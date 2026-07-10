@@ -2,7 +2,9 @@
 
 ## Current implementation
 
-The application under `frontend/` uses React 19, TypeScript, Vite, React Router, and Tailwind's Vite integration. `src/App.tsx` declares the routes, `src/PhilSAContext.tsx` provides application context, and `src/services/` contains mock services/data. Pages are grouped partly by role or function; shared UI is under `src/components/`.
+The application under `frontend/` uses React 19, TypeScript, Vite, React Router, and Tailwind's Vite integration. `src/routing/routes.tsx` contains typed route definitions and prototype role permissions, while `src/routing/RouteGuards.tsx` applies authentication, role, exam-eligibility, layout, and maintenance guards. `src/App.tsx` renders that configuration, `src/PhilSAContext.tsx` provides application context, and `src/services/` contains mock services/data. Pages are grouped partly by role or function; shared UI is under `src/components/`.
+
+Frontend route guards improve prototype navigation only. A future backend must independently authenticate users, authorize every request, and validate exam eligibility.
 
 The application is currently a prototype backed by mock/local behavior. Existing files must remain in place until a dedicated migration is approved.
 

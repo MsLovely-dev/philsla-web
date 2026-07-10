@@ -9,6 +9,7 @@ export type UserRole =
   | 'GRADER' 
   | 'SYSTEM_ADMIN' 
   | 'EXECUTIVE'
+  | 'GOVERNMENT'
   | 'EXAM_ADMINISTRATOR'
   | 'TESTING_CENTER_ADMIN'
   | 'TECH_SUPPORT';

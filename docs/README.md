@@ -7,7 +7,7 @@
 - Business: [BRD](BRD.md), [modules](MODULES.md), and [user stories](USER_STORY.md)
 - Architecture: [system](architecture/SYSTEM-ARCHITECTURE.md), [frontend](architecture/FRONTEND-ARCHITECTURE.md), [backend](architecture/BACKEND-ARCHITECTURE.md), [database](architecture/DATABASE-DESIGN.md), and [security](architecture/SECURITY-ARCHITECTURE.md)
 - API: [standards](api/API-STANDARDS.md) and [endpoint inventory](api/API-ENDPOINTS.md)
-- Development: [coding](development/CODING-STANDARDS.md), [testing](development/TESTING-STANDARDS.md), [Git workflow](development/GIT-WORKFLOW.md), and [definition of done](development/DEFINITION-OF-DONE.md)
+- Development: [coding](development/CODING-STANDARDS.md), [testing](development/TESTING-STANDARDS.md), [Git workflow](development/GIT-WORKFLOW.md), [definition of done](development/DEFINITION-OF-DONE.md), and [frontend module priority checklist](development/FRONTEND-MODULE-PRIORITY-CHECKLIST.md)
 - Decisions: [ADR-001 repository structure](decisions/ADR-001-REPOSITORY-STRUCTURE.md) and [ADR-002 backend framework](decisions/ADR-002-BACKEND-FRAMEWORK.md)
 
 PhilSA is organized as a full-stack project with separate frontend and backend workspaces.
