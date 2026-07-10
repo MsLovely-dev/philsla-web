@@ -36,7 +36,7 @@ Complete these before expanding individual modules.
 
 ### Shared frontend infrastructure
 
-- [ ] Define shared UI patterns for page loading, empty results, errors, confirmation dialogs, and notifications.
+- [x] Define shared UI patterns for page loading, empty results, errors, confirmation dialogs, and notifications.
 - [ ] Define typed service interfaces and consistent mock success, validation-error, authorization-error, and network-error responses.
 - [ ] Add a replaceable session/authentication service boundary around the current local behavior.
 - [ ] Decide and document form, server-state, component-test, and end-to-end-test tooling (`TBD`).

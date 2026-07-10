@@ -3,16 +3,13 @@ import { AlertTriangle, ArrowLeft, Clock } from 'lucide-react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { PublicLayout } from '../components/PublicLayout';
+import { LoadingState } from '../components/ui';
 import { usePhilSA } from '../PhilSAContext';
 import { useMockData } from '../services/mockService';
 import { UserRole } from '../types';
 
 function LoadingScreen() {
-  return (
-    <div className="h-screen w-full flex items-center justify-center font-bold text-philsa-navy" role="status">
-      Initializing PhilSA Environment...
-    </div>
-  );
+  return <LoadingState title="Initializing PhilSA Environment" message="Preparing your secure prototype session." fullPage />;
 }
 
 function MaintenanceGuard({ children }: { children: ReactNode }) {

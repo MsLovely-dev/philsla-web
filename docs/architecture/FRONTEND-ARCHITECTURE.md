@@ -6,6 +6,8 @@ The application under `frontend/` uses React 19, TypeScript, Vite, React Router,
 
 Frontend route guards improve prototype navigation only. A future backend must independently authenticate users, authorize every request, and validate exam eligibility.
 
+Shared feedback primitives under `src/components/ui/` define accessible loading, empty, error, confirmation-dialog, and notification patterns. Existing feature-specific feedback implementations should adopt these primitives incrementally when their modules change; a repository-wide visual rewrite is not implied.
+
 The application is currently a prototype backed by mock/local behavior. Existing files must remain in place until a dedicated migration is approved.
 
 ## Recommended target structure
