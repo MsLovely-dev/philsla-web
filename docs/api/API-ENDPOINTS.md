@@ -2,7 +2,15 @@
 
 ## Current state
 
-There are no implemented backend endpoints. The frontend currently uses mock/local services. Every path below is a capability inventory, not an approved or available contract.
+The baseline health endpoint is implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract.
+
+## Implemented baseline endpoints
+
+| Method | Path | Authentication | Response | Status |
+| --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/health/` | Public | `{"status":"ok"}` | Implemented |
+
+The health response deliberately excludes dependency and infrastructure details. Unsupported methods use the standard API error envelope.
 
 ## Candidate endpoint groups
 

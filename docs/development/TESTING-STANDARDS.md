@@ -2,7 +2,7 @@
 
 ## Current state
 
-The frontend package uses Vitest with jsdom, React Testing Library, Testing Library user-event, and jest-dom for fast unit and component-level behavior tests. Playwright covers critical browser-level journeys, including desktop and mobile routing behavior. These choices are accepted in [ADR-003](../decisions/ADR-003-FRONTEND-TOOLING.md). The package also exposes a TypeScript no-emit check through `npm run lint` and a Vite build. Additional browser coverage, non-Chromium coverage, and coverage thresholds remain `TBD`. Django and Django REST Framework are selected for the backend, but no project or backend test configuration exists yet.
+The frontend package uses Vitest with jsdom, React Testing Library, Testing Library user-event, and jest-dom for fast unit and component-level behavior tests. Playwright covers critical browser-level journeys, including desktop and mobile routing behavior. These choices are accepted in [ADR-003](../decisions/ADR-003-FRONTEND-TOOLING.md). The package also exposes a TypeScript no-emit check through `npm run lint` and a Vite build. Additional browser coverage, non-Chromium coverage, and coverage thresholds remain `TBD`. The initial backend tests use Django's built-in test runner and DRF test integration; broader backend tooling and coverage thresholds remain `TBD`.
 
 ## Required policy
 

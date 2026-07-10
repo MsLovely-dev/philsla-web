@@ -28,7 +28,7 @@ The frontend owns presentation, interaction, and usability validation. It must c
 
 The future backend owns authentication, authorization, validation, workflows, scoring, persistence, integrations, and audit enforcement. Business logic must not live directly in routes or controllers.
 
-External services mentioned by business documents include identity and education registries, email/SMS, object storage, and proctoring capabilities. Their vendors, contracts, legal bases, and failure behavior are `TBD`.
+External services mentioned by business documents include identity and education registries, email/SMS, private S3-compatible object storage, and proctoring capabilities. Object storage approach is accepted in [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md), but the provider, contracts, legal bases, and failure behavior remain `TBD`.
 
 ## Quality attributes
 
