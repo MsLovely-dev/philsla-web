@@ -1,0 +1,8 @@
+{
+  "name": "Development LRN Only PhilSA UP-7092026",
+  "description": "A comprehensive end-to-end college entrance examination and assessment system for the Philippines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

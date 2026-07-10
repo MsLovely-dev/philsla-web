@@ -1,0 +1,68 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Helvetica Neue", Helvetica, Arial, "Inter", sans-serif;
+  --font-display: "Padayon", "Optima", "Palatino Linotype", "Palatino", "Book Antiqua", Georgia, serif;
+  --color-philsa-red: #8A1538;
+  --color-philsa-red-hover: #6D102C;
+  --color-philsa-navy: #111111;
+  --color-philsa-gray: #555555;
+  --color-philsa-bg: #FAFAFA;
+  --color-philsa-border: #E2E8F0;
+  --color-philsa-success: #00563F;
+  
+  --radius-2xl: 12px;
+  --radius-3xl: 16px;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-philsa-bg text-philsa-navy font-sans antialiased selection:bg-philsa-red/10 selection:text-philsa-red;
+  }
+
+  h1, h2, h3 {
+    @apply tracking-[-0.03em] font-extrabold;
+  }
+
+  input, select, textarea {
+    @apply text-philsa-navy;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-philsa-red text-white font-bold py-3 px-6 rounded-lg hover:bg-philsa-red-hover transition-all shadow-sm hover:shadow-md active:scale-[0.98] text-center cursor-pointer text-xs font-sans uppercase tracking-[0.08em];
+  }
+  
+  .btn-secondary {
+    @apply bg-white text-philsa-gray border border-philsa-border font-bold py-2.5 px-5 rounded-lg hover:bg-gray-50 hover:border-philsa-gray/30 transition-all shadow-xs active:scale-95 text-center cursor-pointer text-xs font-sans uppercase tracking-[0.05em];
+  }
+  
+  .card-philsa {
+    @apply bg-white rounded-xl border border-philsa-border shadow-xs hover:shadow-sm p-8 transition-all relative overflow-hidden;
+  }
+  
+  .input-philsa {
+    @apply w-full bg-white border border-philsa-border rounded-lg px-4 py-3 text-sm font-medium focus:outline-hidden focus:ring-2 focus:ring-philsa-red/10 focus:border-philsa-red transition-all placeholder:text-philsa-gray/40 disabled:bg-gray-50 disabled:text-gray-400 shadow-xs;
+  }
+
+  .label-philsa {
+    @apply text-[11px] font-bold text-philsa-gray uppercase tracking-[0.1em] select-none;
+  }
+  
+  .badge-status {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider;
+  }
+  
+  .badge-approved { @apply bg-[#e5f1ec] text-[#00563F] border border-[#00563F]/20; }
+  .badge-pending { @apply bg-gray-100 text-gray-700 border border-gray-200; }
+  .badge-rejected { @apply bg-red-50 text-[#8A1538] border border-red-200; }
+  .badge-draft { @apply bg-zinc-100 text-zinc-700 border border-zinc-200; }
+  .badge-published { @apply bg-blue-50 text-blue-800 border border-blue-200; }
+  .badge-archived { @apply bg-stone-100 text-stone-700 border border-stone-200; }
+}
