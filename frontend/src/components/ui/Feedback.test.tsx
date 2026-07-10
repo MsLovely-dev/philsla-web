@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ConfirmationDialog } from './ConfirmationDialog';
-import { NotificationToast } from './NotificationToast';
+import { NotificationRegion, NotificationToast } from './NotificationToast';
 import { EmptyState, ErrorState, LoadingState } from './StateDisplay';
 
 describe('state displays', () => {
@@ -67,6 +67,25 @@ describe('ConfirmationDialog', () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
+  it('does not cancel while confirmation is in progress', async () => {
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ConfirmationDialog
+        isOpen
+        isConfirming
+        title="Publishing results"
+        message="The request is being processed."
+        onConfirm={vi.fn()}
+        onCancel={onCancel}
+      />,
+    );
+
+    await user.keyboard('{Escape}');
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  });
+
   it('keeps keyboard focus inside the open dialog', async () => {
     const user = userEvent.setup();
     render(
@@ -101,5 +120,15 @@ describe('NotificationToast', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Save failed');
     await user.click(screen.getByRole('button', { name: 'Dismiss notification' }));
     expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it('groups notifications in a named region', () => {
+    render(
+      <NotificationRegion>
+        <NotificationToast title="Saved" tone="success" />
+      </NotificationRegion>,
+    );
+
+    expect(screen.getByLabelText('Notifications')).toContainElement(screen.getByRole('status'));
   });
 });

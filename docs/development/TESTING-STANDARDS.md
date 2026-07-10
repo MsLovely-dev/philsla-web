@@ -2,7 +2,7 @@
 
 ## Current state
 
-The frontend package uses Vitest with jsdom and React Testing Library for fast unit and component-level behavior tests. Playwright with Chromium covers critical browser-level journeys, including desktop and mobile routing behavior. The package also exposes a TypeScript no-emit check through `npm run lint` and a Vite build. Additional browser coverage and coverage thresholds remain `TBD`. Django and Django REST Framework are selected for the backend, but no project or backend test configuration exists yet.
+The frontend package uses Vitest with jsdom, React Testing Library, Testing Library user-event, and jest-dom for fast unit and component-level behavior tests. Playwright covers critical browser-level journeys, including desktop and mobile routing behavior. These choices are accepted in [ADR-003](../decisions/ADR-003-FRONTEND-TOOLING.md). The package also exposes a TypeScript no-emit check through `npm run lint` and a Vite build. Additional browser coverage, non-Chromium coverage, and coverage thresholds remain `TBD`. Django and Django REST Framework are selected for the backend, but no project or backend test configuration exists yet.
 
 ## Required policy
 
@@ -17,6 +17,8 @@ The frontend package uses Vitest with jsdom and React Testing Library for fast u
 ## Recommended layers
 
 - Frontend: unit tests for domain utilities/hooks, component interaction/accessibility tests, service contract tests, and a small set of end-to-end critical journeys.
+- Forms: test feature-local validation helpers and submit-state transitions directly; add component tests for user-facing validation behavior.
+- Service state: test service contracts and mock/API adapters separately from presentation components.
 - Backend: unit tests for domain rules, integration tests for persistence/adapters, endpoint authorization/validation tests, migration tests, and consumer/contract tests.
 - Security/performance: targeted tests based on threat models and capacity targets once those are defined.
 

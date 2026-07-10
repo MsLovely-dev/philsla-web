@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
-import { MOCK_USERS } from './lib/utils';
+import { createPrototypeAuthService } from './services';
+
+const authService = createPrototypeAuthService();
 
 interface InputModuleControl {
   id: string;
@@ -48,11 +50,11 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Check for existing session
-    const savedUser = localStorage.getItem('philsa_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
+    void authService.getCurrentSession().then((result) => {
+      if (result.ok) {
+        setUser(result.data?.user ?? null);
+      }
+    });
     
     const savedLogs = localStorage.getItem('philsa_logs');
     if (savedLogs) {
@@ -253,51 +255,23 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // In prototype mode, we accept any password if the email matches
-    // Check static mock users
-    let foundUser = MOCK_USERS.find(u => u.email === email);
-    
-    // Check registered applications if not found in mock users
-    if (!foundUser) {
-      const savedApps = localStorage.getItem('philsa_apps');
-      if (savedApps) {
-        try {
-          const apps = JSON.parse(savedApps);
-          const matchedApp = apps.find((a: any) => a.email === email);
-          if (matchedApp) {
-            foundUser = {
-              id: matchedApp.userId || matchedApp.id,
-              email: matchedApp.email,
-              firstName: matchedApp.firstName,
-              lastName: matchedApp.lastName,
-              role: 'STUDENT',
-              candidateId: matchedApp.id
-            };
-          }
-        } catch (e) {
-          console.error('Error parsing saved applications', e);
-        }
-      }
-    }
+    const result = await authService.login({ email, password });
 
-    if (foundUser) {
-      setUser(foundUser);
-      localStorage.setItem('philsa_user', JSON.stringify(foundUser));
-      addAuditLog('LOGIN', `User ${foundUser.email} logged in as ${foundUser.role}`);
+    if (result.ok) {
+      setUser(result.data.user);
+      addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
       return true;
     }
+
     return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
     if (user) {
       addAuditLog('LOGOUT', `User ${user.email} logged out`);
     }
+    await authService.logout();
     setUser(null);
-    localStorage.removeItem('philsa_user');
   };
 
   const addAuditLog = (action: string, details: string) => {

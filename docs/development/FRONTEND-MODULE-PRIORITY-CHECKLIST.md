@@ -18,7 +18,7 @@ Priority meanings:
 - [ ] Keep business rules in feature hooks, domain utilities, or services rather than presentation components.
 - [ ] Define frontend request/response types only from an approved API contract; mark unresolved contracts `TBD`.
 - [ ] Treat frontend authentication, authorization, validation, and exam controls as prototype behavior only. The future backend remains authoritative.
-- [ ] Add or update tests when behavior changes. Selection of frontend test tooling is `TBD`.
+- [ ] Add or update tests when behavior changes, following the frontend tooling choices in `docs/decisions/ADR-003-FRONTEND-TOOLING.md`.
 - [ ] Do not use real personal data, credentials, assessment content, or sensitive operational records in mocks.
 
 ## P0 - Frontend foundation
@@ -32,16 +32,16 @@ Complete these before expanding individual modules.
 - [x] Guard `/exam/live` with an authenticated student and eligible exam-session state in the prototype.
 - [x] Add dedicated unauthorized and not-found pages.
 - [x] Verify representative direct navigation, refresh, browser back/forward, and mobile navigation behavior.
-- [ ] Document the production SPA rewrite requirement for `BrowserRouter` when hosting is selected (`TBD`).
+- [x] Document the production SPA rewrite requirement for `BrowserRouter` when hosting is selected.
 
 ### Shared frontend infrastructure
 
 - [x] Define shared UI patterns for page loading, empty results, errors, confirmation dialogs, and notifications.
-- [ ] Define typed service interfaces and consistent mock success, validation-error, authorization-error, and network-error responses.
-- [ ] Add a replaceable session/authentication service boundary around the current local behavior.
-- [ ] Decide and document form, server-state, component-test, and end-to-end-test tooling (`TBD`).
+- [x] Define typed service interfaces and consistent mock success, validation-error, authorization-error, and network-error responses.
+- [x] Add a replaceable session/authentication service boundary around the current local behavior.
+- [x] Decide and document form, server-state, component-test, and end-to-end-test tooling.
 - [x] Add automated checks for critical route access and navigation behavior after test tooling is selected.
-- [ ] Verify keyboard navigation, focus handling, labels, contrast, and responsive layouts for shared components.
+- [x] Verify keyboard navigation, focus handling, labels, contrast, and responsive layouts for shared components.
 
 ## P1 - Core student application journey
 
