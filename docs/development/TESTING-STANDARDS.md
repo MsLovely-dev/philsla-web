@@ -2,7 +2,7 @@
 
 ## Current state
 
-The frontend package exposes a TypeScript no-emit check through `npm run lint` and a Vite build, but no test runner or test files were identified during this documentation review. Django and Django REST Framework are selected for the backend, but no project or test configuration exists yet. Testing tools beyond Django's available test facilities and coverage thresholds are `TBD`.
+The frontend package uses Vitest with jsdom and React Testing Library for fast unit and component-level behavior tests. Playwright with Chromium covers critical browser-level journeys, including desktop and mobile routing behavior. The package also exposes a TypeScript no-emit check through `npm run lint` and a Vite build. Additional browser coverage and coverage thresholds remain `TBD`. Django and Django REST Framework are selected for the backend, but no project or backend test configuration exists yet.
 
 ## Required policy
 

@@ -31,7 +31,7 @@ Complete these before expanding individual modules.
 - [x] Add route-level role checks for `STUDENT`, `ADMISSIONS_REVIEWER`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, `ITEM_WRITER`, `PROCTOR`, `GRADER`, `SYSTEM_ADMIN`, and `EXECUTIVE`.
 - [x] Guard `/exam/live` with an authenticated student and eligible exam-session state in the prototype.
 - [x] Add dedicated unauthorized and not-found pages.
-- [ ] Verify direct navigation, refresh, browser back/forward, and mobile navigation for every route.
+- [x] Verify representative direct navigation, refresh, browser back/forward, and mobile navigation behavior.
 - [ ] Document the production SPA rewrite requirement for `BrowserRouter` when hosting is selected (`TBD`).
 
 ### Shared frontend infrastructure
@@ -40,7 +40,7 @@ Complete these before expanding individual modules.
 - [ ] Define typed service interfaces and consistent mock success, validation-error, authorization-error, and network-error responses.
 - [ ] Add a replaceable session/authentication service boundary around the current local behavior.
 - [ ] Decide and document form, server-state, component-test, and end-to-end-test tooling (`TBD`).
-- [ ] Add automated checks for critical route access and navigation behavior after test tooling is selected.
+- [x] Add automated checks for critical route access and navigation behavior after test tooling is selected.
 - [ ] Verify keyboard navigation, focus handling, labels, contrast, and responsive layouts for shared components.
 
 ## P1 - Core student application journey
