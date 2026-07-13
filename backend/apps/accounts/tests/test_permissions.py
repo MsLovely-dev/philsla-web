@@ -85,6 +85,8 @@ class RolePermissionTests(TestCase):
         response = StudentOnlyView.as_view()(request)
 
         self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"]["code"], "PERMISSION_DENIED")
+        self.assertEqual(response.data["error"]["fields"], {})
 
     def test_missing_view_role_configuration_denies_by_default(self) -> None:
         request = self.factory.get("/missing-role-config/")
@@ -93,6 +95,8 @@ class RolePermissionTests(TestCase):
         response = MissingRoleConfigView.as_view()(request)
 
         self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"]["code"], "PERMISSION_DENIED")
+        self.assertEqual(response.data["error"]["fields"], {})
 
     def test_invalid_prototype_role_is_rejected_at_import_time(self) -> None:
         with self.assertRaisesMessage(ValueError, "Unsupported portal role"):
@@ -126,3 +130,5 @@ class ObjectScopePermissionTests(TestCase):
         response = ObjectProbeView.as_view()(request)
 
         self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"]["code"], "PERMISSION_DENIED")
+        self.assertEqual(response.data["error"]["fields"], {})
