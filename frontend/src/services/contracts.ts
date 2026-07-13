@@ -10,6 +10,7 @@ export interface PaginationMeta {
 export interface AuthCredentials {
   email: string;
   password?: string;
+  otp?: string;
 }
 
 export interface AuthSession {
@@ -18,9 +19,26 @@ export interface AuthSession {
   expiresAt?: string;
 }
 
+export interface AuthIdentifierChallenge {
+  pendingAuthToken: string;
+  nextStep: 'password';
+  expiresInSeconds: number;
+}
+
+export interface AuthOtpChallenge {
+  otpPendingAuthToken: string;
+  nextStep: 'otp';
+  expiresInSeconds: number;
+  resendCooldownSeconds: number;
+  devOtp?: string;
+}
+
 export interface AuthService {
   getCurrentSession(): Promise<ServiceResult<AuthSession | null>>;
   login(credentials: AuthCredentials): Promise<ServiceResult<AuthSession>>;
+  startLoginIdentifier?(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>>;
+  verifyLoginPassword?(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>>;
+  verifyLoginOtp?(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSession>>;
   logout(): Promise<ServiceResult<null>>;
   refreshSession(): Promise<ServiceResult<AuthSession>>;
 }

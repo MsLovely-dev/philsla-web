@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
+import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSession } from './services/contracts';
+import { authorizationError } from './services/serviceResult';
+import type { ServiceResult } from './services/serviceResult';
 
 const authService = createPrototypeAuthService();
 
@@ -16,6 +19,9 @@ interface PhilSAContextType {
   user: User | null;
   setUser: (user: User | null) => void;
   login: (email: string, password?: string) => Promise<boolean>;
+  startLoginIdentifier: (identifier: string) => Promise<ServiceResult<AuthIdentifierChallenge>>;
+  verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthOtpChallenge>>;
+  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSession>>;
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
@@ -266,6 +272,39 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
+  const startLoginIdentifier = async (identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>> => {
+    if (!authService.startLoginIdentifier) {
+      return authorizationError('Identifier login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+    return authService.startLoginIdentifier(identifier);
+  };
+
+  const verifyLoginPassword = async (
+    pendingAuthToken: string,
+    password: string,
+  ): Promise<ServiceResult<AuthOtpChallenge>> => {
+    if (!authService.verifyLoginPassword) {
+      return authorizationError('Password login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+    return authService.verifyLoginPassword(pendingAuthToken, password);
+  };
+
+  const verifyLoginOtp = async (
+    otpPendingAuthToken: string,
+    code: string,
+  ): Promise<ServiceResult<AuthSession>> => {
+    if (!authService.verifyLoginOtp) {
+      return authorizationError('OTP login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    const result = await authService.verifyLoginOtp(otpPendingAuthToken, code);
+    if (result.ok) {
+      setUser(result.data.user);
+      addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
+    }
+    return result;
+  };
+
   const logout = async () => {
     if (user) {
       addAuditLog('LOGOUT', `User ${user.email} logged out`);
@@ -312,7 +351,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, verifyLoginOtp, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

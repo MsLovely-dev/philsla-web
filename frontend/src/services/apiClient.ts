@@ -22,7 +22,7 @@ export class ApiClient {
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
   }
 
   setBearerToken(token: string | null): void {
@@ -30,32 +30,60 @@ export class ApiClient {
   }
 
   async request<TData>(path: string, init: RequestInit = {}): Promise<ServiceResult<TData>> {
-    try {
-      const response = await this.fetcher(`${this.baseUrl}${path}`, {
-        ...init,
-        credentials: 'include',
-        headers: {
-          Accept: 'application/json',
-          ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-          ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
-          ...init.headers,
-        },
-      });
+    const urls = Array.from(
+      new Set(
+        [
+          this.baseUrl ? `${this.baseUrl}${path}` : path,
+          path,
+          `http://127.0.0.1:8000${path}`,
+          `http://localhost:8000${path}`,
+        ].filter(Boolean),
+      ),
+    );
 
-      if (response.status === 204) {
-        return serviceSuccess(null as TData);
+    const failures: string[] = [];
+
+    for (const url of urls) {
+      try {
+        return await this.send<TData>(url, init);
+      } catch (error) {
+        failures.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+        // Try the next local route before reporting a network failure.
       }
-
-      const payload = await this.readJson<TData | ApiErrorEnvelope>(response);
-
-      if (response.ok) {
-        return serviceSuccess(payload as TData);
-      }
-
-      return this.mapError(response, payload as ApiErrorEnvelope);
-    } catch {
-      return networkError('The backend API could not be reached. Check that the Django server is running.');
     }
+
+    if (import.meta.env.DEV) {
+      console.error('Backend API request failed for all local routes.', failures);
+    }
+
+    return networkError(
+      `The backend API could not be reached through /api, http://127.0.0.1:8000, or http://localhost:8000. Open the app from the local Vite URL and confirm Django is running.`,
+    );
+  }
+
+  private async send<TData>(url: string, init: RequestInit): Promise<ServiceResult<TData>> {
+    const response = await this.fetcher(url, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
+        ...init.headers,
+      },
+    });
+
+    if (response.status === 204) {
+      return serviceSuccess(null as TData);
+    }
+
+    const payload = await this.readJson<TData | ApiErrorEnvelope>(response);
+
+    if (response.ok) {
+      return serviceSuccess(payload as TData);
+    }
+
+    return this.mapError(response, payload as ApiErrorEnvelope);
   }
 
   private async readJson<TData>(response: Response): Promise<TData | null> {

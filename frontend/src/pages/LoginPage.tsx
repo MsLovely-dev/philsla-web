@@ -1,155 +1,217 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { usePhilSA } from '../PhilSAContext';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { LogIn, ArrowRight, Shield, Mail, Smartphone, Check } from 'lucide-react';
+import { ArrowRight, CheckCircle2, LogIn, Mail, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
-import { MOCK_USERS } from '../lib/utils';
+import { usePhilSA } from '../PhilSAContext';
+import type { UserRole } from '../types';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LRN_PATTERN = /^\d{12}$/;
+const LOCAL_BACKEND_ACCOUNTS = [
+  'admissions.reviewer@philsa.local',
+  'proctor@philsa.local',
+  'proctor.admin@philsa.local',
+  'university.admin@philsa.local',
+  'testing.center.admin@philsa.local',
+  'exam.admin@philsa.local',
+  'system.admin@philsa.local',
+  'ched.admin@philsa.local',
+  'deped.admin@philsa.local',
+  'tesda.admin@philsa.local',
+  'executive@philsa.local',
+];
+
+type LoginStep = 'identifier' | 'password' | 'otp';
+
+function isValidIdentifier(value: string): boolean {
+  const trimmed = value.trim();
+  return LRN_PATTERN.test(trimmed) || EMAIL_PATTERN.test(trimmed);
+}
+
+function routeForRole(role: UserRole): string {
+  if (role === 'PROCTOR' || role === 'PROCTOR_ADMIN') return '/proctor/schedule';
+  if (role === 'TESTING_CENTER_ADMIN') return '/admin/center-control';
+  if (role === 'ADMISSIONS_REVIEWER') return '/admin/reviewer/applications';
+  if (role === 'UNIVERSITY_ADMIN') return '/admin/university/applications';
+  if (role === 'EXAM_ADMINISTRATOR') return '/admin/hub/overview';
+  if (role === 'SYSTEM_ADMIN') return '/admin/users';
+  if (role === 'GOVERNMENT' || role === 'EXECUTIVE') return '/admin/government';
+  if (role === 'TECH_SUPPORT') return '/support/dashboard';
+  return '/dashboard';
+}
+
+function maskIdentifier(identifier: string): string {
+  if (EMAIL_PATTERN.test(identifier)) {
+    return identifier.replace(/(.{3})(.*)(?=@)/, '$1***');
+  }
+  if (LRN_PATTERN.test(identifier)) {
+    return `${identifier.slice(0, 3)}******${identifier.slice(-3)}`;
+  }
+  return identifier;
+}
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [step, setStep] = useState(1); // 1: Email, 2: Password, 3: MFA Method, 4: OTP
-  const [mfaMethod, setMfaMethod] = useState<'email' | 'phone'>('email');
+  const [step, setStep] = useState<LoginStep>('identifier');
+  const [pendingAuthToken, setPendingAuthToken] = useState('');
+  const [otpPendingAuthToken, setOtpPendingAuthToken] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [localDevOtp, setLocalDevOtp] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = usePhilSA();
+  const { startLoginIdentifier, verifyLoginPassword, verifyLoginOtp } = usePhilSA();
   const navigate = useNavigate();
 
-  const findUserInSystem = (email: string) => {
-    // Check mock users
-    const mockUser = MOCK_USERS.find(u => u.email === email);
-    if (mockUser) return mockUser;
+  const handleIdentifierStep = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalizedIdentifier = identifier.trim();
 
-    // Check local storage apps
-    const savedApps = localStorage.getItem('philsa_apps');
-    if (savedApps) {
-      try {
-        const apps = JSON.parse(savedApps);
-        const app = apps.find((a: any) => a.email === email);
-        if (app) {
-          return {
-            email: app.email,
-            password: app.password,
-            role: 'STUDENT'
-          };
-        }
-      } catch (e) {
-        console.error(e);
-      }
+    if (!normalizedIdentifier) {
+      setError('Please enter your LRN or email address.');
+      return;
     }
-    return null;
-  };
-
-  const handleNextStep = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-
-    const user = findUserInSystem(email);
-    if (!user) {
-      setError('Invalid email or unapproved account');
+    if (!isValidIdentifier(normalizedIdentifier)) {
+      setError('Enter a valid LRN or email address.');
       return;
     }
 
     setLoading(true);
     setError('');
-    setTimeout(() => {
-      setStep(2);
-      setLoading(false);
-    }, 800);
+    const result = await startLoginIdentifier(normalizedIdentifier);
+    setLoading(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    setIdentifier(normalizedIdentifier);
+    setPendingAuthToken(result.data.pendingAuthToken);
+    setStep('password');
   };
 
-  const handlePasswordStep = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!password) return;
+  const handlePasswordStep = async (event: React.FormEvent) => {
+    event.preventDefault();
 
-    // In prototype mode, we allow any password if an account exists
-    const user = findUserInSystem(email);
-    if (!user) {
-      setError('Invalid email or unapproved account');
-      setStep(1); // Go back to email step if somehow the user is gone
+    if (!password) {
+      setError('Please enter your password.');
       return;
     }
 
     setLoading(true);
     setError('');
-    setTimeout(() => {
-      setStep(3);
-      setLoading(false);
-    }, 800);
-  };
+    const result = await verifyLoginPassword(pendingAuthToken, password);
+    setLoading(false);
 
-  const handleMfaSelection = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setTimeout(() => {
-      setStep(4);
-      setLoading(false);
-    }, 800);
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    const success = await login(email, password);
-    if (success) {
-      // Find the user to determine navigation
-      const foundUser = findUserInSystem(email);
-      if (foundUser?.role === 'PROCTOR' || foundUser?.role === 'PROCTOR_ADMIN') {
-        navigate('/proctor/schedule');
-      } else if (foundUser?.role === 'TESTING_CENTER_ADMIN') {
-        navigate('/admin/center-control');
-      } else if (foundUser?.role === 'TECH_SUPPORT') {
-        navigate('/support/dashboard');
-      } else {
-        navigate('/dashboard');
-      }
-    } else {
-      setError('Invalid email or unapproved account');
-      setLoading(false);
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
     }
+
+    setOtpPendingAuthToken(result.data.otpPendingAuthToken);
+    setLocalDevOtp(result.data.devOtp ?? null);
+    setOtp(['', '', '', '', '', '']);
+    setStep('otp');
   };
 
-  const updateOtp = (val: string, index: number) => {
+  const handleOtpStep = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const code = otp.join('');
+
+    if (!/^\d{6}$/.test(code)) {
+      setError('Please enter the 6-digit code sent to your email.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    const result = await verifyLoginOtp(otpPendingAuthToken, code);
+    setLoading(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    navigate(routeForRole(result.data.user.role));
+  };
+
+  const updateOtp = (value: string, index: number) => {
+    const digit = value.replace(/\D/g, '').slice(-1);
     const newOtp = [...otp];
-    newOtp[index] = val.slice(-1);
+    newOtp[index] = digit;
     setOtp(newOtp);
-    // Auto focus next
-    if (val && index < 5) {
-      const nextInput = document.getElementById(`otp-${index + 1}`);
-      nextInput?.focus();
+
+    if (digit && index < 5) {
+      document.getElementById(`otp-${index + 1}`)?.focus();
     }
+  };
+
+  const resetToIdentifier = () => {
+    setStep('identifier');
+    setPendingAuthToken('');
+    setOtpPendingAuthToken('');
+    setPassword('');
+    setOtp(['', '', '', '', '', '']);
+    setLocalDevOtp(null);
+    setError('');
   };
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-6">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md w-full"
       >
         <div className="card-philsa relative">
-          {/* Logo Watermark */}
           <div className="absolute -bottom-10 -right-10 opacity-[0.03] scale-150 rotate-12 pointer-events-none">
-             <Logo size="xl" />
+            <Logo size="xl" />
           </div>
 
           <div className="absolute top-0 right-0">
-             <div className="bg-[#e5f1ec] text-[#00563F] font-black text-[9px] px-3 py-1.5 rounded-bl-md border-l border-b border-[#00563F]/15 flex items-center gap-1.5 tracking-widest leading-none">
-                <Shield className="w-3 h-3" />
-                SECURE
-             </div>
+            <div className="bg-[#e5f1ec] text-[#00563F] font-black text-[9px] px-3 py-1.5 rounded-bl-md border-l border-b border-[#00563F]/15 flex items-center gap-1.5 tracking-widest leading-none">
+              <Shield className="w-3 h-3" />
+              SECURE
+            </div>
           </div>
 
-          <div className="flex items-center gap-5 mb-12">
+          <div className="flex items-center gap-5 mb-10">
             <Logo size="lg" />
             <div>
               <h2 className="text-2xl font-black text-philsa-navy tracking-tight leading-none mb-1">Exam Portal</h2>
               <p className="text-[10px] font-black text-philsa-gray uppercase tracking-[0.2em] opacity-60">Authorized Access Only</p>
             </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 mb-8">
+            {[
+              ['identifier', 'Identifier'],
+              ['password', 'Password'],
+              ['otp', 'Email OTP'],
+            ].map(([key, label], index) => {
+              const active = step === key;
+              const complete =
+                (key === 'identifier' && step !== 'identifier') ||
+                (key === 'password' && step === 'otp');
+              return (
+                <div
+                  key={key}
+                  className={`rounded-xl px-3 py-2 text-center text-[9px] font-black uppercase tracking-widest border ${
+                    active || complete
+                      ? 'bg-philsa-red text-white border-philsa-red'
+                      : 'bg-philsa-bg text-philsa-gray border-philsa-border/40'
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    {complete ? <CheckCircle2 className="w-3 h-3" /> : index + 1}
+                    {label}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {error && (
@@ -159,215 +221,151 @@ export default function LoginPage() {
             </div>
           )}
 
-          {step === 1 ? (
-            <form onSubmit={handleNextStep} className="space-y-8">
+          {step === 'identifier' && (
+            <form onSubmit={handleIdentifierStep} className="space-y-8">
               <div>
-                <label className="label-philsa block mb-3 ml-1">Academic Credentials</label>
+                <label className="label-philsa block mb-3 ml-1">LRN or Email</label>
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
-                  <input 
-                    type="email" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="Enter Application Number or Email"
+                  <input
+                    type="text"
+                    inputMode="email"
+                    value={identifier}
+                    onChange={(event) => setIdentifier(event.target.value)}
+                    placeholder="Student LRN or account email"
                     className="input-philsa pl-14"
+                    autoComplete="username"
                     required
                   />
                 </div>
+                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
+                  Students may use LRN or email. Staff and admin users must use email.
+                </p>
               </div>
-              
-              <div className="bg-philsa-bg p-5 rounded-2xl border border-philsa-border/40 mb-4 ring-1 ring-inset ring-white">
-                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider block mb-2 opacity-50">Simulation Directory</p>
+
+              <div className="bg-philsa-bg p-5 rounded-2xl border border-philsa-border/40 ring-1 ring-inset ring-white">
+                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider block mb-3 opacity-60">
+                  Local backend role accounts
+                </p>
                 <div className="grid grid-cols-2 gap-2">
-                   {[
-                     'stud1resubmit@philsa.edu.ph',
-                     'stud2waitingexam@philsa.edu.ph',
-                     'stud3takeexam@philsa.edu.ph',
-                     'stud3.1takeexamoffline@philsa.edu.ph',
-                     'stud4examcomplete@philsa.edu.ph',
-                     'stud5results@philsa.edu.ph',
-                     'stud6cheated@philsa.edu.ph',
-                     'admin@philsa.gov.ph',
-                     'ched.admin@gov.ph',
-                     'deped.admin@gov.ph',
-                     'tesda.admin@gov.ph',
-                     'executive@gov.ph',
-                     'proctor@philsa.gov.ph',
-                     'proctor.admin@philsa.gov.ph',
-                     'reviewer@philsa.gov.ph',
-                     'exam.admin@philsa.gov.ph',
-                     'ateneo.admin@examhub.ph',
-                     'dlsu.admin@examhub.ph',
-                     'ust.admin@examhub.ph',
-                     'up.admin@examhub.ph',
-                     'tc.admin@examhub.ph',
-                   ].map(u => (
-                     <button 
-                       key={u}
-                       type="button"
-                       onClick={() => setEmail(u)}
-                       className="text-[10px] text-philsa-navy font-bold hover:text-philsa-red transition-colors text-left flex items-center gap-2 group p-1 hover:bg-philsa-red/5 rounded-md"
-                     >
-                       <div className="w-1 h-1 rounded-full bg-philsa-border group-hover:bg-philsa-red" />
-                       {u.split('@')[0]}
-                     </button>
-                   ))}
+                  {LOCAL_BACKEND_ACCOUNTS.map((account) => (
+                    <button
+                      key={account}
+                      type="button"
+                      onClick={() => setIdentifier(account)}
+                      className="text-[10px] text-philsa-navy font-bold hover:text-philsa-red transition-colors text-left flex items-center gap-2 group p-1 hover:bg-philsa-red/5 rounded-md"
+                    >
+                      <div className="w-1 h-1 rounded-full bg-philsa-border group-hover:bg-philsa-red" />
+                      {account.split('@')[0]}
+                    </button>
+                  ))}
                 </div>
               </div>
 
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
-                {loading ? 'Validating Instance...' : 'Continue to Password'}
+                {loading ? 'Checking Identifier...' : 'Continue to Password'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </form>
-          ) : step === 2 ? (
+          )}
+
+          {step === 'password' && (
             <form onSubmit={handlePasswordStep} className="space-y-8">
-               <div>
-                  <div className="flex justify-between items-center mb-3 ml-1">
-                    <label className="label-philsa">Security Password</label>
-                    <button type="button" className="text-[10px] text-philsa-red font-black uppercase tracking-widest hover:underline">Forgot Password?</button>
-                  </div>
-                  <div className="relative group">
-                    <LogIn className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
-                    <input 
-                      type="password" 
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••••••"
-                      className="input-philsa pl-14"
-                      required
-                    />
-                  </div>
-               </div>
-
-                <div className="bg-[#e5f1ec]/30 p-4 rounded-lg border border-[#00563F]/15 flex items-start gap-4">
-                   <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-xs border border-gray-200">
-                      <Shield className="w-4 h-4 text-[#00563F]" />
-                   </div>
-                   <div>
-                      <p className="text-[10px] font-black text-[#00563F] uppercase tracking-widest mb-1">Session Integrity</p>
-                      <p className="text-[10px] text-[#00563F]/80 font-bold leading-tight uppercase">Your credentials are protected by hardware-level encryption (HSM).</p>
-                   </div>
+              <div>
+                <div className="flex justify-between items-center mb-3 ml-1">
+                  <label className="label-philsa">Password</label>
+                  <button type="button" className="text-[10px] text-philsa-red font-black uppercase tracking-widest hover:underline">
+                    Forgot Password?
+                  </button>
                 </div>
+                <div className="relative group">
+                  <LogIn className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="Enter your account password"
+                    className="input-philsa pl-14"
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+              </div>
 
-               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
-                {loading ? 'Authenticating...' : 'Validate Credentials'}
+              <div className="bg-[#e5f1ec]/30 p-4 rounded-lg border border-[#00563F]/15 flex items-start gap-4">
+                <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-xs border border-gray-200">
+                  <Shield className="w-4 h-4 text-[#00563F]" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-[#00563F] uppercase tracking-widest mb-1">Account</p>
+                  <p className="text-[10px] text-[#00563F]/80 font-bold leading-tight uppercase">{maskIdentifier(identifier)}</p>
+                </div>
+              </div>
+
+              <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
+                {loading ? 'Verifying Password...' : 'Send Email OTP'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
-              <button 
-                type="button" 
-                onClick={() => setStep(1)}
+              <button
+                type="button"
+                onClick={resetToIdentifier}
                 className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
               >
                 ← Change Account
               </button>
             </form>
-          ) : step === 3 ? (
-            <form onSubmit={handleMfaSelection} className="space-y-8">
-              <div className="text-center mb-8">
-                <label className="label-philsa block mb-2">Security Verification</label>
-                <p className="text-sm text-philsa-gray font-medium">Choose where to send your security code</p>
-              </div>
+          )}
 
-              <div className="space-y-4">
-                <button 
-                  type="button"
-                  onClick={() => setMfaMethod('email')}
-                  className={`w-full p-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${
-                    mfaMethod === 'email' ? 'border-philsa-red bg-philsa-red/5' : 'border-philsa-border/40 hover:border-philsa-red/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                      mfaMethod === 'email' ? 'bg-philsa-red text-white' : 'bg-philsa-bg text-philsa-gray group-hover:text-philsa-red'
-                    }`}>
-                      <Mail className="w-5 h-5" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-black text-philsa-navy uppercase tracking-widest mb-1">Send to Email</p>
-                      <p className="text-[10px] text-philsa-gray font-bold uppercase">{email.replace(/(.{3})(.*)(?=@)/, '$1***')}</p>
-                    </div>
-                  </div>
-                  {mfaMethod === 'email' && <Check className="w-5 h-5 text-philsa-red" />}
-                </button>
-
-                <button 
-                  type="button"
-                  onClick={() => setMfaMethod('phone')}
-                  className={`w-full p-5 rounded-2xl border-2 transition-all flex items-center justify-between group ${
-                    mfaMethod === 'phone' ? 'border-philsa-red bg-philsa-red/5' : 'border-philsa-border/40 hover:border-philsa-red/30'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                      mfaMethod === 'phone' ? 'bg-philsa-red text-white' : 'bg-philsa-bg text-philsa-gray group-hover:text-philsa-red'
-                    }`}>
-                      <Smartphone className="w-5 h-5" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-xs font-black text-philsa-navy uppercase tracking-widest mb-1">Send to Mobile</p>
-                      <p className="text-[10px] text-philsa-gray font-bold uppercase">+63 **** *** 42</p>
-                    </div>
-                  </div>
-                  {mfaMethod === 'phone' && <Check className="w-5 h-5 text-philsa-red" />}
-                </button>
-              </div>
-
-              <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group mt-4">
-                {loading ? 'Sending Code...' : `Send Code to ${mfaMethod === 'email' ? 'Email' : 'Mobile'}`}
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </button>
-
-              <button 
-                type="button" 
-                onClick={() => setStep(2)}
-                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
-              >
-                ← Back to Password
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleLogin} className="space-y-10">
+          {step === 'otp' && (
+            <form onSubmit={handleOtpStep} className="space-y-10">
               <div>
-                <label className="label-philsa block mb-2 text-center uppercase tracking-widest">Multi-Factor Security Code</label>
+                <label className="label-philsa block mb-2 text-center uppercase tracking-widest">Email Verification Code</label>
                 <p className="text-[11px] text-philsa-gray font-bold text-center mb-8 uppercase">
-                  Sent to {mfaMethod === 'email' ? email.replace(/(.{3})(.*)(?=@)/, '$1***') : '+63 **** *** 42'}
+                  Sent to {maskIdentifier(identifier)}
                 </p>
+
+                {localDevOtp && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-2xl mb-6 text-xs font-bold">
+                    Local development OTP: <span className="font-black tracking-widest">{localDevOtp}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between gap-3">
-                  {otp.map((digit, i) => (
-                    <input 
-                      key={i}
-                      id={`otp-${i}`}
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      id={`otp-${index}`}
                       type="text"
+                      inputMode="numeric"
                       maxLength={1}
                       value={digit}
-                      onChange={(e) => updateOtp(e.target.value, i)}
+                      onChange={(event) => updateOtp(event.target.value, index)}
                       className="w-full h-16 bg-philsa-bg border-none rounded-2xl text-center text-2xl font-black focus:ring-4 focus:ring-philsa-red/10 transition-all shadow-sm ring-1 ring-philsa-border/30"
                     />
                   ))}
                 </div>
                 <div className="flex items-center justify-between mt-8">
-                   <p className="text-[11px] text-philsa-gray font-bold uppercase tracking-wider">
-                     Code expires in 04:59
-                   </p>
-                   <button type="button" className="text-[11px] text-philsa-red font-black uppercase tracking-widest hover:underline">
-                     Resend Security Code
-                   </button>
+                  <p className="text-[11px] text-philsa-gray font-bold uppercase tracking-wider">
+                    Code expires in 5 minutes
+                  </p>
+                  <button type="button" className="text-[11px] text-philsa-red font-black uppercase tracking-widest hover:underline" disabled>
+                    Resend Coming Soon
+                  </button>
                 </div>
               </div>
 
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3">
-                {loading ? 'Authenticating...' : 'Establish Session'}
+                {loading ? 'Creating Session...' : 'Establish Session'}
                 <LogIn className="w-5 h-5 text-white/50" />
               </button>
 
-              <button 
-                type="button" 
-                onClick={() => setStep(3)}
+              <button
+                type="button"
+                onClick={() => setStep('password')}
                 className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
               >
-                ← Change Method
+                ← Back to Password
               </button>
             </form>
           )}

@@ -82,6 +82,7 @@ class CurrentSessionView(APIView):
             {
                 "user": {
                     "id": str(getattr(user, "id", "")),
+                    "email": str(getattr(user, "email", "")),
                     "role": role,
                     "securityTier": get_security_tier(role),
                     "permissions": _string_list(getattr(user, "api_permissions", None)),

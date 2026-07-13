@@ -1,5 +1,5 @@
 import type { User, UserRole } from '../types';
-import type { AuthCredentials, AuthService, AuthSession } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthService, AuthSession } from './contracts';
 import { createApiClient, type ApiClient } from './apiClient';
 import { authorizationError, serviceSuccess } from './serviceResult';
 import type { ServiceFailure, ServiceResult } from './serviceResult';
@@ -7,6 +7,7 @@ import type { ServiceFailure, ServiceResult } from './serviceResult';
 interface BackendSessionResponse {
   user: {
     id: string;
+    email?: string;
     role: string | null;
     securityTier: number | null;
     permissions: string[];
@@ -16,11 +17,6 @@ interface BackendSessionResponse {
     authenticated: boolean;
     expiresAt: string | null;
   };
-}
-
-interface BackendPasswordResponse {
-  otpPendingAuthToken: string;
-  devOtp?: string;
 }
 
 interface BackendTokenResponse {
@@ -47,10 +43,7 @@ export class BackendAuthService implements AuthService {
   }
 
   async login(credentials: AuthCredentials): Promise<ServiceResult<AuthSession>> {
-    const identifierResult = await this.apiClient.request<{ pendingAuthToken: string }>('/api/v1/auth/login/identifier/', {
-      method: 'POST',
-      body: JSON.stringify({ identifier: credentials.email }),
-    });
+    const identifierResult = await this.startLoginIdentifier(credentials.email);
 
     if (identifierResult.ok === false) return identifierResult as ServiceFailure;
 
@@ -58,28 +51,44 @@ export class BackendAuthService implements AuthService {
       return authorizationError('Password is required to continue backend login.', 'PASSWORD_REQUIRED');
     }
 
-    const passwordResult = await this.apiClient.request<BackendPasswordResponse>('/api/v1/auth/login/password/', {
-      method: 'POST',
-      body: JSON.stringify({
-        pendingAuthToken: identifierResult.data.pendingAuthToken,
-        password: credentials.password,
-      }),
-    });
+    const passwordResult = await this.verifyLoginPassword(identifierResult.data.pendingAuthToken, credentials.password);
 
     if (passwordResult.ok === false) return passwordResult as ServiceFailure;
 
-    if (!passwordResult.data.devOtp) {
+    const otpCode = credentials.otp ?? passwordResult.data.devOtp;
+    if (!otpCode) {
       return authorizationError(
-        'Backend OTP verification is required. Enable local dev OTP exposure or wire the OTP screen to continue.',
+        'Backend OTP verification is required. Enter the 6-digit email code to continue.',
         'OTP_REQUIRED',
       );
     }
 
+    return this.verifyLoginOtp(passwordResult.data.otpPendingAuthToken, otpCode);
+  }
+
+  async startLoginIdentifier(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>> {
+    return this.apiClient.request<AuthIdentifierChallenge>('/api/v1/auth/login/identifier/', {
+      method: 'POST',
+      body: JSON.stringify({ identifier }),
+    });
+  }
+
+  async verifyLoginPassword(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>> {
+    return this.apiClient.request<AuthOtpChallenge>('/api/v1/auth/login/password/', {
+      method: 'POST',
+      body: JSON.stringify({
+        pendingAuthToken,
+        password,
+      }),
+    });
+  }
+
+  async verifyLoginOtp(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSession>> {
     const otpResult = await this.apiClient.request<BackendTokenResponse>('/api/v1/auth/login/otp/', {
       method: 'POST',
       body: JSON.stringify({
-        otpPendingAuthToken: passwordResult.data.otpPendingAuthToken,
-        code: passwordResult.data.devOtp,
+        otpPendingAuthToken,
+        code,
       }),
     });
 
@@ -120,7 +129,7 @@ export class BackendAuthService implements AuthService {
   private mapUser(response: BackendSessionResponse): User {
     return {
       id: response.user.id,
-      email: '',
+      email: response.user.email ?? '',
       firstName: 'Backend',
       lastName: 'User',
       role: this.mapRole(response.user.role),

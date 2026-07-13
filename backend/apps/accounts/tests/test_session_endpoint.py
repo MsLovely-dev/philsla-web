@@ -31,6 +31,7 @@ class CurrentSessionEndpointTests(TestCase):
             id="user-123",
             is_authenticated=True,
             is_active=True,
+            email="student@example.test",
             role="STUDENT",
             api_permissions=("applications:create", "applications:read-own"),
             scopes={"studentId": "student-123"},
@@ -45,6 +46,7 @@ class CurrentSessionEndpointTests(TestCase):
             {
                 "user": {
                     "id": "user-123",
+                    "email": "student@example.test",
                     "role": "STUDENT",
                     "securityTier": 1,
                     "permissions": ["applications:create", "applications:read-own"],

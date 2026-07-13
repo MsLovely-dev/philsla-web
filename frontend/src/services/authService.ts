@@ -1,7 +1,7 @@
 import type { Application, User } from '../types';
 import { MOCK_USERS } from '../lib/utils';
 import { BackendAuthService } from './backendAuthService';
-import type { AuthCredentials, AuthService, AuthSession } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthService, AuthSession } from './contracts';
 import { authorizationError, serviceSuccess, validationError } from './serviceResult';
 import type { ServiceResult } from './serviceResult';
 
@@ -17,6 +17,7 @@ export class LocalStorageAuthService implements AuthService {
   private readonly sessionStorageKey: string;
   private readonly applicationStorageKey: string;
   private readonly delayMs: number;
+  private pendingIdentifier: string | null = null;
 
   constructor(private readonly options: PrototypeAuthServiceOptions) {
     this.sessionStorageKey = options.sessionStorageKey ?? 'philsa_user';
@@ -48,6 +49,55 @@ export class LocalStorageAuthService implements AuthService {
 
     this.options.storage.setItem(this.sessionStorageKey, JSON.stringify(user));
     return serviceSuccess(this.createSession(user));
+  }
+
+  async startLoginIdentifier(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>> {
+    await this.delay();
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const user = this.findUser(normalizedIdentifier) ?? this.findStudentFromSavedApplication(normalizedIdentifier);
+
+    if (!user) {
+      return authorizationError('Identifier not found or invalid. Please check and try again.', 'AUTHENTICATION_FAILED');
+    }
+
+    this.pendingIdentifier = normalizedIdentifier;
+    return serviceSuccess({
+      pendingAuthToken: 'prototype-pending-auth',
+      nextStep: 'password',
+      expiresInSeconds: 600,
+    });
+  }
+
+  async verifyLoginPassword(_pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>> {
+    await this.delay();
+
+    if (!this.pendingIdentifier) {
+      return authorizationError('Your session has expired. Please start again.', 'AUTHENTICATION_FAILED');
+    }
+
+    if (!password) {
+      return authorizationError('Incorrect email/LRN or password.', 'AUTHENTICATION_FAILED');
+    }
+
+    return serviceSuccess({
+      otpPendingAuthToken: 'prototype-otp-pending-auth',
+      nextStep: 'otp',
+      expiresInSeconds: 300,
+      resendCooldownSeconds: 60,
+      devOtp: '000000',
+    });
+  }
+
+  async verifyLoginOtp(_otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSession>> {
+    await this.delay();
+
+    if (!this.pendingIdentifier || code !== '000000') {
+      return authorizationError('Invalid or expired code. Please try again.', 'AUTHENTICATION_FAILED');
+    }
+
+    const session = await this.login({ email: this.pendingIdentifier });
+    this.pendingIdentifier = null;
+    return session;
   }
 
   async logout(): Promise<ServiceResult<null>> {
