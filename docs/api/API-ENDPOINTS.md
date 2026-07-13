@@ -37,7 +37,10 @@ Response behavior:
 - CORS headers are returned only when the request origin is configured as allowed.
 - Unsupported methods use the standard API error envelope with `METHOD_NOT_ALLOWED`.
 
-Test coverage: `backend/apps/core/tests/test_health.py`.
+Test coverage:
+
+- Behavior tests: `backend/apps/core/tests/test_health.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
 
 ## Candidate endpoint groups
 
