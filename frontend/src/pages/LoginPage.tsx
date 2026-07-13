@@ -9,17 +9,17 @@ import type { UserRole } from '../types';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LRN_PATTERN = /^\d{12}$/;
 const LOCAL_BACKEND_ACCOUNTS = [
-  'admissions.reviewer@philsa.local',
-  'proctor@philsa.local',
-  'proctor.admin@philsa.local',
-  'university.admin@philsa.local',
-  'testing.center.admin@philsa.local',
-  'exam.admin@philsa.local',
-  'system.admin@philsa.local',
-  'ched.admin@philsa.local',
-  'deped.admin@philsa.local',
-  'tesda.admin@philsa.local',
-  'executive@philsa.local',
+  'admissions.reviewer@yopmail.com',
+  'proctor@yopmail.com',
+  'proctor.admin@yopmail.com',
+  'university.admin@yopmail.com',
+  'testing.center.admin@yopmail.com',
+  'exam.admin@yopmail.com',
+  'system.admin@yopmail.com',
+  'ched.admin@yopmail.com',
+  'deped.admin@yopmail.com',
+  'tesda.admin@yopmail.com',
+  'executive@yopmail.com',
 ];
 
 type LoginStep = 'identifier' | 'password' | 'otp';

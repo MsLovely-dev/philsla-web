@@ -20,6 +20,7 @@ class RoleAccountProvisioningCommandTests(TestCase):
         self.assertNotIn(PortalRole.STUDENT.value, provisioned_roles)
         self.assertEqual(get_user_model().objects.count(), len(expected_roles))
         self.assertFalse(get_user_model().objects.get(username="proctor").has_usable_password())
+        self.assertEqual(get_user_model().objects.get(username="proctor").email, "proctor@yopmail.com")
         self.assertIn("Provisioned non-student role accounts", output.getvalue())
 
     def test_command_can_assign_local_password_when_explicitly_requested(self) -> None:

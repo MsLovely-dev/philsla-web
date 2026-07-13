@@ -29,8 +29,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument(
             "--email-domain",
-            default="philsa.local",
-            help="Synthetic email domain for generated accounts. Default: philsa.local",
+            default="yopmail.com",
+            help="Synthetic email domain for generated accounts. Default: yopmail.com",
         )
         parser.add_argument(
             "--password",
