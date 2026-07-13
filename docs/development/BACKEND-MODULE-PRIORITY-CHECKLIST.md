@@ -64,7 +64,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 - [x] Decide authentication provider/session/token approach.
 - [x] Define backend roles and permissions aligned to documented frontend prototype roles.
 - [x] Add authentication middleware/configuration after provider is selected.
-- [ ] Add permission classes for role and object-level authorization.
+- [x] Add permission classes for role and object-level authorization.
 - [ ] Define password, MFA, account recovery, and invitation approach. (Password rules, mandatory email OTP, staff/admin activation, and token session policy are accepted in ADR-011; password/account recovery remains `TBD`.)
 - [ ] Add security settings for CORS, CSRF/session behavior, allowed hosts, secure cookies, and trusted origins after deployment model is known (`TBD`).
 - [ ] Document that frontend auth remains non-authoritative until backend auth is implemented.

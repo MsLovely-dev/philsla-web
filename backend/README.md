@@ -1,6 +1,6 @@
 # PhilSA Backend
 
-> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, baseline auth configuration, and baseline tests are implemented. Login endpoints, token issuance/validation, OTP delivery, job processing, storage provider, deployment, and database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
+> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, baseline auth/permission configuration, and baseline tests are implemented. Login endpoints, token issuance/validation, OTP delivery, job processing, storage provider, deployment, and database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
 
 ## Local setup
 
@@ -22,7 +22,7 @@ Production settings read the database connection from `DATABASE_URL`. Do not com
 
 For persistence-backed development, use PostgreSQL-compatible storage through `DATABASE_URL`; SQLite is only for the current no-persistence foundation. Keep local, staging, and production databases separate, and use synthetic data outside production. Supabase backup/restore, connection pooling values, migration rollout rules, rollback expectations, seed data rules, and recovery objectives are documented in the [database design notes](../docs/architecture/DATABASE-DESIGN.md).
 
-Authentication configuration follows the accepted three-step portal flow in [ADR-011](../docs/decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). DRF is wired to a Bearer authentication hook that rejects tokens until login, refresh, and revocation workflows are implemented.
+Authentication configuration follows the accepted three-step portal flow in [ADR-011](../docs/decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). DRF is wired to a Bearer authentication hook that rejects tokens until login, refresh, and revocation workflows are implemented. Permission helpers provide deny-by-default role checks and object-level authorization hooks for future business endpoints.
 
 ## Checks and smoke test
 
