@@ -8,13 +8,21 @@ Supabase Postgres is accepted only as the database provider. Supabase Auth and S
 
 Documents, recordings, exports, and evidence must use private S3-compatible object storage after [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md). The backend must authorize every object access and must not expose permanent public URLs for sensitive files.
 
-Initial browser authentication uses Django-managed backend accounts and server-side sessions after [ADR-009](../decisions/ADR-009-AUTHENTICATION-SESSION-AND-ACCOUNT-PROVISIONING.md). Supabase Auth is not adopted. Token-based authentication for non-browser clients remains `TBD`.
+Initial portal authentication uses Django-managed backend accounts and the three-step LRN/email, password, and email OTP flow accepted in [ADR-011](../decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). Supabase Auth is not adopted.
+
+## Backend roles and permissions
+
+Backend role and permission rules are accepted in [ADR-010](../decisions/ADR-010-BACKEND-ROLES-AND-PERMISSIONS.md). The portal authentication role catalog is `STUDENT`, `ADMISSIONS_REVIEWER`, `PROCTOR`, `PROCTOR_ADMIN`, `UNIVERSITY_ADMIN`, `TESTING_CENTER_ADMIN`, `EXAM_ADMINISTRATOR`, `SYSTEM_ADMIN`, `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, and `EXECUTIVE`.
+
+Frontend prototype-only roles such as `ACADEMIC_REVIEWER`, `GOVERNMENT`, `ITEM_WRITER`, `GRADER`, and `TECH_SUPPORT` are not portal login roles for `US-SR-002` until separately approved. `GOVERNMENT` is replaced by agency-specific oversight roles for authentication: `CHED_ADMIN`, `DEPED_ADMIN`, and `TESDA_ADMIN`.
+
+The backend must enforce deny-by-default role-based access control plus object-level authorization. Role assignment is backend-managed and auditable. API permission checks must derive identity, account status, roles, and object scopes from server-side state, never from client-submitted roles, frontend route guards, or browser storage.
 
 ## Required controls
 
 - Authenticate users and enforce role- and object-level authorization on every protected operation.
 - Validate and normalize all backend inputs; enforce allowed workflow transitions server-side.
-- Protect sessions/tokens against theft, replay, fixation, and inappropriate lifetime. MFA policy and non-browser token authentication are `TBD`.
+- Protect pending-auth tokens, access tokens, and refresh tokens against theft, replay, fixation, and inappropriate lifetime. Mandatory email OTP and security-tier session policy are defined in ADR-011.
 - Encrypt sensitive traffic and stored data using approved key management. Exact standards are `TBD`.
 - Never commit secrets. Rotate exposed credentials and use environment/secret management outside source control.
 - Sensitive information must not be written to logs. This includes credentials, tokens, student records, government identifiers, exam answers, scores before release, and proctoring evidence.

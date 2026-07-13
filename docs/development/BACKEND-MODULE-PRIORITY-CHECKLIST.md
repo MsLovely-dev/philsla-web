@@ -4,7 +4,7 @@
 
 This checklist prioritizes backend work now that PhilSA is moving beyond the frontend prototype. It is scoped to the future Django and Django REST Framework service under `backend/`.
 
-Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, private S3-compatible object storage as the file/evidence storage approach, and Django-managed server-side session authentication for the initial browser API are adopted. Deployment, object storage provider, background jobs, API schema tooling, token auth for non-browser clients, and production infrastructure remain `TBD` unless a later ADR accepts them.
+Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, private S3-compatible object storage as the file/evidence storage approach, Django-managed backend accounts, and the three-step LRN/email, password, and email OTP authentication flow are adopted. Deployment, object storage provider, email provider, background jobs, API schema tooling, and production infrastructure remain `TBD` unless a later ADR accepts them.
 
 Priority meanings:
 
@@ -62,10 +62,10 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 ### Authentication, authorization, and security baseline
 
 - [x] Decide authentication provider/session/token approach.
-- [ ] Define backend roles and permissions aligned to documented frontend prototype roles.
-- [ ] Add authentication middleware/configuration after provider is selected.
+- [x] Define backend roles and permissions aligned to documented frontend prototype roles.
+- [x] Add authentication middleware/configuration after provider is selected.
 - [ ] Add permission classes for role and object-level authorization.
-- [ ] Define password, MFA, account recovery, and invitation approach (`TBD`).
+- [ ] Define password, MFA, account recovery, and invitation approach. (Password rules, mandatory email OTP, staff/admin activation, and token session policy are accepted in ADR-011; password/account recovery remains `TBD`.)
 - [ ] Add security settings for CORS, CSRF/session behavior, allowed hosts, secure cookies, and trusted origins after deployment model is known (`TBD`).
 - [ ] Document that frontend auth remains non-authoritative until backend auth is implemented.
 
@@ -91,10 +91,11 @@ Build these after P0 backend foundation is running and tested.
 
 ### 1. Authentication and account entry
 
-- [ ] Implement current-session endpoint.
-- [ ] Implement login/logout or provider callback/session endpoints after auth approach is selected.
-- [ ] Implement account creation or invitation flow (`TBD`).
-- [ ] Implement email confirmation, password recovery, and MFA contracts (`TBD`).
+- [ ] Implement current-session endpoint with server-derived role, permission, and scope claims.
+- [ ] Implement three-step login endpoints for identifier resolution, password verification, and email OTP verification.
+- [ ] Implement logout, refresh-token rotation, token revocation, and session-expiry behavior.
+- [ ] Implement student registration account activation and staff/admin provisioning activation flow.
+- [ ] Implement password recovery and account recovery contracts (`TBD`).
 - [ ] Return safe, actionable auth errors without exposing account existence or sensitive details.
 - [ ] Add auth, throttling, audit, and permission tests.
 
