@@ -71,7 +71,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 
 ### Test and quality baseline
 
-- [ ] Decide backend test tooling and coverage expectations (`TBD`).
+- [x] Decide backend test tooling and coverage expectations.
 - [ ] Add tests for health endpoint, error response shape, authentication requirements, and permission denial behavior. (Health and error baseline implemented; authentication and permission tests await the auth baseline.)
 - [ ] Add lint/type/format tooling decisions (`TBD`).
 - [x] Add CI-ready commands for backend tests and checks.

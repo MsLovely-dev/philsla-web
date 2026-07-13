@@ -2,7 +2,9 @@
 
 ## Current state
 
-The frontend package uses Vitest with jsdom, React Testing Library, Testing Library user-event, and jest-dom for fast unit and component-level behavior tests. Playwright covers critical browser-level journeys, including desktop and mobile routing behavior. These choices are accepted in [ADR-003](../decisions/ADR-003-FRONTEND-TOOLING.md). The package also exposes a TypeScript no-emit check through `npm run lint` and a Vite build. Additional browser coverage, non-Chromium coverage, and coverage thresholds remain `TBD`. The initial backend tests use Django's built-in test runner and DRF test integration; broader backend tooling and coverage thresholds remain `TBD`.
+The frontend package uses Vitest with jsdom, React Testing Library, Testing Library user-event, and jest-dom for fast unit and component-level behavior tests. Playwright covers critical browser-level journeys, including desktop and mobile routing behavior. These choices are accepted in [ADR-003](../decisions/ADR-003-FRONTEND-TOOLING.md). The package also exposes a TypeScript no-emit check through `npm run lint` and a Vite build. Additional browser coverage, non-Chromium coverage, and frontend coverage thresholds remain `TBD`.
+
+Backend foundation tests use Django's built-in test runner, Django test utilities, and DRF test utilities as accepted in [ADR-012](../decisions/ADR-012-BACKEND-TEST-TOOLING-AND-COVERAGE.md). Backend coverage expectations are behavior-based for now; numeric coverage thresholds remain deferred until coverage tooling is accepted.
 
 ## Required policy
 
@@ -21,6 +23,23 @@ The frontend package uses Vitest with jsdom, React Testing Library, Testing Libr
 - Service state: test service contracts and mock/API adapters separately from presentation components.
 - Backend: unit tests for domain rules, integration tests for persistence/adapters, endpoint authorization/validation tests, migration tests, and consumer/contract tests.
 - Security/performance: targeted tests based on threat models and capacity targets once those are defined.
+
+## Backend baseline
+
+Run backend checks and tests from `backend/`:
+
+```powershell
+python manage.py check --settings=config.settings.local
+python manage.py test --settings=config.settings.test
+```
+
+When production settings change, also run a production settings check with fake non-secret environment values:
+
+```powershell
+python manage.py check --settings=config.settings.production
+```
+
+Backend endpoint tests must cover success, validation failure, authentication failure, permission denial, object-level authorization denial, not-found behavior, conflict/state-transition behavior, and standard error shape where applicable. Security-sensitive workflows must also cover token/session behavior, account state, lockout/rate-limit behavior, audit expectations, and safe logging.
 
 ## Reporting
 
