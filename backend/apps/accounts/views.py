@@ -4,6 +4,7 @@ from typing import Any
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .audit import record_auth_event
 from .permissions import RoleRequiredPermission, require_roles
 from .roles import PortalRole, get_security_tier, get_user_role
 from .serializers import (
@@ -30,6 +31,7 @@ from .services import (
     verify_login_otp,
     verify_login_password,
 )
+from .throttling import AuthScopedRateThrottle
 
 
 def _json_datetime(value: object) -> str | None:
@@ -83,11 +85,14 @@ class CurrentSessionView(APIView):
 class IdentifierLoginView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_identifier"
 
     def post(self, request) -> Response:
         serializer = IdentifierLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        record_auth_event(event="auth.identifier_submitted", outcome="rejected", request=request)
         start_identifier_login(identifier=serializer.validated_data["identifier"])
         return Response(status=202)
 
@@ -95,11 +100,14 @@ class IdentifierLoginView(APIView):
 class PasswordLoginView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
 
     def post(self, request) -> Response:
         serializer = PasswordLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        record_auth_event(event="auth.password_submitted", outcome="rejected", request=request)
         verify_login_password(
             pending_auth_token=serializer.validated_data["pendingAuthToken"],
             password=serializer.validated_data["password"],
@@ -110,11 +118,14 @@ class PasswordLoginView(APIView):
 class OtpLoginView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
 
     def post(self, request) -> Response:
         serializer = OtpLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        record_auth_event(event="auth.otp_submitted", outcome="rejected", request=request)
         verify_login_otp(
             otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
             code=serializer.validated_data["code"],
@@ -133,8 +144,11 @@ class LogoutView(APIView):
 class RefreshTokenView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
 
     def post(self, request) -> Response:
+        record_auth_event(event="auth.token_refresh", outcome="rejected", request=request)
         rotate_refresh_token(refresh_token=request.COOKIES.get("refreshToken"))
         return Response(status=200)
 
@@ -166,11 +180,14 @@ class StudentRegistrationActivationView(APIView):
 class StaffActivationCompletionView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
 
     def post(self, request) -> Response:
         serializer = StaffActivationCompletionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        record_auth_event(event="auth.staff_activation_complete", outcome="rejected", request=request)
         complete_staff_activation(
             activation_token=serializer.validated_data["activationToken"],
             password=serializer.validated_data["password"],
@@ -181,11 +198,14 @@ class StaffActivationCompletionView(APIView):
 class PasswordRecoveryRequestView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_recovery"
 
     def post(self, request) -> Response:
         serializer = PasswordRecoveryRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        record_auth_event(event="auth.password_recovery_requested", outcome="accepted", request=request)
         request_password_recovery(identifier=serializer.validated_data["identifier"])
         return Response(
             {
@@ -198,11 +218,14 @@ class PasswordRecoveryRequestView(APIView):
 class PasswordRecoveryCompletionView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
 
     def post(self, request) -> Response:
         serializer = PasswordRecoveryCompletionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        record_auth_event(event="auth.password_recovery_completed", outcome="rejected", request=request)
         complete_password_recovery(
             recovery_token=serializer.validated_data["recoveryToken"],
             password=serializer.validated_data["password"],

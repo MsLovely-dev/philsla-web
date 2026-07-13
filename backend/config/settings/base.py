@@ -70,6 +70,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "EXCEPTION_HANDLER": "apps.core.exceptions.api_exception_handler",
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.StandardPageNumberPagination",
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_identifier": "20/min",
+        "auth_sensitive": "10/min",
+        "auth_recovery": "5/hour",
+    },
     "PAGE_SIZE": 25,
 }
 
@@ -123,6 +128,11 @@ LOGGING = {
     },
     "loggers": {
         "philsa.request": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "philsa.audit": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

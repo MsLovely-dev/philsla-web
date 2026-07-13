@@ -86,6 +86,12 @@ Authentication, activation, and recovery endpoints must return safe, actionable 
 - Response bodies and field errors must not include raw credentials, OTPs, bearer tokens, refresh tokens, pending-auth tokens, activation tokens, recovery tokens, account IDs, internal table names, stack traces, or provider diagnostics.
 - Authentication and recovery safety tests must cover implemented auth endpoints before frontend adapters consume them.
 
+## Authentication throttling and audit baseline
+
+Authentication, activation, recovery, and token-session endpoints must have endpoint-level throttling before frontend integration. Baseline throttle scopes are configured for identifier entry, sensitive auth steps, and recovery requests; production rates may be tightened through deployment configuration after traffic and WAF/API-gateway policy are known.
+
+Auth events must be recorded through a safe audit boundary using approved metadata only: event name, outcome, correlation ID, actor/user identifier when already authenticated, timestamp from the logging system, and operational request metadata supplied by the request logger. Durable audit persistence remains a later audit-module implementation, but endpoint tests must verify that auth audit boundary events do not include credentials, OTP codes, bearer tokens, refresh tokens, pending-auth tokens, activation tokens, recovery tokens, raw identifiers, request bodies, or provider diagnostics.
+
 ## Security and correctness
 
 - The backend authenticates, authorizes, validates, and enforces workflow state; frontend validation is for usability only.

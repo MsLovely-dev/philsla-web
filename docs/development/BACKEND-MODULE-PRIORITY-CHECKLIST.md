@@ -97,7 +97,7 @@ Build these after P0 backend foundation is running and tested.
 - [x] Implement student registration account activation and staff/admin provisioning activation endpoint boundaries; account, registration approval, activation-token storage, email delivery, and audit events remain in later auth/account slices.
 - [x] Implement password recovery and account recovery endpoint boundaries from ADR-011; recovery-token storage, email delivery, password hashing, session revocation, and audit events remain in later auth/account slices.
 - [x] Return safe, actionable auth errors without exposing account existence or sensitive details.
-- [ ] Add auth, throttling, audit, and permission tests.
+- [x] Add auth, throttling, audit, and permission tests.
 
 ### 2. Student registration and application
 
