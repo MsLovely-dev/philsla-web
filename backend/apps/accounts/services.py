@@ -29,3 +29,21 @@ def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> None:
     """Validate the email OTP and issue the full backend session."""
 
     raise LoginFlowRejected("Invalid or expired code. Please try again.")
+
+
+def rotate_refresh_token(*, refresh_token: str | None) -> None:
+    """Rotate the refresh token and issue a new access token."""
+
+    raise LoginFlowRejected("Your session has expired. Please log in again.")
+
+
+def revoke_current_session(*, user: object, auth: object) -> None:
+    """Revoke the current session's refresh token and access-token family."""
+
+    return None
+
+
+def revoke_tokens(*, user: object, scope: str) -> None:
+    """Revoke refresh/access tokens for the requested scope."""
+
+    return None

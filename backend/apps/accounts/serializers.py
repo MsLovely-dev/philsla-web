@@ -69,3 +69,7 @@ class OtpLoginSerializer(serializers.Serializer):
         if OTP_PATTERN.fullmatch(value):
             return value
         raise serializers.ValidationError("Please enter the 6-digit code sent to your email.")
+
+
+class TokenRevocationSerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(choices=("current", "all"), default="current", required=False)

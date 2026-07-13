@@ -5,8 +5,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .roles import get_security_tier, get_user_role
-from .serializers import IdentifierLoginSerializer, OtpLoginSerializer, PasswordLoginSerializer
-from .services import start_identifier_login, verify_login_otp, verify_login_password
+from .serializers import IdentifierLoginSerializer, OtpLoginSerializer, PasswordLoginSerializer, TokenRevocationSerializer
+from .services import (
+    revoke_current_session,
+    revoke_tokens,
+    rotate_refresh_token,
+    start_identifier_login,
+    verify_login_otp,
+    verify_login_password,
+)
 
 
 def _json_datetime(value: object) -> str | None:
@@ -97,3 +104,29 @@ class OtpLoginView(APIView):
             code=serializer.validated_data["code"],
         )
         return Response(status=200)
+
+
+class LogoutView(APIView):
+    def post(self, request) -> Response:
+        revoke_current_session(user=request.user, auth=request.auth)
+        response = Response(status=204)
+        response.delete_cookie("refreshToken", samesite="Strict")
+        return response
+
+
+class RefreshTokenView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+
+    def post(self, request) -> Response:
+        rotate_refresh_token(refresh_token=request.COOKIES.get("refreshToken"))
+        return Response(status=200)
+
+
+class TokenRevocationView(APIView):
+    def post(self, request) -> Response:
+        serializer = TokenRevocationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        revoke_tokens(user=request.user, scope=serializer.validated_data["scope"])
+        return Response(status=204)

@@ -49,6 +49,30 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/accounts/tests/test_login_endpoints.py",
         "route_namespace": "accounts",
     },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/logout/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/logout/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_token_session_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/token/refresh/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/token/refresh/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_token_session_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/token/revoke/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/token/revoke/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_token_session_endpoints.py",
+        "route_namespace": "accounts",
+    },
 )
 
 

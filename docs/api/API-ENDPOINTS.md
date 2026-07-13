@@ -2,7 +2,7 @@
 
 ## Current state
 
-The baseline health endpoint, current-session endpoint boundary, and three-step login endpoint boundaries are implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
+The baseline health endpoint, current-session endpoint boundary, three-step login endpoint boundaries, and session token management endpoint boundaries are implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
 
 ## Implemented baseline endpoints
 
@@ -13,6 +13,9 @@ The baseline health endpoint, current-session endpoint boundary, and three-step 
 | `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented boundary; account lookup pending |
 | `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented boundary; pending-token/password verification pending |
 | `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and complete session issuance | Implemented boundary; OTP/session issuance pending |
+| `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented boundary; durable revocation pending |
+| `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented boundary; token store pending |
+| `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
 
 ### `GET /api/v1/health/`
 
@@ -215,11 +218,101 @@ Test coverage:
 - Behavior tests: `backend/apps/accounts/tests/test_login_endpoints.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
 
+### `POST /api/v1/auth/logout/`
+
+Use this endpoint to end the current authenticated session. It requires backend authentication and must not trust frontend-local session state.
+
+Current implementation status: route, authentication boundary, refresh-cookie clearing, and tests exist. Durable refresh-token revocation, access-token family tracking, and logout audit events remain pending until the token store is implemented.
+
+Request:
+
+- Body: none.
+- Authentication: bearer access token from the backend session flow.
+
+Current successful response:
+
+- `204 No Content`.
+- Clears the `refreshToken` cookie with `SameSite=Strict`.
+
+Error behavior:
+
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_token_session_endpoints.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+### `POST /api/v1/auth/token/refresh/`
+
+Use this endpoint to rotate a valid refresh token and issue a new access token. The refresh token must be read from an HttpOnly, Secure, SameSite=Strict cookie, not from frontend JavaScript storage.
+
+Current implementation status: route, safe session-expired error, and tests exist. Refresh-token lookup, rotation, replay detection, cookie replacement, access-token issuance, and audit events remain pending until the token store is implemented.
+
+Request:
+
+- Body: none.
+- Authentication: refresh token cookie.
+
+Current response behavior:
+
+- `401 AUTHENTICATION_FAILED` with `Your session has expired. Please log in again.` until refresh-token storage exists.
+
+Future successful response:
+
+```json
+{
+  "accessToken": "opaque-access-token",
+  "tokenType": "Bearer",
+  "expiresInSeconds": 900
+}
+```
+
+The rotated refresh token must be issued separately as an HttpOnly, Secure, SameSite=Strict cookie.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_token_session_endpoints.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+### `POST /api/v1/auth/token/revoke/`
+
+Use this endpoint to revoke tokens for the authenticated account. The backend decides which tokens belong to the user; clients may only request the revocation scope.
+
+Current implementation status: route, authentication boundary, request validation, and tests exist. Durable token-family revocation, real-time session invalidation across active tokens, and audit events remain pending until the token store is implemented.
+
+Request:
+
+```json
+{
+  "scope": "current"
+}
+```
+
+Validation behavior:
+
+- `scope` may be `current` or `all`.
+- Missing `scope` defaults to `current`.
+- Invalid scope returns `400 VALIDATION_FAILED`.
+
+Current successful response:
+
+- `204 No Content` for an authenticated request.
+
+Error behavior:
+
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_token_session_endpoints.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
 ## Candidate endpoint groups
 
 | Capability | Candidate base path | Status |
 | --- | --- | --- |
-| Authentication and sessions | `/api/v1/auth` | Partially implemented: current-session and three-step login boundaries only; token storage, email delivery, logout, refresh, and revocation remain `TBD` |
+| Authentication and sessions | `/api/v1/auth` | Partially implemented: current-session, three-step login, logout, refresh, and revocation boundaries only; token storage, email delivery, durable revocation, and audit events remain `TBD` |
 | Student registration/applications | `/api/v1/applications` | `TBD` |
 | Student and registry verification | `/api/v1/verifications` | `TBD` |
 | Assessments and question banks | `/api/v1/assessments` | `TBD` |
