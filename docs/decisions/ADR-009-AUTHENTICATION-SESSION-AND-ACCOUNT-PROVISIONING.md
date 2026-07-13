@@ -48,7 +48,7 @@ Auditing requirements:
 - The next implementation step should configure authentication endpoints, token handling, OTP delivery, session revocation, and backend permission classes around this account model.
 - Student registration and account activation are separate workflow stages.
 - Existing prototype stories that imply direct student account creation are superseded for backend implementation by this ADR.
-- Password policy, mandatory email OTP, staff/admin activation, and token session policy are defined in [ADR-011](ADR-011-USER-AUTHENTICATION-FLOW.md). Password/account recovery remains `TBD`.
+- Password policy, mandatory email OTP, staff/admin activation, invitation, password recovery, account recovery, and token session policy are defined in [ADR-011](ADR-011-USER-AUTHENTICATION-FLOW.md).
 - CORS, CSRF, cookie, trusted-origin, and deployment-specific security settings remain `TBD` until the deployment model is selected.
 
 ## Alternatives considered

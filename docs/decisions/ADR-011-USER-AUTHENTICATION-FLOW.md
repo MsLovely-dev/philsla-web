@@ -44,6 +44,12 @@ Password policy:
 - Staff/admin first login requires password activation through a secure 24-48 hour time-limited activation link.
 - Default or temporary passwords must not remain valid beyond first use.
 
+MFA approach:
+
+- Mandatory email OTP is the baseline second factor for all portal roles.
+- SMS OTP, authenticator apps, passkeys, hardware keys, and risk-based step-up authentication are not part of the baseline implementation.
+- Any future additional MFA factor requires a separate security decision, migration path, recovery process, and user-support operating model.
+
 Email OTP policy:
 
 - OTPs are six-digit numeric codes generated with a cryptographically secure random generator.
@@ -52,6 +58,27 @@ Email OTP policy:
 - Resend invalidates the prior OTP, enforces a 30-60 second cooldown, and allows at most three resends per pending-auth session.
 - A maximum of five pending-auth session restarts per identifier per hour is required to limit email-bombing and brute-force abuse.
 - OTP emails must include the six-digit code, expiry notice, and support warning. They must not include clickable login links.
+
+Password and account recovery:
+
+- Password recovery uses the account's verified email address only.
+- A recovery request must not reveal whether the identifier exists, whether the account is inactive, or whether the account belongs to a student or staff/admin user.
+- Recovery links must be single-use, stored server-side only as hashes, and expire after 30 minutes.
+- Recovery links must not create a session. After password reset, the user must complete the normal three-step login flow.
+- A password reset invalidates all active access and refresh tokens for the account.
+- Recovery is denied with a generic message for suspended, deactivated, unverified, role-revoked, or scope-revoked accounts.
+- Staff/admin account recovery may also be initiated by an authorized `SYSTEM_ADMIN`, but the reset must still send a user-controlled activation/recovery link to the account email. System administrators must not set a reusable password for another user.
+- Support-assisted recovery must be auditable and must not disclose or modify credentials outside the approved recovery flow.
+
+Invitation and activation:
+
+- Student accounts are not invited by staff/admin users. Students may begin public self-registration, but account activation occurs only after approved registration review.
+- Staff/admin accounts are provisioned only by an authorized `SYSTEM_ADMIN`.
+- Staff/admin provisioning sends a secure activation link to the provisioned email address.
+- Activation links must be single-use, stored server-side only as hashes, and expire after 24-48 hours.
+- Activation requires the user to set their own password before the normal login flow is available.
+- Expired or revoked activation links require a new audited resend by an authorized `SYSTEM_ADMIN`.
+- Invitation, activation, resend, cancellation, password reset, and recovery completion events must be written to the audit trail.
 
 Full session:
 
@@ -86,12 +113,13 @@ Audit requirements:
 Out of scope:
 
 - Proctor Admin testing-center PC or Tauri-app enrollment is not part of this human login flow. It requires a separate machine-identity mechanism such as enrollment token plus device certificate or mTLS.
-- Password recovery and account recovery details remain `TBD` except for first-time staff/admin activation.
+- Non-email MFA factors and machine-identity recovery are outside this baseline.
 
 ## Consequences
 
 - [ADR-009](ADR-009-AUTHENTICATION-SESSION-AND-ACCOUNT-PROVISIONING.md) remains the account-provisioning decision, but its earlier browser server-side session assumption is superseded by this ADR.
 - Authentication implementation must include pending-auth token storage, OTP hashing, email delivery integration, refresh-token rotation, session revocation, account lockout, rate limits, audit events, and security-tier enforcement.
+- Account implementation must include activation, password reset, recovery-link hashing, recovery rate limits, and full session revocation after password reset.
 - API clients must not receive role or permission details before OTP verification succeeds.
 - CORS, CSRF, cookie domain, trusted origins, TLS termination, WAF/API gateway rate limits, email provider, and deployment-specific security settings remain `TBD`.
 
@@ -100,3 +128,4 @@ Out of scope:
 - Single-step email/password login: rejected because US-SR-002 requires mandatory email OTP.
 - Role-selected login: rejected because identifier resolution is format-driven and role selection would increase enumeration and routing risk.
 - Server-side browser sessions only: superseded because US-SR-002 requires access and rotating refresh tokens after OTP verification.
+- System-admin-assigned temporary passwords: rejected because users must set their own password through a single-use activation or recovery link.

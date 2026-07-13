@@ -65,7 +65,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 - [x] Define backend roles and permissions aligned to documented frontend prototype roles.
 - [x] Add authentication middleware/configuration after provider is selected.
 - [x] Add permission classes for role and object-level authorization.
-- [ ] Define password, MFA, account recovery, and invitation approach. (Password rules, mandatory email OTP, staff/admin activation, and token session policy are accepted in ADR-011; password/account recovery remains `TBD`.)
+- [x] Define password, MFA, account recovery, and invitation approach.
 - [ ] Add security settings for CORS, CSRF/session behavior, allowed hosts, secure cookies, and trusted origins after deployment model is known (`TBD`).
 - [ ] Document that frontend auth remains non-authoritative until backend auth is implemented.
 
@@ -95,7 +95,7 @@ Build these after P0 backend foundation is running and tested.
 - [ ] Implement three-step login endpoints for identifier resolution, password verification, and email OTP verification.
 - [ ] Implement logout, refresh-token rotation, token revocation, and session-expiry behavior.
 - [ ] Implement student registration account activation and staff/admin provisioning activation flow.
-- [ ] Implement password recovery and account recovery contracts (`TBD`).
+- [ ] Implement password recovery and account recovery contracts from ADR-011.
 - [ ] Return safe, actionable auth errors without exposing account existence or sensitive details.
 - [ ] Add auth, throttling, audit, and permission tests.
 
