@@ -24,6 +24,8 @@ For persistence-backed development, use PostgreSQL-compatible storage through `D
 
 Authentication configuration follows the accepted three-step portal flow in [ADR-011](../docs/decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). DRF is wired to a Bearer authentication hook that rejects tokens until login, refresh, and revocation workflows are implemented. Permission helpers provide deny-by-default role checks and object-level authorization hooks for future business endpoints.
 
+Security settings use strict defaults for cookies and headers. Local development allows only localhost origins. Production must provide `DJANGO_ALLOWED_HOSTS`; trusted CSRF/CORS origins remain environment-specific until deployment domains are selected.
+
 ## Checks and smoke test
 
 ```powershell

@@ -55,6 +55,22 @@ class HealthEndpointTests(TestCase):
         self.assertNotIn("Authorization", formatted)
         self.assertNotIn("token=", formatted)
 
+    @override_settings(CORS_ALLOWED_ORIGINS=["https://frontend.example.test"])
+    def test_cors_allowlist_adds_headers_for_allowed_origin(self) -> None:
+        response = self.client.get("/api/v1/health/", headers={"Origin": "https://frontend.example.test"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://frontend.example.test")
+        self.assertEqual(response.headers["Access-Control-Allow-Credentials"], "true")
+        self.assertIn("Origin", response.headers["Vary"])
+
+    @override_settings(CORS_ALLOWED_ORIGINS=["https://frontend.example.test"])
+    def test_cors_allowlist_ignores_untrusted_origin(self) -> None:
+        response = self.client.get("/api/v1/health/", headers={"Origin": "https://evil.example.test"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("Access-Control-Allow-Origin", response.headers)
+
 
 class DatabaseUrlConfigTests(TestCase):
     def test_database_url_builds_postgresql_config_without_logging_credentials(self) -> None:
