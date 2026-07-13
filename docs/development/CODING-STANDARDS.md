@@ -22,6 +22,7 @@
 
 The backend uses Django and Django REST Framework. Follow their established project, app, serializer, view, migration, and testing conventions while also applying these rules:
 
+- Backend lint, format, and type tooling is accepted in [ADR-013](../decisions/ADR-013-BACKEND-LINT-TYPE-FORMAT-TOOLING.md): Ruff for linting/formatting/import ordering and mypy for static type checking. Tool installation and lock updates remain a separate implementation step.
 - Backend business logic must not be placed directly inside routes or controllers.
 - Validate at the system boundary and enforce invariants in domain/application code.
 - Require authentication and authorization independently of frontend behavior.

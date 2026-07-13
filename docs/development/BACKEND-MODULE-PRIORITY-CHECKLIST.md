@@ -73,7 +73,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 
 - [x] Decide backend test tooling and coverage expectations.
 - [x] Add tests for health endpoint, error response shape, authentication requirements, and permission denial behavior.
-- [ ] Add lint/type/format tooling decisions (`TBD`).
+- [x] Add lint/type/format tooling decisions.
 - [x] Add CI-ready commands for backend tests and checks.
 - [x] Ensure docs report exact backend commands once they exist.
 
