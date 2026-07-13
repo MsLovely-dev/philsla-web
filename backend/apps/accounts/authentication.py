@@ -1,14 +1,11 @@
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 from rest_framework.exceptions import AuthenticationFailed
 
+from .services import validate_access_token
+
 
 class PendingAwareBearerAuthentication(BaseAuthentication):
-    """Bearer-token authentication hook for the ADR-011 auth flow.
-
-    Token issuance and validation are intentionally not implemented in this
-    foundation slice. Protected endpoints reject supplied bearer tokens until
-    the login, refresh, and revocation workflows are built.
-    """
+    """Bearer-token authentication hook for the ADR-011 auth flow."""
 
     keyword = b"bearer"
     www_authenticate_realm = "api"
@@ -25,7 +22,11 @@ class PendingAwareBearerAuthentication(BaseAuthentication):
         if len(auth_parts) != 2:
             raise AuthenticationFailed("Invalid bearer token header.")
 
-        raise AuthenticationFailed("Bearer token validation is not implemented.")
+        token = auth_parts[1].decode()
+        validated = validate_access_token(access_token=token)
+        if validated is None:
+            raise AuthenticationFailed("Invalid or expired bearer token.")
+        return validated
 
     def authenticate_header(self, request) -> str:
         return f'Bearer realm="{self.www_authenticate_realm}"'

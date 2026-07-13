@@ -99,4 +99,83 @@ describe('BackendAuthService', () => {
       }),
     );
   });
+
+  it('completes local dev backend login when the backend exposes a dev OTP', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            pendingAuthToken: 'identifier-token',
+            nextStep: 'password',
+            expiresInSeconds: 600,
+          },
+          { status: 202 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            otpPendingAuthToken: 'otp-token',
+            nextStep: 'otp',
+            expiresInSeconds: 300,
+            resendCooldownSeconds: 60,
+            devOtp: '123456',
+          },
+          { status: 202 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            accessToken: 'access-token',
+            tokenType: 'Bearer',
+            expiresInSeconds: 900,
+            expiresAt: '2026-07-13T10:00:00Z',
+          },
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            user: {
+              id: 'dev-student',
+              role: 'STUDENT',
+              securityTier: 1,
+              permissions: [],
+              scopes: {},
+            },
+            session: {
+              authenticated: true,
+              expiresAt: '2026-07-13T10:00:00Z',
+            },
+          },
+          { status: 200 },
+        ),
+      );
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.login({ email: 'student@example.test', password: 'Password1!' });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.user).toMatchObject({ id: 'dev-student', role: 'STUDENT' });
+    }
+    expect(fetcher).toHaveBeenNthCalledWith(
+      3,
+      'http://backend.test/api/v1/auth/login/otp/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ otpPendingAuthToken: 'otp-token', code: '123456' }),
+      }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      4,
+      'http://backend.test/api/v1/auth/session/',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
+      }),
+    );
+  });
 });

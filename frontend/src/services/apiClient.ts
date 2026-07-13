@@ -18,10 +18,15 @@ export interface ApiClientOptions {
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
+  private bearerToken: string | null = null;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.fetcher = options.fetcher ?? fetch;
+  }
+
+  setBearerToken(token: string | null): void {
+    this.bearerToken = token;
   }
 
   async request<TData>(path: string, init: RequestInit = {}): Promise<ServiceResult<TData>> {
@@ -32,6 +37,7 @@ export class ApiClient {
         headers: {
           Accept: 'application/json',
           ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
           ...init.headers,
         },
       });

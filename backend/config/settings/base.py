@@ -27,6 +27,7 @@ DEBUG = False
 ALLOWED_HOSTS: list[str] = []
 
 INSTALLED_APPS = [
+    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -50,6 +51,20 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 TEMPLATES: list[dict[str, object]] = []
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    }
+]
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
@@ -91,6 +106,7 @@ AUTH_STUDENT_IDLE_TIMEOUT_MINUTES = env_int("AUTH_STUDENT_IDLE_TIMEOUT_MINUTES",
 AUTH_STAFF_IDLE_TIMEOUT_MINUTES = env_int("AUTH_STAFF_IDLE_TIMEOUT_MINUTES", 10)
 AUTH_STUDENT_ABSOLUTE_TIMEOUT_HOURS = env_int("AUTH_STUDENT_ABSOLUTE_TIMEOUT_HOURS", 12)
 AUTH_STAFF_ABSOLUTE_TIMEOUT_HOURS = env_int("AUTH_STAFF_ABSOLUTE_TIMEOUT_HOURS", 8)
+AUTH_LOCAL_EXPOSE_OTP = env_bool("AUTH_LOCAL_EXPOSE_OTP", False)
 
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS")

@@ -18,6 +18,18 @@ interface BackendSessionResponse {
   };
 }
 
+interface BackendPasswordResponse {
+  otpPendingAuthToken: string;
+  devOtp?: string;
+}
+
+interface BackendTokenResponse {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresInSeconds: number;
+  expiresAt: string;
+}
+
 export class BackendAuthService implements AuthService {
   constructor(private readonly apiClient: ApiClient = createApiClient()) {}
 
@@ -46,7 +58,7 @@ export class BackendAuthService implements AuthService {
       return authorizationError('Password is required to continue backend login.', 'PASSWORD_REQUIRED');
     }
 
-    const passwordResult = await this.apiClient.request<{ otpPendingAuthToken: string }>('/api/v1/auth/login/password/', {
+    const passwordResult = await this.apiClient.request<BackendPasswordResponse>('/api/v1/auth/login/password/', {
       method: 'POST',
       body: JSON.stringify({
         pendingAuthToken: identifierResult.data.pendingAuthToken,
@@ -56,20 +68,41 @@ export class BackendAuthService implements AuthService {
 
     if (passwordResult.ok === false) return passwordResult as ServiceFailure;
 
-    return authorizationError(
-      'Backend OTP verification is required. The frontend OTP screen is not wired yet.',
-      'OTP_REQUIRED',
-    );
+    if (!passwordResult.data.devOtp) {
+      return authorizationError(
+        'Backend OTP verification is required. Enable local dev OTP exposure or wire the OTP screen to continue.',
+        'OTP_REQUIRED',
+      );
+    }
+
+    const otpResult = await this.apiClient.request<BackendTokenResponse>('/api/v1/auth/login/otp/', {
+      method: 'POST',
+      body: JSON.stringify({
+        otpPendingAuthToken: passwordResult.data.otpPendingAuthToken,
+        code: passwordResult.data.devOtp,
+      }),
+    });
+
+    if (otpResult.ok === false) return otpResult as ServiceFailure;
+
+    this.apiClient.setBearerToken(otpResult.data.accessToken);
+    const sessionResult = await this.getCurrentSession();
+    if (sessionResult.ok === false) return sessionResult as ServiceFailure;
+    if (!sessionResult.data) return authorizationError('The backend session was not created.', 'SESSION_NOT_CREATED');
+    return serviceSuccess(sessionResult.data);
   }
 
   async logout(): Promise<ServiceResult<null>> {
-    return this.apiClient.request<null>('/api/v1/auth/logout/', { method: 'POST' });
+    const result = await this.apiClient.request<null>('/api/v1/auth/logout/', { method: 'POST' });
+    this.apiClient.setBearerToken(null);
+    return result;
   }
 
   async refreshSession(): Promise<ServiceResult<AuthSession>> {
-    const result = await this.apiClient.request<{ accessToken: string }>('/api/v1/auth/token/refresh/', { method: 'POST' });
+    const result = await this.apiClient.request<BackendTokenResponse>('/api/v1/auth/token/refresh/', { method: 'POST' });
     if (result.ok === false) return result as ServiceFailure;
 
+    this.apiClient.setBearerToken(result.data.accessToken);
     const sessionResult = await this.getCurrentSession();
     if (sessionResult.ok === false) return sessionResult as ServiceFailure;
     if (!sessionResult.data) return authorizationError('The backend session has expired.', 'SESSION_EXPIRED');

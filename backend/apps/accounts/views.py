@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
 
+from django.conf import settings
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -19,6 +20,7 @@ from .serializers import (
     TokenRevocationSerializer,
 )
 from .services import (
+    LoginFlowRejected,
     activate_student_registration_account,
     complete_staff_activation,
     complete_password_recovery,
@@ -58,6 +60,17 @@ def _scope_claims(value: object) -> dict[str, Any]:
     return {}
 
 
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    response.set_cookie(
+        "refreshToken",
+        refresh_token,
+        max_age=settings.AUTH_REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,
+        samesite="Strict",
+    )
+
+
 class CurrentSessionView(APIView):
     """Return server-derived identity, role, permission, and scope claims."""
 
@@ -92,9 +105,13 @@ class IdentifierLoginView(APIView):
         serializer = IdentifierLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        record_auth_event(event="auth.identifier_submitted", outcome="rejected", request=request)
-        start_identifier_login(identifier=serializer.validated_data["identifier"])
-        return Response(status=202)
+        try:
+            result = start_identifier_login(identifier=serializer.validated_data["identifier"])
+        except LoginFlowRejected:
+            record_auth_event(event="auth.identifier_submitted", outcome="rejected", request=request)
+            raise
+        record_auth_event(event="auth.identifier_submitted", outcome="accepted", request=request)
+        return Response(result, status=202)
 
 
 class PasswordLoginView(APIView):
@@ -107,12 +124,16 @@ class PasswordLoginView(APIView):
         serializer = PasswordLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        record_auth_event(event="auth.password_submitted", outcome="rejected", request=request)
-        verify_login_password(
-            pending_auth_token=serializer.validated_data["pendingAuthToken"],
-            password=serializer.validated_data["password"],
-        )
-        return Response(status=202)
+        try:
+            result = verify_login_password(
+                pending_auth_token=serializer.validated_data["pendingAuthToken"],
+                password=serializer.validated_data["password"],
+            )
+        except LoginFlowRejected:
+            record_auth_event(event="auth.password_submitted", outcome="rejected", request=request)
+            raise
+        record_auth_event(event="auth.password_submitted", outcome="accepted", request=request)
+        return Response(result, status=202)
 
 
 class OtpLoginView(APIView):
@@ -125,12 +146,26 @@ class OtpLoginView(APIView):
         serializer = OtpLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        record_auth_event(event="auth.otp_submitted", outcome="rejected", request=request)
-        verify_login_otp(
-            otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
-            code=serializer.validated_data["code"],
+        try:
+            issue = verify_login_otp(
+                otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
+                code=serializer.validated_data["code"],
+            )
+        except LoginFlowRejected:
+            record_auth_event(event="auth.otp_submitted", outcome="rejected", request=request)
+            raise
+        record_auth_event(event="auth.otp_submitted", outcome="accepted", request=request)
+        response = Response(
+            {
+                "accessToken": issue.access_token,
+                "tokenType": "Bearer",
+                "expiresInSeconds": issue.expires_in_seconds,
+                "expiresAt": issue.expires_at,
+            },
+            status=200,
         )
-        return Response(status=200)
+        _set_refresh_cookie(response, issue.refresh_token)
+        return response
 
 
 class LogoutView(APIView):
@@ -148,9 +183,19 @@ class RefreshTokenView(APIView):
     throttle_scope = "auth_sensitive"
 
     def post(self, request) -> Response:
-        record_auth_event(event="auth.token_refresh", outcome="rejected", request=request)
-        rotate_refresh_token(refresh_token=request.COOKIES.get("refreshToken"))
-        return Response(status=200)
+        issue = rotate_refresh_token(refresh_token=request.COOKIES.get("refreshToken"))
+        record_auth_event(event="auth.token_refresh", outcome="accepted", request=request)
+        response = Response(
+            {
+                "accessToken": issue.access_token,
+                "tokenType": "Bearer",
+                "expiresInSeconds": issue.expires_in_seconds,
+                "expiresAt": issue.expires_at,
+            },
+            status=200,
+        )
+        _set_refresh_cookie(response, issue.refresh_token)
+        return response
 
 
 class TokenRevocationView(APIView):

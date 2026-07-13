@@ -16,14 +16,14 @@ class CurrentSessionEndpointTests(TestCase):
         self.assertEqual(payload["error"]["fields"], {})
         self.assertEqual(payload["error"]["correlationId"], response.headers["X-Correlation-ID"])
 
-    def test_bearer_token_is_rejected_until_token_validation_is_implemented(self) -> None:
+    def test_invalid_bearer_token_is_rejected(self) -> None:
         response = self.client.get("/api/v1/auth/session/", headers={"Authorization": "Bearer placeholder"})
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.headers["WWW-Authenticate"], 'Bearer realm="api"')
         payload = response.json()
         self.assertEqual(payload["error"]["code"], "AUTHENTICATION_FAILED")
-        self.assertEqual(payload["error"]["message"], "Bearer token validation is not implemented.")
+        self.assertEqual(payload["error"]["message"], "Invalid or expired bearer token.")
 
     def test_authenticated_request_returns_server_derived_session_claims(self) -> None:
         client = APIClient()
