@@ -36,6 +36,19 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/health/
 
 The smoke test returns `{"status":"ok"}`.
 
+## Frontend connection
+
+The frontend dev server runs on port `3000`. Local backend settings allow `http://localhost:3000` and `http://127.0.0.1:3000` for CSRF/CORS, while retaining `5173` for compatibility with default Vite setups.
+
+To point the frontend at this backend, set the frontend `.env.local` values:
+
+```env
+VITE_AUTH_SERVICE_MODE="backend"
+VITE_BACKEND_API_BASE_URL="http://localhost:8000"
+```
+
+Only implemented auth boundary endpoints are callable. Full backend login remains pending account storage, token issuance, OTP delivery, and session validation.
+
 ## Dependency updates
 
 Edit the appropriate `.in` manifest, then regenerate and review its committed lock file from Python 3.13:

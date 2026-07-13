@@ -22,3 +22,20 @@ View your app in AI Studio: https://ai.studio/apps/2d090cdc-2563-4366-a94e-9a7af
 2. Set `GEMINI_API_KEY` in an ignored `.env.local` file for local prototype use; never commit the value
 3. Run the app:
    `npm run dev`
+
+## Backend connection mode
+
+The frontend defaults to local prototype authentication:
+
+```env
+VITE_AUTH_SERVICE_MODE="prototype"
+```
+
+To call the Django backend auth API boundaries during development, run the backend on port `8000` and set:
+
+```env
+VITE_AUTH_SERVICE_MODE="backend"
+VITE_BACKEND_API_BASE_URL="http://localhost:8000"
+```
+
+Backend mode calls the current implemented auth boundary endpoints. Full backend login is still incomplete until account storage, token issuance, OTP delivery, and session validation are implemented.

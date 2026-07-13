@@ -1,5 +1,6 @@
 import type { Application, User } from '../types';
 import { MOCK_USERS } from '../lib/utils';
+import { BackendAuthService } from './backendAuthService';
 import type { AuthCredentials, AuthService, AuthSession } from './contracts';
 import { authorizationError, serviceSuccess, validationError } from './serviceResult';
 import type { ServiceResult } from './serviceResult';
@@ -121,6 +122,10 @@ export class LocalStorageAuthService implements AuthService {
 }
 
 export function createPrototypeAuthService(): AuthService {
+  if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
+    return new BackendAuthService();
+  }
+
   return new LocalStorageAuthService({
     users: MOCK_USERS,
     storage: localStorage,
