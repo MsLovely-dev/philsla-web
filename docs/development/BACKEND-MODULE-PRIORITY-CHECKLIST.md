@@ -4,7 +4,7 @@
 
 This checklist prioritizes backend work now that PhilSA is moving beyond the frontend prototype. It is scoped to the future Django and Django REST Framework service under `backend/`.
 
-Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, and private S3-compatible object storage as the file/evidence storage approach are adopted. Authentication provider, deployment, object storage provider, background jobs, API schema tooling, and production infrastructure remain `TBD` unless a later ADR accepts them.
+Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, private S3-compatible object storage as the file/evidence storage approach, and Django-managed server-side session authentication for the initial browser API are adopted. Deployment, object storage provider, background jobs, API schema tooling, token auth for non-browser clients, and production infrastructure remain `TBD` unless a later ADR accepts them.
 
 Priority meanings:
 
@@ -61,7 +61,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 
 ### Authentication, authorization, and security baseline
 
-- [ ] Decide authentication provider/session/token approach (`TBD`).
+- [x] Decide authentication provider/session/token approach.
 - [ ] Define backend roles and permissions aligned to documented frontend prototype roles.
 - [ ] Add authentication middleware/configuration after provider is selected.
 - [ ] Add permission classes for role and object-level authorization.

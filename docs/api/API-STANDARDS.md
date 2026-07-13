@@ -34,6 +34,7 @@ The backend generates a UUID correlation identifier for every request, returns i
 ## Security and correctness
 
 - The backend authenticates, authorizes, validates, and enforces workflow state; frontend validation is for usability only.
+- Initial browser authentication uses backend-managed server-side sessions. Token authentication for non-browser clients remains `TBD`.
 - Derive identity and permissions from verified server-side context, never client-supplied roles.
 - Apply object-level authorization and data minimization to responses.
 - Use idempotency keys for retryable creation or high-impact commands where appropriate.

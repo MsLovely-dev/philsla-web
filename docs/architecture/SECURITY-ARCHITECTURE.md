@@ -8,11 +8,13 @@ Supabase Postgres is accepted only as the database provider. Supabase Auth and S
 
 Documents, recordings, exports, and evidence must use private S3-compatible object storage after [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md). The backend must authorize every object access and must not expose permanent public URLs for sensitive files.
 
+Initial browser authentication uses Django-managed backend accounts and server-side sessions after [ADR-009](../decisions/ADR-009-AUTHENTICATION-SESSION-AND-ACCOUNT-PROVISIONING.md). Supabase Auth is not adopted. Token-based authentication for non-browser clients remains `TBD`.
+
 ## Required controls
 
 - Authenticate users and enforce role- and object-level authorization on every protected operation.
 - Validate and normalize all backend inputs; enforce allowed workflow transitions server-side.
-- Protect sessions/tokens against theft, replay, fixation, and inappropriate lifetime. The authentication mechanism and MFA policy are `TBD`.
+- Protect sessions/tokens against theft, replay, fixation, and inappropriate lifetime. MFA policy and non-browser token authentication are `TBD`.
 - Encrypt sensitive traffic and stored data using approved key management. Exact standards are `TBD`.
 - Never commit secrets. Rotate exposed credentials and use environment/secret management outside source control.
 - Sensitive information must not be written to logs. This includes credentials, tokens, student records, government identifiers, exam answers, scores before release, and proctoring evidence.
