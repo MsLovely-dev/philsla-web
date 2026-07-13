@@ -2,10 +2,13 @@ from django.urls import path
 
 from .views import (
     CurrentSessionView,
+    AdminAccountRecoveryRequestView,
     IdentifierLoginView,
     LogoutView,
     OtpLoginView,
     PasswordLoginView,
+    PasswordRecoveryCompletionView,
+    PasswordRecoveryRequestView,
     RefreshTokenView,
     StaffActivationCompletionView,
     StudentRegistrationActivationView,
@@ -22,6 +25,9 @@ urlpatterns = [
     path("login/identifier/", IdentifierLoginView.as_view(), name="login-identifier"),
     path("login/password/", PasswordLoginView.as_view(), name="login-password"),
     path("login/otp/", OtpLoginView.as_view(), name="login-otp"),
+    path("recovery/password/request/", PasswordRecoveryRequestView.as_view(), name="password-recovery-request"),
+    path("recovery/password/complete/", PasswordRecoveryCompletionView.as_view(), name="password-recovery-complete"),
+    path("recovery/admin/request/", AdminAccountRecoveryRequestView.as_view(), name="admin-account-recovery-request"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("token/refresh/", RefreshTokenView.as_view(), name="token-refresh"),
     path("token/revoke/", TokenRevocationView.as_view(), name="token-revoke"),

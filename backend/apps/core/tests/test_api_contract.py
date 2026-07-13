@@ -89,6 +89,30 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/accounts/tests/test_activation_endpoints.py",
         "route_namespace": "accounts",
     },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/recovery/password/request/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/recovery/password/request/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_recovery_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/recovery/password/complete/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/recovery/password/complete/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_recovery_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/recovery/admin/request/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/recovery/admin/request/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_recovery_endpoints.py",
+        "route_namespace": "accounts",
+    },
 )
 
 

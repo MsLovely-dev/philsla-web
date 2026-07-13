@@ -2,7 +2,7 @@
 
 ## Current state
 
-The baseline health endpoint, current-session endpoint boundary, three-step login endpoint boundaries, session token management endpoint boundaries, and account activation endpoint boundaries are implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
+The baseline health endpoint, current-session endpoint boundary, three-step login endpoint boundaries, session token management endpoint boundaries, account activation endpoint boundaries, and recovery endpoint boundaries are implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
 
 ## Implemented baseline endpoints
 
@@ -18,6 +18,9 @@ The baseline health endpoint, current-session endpoint boundary, three-step logi
 | `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create and activate a Student account after registration approval | Implemented boundary; registration/account storage pending |
 | `POST` | `/api/v1/auth/activation/staff/complete/` | Public activation link | `AllowAny` | Complete first-time staff/admin activation by setting the user's password | Implemented boundary; activation-token storage pending |
+| `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented boundary; email/token storage pending |
+| `POST` | `/api/v1/auth/recovery/password/complete/` | Public recovery link | `AllowAny` | Complete password reset from a recovery link | Implemented boundary; recovery-token storage pending |
+| `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented boundary; email/token storage pending |
 
 ### `GET /api/v1/health/`
 
@@ -282,6 +285,112 @@ Test coverage:
 - Behavior tests: `backend/apps/accounts/tests/test_activation_endpoints.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
 
+### `POST /api/v1/auth/recovery/password/request/`
+
+Use this endpoint to request password recovery instructions for a Student or staff/admin account. The response must not reveal whether the identifier exists, whether the account is inactive, or which account table/role matched.
+
+Current implementation status: route, identifier validation, anti-enumeration response, and tests exist. Recovery-token generation, token hashing/storage, email delivery, rate limits, and audit events remain pending.
+
+Request:
+
+```json
+{
+  "identifier": "student@example.test"
+}
+```
+
+Validation behavior:
+
+- A 12-digit numeric identifier is accepted as LRN format.
+- A valid email address is accepted as email format.
+- Any other format returns `400 VALIDATION_FAILED`.
+
+Current successful response:
+
+```json
+{
+  "detail": "If the account can be recovered, instructions will be sent to the verified email address."
+}
+```
+
+Response status is `202 Accepted` for every well-formed identifier, regardless of account existence.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_recovery_endpoints.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+### `POST /api/v1/auth/recovery/password/complete/`
+
+Use this endpoint to complete password recovery from a secure, time-limited recovery link. Completing recovery must not create a session; the user must complete the normal three-step login flow after reset.
+
+Current implementation status: route, password-policy validation, password-confirmation validation, safe expired-link response, and tests exist. Recovery-token lookup, password hashing, session revocation, and audit events remain pending.
+
+Request:
+
+```json
+{
+  "recoveryToken": "opaque-recovery-token",
+  "password": "user-supplied-password",
+  "confirmPassword": "user-supplied-password"
+}
+```
+
+Validation behavior:
+
+- `password` must be at least 8 characters and include uppercase, lowercase, number, and special character.
+- `confirmPassword` must match `password`.
+- Passwords and recovery tokens must never be logged or returned.
+
+Current response behavior:
+
+- `400 VALIDATION_FAILED` is returned for invalid password policy or mismatched confirmation.
+- `401 AUTHENTICATION_FAILED` with `This recovery link has expired. Please request a new one.` is returned until recovery-token storage exists.
+
+Future successful response:
+
+- `204 No Content`.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_recovery_endpoints.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+### `POST /api/v1/auth/recovery/admin/request/`
+
+Use this endpoint when an authorized System Admin initiates staff/admin account recovery. The System Admin must not set or know the user's password; the system sends a user-controlled recovery link to the account email when eligible.
+
+Current implementation status: route, System Admin role boundary, email validation, anti-enumeration response, and tests exist. Account lookup, recovery-token generation/storage, email delivery, rate limits, and audit events remain pending.
+
+Request:
+
+```json
+{
+  "email": "staff@example.test"
+}
+```
+
+Current successful response:
+
+```json
+{
+  "detail": "If the account can be recovered, instructions will be sent to the verified email address."
+}
+```
+
+Response status is `202 Accepted` for every well-formed email when called by a System Admin, regardless of account existence.
+
+Error behavior:
+
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned for roles other than `SYSTEM_ADMIN`.
+- `400 VALIDATION_FAILED` is returned for invalid email format.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_recovery_endpoints.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
 ### `POST /api/v1/auth/activation/staff/complete/`
 
 Use this endpoint for first-time staff/admin activation from a secure, time-limited activation link sent during System Admin provisioning.
@@ -387,7 +496,7 @@ Test coverage:
 
 | Capability | Candidate base path | Status |
 | --- | --- | --- |
-| Authentication and sessions | `/api/v1/auth` | Partially implemented: current-session, three-step login, logout, refresh, revocation, and activation boundaries only; account storage, token storage, email delivery, durable revocation, and audit events remain `TBD` |
+| Authentication and sessions | `/api/v1/auth` | Partially implemented: current-session, three-step login, logout, refresh, revocation, activation, and recovery boundaries only; account storage, token storage, email delivery, durable revocation, and audit events remain `TBD` |
 | Student registration/applications | `/api/v1/applications` | `TBD` |
 | Student and registry verification | `/api/v1/verifications` | `TBD` |
 | Assessments and question banks | `/api/v1/assessments` | `TBD` |

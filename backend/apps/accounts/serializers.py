@@ -130,3 +130,49 @@ class StaffActivationCompletionSerializer(serializers.Serializer):
         if attrs["password"] != attrs["confirmPassword"]:
             raise serializers.ValidationError({"confirmPassword": "Passwords do not match."})
         return attrs
+
+
+class PasswordRecoveryRequestSerializer(IdentifierLoginSerializer):
+    pass
+
+
+class PasswordRecoveryCompletionSerializer(serializers.Serializer):
+    recoveryToken = serializers.CharField(
+        trim_whitespace=True,
+        error_messages={
+            "blank": "This recovery link has expired. Please request a new one.",
+            "required": "This recovery link has expired. Please request a new one.",
+        },
+    )
+    password = serializers.CharField(
+        trim_whitespace=False,
+        error_messages={
+            "blank": "Please enter your password.",
+            "required": "Please enter your password.",
+        },
+    )
+    confirmPassword = serializers.CharField(
+        trim_whitespace=False,
+        error_messages={
+            "blank": "Please confirm your password.",
+            "required": "Please confirm your password.",
+        },
+    )
+
+    def validate_password(self, value: str) -> str:
+        return validate_password_policy(value)
+
+    def validate(self, attrs: dict[str, str]) -> dict[str, str]:
+        if attrs["password"] != attrs["confirmPassword"]:
+            raise serializers.ValidationError({"confirmPassword": "Passwords do not match."})
+        return attrs
+
+
+class AdminAccountRecoveryRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField(
+        error_messages={
+            "blank": "Enter a valid email address.",
+            "invalid": "Enter a valid email address.",
+            "required": "Enter a valid email address.",
+        }
+    )

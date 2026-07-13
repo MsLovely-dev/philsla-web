@@ -64,3 +64,21 @@ def complete_staff_activation(*, activation_token: str, password: str) -> None:
     """Complete first-time staff/admin activation from a time-limited link."""
 
     raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")
+
+
+def request_password_recovery(*, identifier: str) -> None:
+    """Request a password recovery link without revealing account existence."""
+
+    return None
+
+
+def complete_password_recovery(*, recovery_token: str, password: str) -> None:
+    """Complete password reset and revoke active sessions."""
+
+    raise LoginFlowRejected("This recovery link has expired. Please request a new one.")
+
+
+def request_admin_account_recovery(*, email: str, actor: object) -> None:
+    """System Admin initiated staff/admin account recovery request."""
+
+    return None

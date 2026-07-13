@@ -9,7 +9,10 @@ from .roles import PortalRole, get_security_tier, get_user_role
 from .serializers import (
     IdentifierLoginSerializer,
     OtpLoginSerializer,
+    AdminAccountRecoveryRequestSerializer,
     PasswordLoginSerializer,
+    PasswordRecoveryCompletionSerializer,
+    PasswordRecoveryRequestSerializer,
     StaffActivationCompletionSerializer,
     StudentRegistrationActivationSerializer,
     TokenRevocationSerializer,
@@ -17,6 +20,9 @@ from .serializers import (
 from .services import (
     activate_student_registration_account,
     complete_staff_activation,
+    complete_password_recovery,
+    request_admin_account_recovery,
+    request_password_recovery,
     revoke_current_session,
     revoke_tokens,
     rotate_refresh_token,
@@ -170,3 +176,52 @@ class StaffActivationCompletionView(APIView):
             password=serializer.validated_data["password"],
         )
         return Response(status=204)
+
+
+class PasswordRecoveryRequestView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+
+    def post(self, request) -> Response:
+        serializer = PasswordRecoveryRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        request_password_recovery(identifier=serializer.validated_data["identifier"])
+        return Response(
+            {
+                "detail": "If the account can be recovered, instructions will be sent to the verified email address."
+            },
+            status=202,
+        )
+
+
+class PasswordRecoveryCompletionView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+
+    def post(self, request) -> Response:
+        serializer = PasswordRecoveryCompletionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        complete_password_recovery(
+            recovery_token=serializer.validated_data["recoveryToken"],
+            password=serializer.validated_data["password"],
+        )
+        return Response(status=204)
+
+
+class AdminAccountRecoveryRequestView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
+
+    def post(self, request) -> Response:
+        serializer = AdminAccountRecoveryRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        request_admin_account_recovery(email=serializer.validated_data["email"], actor=request.user)
+        return Response(
+            {
+                "detail": "If the account can be recovered, instructions will be sent to the verified email address."
+            },
+            status=202,
+        )
