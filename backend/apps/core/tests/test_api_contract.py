@@ -15,6 +15,15 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "response": {"status": "ok"},
         "doc_heading": "### `GET /api/v1/health/`",
         "doc_test_reference": "backend/apps/core/tests/test_health.py",
+        "route_namespace": "api-v1",
+    },
+    {
+        "method": "GET",
+        "path": "/api/v1/auth/session/",
+        "response": None,
+        "doc_heading": "### `GET /api/v1/auth/session/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_session_endpoint.py",
+        "route_namespace": "accounts",
     },
 )
 
@@ -35,7 +44,7 @@ class ApiContractTests(TestCase):
         for contract in IMPLEMENTED_ENDPOINT_CONTRACTS:
             match = resolve(contract["path"])
 
-            self.assertEqual(match.namespace, "api-v1")
+            self.assertEqual(match.namespace, contract["route_namespace"])
 
     def test_health_endpoint_matches_documented_contract(self) -> None:
         contract = IMPLEMENTED_ENDPOINT_CONTRACTS[0]

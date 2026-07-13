@@ -91,7 +91,7 @@ Build these after P0 backend foundation is running and tested.
 
 ### 1. Authentication and account entry
 
-- [ ] Implement current-session endpoint with server-derived role, permission, and scope claims.
+- [x] Implement current-session endpoint with server-derived role, permission, and scope claims.
 - [ ] Implement three-step login endpoints for identifier resolution, password verification, and email OTP verification.
 - [ ] Implement logout, refresh-token rotation, token revocation, and session-expiry behavior.
 - [ ] Implement student registration account activation and staff/admin provisioning activation flow.
