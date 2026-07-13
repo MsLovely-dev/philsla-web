@@ -4,7 +4,7 @@
 
 This checklist prioritizes backend work now that PhilSA is moving beyond the frontend prototype. It is scoped to the future Django and Django REST Framework service under `backend/`.
 
-Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, private S3-compatible object storage as the file/evidence storage approach, Django-managed backend accounts, and the three-step LRN/email, password, and email OTP authentication flow are adopted. Deployment, object storage provider, email provider, background jobs, API schema tooling, and production infrastructure remain `TBD` unless a later ADR accepts them.
+Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, private S3-compatible object storage as the file/evidence storage approach, Django-managed backend accounts, the three-step LRN/email, password, and email OTP authentication flow, and OpenAPI 3 with DRF Spectacular for API schema tooling are adopted. Deployment, object storage provider, email provider, background jobs, and production infrastructure remain `TBD` unless a later ADR accepts them.
 
 Priority meanings:
 
@@ -79,7 +79,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 
 ### API contract process
 
-- [ ] Decide API schema tooling and publication approach (`TBD`).
+- [x] Decide API schema tooling and publication approach.
 - [ ] Update `docs/api/API-STANDARDS.md` with the final error, pagination, authentication, and versioning conventions.
 - [ ] Update `docs/api/API-ENDPOINTS.md` when endpoints become implemented, not merely planned.
 - [ ] Add contract tests or schema checks before frontend integration.

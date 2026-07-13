@@ -2,7 +2,7 @@
 
 ## Current state
 
-The baseline health endpoint is implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract.
+The baseline health endpoint is implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
 
 ## Implemented baseline endpoints
 
@@ -32,7 +32,7 @@ Do not implement from this table alone. For each endpoint, approve the actor, au
 ## Contract workflow
 
 1. Link the endpoint to approved requirements in [BRD](../BRD.md), [modules](../MODULES.md), or [user stories](../USER_STORY.md).
-2. Define the contract according to [API standards](API-STANDARDS.md).
+2. Define the contract according to [API standards](API-STANDARDS.md), then include it in the generated OpenAPI schema once the endpoint is implemented.
 3. Review security and privacy implications.
 4. Implement backend and frontend service adapters against the same contract.
 5. Add backend, contract, and relevant frontend tests before marking it available.
