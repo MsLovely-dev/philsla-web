@@ -171,6 +171,9 @@ Before replacing a mock service with a backend endpoint:
 - [ ] Approve state transitions, error behavior, idempotency, and concurrency handling.
 - [ ] Approve privacy classification, retention, audit events, and rate limits.
 - [ ] Add backend authorization/validation tests and frontend contract tests.
+- [ ] Verify the endpoint is documented in `docs/api/API-ENDPOINTS.md` and covered by a contract guard or generated schema check.
+- [ ] Keep backend adapters isolated in service modules and map API payloads to frontend domain types at that boundary.
+- [ ] Do not send frontend-local roles, mock session state, route selections, or dashboard state as authorization evidence.
 - [ ] Keep the mock adapter available only where it remains useful for deterministic development and tests.
 
 ## Recommended first delivery milestone

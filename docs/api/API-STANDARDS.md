@@ -96,3 +96,18 @@ Additive changes may be backward compatible when clients safely ignore new field
 ## Schema publication
 
 The machine-readable API contract must be generated from implemented DRF views/serializers, not manually invented from planned endpoints. Publish a reviewed schema artifact per major API version before frontend adapters depend on that API. The hosted schema location remains `TBD` until deployment/documentation hosting is selected.
+
+## Frontend adapter handoff
+
+Do not replace a frontend mock/local service with a backend API adapter until the endpoint has passed this handoff gate:
+
+1. The endpoint is implemented under the active major API namespace and documented in [API endpoints](API-ENDPOINTS.md).
+2. The endpoint contract defines request fields, response fields, authentication, authorization, validation errors, state transitions, pagination/filtering/sorting where applicable, idempotency/concurrency behavior, rate limits, audit behavior, and privacy classification.
+3. Backend tests cover the endpoint's success path, validation failures, authentication failure, permission denial, object-level authorization where applicable, standard error envelope, and workflow/state-transition behavior where applicable.
+4. A contract guard or generated schema check covers the implemented endpoint before the frontend consumes it.
+5. Frontend request/response types are generated from, or manually aligned to, the approved contract. Unresolved fields remain `TBD`; frontend code must not invent backend behavior.
+6. Frontend service modules isolate the backend adapter from components and preserve a deterministic mock adapter for local development and tests where useful.
+7. Frontend tests cover adapter mapping, loading, empty, validation-error, authorization-error, and network-error behavior before mock behavior is removed from the user journey.
+8. The frontend must send only contract-approved inputs. It must not submit local-storage roles, mock session values, dashboard selections, or client-derived permissions as proof of authorization.
+
+The health endpoint may be used for smoke tests without a feature adapter because it is not a business workflow endpoint.

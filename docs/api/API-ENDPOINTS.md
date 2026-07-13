@@ -66,3 +66,4 @@ Do not implement from this table alone. For each endpoint, approve the actor, au
 3. Review security and privacy implications.
 4. Implement backend and frontend service adapters against the same contract.
 5. Add backend, contract, and relevant frontend tests before marking it available.
+6. Complete the [frontend adapter handoff](API-STANDARDS.md#frontend-adapter-handoff) before replacing any mock/local service with the backend endpoint.
