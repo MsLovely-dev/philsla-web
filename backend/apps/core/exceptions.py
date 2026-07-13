@@ -1,4 +1,4 @@
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
@@ -14,6 +14,8 @@ def api_exception_handler(exc: Exception, context: dict[str, object]) -> Respons
 
     if isinstance(exc, APIException):
         code = str(exc.default_code).upper()
+        if isinstance(exc, ValidationError):
+            code = "VALIDATION_FAILED"
         if isinstance(response.data, dict) and "detail" in response.data:
             message = str(response.data["detail"])
         else:

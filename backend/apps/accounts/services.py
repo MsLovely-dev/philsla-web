@@ -1,0 +1,31 @@
+from rest_framework.exceptions import APIException
+
+
+class LoginFlowRejected(APIException):
+    status_code = 401
+    default_code = "authentication_failed"
+
+
+def start_identifier_login(*, identifier: str) -> None:
+    """Resolve the login identifier and issue a Step-1 pending-auth token.
+
+    Account lookup, anti-enumeration timing controls, pending-auth token
+    persistence, and audit logging are intentionally deferred until the
+    account model and token store are implemented. Until then, valid
+    identifiers receive the same safe failure used for invalid or unavailable
+    accounts.
+    """
+
+    raise LoginFlowRejected("Identifier not found or invalid. Please check and try again.")
+
+
+def verify_login_password(*, pending_auth_token: str, password: str) -> None:
+    """Validate the password and issue an OTP-scoped pending-auth token."""
+
+    raise LoginFlowRejected("Your session has expired. Please start again.")
+
+
+def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> None:
+    """Validate the email OTP and issue the full backend session."""
+
+    raise LoginFlowRejected("Invalid or expired code. Please try again.")

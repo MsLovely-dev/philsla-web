@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .roles import get_security_tier, get_user_role
+from .serializers import IdentifierLoginSerializer, OtpLoginSerializer, PasswordLoginSerializer
+from .services import start_identifier_login, verify_login_otp, verify_login_password
 
 
 def _json_datetime(value: object) -> str | None:
@@ -53,3 +55,45 @@ class CurrentSessionView(APIView):
                 },
             }
         )
+
+
+class IdentifierLoginView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+
+    def post(self, request) -> Response:
+        serializer = IdentifierLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        start_identifier_login(identifier=serializer.validated_data["identifier"])
+        return Response(status=202)
+
+
+class PasswordLoginView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+
+    def post(self, request) -> Response:
+        serializer = PasswordLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        verify_login_password(
+            pending_auth_token=serializer.validated_data["pendingAuthToken"],
+            password=serializer.validated_data["password"],
+        )
+        return Response(status=202)
+
+
+class OtpLoginView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+
+    def post(self, request) -> Response:
+        serializer = OtpLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        verify_login_otp(
+            otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
+            code=serializer.validated_data["code"],
+        )
+        return Response(status=200)

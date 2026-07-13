@@ -25,6 +25,30 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/accounts/tests/test_session_endpoint.py",
         "route_namespace": "accounts",
     },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/login/identifier/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/login/identifier/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_login_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/login/password/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/login/password/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_login_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/login/otp/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/login/otp/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_login_endpoints.py",
+        "route_namespace": "accounts",
+    },
 )
 
 
