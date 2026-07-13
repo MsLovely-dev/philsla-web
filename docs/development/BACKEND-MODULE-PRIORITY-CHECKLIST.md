@@ -81,7 +81,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 
 - [x] Decide API schema tooling and publication approach.
 - [x] Update `docs/api/API-STANDARDS.md` with the final error, pagination, authentication, and versioning conventions.
-- [ ] Update `docs/api/API-ENDPOINTS.md` when endpoints become implemented, not merely planned.
+- [x] Update `docs/api/API-ENDPOINTS.md` when endpoints become implemented, not merely planned.
 - [ ] Add contract tests or schema checks before frontend integration.
 - [ ] Define frontend adapter handoff rules for replacing mock services.
 

@@ -6,11 +6,38 @@ The baseline health endpoint is implemented. The frontend currently uses mock/lo
 
 ## Implemented baseline endpoints
 
-| Method | Path | Authentication | Response | Status |
-| --- | --- | --- | --- | --- |
-| `GET` | `/api/v1/health/` | Public | `{"status":"ok"}` | Implemented |
+| Method | Path | Authentication | Permission | Purpose | Status |
+| --- | --- | --- | --- | --- | --- |
+| `GET` | `/api/v1/health/` | Public; no credentials required | `AllowAny` | Safe service liveness smoke check | Implemented |
 
-The health response deliberately excludes dependency and infrastructure details. Unsupported methods use the standard API error envelope.
+### `GET /api/v1/health/`
+
+Use this endpoint for local smoke tests and lightweight service liveness checks.
+
+Request:
+
+- Body: none.
+- Query parameters: none.
+- Authentication: none.
+
+Successful response:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Response behavior:
+
+- `200 OK` returns only the static health status payload above.
+- The response deliberately excludes database status, storage status, dependency status, infrastructure internals, secrets, credentials, hostnames, connection strings, and environment details.
+- Supported response format follows the project JSON-only API baseline.
+- Responses include the standard `X-Correlation-ID` header.
+- CORS headers are returned only when the request origin is configured as allowed.
+- Unsupported methods use the standard API error envelope with `METHOD_NOT_ALLOWED`.
+
+Test coverage: `backend/apps/core/tests/test_health.py`.
 
 ## Candidate endpoint groups
 
