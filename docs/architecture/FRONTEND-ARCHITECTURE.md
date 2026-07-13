@@ -4,11 +4,11 @@
 
 The application under `frontend/` uses React 19, TypeScript, Vite, React Router, and Tailwind's Vite integration. `src/routing/routes.tsx` contains typed route definitions and prototype role permissions, while `src/routing/RouteGuards.tsx` applies authentication, role, exam-eligibility, layout, and maintenance guards. `src/App.tsx` renders that configuration, `src/PhilSAContext.tsx` provides application context, and `src/services/` contains mock services/data. Pages are grouped partly by role or function; shared UI is under `src/components/`.
 
-Frontend route guards improve prototype navigation only. A future backend must independently authenticate users, authorize every request, and validate exam eligibility.
+Frontend route guards improve prototype navigation only. They are not an authority for identity, role, account status, permissions, session validity, exam eligibility, or workflow access. Until backend authentication endpoints replace the current mock/local behavior, all frontend-authenticated state must be treated as prototype-only and non-authoritative.
 
 Shared feedback primitives under `src/components/ui/` define accessible loading, empty, error, confirmation-dialog, and notification patterns. Existing feature-specific feedback implementations should adopt these primitives incrementally when their modules change; a repository-wide visual rewrite is not implied.
 
-Service contracts under `src/services/` define the frontend boundary for authentication, application submission, reviewer decisions, and shared service responses. `LocalStorageAuthService` preserves the current prototype session behavior behind the `AuthService` contract. Mock implementations are intentionally replaceable and must not be treated as production API behavior. Future backend request and response schemas remain `TBD` until an API contract is approved.
+Service contracts under `src/services/` define the frontend boundary for authentication, application submission, reviewer decisions, and shared service responses. `LocalStorageAuthService` preserves the current prototype session behavior behind the `AuthService` contract. Mock implementations are intentionally replaceable and must not be treated as production API behavior. Frontend role values, local storage sessions, and route-level allowed-role lists must never be sent to the backend as authorization evidence. Future backend request and response schemas remain `TBD` until an API contract is approved.
 
 The application is currently a prototype backed by mock/local behavior. Existing files must remain in place until a dedicated migration is approved.
 

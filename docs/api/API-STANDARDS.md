@@ -37,6 +37,7 @@ The backend generates a UUID correlation identifier for every request, returns i
 - Portal authentication uses the three-step LRN/email, password, and email OTP flow defined in [ADR-011](../decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). Full sessions are issued only after OTP verification succeeds.
 - Full sessions use a short-lived access token and rotating refresh token in an HttpOnly, Secure, SameSite=Strict cookie. Deployment-specific cookie domain, CSRF, CORS, and trusted-origin settings remain `TBD`.
 - Derive identity and permissions from verified server-side context, never client-supplied roles. Backend roles and prototype-role alignment are defined in [ADR-010](../decisions/ADR-010-BACKEND-ROLES-AND-PERMISSIONS.md).
+- Current frontend mock/local authentication is non-authoritative. API clients must not submit frontend route roles, local-storage session values, dashboard selections, or mock user state as proof of authorization.
 - Apply object-level authorization and data minimization to responses.
 - Use idempotency keys for retryable creation or high-impact commands where appropriate.
 - Define concurrency controls for mutable resources and audit sensitive changes.

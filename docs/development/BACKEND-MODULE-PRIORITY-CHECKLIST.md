@@ -67,7 +67,7 @@ Complete these before replacing frontend mock/local behavior with backend APIs.
 - [x] Add permission classes for role and object-level authorization.
 - [x] Define password, MFA, account recovery, and invitation approach.
 - [x] Add security settings for CORS, CSRF/session behavior, allowed hosts, secure cookies, and trusted origins with deployment-specific domains still `TBD`.
-- [ ] Document that frontend auth remains non-authoritative until backend auth is implemented.
+- [x] Document that frontend auth remains non-authoritative until backend auth is implemented.
 
 ### Test and quality baseline
 

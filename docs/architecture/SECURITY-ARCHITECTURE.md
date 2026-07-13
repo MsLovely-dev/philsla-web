@@ -18,6 +18,12 @@ Frontend prototype-only roles such as `ACADEMIC_REVIEWER`, `GOVERNMENT`, `ITEM_W
 
 The backend must enforce deny-by-default role-based access control plus object-level authorization. Role assignment is backend-managed and auditable. API permission checks must derive identity, account status, roles, and object scopes from server-side state, never from client-submitted roles, frontend route guards, or browser storage.
 
+## Frontend authentication status
+
+The current frontend authentication state is prototype-only. Local storage sessions, mock users, route guards, role labels, and dashboard/module visibility are usable for navigation demos and UI development only. They must not be treated as evidence of authentication, authorization, account activation, role assignment, scope assignment, exam eligibility, or workflow state.
+
+Until the backend authentication endpoints from ADR-011 are implemented and integrated, any protected backend API must continue to require server-side authentication and authorization. The frontend may hide or show UI for usability, but every protected operation must be independently enforced by the backend.
+
 ## Required controls
 
 - Authenticate users and enforce role- and object-level authorization on every protected operation.
