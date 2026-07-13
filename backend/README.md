@@ -43,6 +43,18 @@ AUTH_LOCAL_EXPOSE_OTP="true"
 
 `AUTH_LOCAL_EXPOSE_OTP=true` returns the generated OTP to the frontend so the current prototype login page can complete the backend flow. Keep this disabled outside local development. OTP email delivery, lockout persistence, and production-grade token storage remain future work.
 
+Azure Communication Services Email is the planned production email provider because the platform is expected to deploy on Azure. The provider is configured through environment settings but is not wired to OTP delivery yet:
+
+```env
+AUTH_EMAIL_PROVIDER="console"
+AZURE_COMMUNICATION_EMAIL_ENABLED="false"
+AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING=""
+AZURE_COMMUNICATION_EMAIL_ENDPOINT=""
+AZURE_COMMUNICATION_EMAIL_SENDER=""
+```
+
+Keep `AUTH_EMAIL_PROVIDER="console"` until the OTP email delivery service is implemented. Do not commit Azure connection strings, access keys, sender secrets, or verified-domain credentials.
+
 Security settings use strict defaults for cookies and headers. Local development allows only localhost origins. Production must provide `DJANGO_ALLOWED_HOSTS`; trusted CSRF/CORS origins remain environment-specific until deployment domains are selected.
 
 ## Checks and smoke test

@@ -20,6 +20,24 @@ class AuthFlowSettings:
     staff_absolute_timeout_hours: int
 
 
+@dataclass(frozen=True)
+class AuthEmailSettings:
+    provider: str
+    azure_enabled: bool
+    azure_connection_string: str
+    azure_endpoint: str
+    azure_sender: str
+
+    @property
+    def azure_configured(self) -> bool:
+        return (
+            self.provider == "azure_communication_services"
+            and self.azure_enabled
+            and bool(self.azure_sender)
+            and bool(self.azure_connection_string or self.azure_endpoint)
+        )
+
+
 def get_auth_flow_settings() -> AuthFlowSettings:
     return AuthFlowSettings(
         access_token_lifetime_minutes=settings.AUTH_ACCESS_TOKEN_LIFETIME_MINUTES,
@@ -35,4 +53,14 @@ def get_auth_flow_settings() -> AuthFlowSettings:
         staff_idle_timeout_minutes=settings.AUTH_STAFF_IDLE_TIMEOUT_MINUTES,
         student_absolute_timeout_hours=settings.AUTH_STUDENT_ABSOLUTE_TIMEOUT_HOURS,
         staff_absolute_timeout_hours=settings.AUTH_STAFF_ABSOLUTE_TIMEOUT_HOURS,
+    )
+
+
+def get_auth_email_settings() -> AuthEmailSettings:
+    return AuthEmailSettings(
+        provider=settings.AUTH_EMAIL_PROVIDER,
+        azure_enabled=settings.AZURE_COMMUNICATION_EMAIL_ENABLED,
+        azure_connection_string=settings.AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING,
+        azure_endpoint=settings.AZURE_COMMUNICATION_EMAIL_ENDPOINT,
+        azure_sender=settings.AZURE_COMMUNICATION_EMAIL_SENDER,
     )

@@ -4,7 +4,7 @@ from django.urls import path
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.settings import get_auth_flow_settings
+from apps.accounts.settings import get_auth_email_settings, get_auth_flow_settings
 
 
 class ProtectedProbeView(APIView):
@@ -40,6 +40,31 @@ class AuthenticationConfigurationTests(TestCase):
         self.assertEqual(auth_settings.staff_idle_timeout_minutes, 10)
         self.assertEqual(auth_settings.student_absolute_timeout_hours, 12)
         self.assertEqual(auth_settings.staff_absolute_timeout_hours, 8)
+
+    def test_auth_email_settings_default_to_console_provider(self) -> None:
+        email_settings = get_auth_email_settings()
+
+        self.assertEqual(email_settings.provider, "console")
+        self.assertFalse(email_settings.azure_enabled)
+        self.assertFalse(email_settings.azure_configured)
+        self.assertEqual(email_settings.azure_connection_string, "")
+        self.assertEqual(email_settings.azure_endpoint, "")
+        self.assertEqual(email_settings.azure_sender, "")
+
+    @override_settings(
+        AUTH_EMAIL_PROVIDER="azure_communication_services",
+        AZURE_COMMUNICATION_EMAIL_ENABLED=True,
+        AZURE_COMMUNICATION_EMAIL_CONNECTION_STRING="endpoint=https://example.communication.azure.com/;accesskey=test",
+        AZURE_COMMUNICATION_EMAIL_ENDPOINT="",
+        AZURE_COMMUNICATION_EMAIL_SENDER="no-reply@example.test",
+    )
+    def test_auth_email_settings_allow_future_azure_provider(self) -> None:
+        email_settings = get_auth_email_settings()
+
+        self.assertEqual(email_settings.provider, "azure_communication_services")
+        self.assertTrue(email_settings.azure_enabled)
+        self.assertTrue(email_settings.azure_configured)
+        self.assertEqual(email_settings.azure_sender, "no-reply@example.test")
 
     @override_settings(ROOT_URLCONF=__name__)
     def test_protected_endpoint_requires_authentication(self) -> None:
