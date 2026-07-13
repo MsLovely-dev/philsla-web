@@ -76,6 +76,16 @@ Baseline error codes:
 | `THROTTLED` | `429` |
 | `API_ERROR` | `500` |
 
+## Authentication error safety
+
+Authentication, activation, and recovery endpoints must return safe, actionable errors without exposing account existence, role path, account status, token values, passwords, OTP codes, or sensitive operational details.
+
+- Identifier lookup, password recovery, and System Admin initiated recovery must not reveal whether an identifier/email exists, belongs to a student or staff/admin account, is inactive, is suspended, is unverified, or is otherwise ineligible.
+- Password, OTP, activation-token, recovery-token, refresh-token, and pending-auth-token failures must not echo submitted token/code/password values.
+- Messages may tell the user what to do next, for example start over, log in again, request a new link, contact an administrator, or check the verified email address.
+- Response bodies and field errors must not include raw credentials, OTPs, bearer tokens, refresh tokens, pending-auth tokens, activation tokens, recovery tokens, account IDs, internal table names, stack traces, or provider diagnostics.
+- Authentication and recovery safety tests must cover implemented auth endpoints before frontend adapters consume them.
+
 ## Security and correctness
 
 - The backend authenticates, authorizes, validates, and enforces workflow state; frontend validation is for usability only.
