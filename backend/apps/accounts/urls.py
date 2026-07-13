@@ -7,10 +7,18 @@ from .views import (
     OtpLoginView,
     PasswordLoginView,
     RefreshTokenView,
+    StaffActivationCompletionView,
+    StudentRegistrationActivationView,
     TokenRevocationView,
 )
 
 urlpatterns = [
+    path("activation/staff/complete/", StaffActivationCompletionView.as_view(), name="staff-activation-complete"),
+    path(
+        "activation/student-registration/",
+        StudentRegistrationActivationView.as_view(),
+        name="student-registration-activation",
+    ),
     path("login/identifier/", IdentifierLoginView.as_view(), name="login-identifier"),
     path("login/password/", PasswordLoginView.as_view(), name="login-password"),
     path("login/otp/", OtpLoginView.as_view(), name="login-otp"),

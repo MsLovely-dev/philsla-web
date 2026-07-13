@@ -6,6 +6,11 @@ class LoginFlowRejected(APIException):
     default_code = "authentication_failed"
 
 
+class ActivationUnavailable(APIException):
+    status_code = 409
+    default_code = "conflict"
+
+
 def start_identifier_login(*, identifier: str) -> None:
     """Resolve the login identifier and issue a Step-1 pending-auth token.
 
@@ -47,3 +52,15 @@ def revoke_tokens(*, user: object, scope: str) -> None:
     """Revoke refresh/access tokens for the requested scope."""
 
     return None
+
+
+def activate_student_registration_account(*, registration_application_id: str, actor: object) -> None:
+    """Create and activate a student account after registration approval."""
+
+    raise ActivationUnavailable("Student account activation is unavailable until registration approval storage exists.")
+
+
+def complete_staff_activation(*, activation_token: str, password: str) -> None:
+    """Complete first-time staff/admin activation from a time-limited link."""
+
+    raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")

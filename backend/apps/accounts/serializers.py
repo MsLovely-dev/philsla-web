@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 LRN_PATTERN = re.compile(r"^\d{12}$")
 OTP_PATTERN = re.compile(r"^\d{6}$")
+PASSWORD_SPECIAL_PATTERN = re.compile(r"[^A-Za-z0-9]")
 
 
 def _is_email(value: str) -> bool:
@@ -73,3 +74,59 @@ class OtpLoginSerializer(serializers.Serializer):
 
 class TokenRevocationSerializer(serializers.Serializer):
     scope = serializers.ChoiceField(choices=("current", "all"), default="current", required=False)
+
+
+def validate_password_policy(value: str) -> str:
+    if len(value) < 8:
+        raise serializers.ValidationError("Password must be at least 8 characters long.")
+    if not any(character.isupper() for character in value):
+        raise serializers.ValidationError("Password must include at least one uppercase letter.")
+    if not any(character.islower() for character in value):
+        raise serializers.ValidationError("Password must include at least one lowercase letter.")
+    if not any(character.isdigit() for character in value):
+        raise serializers.ValidationError("Password must include at least one number.")
+    if PASSWORD_SPECIAL_PATTERN.search(value) is None:
+        raise serializers.ValidationError("Password must include at least one special character.")
+    return value
+
+
+class StudentRegistrationActivationSerializer(serializers.Serializer):
+    registrationApplicationId = serializers.CharField(
+        trim_whitespace=True,
+        error_messages={
+            "blank": "Registration application ID is required.",
+            "required": "Registration application ID is required.",
+        },
+    )
+
+
+class StaffActivationCompletionSerializer(serializers.Serializer):
+    activationToken = serializers.CharField(
+        trim_whitespace=True,
+        error_messages={
+            "blank": "This activation link has expired. Please request a new one from your administrator.",
+            "required": "This activation link has expired. Please request a new one from your administrator.",
+        },
+    )
+    password = serializers.CharField(
+        trim_whitespace=False,
+        error_messages={
+            "blank": "Please enter your password.",
+            "required": "Please enter your password.",
+        },
+    )
+    confirmPassword = serializers.CharField(
+        trim_whitespace=False,
+        error_messages={
+            "blank": "Please confirm your password.",
+            "required": "Please confirm your password.",
+        },
+    )
+
+    def validate_password(self, value: str) -> str:
+        return validate_password_policy(value)
+
+    def validate(self, attrs: dict[str, str]) -> dict[str, str]:
+        if attrs["password"] != attrs["confirmPassword"]:
+            raise serializers.ValidationError({"confirmPassword": "Passwords do not match."})
+        return attrs

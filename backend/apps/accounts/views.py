@@ -4,9 +4,19 @@ from typing import Any
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .roles import get_security_tier, get_user_role
-from .serializers import IdentifierLoginSerializer, OtpLoginSerializer, PasswordLoginSerializer, TokenRevocationSerializer
+from .permissions import RoleRequiredPermission, require_roles
+from .roles import PortalRole, get_security_tier, get_user_role
+from .serializers import (
+    IdentifierLoginSerializer,
+    OtpLoginSerializer,
+    PasswordLoginSerializer,
+    StaffActivationCompletionSerializer,
+    StudentRegistrationActivationSerializer,
+    TokenRevocationSerializer,
+)
 from .services import (
+    activate_student_registration_account,
+    complete_staff_activation,
     revoke_current_session,
     revoke_tokens,
     rotate_refresh_token,
@@ -129,4 +139,34 @@ class TokenRevocationView(APIView):
         serializer.is_valid(raise_exception=True)
 
         revoke_tokens(user=request.user, scope=serializer.validated_data["scope"])
+        return Response(status=204)
+
+
+class StudentRegistrationActivationView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def post(self, request) -> Response:
+        serializer = StudentRegistrationActivationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        activate_student_registration_account(
+            registration_application_id=serializer.validated_data["registrationApplicationId"],
+            actor=request.user,
+        )
+        return Response(status=201)
+
+
+class StaffActivationCompletionView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+
+    def post(self, request) -> Response:
+        serializer = StaffActivationCompletionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        complete_staff_activation(
+            activation_token=serializer.validated_data["activationToken"],
+            password=serializer.validated_data["password"],
+        )
         return Response(status=204)

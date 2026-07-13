@@ -73,6 +73,22 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/accounts/tests/test_token_session_endpoints.py",
         "route_namespace": "accounts",
     },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/activation/student-registration/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/activation/student-registration/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_activation_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/auth/activation/staff/complete/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/activation/staff/complete/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_activation_endpoints.py",
+        "route_namespace": "accounts",
+    },
 )
 
 
