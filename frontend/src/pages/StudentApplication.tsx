@@ -348,6 +348,10 @@ export default function StudentApplication() {
   const [selfieLog, setSelfieLog] = useState('');
   const [shutterFlash, setShutterFlash] = useState(false);
   const [step2SubStage, setStep2SubStage] = useState<'upload_photo' | 'selfie'>('upload_photo');
+  const [emailOtp, setEmailOtp] = useState('');
+  const [generatedEmailOtp, setGeneratedEmailOtp] = useState('');
+  const [emailOtpSentTo, setEmailOtpSentTo] = useState('');
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
 
   // New multi-angle Face Verification states
   const [faceVerificationStage, setFaceVerificationStage] = useState<'not_started' | 'camera_ready' | 'countdown' | 'verifying' | 'success' | 'failed' | 'failed_unrecognized' | 'failed_mismatch' | 'selfie_verification' | 'selfie_checking' | 'selfie_recorded' | 'selfie_failed_unrecognized' | 'selfie_failed_mismatch'>('not_started');
@@ -639,6 +643,10 @@ export default function StudentApplication() {
     setFaceOrientation('front');
     setSelfieStatus('idle');
     setLrnVerificationToken('');
+    setEmailOtp('');
+    setGeneratedEmailOtp('');
+    setEmailOtpSentTo('');
+    setIsEmailVerified(false);
     setCurrentSection(0);
     setVisitedSections([0]);
     setIsSessionExpired(false);
@@ -864,6 +872,55 @@ export default function StudentApplication() {
         alert('Identity Authenticated Successfully with PhilSys Registry. Official registry credentials loaded.');
       }
     }, 1200);
+  };
+
+  const resetEmailVerification = () => {
+    setEmailOtp('');
+    setGeneratedEmailOtp('');
+    setEmailOtpSentTo('');
+    setIsEmailVerified(false);
+  };
+
+  const handleSendEmailOtp = () => {
+    const email = formData.email.trim();
+    if (!email) {
+      setErrors(prev => ({ ...prev, email: 'Email address is required before sending OTP' }));
+      return;
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setErrors(prev => ({ ...prev, email: 'Invalid email address format' }));
+      return;
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    setGeneratedEmailOtp(otp);
+    setEmailOtpSentTo(email);
+    setEmailOtp('');
+    setIsEmailVerified(false);
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next.email;
+      delete next.emailOtp;
+      return next;
+    });
+  };
+
+  const handleVerifyEmailOtp = () => {
+    if (!generatedEmailOtp || emailOtpSentTo !== formData.email.trim()) {
+      setErrors(prev => ({ ...prev, emailOtp: 'Please send an OTP to this email address first.' }));
+      return;
+    }
+    if (emailOtp.trim() !== generatedEmailOtp) {
+      setErrors(prev => ({ ...prev, emailOtp: 'Invalid OTP. Please check the temporary code shown above.' }));
+      return;
+    }
+    setIsEmailVerified(true);
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next.email;
+      delete next.emailOtp;
+      return next;
+    });
   };
 
   const handleVerifyLrnPath = async (forcedLrn?: string, forcedDob?: string) => {
@@ -1119,6 +1176,8 @@ export default function StudentApplication() {
         newErrors.email = 'Email address is required';
       } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
         newErrors.email = 'Invalid email address format';
+      } else if (!isEmailVerified || emailOtpSentTo !== formData.email.trim()) {
+        newErrors.emailOtp = 'Please verify your email address using the OTP before continuing.';
       }
 
       if (!formData.mobile) {
@@ -2846,25 +2905,107 @@ export default function StudentApplication() {
                            <Save className="w-6 h-6" />
                         </div>
                         <div>
-                           <h4 className="text-lg font-black text-philsa-navy leading-tight">Security Credentials</h4>
-                           <p className="text-xs text-philsa-gray font-medium uppercase tracking-wider">Account Password Establishment</p>
+                           <h4 className="text-lg font-black text-philsa-navy leading-tight">Email Verification & Security Credentials</h4>
+                           <p className="text-xs text-philsa-gray font-medium uppercase tracking-wider">Verify email with OTP before account setup</p>
                         </div>
                      </div>
 
                      <div className="space-y-6">
                         <div className="space-y-2">
                            <label className={cn("label-philsa", errors.email ? "text-philsa-red" : "text-philsa-gray")}>Email Address *</label>
-                           <input 
-                              type="email" 
-                              placeholder="student@email.ph" 
-                              className={cn("input-philsa", errors.email && "border-philsa-red bg-philsa-red/5")} 
-                              value={formData.email} 
-                              onChange={(e) => {
-                                 setFormData({...formData, email: e.target.value});
-                                 if (errors.email) setErrors(prev => ({...prev, email: ''}));
-                              }} 
-                           />
+                           <div className="flex flex-col sm:flex-row gap-3">
+                              <div className="relative flex-1">
+                                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray" />
+                                 <input
+                                    type="email"
+                                    placeholder="student@email.ph"
+                                    className={cn("input-philsa pl-11", errors.email && "border-philsa-red bg-philsa-red/5", isEmailVerified && "border-green-500 bg-green-50/60")}
+                                    value={formData.email}
+                                    onChange={(e) => {
+                                       setFormData({...formData, email: e.target.value});
+                                       resetEmailVerification();
+                                       if (errors.email || errors.emailOtp) {
+                                          setErrors(prev => {
+                                             const next = {...prev};
+                                             delete next.email;
+                                             delete next.emailOtp;
+                                             return next;
+                                          });
+                                       }
+                                    }}
+                                 />
+                              </div>
+                              <button
+                                 type="button"
+                                 onClick={handleSendEmailOtp}
+                                 disabled={isEmailVerified}
+                                 className={cn(
+                                    "px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200",
+                                    isEmailVerified
+                                      ? "bg-green-50 text-green-700 border-green-200 cursor-not-allowed"
+                                      : "bg-philsa-navy text-white border-philsa-navy hover:bg-philsa-navy/90"
+                                 )}
+                              >
+                                 {generatedEmailOtp ? 'Resend OTP' : 'Send OTP'}
+                              </button>
+                           </div>
                            {errors.email && <p className="text-xs text-philsa-red font-bold pl-1">{errors.email}</p>}
+                           {isEmailVerified && (
+                              <p className="text-xs text-green-700 font-black uppercase tracking-wider flex items-center gap-1.5 pl-1">
+                                 <CheckCircle className="w-3.5 h-3.5" /> Email verified
+                              </p>
+                           )}
+                        </div>
+
+                        {generatedEmailOtp && !isEmailVerified && (
+                           <div className="space-y-3 p-5 rounded-2xl border border-amber-200 bg-amber-50">
+                              <div className="flex items-start gap-3">
+                                 <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                                    <Mail className="w-5 h-5" />
+                                 </div>
+                                 <div>
+                                    <h5 className="text-xs font-black text-amber-900 uppercase tracking-widest">Temporary Email OTP Simulation</h5>
+                                    <p className="text-xs text-amber-800 font-medium mt-1">
+                                       Email delivery is not connected yet. Use this temporary OTP for local testing:
+                                       <span className="ml-2 font-black tracking-[0.35em] text-philsa-navy">{generatedEmailOtp}</span>
+                                    </p>
+                                    <p className="text-[11px] text-amber-700 mt-1">Target email: {emailOtpSentTo}</p>
+                                 </div>
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-3">
+                                 <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    placeholder="Enter 6-digit OTP"
+                                    className={cn("input-philsa tracking-[0.35em] font-black", errors.emailOtp && "border-philsa-red bg-philsa-red/5")}
+                                    value={emailOtp}
+                                    onChange={(e) => {
+                                       setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
+                                       if (errors.emailOtp) setErrors(prev => ({...prev, emailOtp: ''}));
+                                    }}
+                                 />
+                                 <button
+                                    type="button"
+                                    onClick={handleVerifyEmailOtp}
+                                    className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-green-600 bg-green-600 text-white hover:bg-green-700 transition-all duration-200"
+                                 >
+                                    Verify OTP
+                                 </button>
+                              </div>
+                              {errors.emailOtp && <p className="text-xs text-philsa-red font-bold pl-1">{errors.emailOtp}</p>}
+                           </div>
+                        )}
+
+                        {!generatedEmailOtp && !isEmailVerified && errors.emailOtp && (
+                           <p className="text-xs text-philsa-red font-bold pl-1">{errors.emailOtp}</p>
+                        )}
+
+                        <div className={cn("p-4 rounded-2xl border flex items-start gap-3", isEmailVerified ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200")}>
+                           <ShieldCheck className={cn("w-5 h-5 mt-0.5 shrink-0", isEmailVerified ? "text-green-700" : "text-blue-700")} />
+                           <p className={cn("text-xs font-bold leading-relaxed", isEmailVerified ? "text-green-800" : "text-blue-800")}>
+                              Email must be verified using OTP before setting password and mobile number. This OTP is currently displayed on-screen until email delivery is configured.
+                           </p>
                         </div>
 
                         <div className="space-y-2">
@@ -2872,7 +3013,8 @@ export default function StudentApplication() {
                            <input 
                               type="tel" 
                               placeholder="e.g. 09171234567" 
-                              className={cn("input-philsa", errors.mobile && "border-philsa-red bg-philsa-red/5")} 
+                              disabled={!isEmailVerified}
+                              className={cn("input-philsa", errors.mobile && "border-philsa-red bg-philsa-red/5", !isEmailVerified && "bg-slate-100 text-slate-400 cursor-not-allowed")}
                               value={formData.mobile} 
                               onChange={(e) => {
                                  setFormData({...formData, mobile: e.target.value});
@@ -2887,7 +3029,8 @@ export default function StudentApplication() {
                            <label className={cn("label-philsa", errors.password ? "text-philsa-red" : "text-philsa-gray")}>Create Password *</label>
                            <input 
                               type="password" 
-                              className={cn("input-philsa", errors.password && "border-philsa-red bg-philsa-red/5")} 
+                              disabled={!isEmailVerified}
+                              className={cn("input-philsa", errors.password && "border-philsa-red bg-philsa-red/5", !isEmailVerified && "bg-slate-100 text-slate-400 cursor-not-allowed")}
                               value={formData.password} 
                               onChange={(e) => {
                                  setFormData({...formData, password: e.target.value});
@@ -2902,7 +3045,8 @@ export default function StudentApplication() {
                            <label className={cn("label-philsa", errors.confirmPassword ? "text-philsa-red" : "text-philsa-gray")}>Confirm Password *</label>
                            <input 
                               type="password" 
-                              className={cn("input-philsa", errors.confirmPassword && "border-philsa-red bg-philsa-red/5")} 
+                              disabled={!isEmailVerified}
+                              className={cn("input-philsa", errors.confirmPassword && "border-philsa-red bg-philsa-red/5", !isEmailVerified && "bg-slate-100 text-slate-400 cursor-not-allowed")}
                               value={formData.confirmPassword} 
                               onChange={(e) => {
                                  setFormData({...formData, confirmPassword: e.target.value});
