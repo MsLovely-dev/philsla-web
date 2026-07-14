@@ -62,12 +62,13 @@ export class ApiClient {
   }
 
   private async send<TData>(url: string, init: RequestInit): Promise<ServiceResult<TData>> {
+    const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
     const response = await this.fetcher(url, {
       ...init,
       credentials: 'include',
       headers: {
         Accept: 'application/json',
-        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(init.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
         ...init.headers,
       },

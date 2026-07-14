@@ -16,6 +16,39 @@ export interface LrnVerificationResult {
   verificationToken: string;
   expiresInSeconds: number;
   profile: LrnVerificationProfile;
+  step2: Step2Configuration;
+}
+
+export interface Step2Configuration {
+  configurationId: number | null;
+  requireStudentIdVerification: boolean;
+  requireStudentIdFront: boolean;
+  requireStudentIdBack: boolean;
+  enableStudentIdInformationExtraction: boolean;
+  compareStudentName: boolean;
+  compareSchoolName: boolean;
+  nameMatchThreshold: number;
+  schoolMatchThreshold: number;
+  enableFacialComparison: boolean;
+  facialReferenceMediaType: 'STUDENT_ID_FRONT';
+  facialSimilarityThreshold: number;
+  allowManualReview: boolean;
+  maximumVerificationAttempts: number;
+  effectiveDate: string | null;
+}
+
+export interface Step2ConfigurationInput extends Omit<Step2Configuration, 'configurationId' | 'effectiveDate'> {
+  effectiveDate: string;
+  status: boolean;
+}
+
+export interface Step2VerificationResult {
+  id: string;
+  status: 'IN_PROGRESS' | 'PASSED' | 'MANUAL_REVIEW' | 'REJECTED';
+  attempts: number;
+  configuration: Step2Configuration;
+  uploadedMedia: Array<'STUDENT_ID_FRONT' | 'STUDENT_ID_BACK' | 'SELFIE'>;
+  results: Record<string, unknown>;
 }
 
 export interface BackendApplication {
@@ -60,6 +93,31 @@ export class BackendApplicationService {
     return this.apiClient.request<BackendApplication>('/api/v1/applications/', {
       method: 'POST',
       body: JSON.stringify(input),
+    });
+  }
+
+  async uploadStep2Media(
+    registrationToken: string,
+    mediaType: 'STUDENT_ID_FRONT' | 'STUDENT_ID_BACK' | 'SELFIE',
+    file: File,
+  ): Promise<ServiceResult<Step2VerificationResult>> {
+    const body = new FormData();
+    body.append('mediaType', mediaType);
+    body.append('file', file);
+    return this.apiClient.request<Step2VerificationResult>('/api/v1/applications/registration/step-2/', {
+      method: 'POST',
+      headers: { 'X-Registration-Token': registrationToken },
+      body,
+    });
+  }
+
+  async listStep2Configurations(): Promise<ServiceResult<Array<Step2Configuration & { id: number; status: boolean }>>> {
+    return this.apiClient.request<Array<Step2Configuration & { id: number; status: boolean }>>('/api/v1/applications/configuration/step-2/');
+  }
+
+  async createStep2Configuration(input: Step2ConfigurationInput): Promise<ServiceResult<Step2Configuration>> {
+    return this.apiClient.request<Step2Configuration>('/api/v1/applications/configuration/step-2/', {
+      method: 'POST', body: JSON.stringify(input),
     });
   }
 

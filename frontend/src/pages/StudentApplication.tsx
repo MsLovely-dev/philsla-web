@@ -6,8 +6,9 @@ import {
   backendApplicationService,
   createBackendApplicationDraftInput,
   mapBackendApplicationToFrontend,
+  type Step2Configuration,
 } from '../services/backendApplicationService';
-import { FileUp, CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, BookOpen, Plus, Trash2, MapPin, Activity, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, Check, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Scan, Eye, Video } from 'lucide-react';
+import { FileUp, CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, BookOpen, Plus, Trash2, MapPin, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, Check, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Scan, Eye, Video } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const SECTIONS = [
@@ -348,6 +349,13 @@ export default function StudentApplication() {
   const [selfieLog, setSelfieLog] = useState('');
   const [shutterFlash, setShutterFlash] = useState(false);
   const [step2SubStage, setStep2SubStage] = useState<'upload_photo' | 'selfie'>('upload_photo');
+  const [step2Configuration, setStep2Configuration] = useState<Step2Configuration | null>(null);
+  const [step2UploadedMedia, setStep2UploadedMedia] = useState<string[]>([]);
+  const [step2BackendStatus, setStep2BackendStatus] = useState<'IN_PROGRESS' | 'PASSED' | 'MANUAL_REVIEW' | 'REJECTED'>('IN_PROGRESS');
+  const [idBackPreview, setIdBackPreview] = useState('');
+  useEffect(() => {
+    if (step2Configuration && !step2Configuration.requireStudentIdVerification) setStep2SubStage('selfie');
+  }, [step2Configuration]);
   const [emailOtp, setEmailOtp] = useState('');
   const [generatedEmailOtp, setGeneratedEmailOtp] = useState('');
   const [emailOtpSentTo, setEmailOtpSentTo] = useState('');
@@ -965,8 +973,11 @@ export default function StudentApplication() {
       return;
     }
 
-    const { profile, verificationToken } = result.data;
+    const { profile, verificationToken, step2 } = result.data;
     setLrnVerificationToken(verificationToken);
+    setStep2Configuration(step2);
+    setStep2UploadedMedia([]);
+    setStep2BackendStatus('IN_PROGRESS');
     setLrnAttemptsLeft(5);
     setIsIdVerified(true);
     setFaceCheckStatus('success');
@@ -993,45 +1004,34 @@ export default function StudentApplication() {
     setCurrentSection(1);
   };
 
-  const handleSimulateFaceCheck = (file: File) => {
-    setFaceCheckStatus('scanning');
-    setFaceCheckLog('Reading binary signature...');
-    
-    setTimeout(() => {
-      setFaceCheckLog('Verifying MIME magic headers (JPEG/PNG magic bytes)...');
-      
-      setTimeout(() => {
-        setFaceCheckLog('Initializing automated local face-detection model (FaceAPI)...');
-        
-        setTimeout(() => {
-          setFaceCheckLog('Analyzing contours and facial coordinates...');
-          
-          setTimeout(() => {
-            if (simulateFaceFailure) {
-              setFaceCheckStatus('failed');
-              setFaceCheckLog('');
-              setFormData(prev => ({ ...prev, photoUrl: '', photoFilename: '' }));
-              setErrors(prev => ({ ...prev, photoUrl: "We couldn't detect a face in this photo. Please upload a clear photo of yourself." }));
-              addAuditLog('FACE_DETECTION_FAILED', 'Automated face detection scan rejected the uploaded 2x2 photo: no facial coordinates located.');
-            } else {
-              setFaceCheckStatus('success');
-              setFaceCheckLog('Contour validation complete. Single human face identified.');
-              setFormData(prev => ({
-                ...prev,
-                photoUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-                photoFilename: file.name
-              }));
-              setErrors(prev => {
-                const next = { ...prev };
-                delete next.photoUrl;
-                return next;
-              });
-              addAuditLog('FACE_DETECTION_SUCCESS', `Automated face detection validated physical photo structures for file: ${file.name}`);
-            }
-          }, 1000);
-        }, 1000);
-      }, 1000);
-    }, 1000);
+  const uploadRealStep2Media = async (
+    mediaType: 'STUDENT_ID_FRONT' | 'STUDENT_ID_BACK' | 'SELFIE',
+    file: File,
+  ) => {
+    if (!lrnVerificationToken) {
+      setErrors(prev => ({ ...prev, general: 'Please verify your LRN again before uploading identity images.' }));
+      return;
+    }
+    setIsSubmitting(true);
+    const result = await backendApplicationService.uploadStep2Media(lrnVerificationToken, mediaType, file);
+    setIsSubmitting(false);
+    if (result.ok === false) {
+      setErrors(prev => ({ ...prev, general: result.error.message }));
+      return;
+    }
+    const preview = URL.createObjectURL(file);
+    setStep2UploadedMedia(result.data.uploadedMedia);
+    setStep2BackendStatus(result.data.status);
+    if (mediaType === 'STUDENT_ID_FRONT') {
+      setFormData(prev => ({ ...prev, photoUrl: preview, photoFilename: file.name }));
+    } else if (mediaType === 'STUDENT_ID_BACK') {
+      setIdBackPreview(preview);
+    } else {
+      setFormData(prev => ({ ...prev, selfieUrl: preview, selfieFilename: file.name }));
+      setSelfieStatus(result.data.status === 'PASSED' ? 'success' : 'failed');
+      if (result.data.status === 'PASSED') setFaceVerificationStage('selfie_recorded');
+    }
+    setErrors(prev => { const next = { ...prev }; delete next.general; delete next.photoUrl; delete next.selfieUrl; return next; });
   };
 
   const handleStartCamera = () => {
@@ -1162,12 +1162,19 @@ export default function StudentApplication() {
     }
 
     if (currentSection === 1) {
-      if (!formData.photoUrl) {
-        newErrors.photoUrl = 'Student 2x2 Photo ID is required';
+      if (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) {
+        newErrors.photoUrl = 'Student ID front image is required';
         setStep2SubStage('upload_photo');
-      } else if (!formData.selfieUrl) {
+      } else if (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK')) {
+        newErrors.photoUrl = 'Student ID back image is required';
+        setStep2SubStage('upload_photo');
+      } else if (!step2UploadedMedia.includes('SELFIE')) {
         newErrors.selfieUrl = 'Live Biometric Selfie Scan is required';
         setStep2SubStage('selfie');
+      } else if (step2BackendStatus !== 'PASSED') {
+        newErrors.general = step2BackendStatus === 'MANUAL_REVIEW'
+          ? 'Your identity verification requires authorized manual review.'
+          : 'Identity verification has not passed.';
       }
     }
 
@@ -2185,16 +2192,18 @@ export default function StudentApplication() {
                         </div>
                         <div>
                            <h4 className="text-lg font-black text-philsa-navy leading-tight">
-                             Selfie Verification
+                             {step2Configuration?.requireStudentIdVerification ? 'Student ID & Selfie Verification' : 'Selfie Submission'}
                            </h4>
                            <p className="text-xs text-philsa-gray font-medium uppercase tracking-wider">
-                             {step2SubStage === 'upload_photo' ? "Upload 2x2 Student Photo" : "Biometric Liveness Selfie Verification"}
+                             {step2Configuration?.requireStudentIdVerification
+                               ? (step2SubStage === 'upload_photo' ? 'Upload Student ID Front and Back' : 'Capture Selfie')
+                               : 'Selfie-Only Mode — no ID or facial comparison required'}
                            </p>
                         </div>
                      </div>
 
                      {/* Sub-steps Segmented Control */}
-                     <div className="flex flex-col sm:flex-row items-center justify-center gap-3 border-b border-philsa-border/20 pb-6">
+                     {step2Configuration?.requireStudentIdVerification && <div className="flex flex-col sm:flex-row items-center justify-center gap-3 border-b border-philsa-border/20 pb-6">
                        <button
                          type="button"
                          onClick={() => setStep2SubStage('upload_photo')}
@@ -2206,19 +2215,26 @@ export default function StudentApplication() {
                          )}
                        >
                          <span className="text-[9px] uppercase tracking-wider block opacity-75 mb-0.5">Sub-Step 1</span>
-                         <span className="text-xs uppercase tracking-widest font-black">1. Upload 2x2 Photo</span>
+                         <span className="text-xs uppercase tracking-widest font-black">1. Upload Student ID</span>
                        </button>
 
                        <button
                          type="button"
                          onClick={() => {
-                           if (!formData.photoUrl) {
-                             alert('Please upload your 2x2 Student Photo first.');
+                           if (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) {
+                             alert('Please upload the front of your Student ID first.');
+                             return;
+                           }
+                           if (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK')) {
+                             alert('Please upload the back of your Student ID first.');
                              return;
                            }
                            setStep2SubStage('selfie');
                          }}
-                         disabled={!formData.photoUrl}
+                         disabled={
+                           (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) ||
+                           (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK'))
+                         }
                          className={cn(
                            "w-full sm:flex-1 py-3 px-4 rounded-2xl border text-center transition-all cursor-pointer",
                            step2SubStage === 'selfie'
@@ -2229,7 +2245,7 @@ export default function StudentApplication() {
                          <span className="text-[9px] uppercase tracking-wider block opacity-75 mb-0.5">Sub-Step 2</span>
                          <span className="text-xs uppercase tracking-widest font-black">2. Selfie Verification</span>
                        </button>
-                     </div>
+                     </div>}
 
                      {step2SubStage === 'upload_photo' && (
                        <div className="space-y-6">
@@ -2238,39 +2254,39 @@ export default function StudentApplication() {
                              <AlertTriangle className="w-4 h-4 text-amber-600" /> Upload Requirements
                            </h5>
                            <p className="text-[10px] text-slate-600 font-bold uppercase tracking-wider leading-relaxed">
-                             Please upload a recent 2x2 portrait photo with a plain white background. Ensure your face is fully visible and clearly centered.
+                             Upload a clear, uncropped image of the front and back of your valid Student ID. The portrait on the ID front will be compared with your selfie, so it must be clearly visible.
                            </p>
                          </div>
 
-                         <div className="border-2 border-dashed border-slate-300 hover:border-[#8B0D11]/50 rounded-3xl p-8 text-center transition-all bg-slate-50/50 relative">
+                         <div className="grid gap-5 md:grid-cols-2">
+                         {step2Configuration?.requireStudentIdFront && <div className="border-2 border-dashed border-slate-300 hover:border-[#8B0D11]/50 rounded-3xl p-6 text-center transition-all bg-slate-50/50 relative">
                            {formData.photoUrl ? (
                              <div className="space-y-4">
-                               <div className="w-40 h-40 mx-auto rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md relative group">
-                                 <img referrerPolicy="no-referrer" src={formData.photoUrl} alt="Uploaded 2x2" className="w-full h-full object-cover" />
+                               <div className="w-full aspect-[1.6/1] mx-auto rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md relative group bg-white">
+                                 <img referrerPolicy="no-referrer" src={formData.photoUrl} alt="Student ID front preview" className="w-full h-full object-contain" />
                                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
                                    <button
                                      type="button"
-                                     onClick={() => setFormData({ ...formData, photoUrl: '' })}
+                                     onClick={() => document.getElementById('student-id-front-replace')?.click()}
                                      className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-all cursor-pointer"
                                    >
-                                     <Trash2 className="w-5 h-5" />
+                                     <Upload className="w-5 h-5" />
                                    </button>
+                                   <input
+                                     id="student-id-front-replace"
+                                     type="file"
+                                     accept="image/jpeg,image/png"
+                                     className="hidden"
+                                     onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadRealStep2Media('STUDENT_ID_FRONT', file); }}
+                                   />
                                  </div>
                                </div>
                                <div>
                                  <p className="text-xs font-black text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1">
-                                   <CheckCircle className="w-4 h-4" /> 2x2 Photo Uploaded successfully
+                                   <CheckCircle className="w-4 h-4" /> Student ID Front Uploaded
                                   </p>
-                                 <p className="text-[10px] text-slate-400 font-bold uppercase mt-1">Ready for Selfie Verification</p>
+                                 <button type="button" onClick={() => document.getElementById('student-id-front-replace')?.click()} className="mt-2 text-[9px] font-black uppercase tracking-wider text-[#8B0D11] hover:underline">Replace Front Image</button>
                                </div>
-                               
-                               <button
-                                 type="button"
-                                 onClick={() => setStep2SubStage('selfie')}
-                                 className="px-6 py-2.5 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2 mx-auto mt-4 cursor-pointer"
-                               >
-                                 Proceed to Selfie Verification <ChevronRight className="w-3.5 h-3.5" />
-                               </button>
                              </div>
                            ) : (
                              <div className="space-y-4">
@@ -2278,51 +2294,73 @@ export default function StudentApplication() {
                                  <Upload className="w-8 h-8 text-[#8B0D11]" />
                                </div>
                                <div>
-                                 <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Drag and drop your 2x2 Photo here</p>
+                                 <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Select the front image of your Student ID</p>
                                  <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">or click to browse local files (JPG, PNG, max 5MB)</p>
                                </div>
                                <input
                                  type="file"
-                                 accept="image/*"
-                                 id="student-photo-upload"
+                                 accept="image/jpeg,image/png"
+                                 id="student-id-front-upload"
                                  className="hidden"
                                  onChange={(e) => {
                                    const file = e.target.files?.[0];
                                    if (file) {
-                                     // Simulate file upload setting an Unsplash portrait URL
-                                     setFormData({
-                                       ...formData,
-                                       photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80'
-                                     });
-                                     addAuditLog('PHOTO_UPLOADED', `User uploaded 2x2 Student Photo: ${file.name}`);
+                                     void uploadRealStep2Media('STUDENT_ID_FRONT', file);
                                    }
                                  }}
                                />
-                               <div className="flex flex-col sm:flex-row gap-2 justify-center pt-2">
+                               <div className="flex justify-center pt-2">
                                  <button
                                    type="button"
-                                   onClick={() => document.getElementById('student-photo-upload')?.click()}
+                                   onClick={() => document.getElementById('student-id-front-upload')?.click()}
                                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm cursor-pointer"
                                  >
-                                   Select Photo File
-                                 </button>
-                                 <button
-                                   type="button"
-                                   onClick={() => {
-                                     setFormData({
-                                       ...formData,
-                                       photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80'
-                                     });
-                                     addAuditLog('PHOTO_UPLOADED_SIMULATED', 'Simulated 2x2 student photo upload.');
-                                   }}
-                                   className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm flex items-center justify-center gap-1 cursor-pointer"
-                                 >
-                                   <Activity className="w-3.5 h-3.5" /> Simulate Photo Upload
+                                 Select Student ID Front
                                  </button>
                                </div>
                              </div>
                            )}
+                         </div>}
+
+                         {step2Configuration?.requireStudentIdBack && (
+                           <div className="border-2 border-dashed border-slate-300 hover:border-[#8B0D11]/50 rounded-3xl p-6 text-center transition-all bg-slate-50/50 relative">
+                             {idBackPreview ? (
+                               <div className="space-y-4">
+                                 <div className="w-full aspect-[1.6/1] mx-auto rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md relative group bg-white">
+                                   <img src={idBackPreview} alt="Student ID back preview" className="w-full h-full object-contain" />
+                                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+                                     <button type="button" onClick={() => document.getElementById('student-id-back-replace')?.click()} className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-all cursor-pointer"><Upload className="w-5 h-5" /></button>
+                                   </div>
+                                 </div>
+                                 <p className="text-xs font-black text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1"><CheckCircle className="w-4 h-4" /> Student ID Back Uploaded</p>
+                                 <button type="button" onClick={() => document.getElementById('student-id-back-replace')?.click()} className="text-[9px] font-black uppercase tracking-wider text-[#8B0D11] hover:underline">Replace Back Image</button>
+                               </div>
+                             ) : (
+                               <div className="space-y-4">
+                                 <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto border border-slate-200"><Upload className="w-8 h-8 text-[#8B0D11]" /></div>
+                                 <div>
+                                   <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Select the back image of your Student ID</p>
+                                   <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Click to browse local files (JPG, PNG, max 5MB)</p>
+                                 </div>
+                                 <button type="button" onClick={() => document.getElementById('student-id-back-replace')?.click()} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm cursor-pointer">Select Student ID Back</button>
+                               </div>
+                             )}
+                             <input id="student-id-back-replace" type="file" accept="image/jpeg,image/png" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadRealStep2Media('STUDENT_ID_BACK', file); }} />
+                           </div>
+                         )}
                          </div>
+
+                         <button
+                           type="button"
+                           disabled={
+                             (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) ||
+                             (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK'))
+                           }
+                           onClick={() => setStep2SubStage('selfie')}
+                           className="px-6 py-3 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2 mx-auto cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                         >
+                           Proceed to Selfie Verification <ChevronRight className="w-3.5 h-3.5" />
+                         </button>
                          
                          {errors.photoUrl && (
                            <p className="text-xs text-philsa-red font-bold pl-1 mt-1 leading-relaxed border-l-2 border-philsa-red py-0.5 text-center">
@@ -2334,6 +2372,20 @@ export default function StudentApplication() {
 
                      {step2SubStage === 'selfie' && (
                        <div className="space-y-6">
+                         <div className="rounded-2xl border-2 border-dashed border-[#8B0D11]/30 bg-red-50/30 p-5 text-center space-y-3">
+                           <Camera className="w-8 h-8 text-[#8B0D11] mx-auto" />
+                           <p className="text-xs font-black uppercase tracking-wider text-slate-700">Capture or select a current selfie</p>
+                           <input
+                             type="file"
+                             accept="image/jpeg,image/png"
+                             capture="user"
+                             disabled={isSubmitting}
+                             onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadRealStep2Media('SELFIE', file); }}
+                             className="block w-full text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[#8B0D11] file:px-4 file:py-2 file:text-white disabled:opacity-50"
+                           />
+                           {step2BackendStatus === 'PASSED' && <p className="text-xs font-black text-emerald-700">Step 2 completed by the backend.</p>}
+                           {step2BackendStatus === 'MANUAL_REVIEW' && <p className="text-xs font-black text-amber-700">Submitted for authorized manual review.</p>}
+                         </div>
                          {/* Interactive Biometric Simulation Control Panel */}
                          <div className="p-3 bg-slate-50 text-slate-800 rounded-2xl border border-slate-200 space-y-2">
                             <div className="flex items-center justify-between">
@@ -3884,26 +3936,34 @@ export default function StudentApplication() {
                      <div className="flex flex-col lg:flex-row gap-6 sm:gap-12">
                         {/* Profile Photo & Selfie */}
                         <div className="shrink-0 flex flex-col sm:flex-row lg:flex-col gap-6 items-center">
-                           {/* 2x2 Portrait Card */}
+                           {/* Student ID Front Card */}
                            <div className="flex flex-col items-center">
-                              <div className="w-32 sm:w-36 aspect-square rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white shadow-xl ring-1 ring-philsa-border relative group">
+                              <div className="w-44 sm:w-52 aspect-[1.6/1] rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white shadow-xl ring-1 ring-philsa-border relative group">
                                  {formData.photoUrl ? (
-                                    <img referrerPolicy="no-referrer" src={formData.photoUrl} alt="Identity Portrait" className="w-full h-full object-cover" />
+                                    <img referrerPolicy="no-referrer" src={formData.photoUrl} alt="Student ID front" className="w-full h-full object-contain" />
                                  ) : (
                                     <div className="w-full h-full flex flex-col items-center justify-center text-philsa-gray opacity-30">
                                        <User className="w-10 h-10 mb-1" />
-                                       <span className="text-[9px] font-black uppercase">Missing Photo</span>
+                                       <span className="text-[9px] font-black uppercase">Missing ID Front</span>
                                     </div>
                                  )}
                                  <div className="absolute top-2 right-2 px-2 py-0.5 bg-philsa-red text-white text-[7px] font-black uppercase tracking-widest rounded shadow">
-                                    2x2 PORTRAIT
+                                    ID FRONT
                                  </div>
                               </div>
                               <div className="mt-2 text-center">
-                                 <p className="text-[8px] sm:text-[9px] font-black text-philsa-red uppercase tracking-widest leading-none">Biometric Portrait</p>
-                                 <p className="text-[7px] sm:text-[8px] text-philsa-gray font-bold mt-1 uppercase tracking-tight">Verified Profile Photo</p>
+                                 <p className="text-[8px] sm:text-[9px] font-black text-philsa-red uppercase tracking-widest leading-none">Student ID Front</p>
+                                 <p className="text-[7px] sm:text-[8px] text-philsa-gray font-bold mt-1 uppercase tracking-tight">Uploaded identity document</p>
                               </div>
                            </div>
+
+                           {step2Configuration?.requireStudentIdBack && <div className="flex flex-col items-center">
+                              <div className="w-44 sm:w-52 aspect-[1.6/1] rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white shadow-xl ring-1 ring-philsa-border relative">
+                                 {idBackPreview ? <img src={idBackPreview} alt="Student ID back" className="w-full h-full object-contain" /> : <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase text-philsa-gray opacity-40">Missing ID Back</div>}
+                                 <div className="absolute top-2 right-2 px-2 py-0.5 bg-philsa-red text-white text-[7px] font-black uppercase tracking-widest rounded shadow">ID BACK</div>
+                              </div>
+                              <p className="mt-2 text-[8px] sm:text-[9px] font-black text-philsa-red uppercase tracking-widest">Student ID Back</p>
+                           </div>}
 
                            {/* Selfie Verification Card */}
                            <div className="flex flex-col items-center">
@@ -4116,7 +4176,7 @@ export default function StudentApplication() {
                 You reached 5 attempts. Will proceed to Selfie Verification.
               </p>
               <p className="text-[11px] text-slate-500 font-semibold leading-relaxed font-sans">
-                A manual backup check will be scheduled to review your uploaded high-resolution 2x2 portrait photo against DepEd records.
+                A manual backup check will review the portrait and identity details printed on your uploaded Student ID.
               </p>
             </div>
 

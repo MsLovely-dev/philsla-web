@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Eye } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Eye, Loader2, Save, ShieldCheck } from 'lucide-react';
 import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField } from '../../../components/maintenance/MaintenancePageTemplate';
 import RegistrationPreview from '../../../components/maintenance/RegistrationPreview';
+import { backendApplicationService, type Step2Configuration, type Step2ConfigurationInput } from '../../../services/backendApplicationService';
 
 const MOCK_DATA = [
   // Verification Methods
@@ -67,7 +68,81 @@ export default function StudentRegistrationMaintenance() {
   });
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [selectedSection, setSelectedSection] = useState<'All' | 'Personal Information' | 'Academic'>('All');
+  const [selectedSection, setSelectedSection] = useState<'All' | 'Personal Information' | 'Academic' | 'Identity Verification'>('All');
+  const [step2Configurations, setStep2Configurations] = useState<Array<Step2Configuration & { id: number; status: boolean }>>([]);
+  const [isLoadingStep2, setIsLoadingStep2] = useState(false);
+  const [isSavingStep2, setIsSavingStep2] = useState(false);
+  const [step2Message, setStep2Message] = useState('');
+  const [step2Error, setStep2Error] = useState('');
+  const [step2Draft, setStep2Draft] = useState<Step2ConfigurationInput>({
+    requireStudentIdVerification: false,
+    requireStudentIdFront: false,
+    requireStudentIdBack: false,
+    enableStudentIdInformationExtraction: false,
+    compareStudentName: false,
+    compareSchoolName: false,
+    nameMatchThreshold: 85,
+    schoolMatchThreshold: 85,
+    enableFacialComparison: false,
+    facialReferenceMediaType: 'STUDENT_ID_FRONT',
+    facialSimilarityThreshold: 85,
+    allowManualReview: true,
+    maximumVerificationAttempts: 5,
+    effectiveDate: new Date().toISOString().slice(0, 16),
+    status: true,
+  });
+
+  const loadStep2Configurations = async () => {
+    setIsLoadingStep2(true);
+    const result = await backendApplicationService.listStep2Configurations();
+    setIsLoadingStep2(false);
+    if (result.ok === false) {
+      setStep2Error(result.error.message);
+      return;
+    }
+    setStep2Configurations(result.data);
+    setStep2Error('');
+  };
+
+  useEffect(() => { void loadStep2Configurations(); }, []);
+
+  const updateStep2Draft = <K extends keyof Step2ConfigurationInput,>(key: K, value: Step2ConfigurationInput[K]) => {
+    setStep2Draft(previous => {
+      const next = { ...previous, [key]: value };
+      if (key === 'requireStudentIdVerification' && value === false) {
+        Object.assign(next, {
+          requireStudentIdFront: false,
+          requireStudentIdBack: false,
+          enableStudentIdInformationExtraction: false,
+          compareStudentName: false,
+          compareSchoolName: false,
+          enableFacialComparison: false,
+        });
+      }
+      if (key === 'enableStudentIdInformationExtraction' && value === false) {
+        Object.assign(next, { compareStudentName: false, compareSchoolName: false });
+      }
+      if (key === 'requireStudentIdFront' && value === false) next.enableFacialComparison = false;
+      return next;
+    });
+  };
+
+  const saveStep2Configuration = async () => {
+    setStep2Error('');
+    setStep2Message('');
+    setIsSavingStep2(true);
+    const result = await backendApplicationService.createStep2Configuration({
+      ...step2Draft,
+      effectiveDate: new Date(step2Draft.effectiveDate).toISOString(),
+    });
+    setIsSavingStep2(false);
+    if (result.ok === false) {
+      setStep2Error(result.error.message);
+      return;
+    }
+    setStep2Message('A new Step 2 configuration version was saved successfully.');
+    await loadStep2Configurations();
+  };
 
   const saveConfigs = (newData: any[]) => {
     setData(newData);
@@ -80,11 +155,13 @@ export default function StudentRegistrationMaintenance() {
       label: 'Portal Section',
       render: (row) => (
         <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-          row.section === 'Personal Information' 
+          row.section === 'Personal Information'
             ? 'bg-blue-50 text-blue-700 border border-blue-100' 
-            : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+            : row.section === 'Identity Verification'
+              ? 'bg-rose-50 text-[#8A1538] border border-rose-100'
+              : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
         }`}>
-          {row.section === 'Personal Information' ? '1. Personal' : '2. Academic'}
+          {row.section === 'Personal Information' ? '1. Personal' : row.section === 'Identity Verification' ? 'Step 2 Identity' : '2. Academic'}
         </span>
       )
     },
@@ -163,6 +240,88 @@ export default function StudentRegistrationMaintenance() {
     }
   };
 
+  const step2Rows = step2Configurations.map(configuration => ({
+    id: configuration.id,
+    section: 'Identity Verification',
+    type: configuration.requireStudentIdVerification ? 'Student ID + Selfie' : 'Selfie Only',
+    value: `Attempts: ${configuration.maximumVerificationAttempts} · Effective: ${new Date(configuration.effectiveDate).toLocaleString()}`,
+    status: configuration.status ? 'Active' : 'Inactive',
+    approvalStatus: 'Approved',
+    updatedBy: 'Backend configuration',
+    updatedAt: new Date(configuration.effectiveDate).toLocaleString(),
+  }));
+
+  const toggleField = (key: keyof Step2ConfigurationInput, label: string, disabled = false) => (
+    <label className={`flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-3 ${disabled ? 'opacity-45' : 'cursor-pointer'}`}>
+      <span className="text-xs font-bold text-slate-700">{label}</span>
+      <input
+        type="checkbox"
+        checked={Boolean(step2Draft[key])}
+        disabled={disabled}
+        onChange={event => updateStep2Draft(key, event.target.checked as never)}
+        className="h-4 w-4 accent-[#8A1538]"
+      />
+    </label>
+  );
+
+  const step2Editor = selectedSection === 'Identity Verification' && (
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-6">
+      <div className="flex items-start gap-3">
+        <div className="rounded-xl bg-[#8A1538] p-2.5 text-white"><ShieldCheck className="h-5 w-5" /></div>
+        <div>
+          <h3 className="text-sm font-black uppercase tracking-wider text-philsa-navy">Step 2 Identity Verification</h3>
+          <p className="mt-1 text-xs text-slate-500">Saving creates a new immutable version. Registrations that already started retain their captured configuration.</p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {toggleField('requireStudentIdVerification', 'Require Student ID Verification')}
+        {toggleField('requireStudentIdFront', 'Require Student ID Front', !step2Draft.requireStudentIdVerification)}
+        {toggleField('requireStudentIdBack', 'Require Student ID Back', !step2Draft.requireStudentIdVerification)}
+        {toggleField('enableStudentIdInformationExtraction', 'Enable ID Information Extraction', !step2Draft.requireStudentIdVerification)}
+        {toggleField('compareStudentName', 'Compare Student Name', !step2Draft.enableStudentIdInformationExtraction)}
+        {toggleField('compareSchoolName', 'Compare School Name', !step2Draft.enableStudentIdInformationExtraction)}
+        {toggleField('enableFacialComparison', 'Enable Facial Comparison', !step2Draft.requireStudentIdFront)}
+        {toggleField('allowManualReview', 'Allow Manual Review')}
+        {toggleField('status', 'Active Configuration')}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        {[
+          ['nameMatchThreshold', 'Name Match %'],
+          ['schoolMatchThreshold', 'School Match %'],
+          ['facialSimilarityThreshold', 'Facial Similarity %'],
+          ['maximumVerificationAttempts', 'Maximum Attempts'],
+        ].map(([key, label]) => (
+          <label key={key} className="space-y-1.5">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</span>
+            <input
+              type="number"
+              min={key === 'maximumVerificationAttempts' ? 1 : 0}
+              max={key === 'maximumVerificationAttempts' ? 20 : 100}
+              value={Number(step2Draft[key as keyof Step2ConfigurationInput])}
+              onChange={event => updateStep2Draft(key as keyof Step2ConfigurationInput, Number(event.target.value) as never)}
+              className="input-philsa w-full"
+            />
+          </label>
+        ))}
+        <label className="space-y-1.5">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Effective Date</span>
+          <input type="datetime-local" value={step2Draft.effectiveDate} onChange={event => updateStep2Draft('effectiveDate', event.target.value)} className="input-philsa w-full" />
+        </label>
+      </div>
+
+      {step2Error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-700">{step2Error}</p>}
+      {step2Message && <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{step2Message}</p>}
+      <div className="flex justify-end">
+        <button type="button" onClick={() => void saveStep2Configuration()} disabled={isSavingStep2} className="btn-primary flex items-center gap-2 px-5 py-3 text-xs disabled:opacity-50">
+          {isSavingStep2 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save New Configuration Version
+        </button>
+      </div>
+    </div>
+  );
+
   // Section Filter Tab Bar rendered above the table
   const aboveTableContent = (
     <div className="flex flex-col gap-3 animate-fadeIn">
@@ -206,14 +365,22 @@ export default function StudentRegistrationMaintenance() {
         >
           2. Academic Settings ({data.filter(d => d.section === 'Academic').length})
         </button>
+        <button
+          type="button"
+          onClick={() => setSelectedSection('Identity Verification')}
+          className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${selectedSection === 'Identity Verification' ? 'bg-white text-philsa-navy shadow-md' : 'text-slate-500 hover:text-philsa-navy'}`}
+        >
+          Step 2 Identity ({step2Configurations.length})
+        </button>
       </div>
+      {step2Editor}
     </div>
   );
 
   // Filter the actual data array being rendered by the table
-  const filteredDataBySection = selectedSection === 'All' 
-    ? data 
-    : data.filter(item => item.section === selectedSection);
+  const filteredDataBySection = selectedSection === 'Identity Verification'
+    ? step2Rows
+    : selectedSection === 'All' ? data : data.filter(item => item.section === selectedSection);
 
   return (
     <MaintenancePageTemplate
@@ -221,13 +388,15 @@ export default function StudentRegistrationMaintenance() {
       subtitle="Lookup tables and validation rules for the National standardized registration portal."
       breadcrumb={['Maintenance', 'Student Registration']}
       columns={columns}
-      data={filteredDataBySection}
+      data={isLoadingStep2 && selectedSection === 'Identity Verification' ? [] : filteredDataBySection}
       fields={fields}
-      onAdd={handleAdd}
-      onEdit={handleEdit}
-      onDelete={handleDelete}
+      onAdd={selectedSection === 'Identity Verification' ? undefined : handleAdd}
+      onEdit={selectedSection === 'Identity Verification' ? undefined : handleEdit}
+      onDelete={selectedSection === 'Identity Verification' ? undefined : handleDelete}
+      showCreateAction={selectedSection !== 'Identity Verification'}
+      showRowActions={selectedSection !== 'Identity Verification'}
       aboveTableContent={aboveTableContent}
-      bulkUpload={{
+      bulkUpload={selectedSection === 'Identity Verification' ? undefined : {
         templateUrl: '#',
         allowedTypes: ['.xlsx', '.csv']
       }}

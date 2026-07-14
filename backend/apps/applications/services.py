@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
@@ -10,7 +11,9 @@ from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.services import activate_student_registration_account
 
-from .models import ApplicationStatus, StudentApplication
+from .models import (ApplicationIdentityMedia, ApplicationStatus, IdentityMediaType,
+                     Step2Verification, Step2VerificationConfiguration,
+                     Step2VerificationStatus, StudentApplication)
 from .registry import RegistryUnavailable, get_lrn_registry
 
 
@@ -92,7 +95,115 @@ def verify_lrn(*, lrn: str, date_of_birth) -> dict:
         "gradeLevel": record.grade_level,
     }
     cache.set(f"{LRN_PROOF_PREFIX}{token}", profile, settings.LRN_VERIFICATION_TTL_MINUTES * 60)
-    return {"verificationToken": token, "expiresInSeconds": settings.LRN_VERIFICATION_TTL_MINUTES * 60, "profile": profile}
+    configuration = active_step2_configuration()
+    Step2Verification.objects.create(
+        token_digest=_token_digest(token), lrn=lrn, lrn_profile=profile,
+        configuration_snapshot=configuration,
+        expires_at=timezone.now() + timedelta(minutes=settings.LRN_VERIFICATION_TTL_MINUTES),
+    )
+    return {"verificationToken": token, "expiresInSeconds": settings.LRN_VERIFICATION_TTL_MINUTES * 60, "profile": profile, "step2": configuration}
+
+
+def _token_digest(token: str) -> str:
+    return hashlib.sha256(f"{settings.SECRET_KEY}:{token}".encode()).hexdigest()
+
+
+def active_step2_configuration() -> dict:
+    config = Step2VerificationConfiguration.objects.filter(is_active=True, effective_date__lte=timezone.now()).first()
+    if config:
+        return config.snapshot()
+    return {
+        "configurationId": None, "requireStudentIdVerification": False,
+        "requireStudentIdFront": False, "requireStudentIdBack": False,
+        "enableStudentIdInformationExtraction": False, "compareStudentName": False,
+        "compareSchoolName": False, "nameMatchThreshold": 85,
+        "schoolMatchThreshold": 85, "enableFacialComparison": False,
+        "facialReferenceMediaType": IdentityMediaType.STUDENT_ID_FRONT,
+        "facialSimilarityThreshold": 85, "allowManualReview": True,
+        "maximumVerificationAttempts": 5, "effectiveDate": None,
+    }
+
+
+def get_step2_verification(token: str) -> Step2Verification:
+    verification = Step2Verification.objects.filter(token_digest=_token_digest(token)).first()
+    if verification is None or verification.expires_at <= timezone.now():
+        raise LrnVerificationRejected("Registration verification has expired. Please verify your LRN again.")
+    return verification
+
+
+def serialize_step2(verification: Step2Verification) -> dict:
+    present = list(verification.media.values_list("media_type", flat=True))
+    return {"id": str(verification.id), "status": verification.status, "attempts": verification.attempts,
+            "configuration": verification.configuration_snapshot, "uploadedMedia": present,
+            "results": verification.results}
+
+
+@transaction.atomic
+def upload_step2_media(*, token: str, media_type: str, uploaded_file) -> Step2Verification:
+    verification = get_step2_verification(token)
+    if verification.status in {Step2VerificationStatus.PASSED, Step2VerificationStatus.REJECTED}:
+        raise ApplicationConflict("Step 2 can no longer be changed.")
+    configuration = verification.configuration_snapshot
+    if verification.attempts >= int(configuration.get("maximumVerificationAttempts", 5)):
+        verification.status = (Step2VerificationStatus.MANUAL_REVIEW
+                               if configuration.get("allowManualReview") else Step2VerificationStatus.REJECTED)
+        verification.results = {"code": "MAXIMUM_ATTEMPTS_REACHED"}
+        verification.save()
+        raise ApplicationConflict("Maximum identity verification attempts reached.")
+    allowed = {IdentityMediaType.SELFIE}
+    if configuration.get("requireStudentIdVerification"):
+        if configuration.get("requireStudentIdFront"): allowed.add(IdentityMediaType.STUDENT_ID_FRONT)
+        if configuration.get("requireStudentIdBack"): allowed.add(IdentityMediaType.STUDENT_ID_BACK)
+    if media_type not in allowed:
+        raise ValidationError({"mediaType": ["This image is not required by the applied Step 2 configuration."]})
+    if uploaded_file.size > settings.STEP2_MAX_IMAGE_BYTES:
+        raise ValidationError({"file": ["Image must not exceed 5 MB."]})
+    header = uploaded_file.read(16)
+    uploaded_file.seek(0)
+    content_type = "image/png" if header.startswith(b"\x89PNG\r\n\x1a\n") else "image/jpeg" if header.startswith(b"\xff\xd8\xff") else ""
+    if not content_type:
+        raise ValidationError({"file": ["Only valid JPEG and PNG images are accepted."]})
+    digest = hashlib.sha256()
+    for chunk in uploaded_file.chunks(): digest.update(chunk)
+    uploaded_file.seek(0)
+    for existing_media in ApplicationIdentityMedia.objects.filter(verification=verification, media_type=media_type):
+        existing_media.file.delete(save=False)
+        existing_media.delete()
+    ApplicationIdentityMedia.objects.create(verification=verification, media_type=media_type, file=uploaded_file,
+                                            content_type=content_type, size=uploaded_file.size, sha256=digest.hexdigest())
+    verification.attempts += 1
+    required = {IdentityMediaType.SELFIE}
+    if configuration.get("requireStudentIdVerification"):
+        if configuration.get("requireStudentIdFront"): required.add(IdentityMediaType.STUDENT_ID_FRONT)
+        if configuration.get("requireStudentIdBack"): required.add(IdentityMediaType.STUDENT_ID_BACK)
+    present = set(verification.media.values_list("media_type", flat=True))
+    if required <= present:
+        if configuration.get("requireStudentIdVerification"):
+            verification.status = Step2VerificationStatus.MANUAL_REVIEW if configuration.get("allowManualReview") else Step2VerificationStatus.REJECTED
+            verification.results = {
+                "code": "AUTOMATED_PROVIDERS_NOT_CONFIGURED",
+                "facialReferenceMediaType": IdentityMediaType.STUDENT_ID_FRONT,
+                "selfieMediaType": IdentityMediaType.SELFIE,
+            }
+        else:
+            verification.status = Step2VerificationStatus.PASSED
+            verification.completed_at = timezone.now()
+            verification.results = {"selfieSubmitted": True, "mode": "SELFIE_ONLY"}
+    verification.save()
+    return verification
+
+
+@transaction.atomic
+def decide_step2_manual_review(*, verification_id, decision: str, reason: str, actor) -> Step2Verification:
+    verification = Step2Verification.objects.select_for_update().get(id=verification_id)
+    if verification.status != Step2VerificationStatus.MANUAL_REVIEW:
+        raise ApplicationConflict("Only a pending manual review can receive this decision.")
+    verification.status = Step2VerificationStatus.PASSED if decision == "PASS" else Step2VerificationStatus.REJECTED
+    verification.completed_at = timezone.now()
+    verification.results = {**verification.results, "manualDecision": decision, "manualReason": reason,
+                            "manualReviewedBy": str(getattr(actor, "user_id", getattr(actor, "id", "")))}
+    verification.save()
+    return verification
 
 
 def _lrn_attempt_key(lrn: str) -> str:
@@ -105,6 +216,9 @@ def create_draft(*, owner=None, verification_token: str, data: dict, submit_on_c
     verified = cache.get(f"{LRN_PROOF_PREFIX}{verification_token}")
     if verified is None:
         raise LrnVerificationRejected("LRN verification has expired. Please verify your LRN and Date of Birth again.")
+    step2 = get_step2_verification(verification_token)
+    if submit_on_create and step2.status != Step2VerificationStatus.PASSED:
+        raise ValidationError({"step2": ["Identity verification must be completed before registration submission."]})
     password = data.pop("password", "")
     personal = dict(data.get("personal", {}))
     school = dict(data.get("school", {}))
@@ -120,6 +234,8 @@ def create_draft(*, owner=None, verification_token: str, data: dict, submit_on_c
             password_hash=make_password(password) if password else "",
             **data,
         )
+        step2.application = application
+        step2.save(update_fields=["application", "updated_at"])
         if submit_on_create:
             _validate_complete(application)
             application.status = ApplicationStatus.SUBMITTED
@@ -182,6 +298,8 @@ def _validate_complete(application: StudentApplication) -> None:
         "school": ("lrn", "name", "academicTrack", "gradeLevel", "gwa"),
     }
     errors = {}
+    if hasattr(application, "step2_verification") and application.step2_verification.status != Step2VerificationStatus.PASSED:
+        errors["step2"] = ["Identity verification is required."]
     for section, fields in required.items():
         payload = getattr(application, section)
         missing = [field for field in fields if payload.get(field) in (None, "")]

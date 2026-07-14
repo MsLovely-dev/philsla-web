@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.accounts.serializers import validate_password_policy
 
-from .models import StudentApplication
+from .models import IdentityMediaType, Step2VerificationConfiguration, StudentApplication
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -108,3 +108,57 @@ class ApplicationCreateSerializer(ApplicationSerializer):
         if attrs.get("submitOnCreate") and not attrs.get("password"):
             raise serializers.ValidationError({"password": ["Password is required before final registration submission."]})
         return attrs
+
+
+class Step2ConfigurationSerializer(serializers.ModelSerializer):
+    requireStudentIdVerification = serializers.BooleanField(source="require_student_id_verification")
+    requireStudentIdFront = serializers.BooleanField(source="require_student_id_front")
+    requireStudentIdBack = serializers.BooleanField(source="require_student_id_back")
+    enableStudentIdInformationExtraction = serializers.BooleanField(source="enable_student_id_information_extraction")
+    compareStudentName = serializers.BooleanField(source="compare_student_name")
+    compareSchoolName = serializers.BooleanField(source="compare_school_name")
+    nameMatchThreshold = serializers.DecimalField(source="name_match_threshold", max_digits=5, decimal_places=2, min_value=0, max_value=100)
+    schoolMatchThreshold = serializers.DecimalField(source="school_match_threshold", max_digits=5, decimal_places=2, min_value=0, max_value=100)
+    enableFacialComparison = serializers.BooleanField(source="enable_facial_comparison")
+    facialReferenceMediaType = serializers.SerializerMethodField()
+    facialSimilarityThreshold = serializers.DecimalField(source="facial_similarity_threshold", max_digits=5, decimal_places=2, min_value=0, max_value=100)
+    allowManualReview = serializers.BooleanField(source="allow_manual_review")
+    maximumVerificationAttempts = serializers.IntegerField(source="maximum_verification_attempts", min_value=1, max_value=20)
+    effectiveDate = serializers.DateTimeField(source="effective_date")
+    status = serializers.BooleanField(source="is_active")
+
+    class Meta:
+        model = Step2VerificationConfiguration
+        fields = ("id", "requireStudentIdVerification", "requireStudentIdFront", "requireStudentIdBack",
+                  "enableStudentIdInformationExtraction", "compareStudentName", "compareSchoolName",
+                  "nameMatchThreshold", "schoolMatchThreshold", "enableFacialComparison", "facialReferenceMediaType",
+                  "facialSimilarityThreshold", "allowManualReview", "maximumVerificationAttempts",
+                  "effectiveDate", "status", "created_at")
+        read_only_fields = ("id", "created_at")
+
+    def get_facialReferenceMediaType(self, obj):
+        return IdentityMediaType.STUDENT_ID_FRONT
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        require_id = attrs.get("require_student_id_verification", False)
+        dependent = ("enable_student_id_information_extraction", "compare_student_name", "compare_school_name", "enable_facial_comparison")
+        if not require_id and any(attrs.get(field, False) for field in dependent):
+            raise serializers.ValidationError("Student ID processing and comparison must be disabled in Selfie-Only Mode.")
+        if require_id and not (attrs.get("require_student_id_front", False) or attrs.get("require_student_id_back", False)):
+            raise serializers.ValidationError("At least one Student ID side must be required.")
+        if (attrs.get("compare_student_name") or attrs.get("compare_school_name")) and not attrs.get("enable_student_id_information_extraction"):
+            raise serializers.ValidationError("Student ID information extraction is required for name or school comparison.")
+        if attrs.get("enable_facial_comparison") and not attrs.get("require_student_id_front"):
+            raise serializers.ValidationError("Student ID front is required for facial comparison.")
+        return attrs
+
+
+class Step2MediaUploadSerializer(serializers.Serializer):
+    mediaType = serializers.ChoiceField(choices=IdentityMediaType.choices)
+    file = serializers.FileField()
+
+
+class Step2ManualDecisionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=("PASS", "REJECT"))
+    reason = serializers.CharField(max_length=1000)

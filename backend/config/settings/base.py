@@ -77,6 +77,9 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+MEDIA_ROOT = BASE_DIR / "private-media"
+MEDIA_URL = "/private-media/"
+STEP2_MAX_IMAGE_BYTES = env_int("STEP2_MAX_IMAGE_BYTES", 5 * 1024 * 1024)
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {

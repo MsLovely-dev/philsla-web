@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,8 +17,14 @@ from .serializers import (
     ApplicationUpdateSerializer,
     LrnVerificationSerializer,
     ReviewerDecisionSerializer,
+    Step2ConfigurationSerializer,
+    Step2MediaUploadSerializer,
+    Step2ManualDecisionSerializer,
 )
-from .services import create_draft, decide_application, submit_application, update_draft, verify_lrn
+from .services import (active_step2_configuration, create_draft, decide_application,
+                       decide_step2_manual_review, get_step2_verification, serialize_step2, submit_application,
+                       update_draft, upload_step2_media, verify_lrn)
+from .models import Step2VerificationConfiguration
 from .throttling import DeviceScopedRateThrottle
 
 
@@ -36,6 +43,62 @@ class LrnVerificationView(APIView):
         )
         record_application_event(event="registration_lrn_verified", outcome="success", request=request)
         return Response(result)
+
+
+class PublicStep2ConfigurationView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request) -> Response:
+        return Response(active_step2_configuration())
+
+
+class Step2VerificationView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    parser_classes = [MultiPartParser, FormParser]
+
+    @staticmethod
+    def token(request) -> str:
+        return request.headers.get("X-Registration-Token", "")
+
+    def get(self, request) -> Response:
+        return Response(serialize_step2(get_step2_verification(self.token(request))))
+
+    def post(self, request) -> Response:
+        serializer = Step2MediaUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        verification = upload_step2_media(token=self.token(request), media_type=serializer.validated_data["mediaType"],
+                                          uploaded_file=serializer.validated_data["file"])
+        record_application_event(event="registration_step2_media_uploaded", outcome="success", request=request)
+        return Response(serialize_step2(verification))
+
+
+class Step2ConfigurationAdminView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN, PortalRole.DEPED_ADMIN)
+
+    def get(self, request) -> Response:
+        return Response(Step2ConfigurationSerializer(Step2VerificationConfiguration.objects.all(), many=True).data)
+
+    def post(self, request) -> Response:
+        serializer = Step2ConfigurationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        configuration = serializer.save(created_by_id=getattr(request.user, "user_id", request.user.id))
+        record_application_event(event="step2_configuration_created", outcome="success", request=request, user=request.user)
+        return Response(Step2ConfigurationSerializer(configuration).data, status=status.HTTP_201_CREATED)
+
+
+class Step2ManualDecisionView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN, PortalRole.DEPED_ADMIN, PortalRole.ADMISSIONS_REVIEWER)
+
+    def post(self, request, verification_id) -> Response:
+        serializer = Step2ManualDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        verification = decide_step2_manual_review(verification_id=verification_id, actor=request.user, **serializer.validated_data)
+        record_application_event(event="registration_step2_manual_decision", outcome="success", request=request, user=request.user)
+        return Response(serialize_step2(verification))
 
 
 class ApplicationCreateView(APIView):

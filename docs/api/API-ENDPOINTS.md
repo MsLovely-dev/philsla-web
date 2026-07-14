@@ -28,6 +28,10 @@ The baseline health and authentication boundaries plus the first student-applica
 | `GET` | `/api/v1/applications/review-queue/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | List submitted registration applications for admissions review | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN and date of birth through the configured registry boundary | Implemented with synthetic local/test provider; production provider `TBD` |
+| `GET` | `/api/v1/applications/registration/step-2/configuration/` | Public | `AllowAny` | Return the currently effective Step 2 requirements | Implemented |
+| `GET`, `POST` | `/api/v1/applications/registration/step-2/` | Public with registration token | `AllowAny` | Read progress or upload one private JPEG/PNG identity image | Implemented |
+| `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
+| `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
 
 ### Student application draft and submission
 
@@ -40,7 +44,7 @@ Before draft creation, call `POST /api/v1/applications/registration/lrn/verify/`
 }
 ```
 
-Local and test settings use a synthetic registry record for that exact LRN/date pair. A successful response contains an opaque, 15-minute `verificationToken` and the registry-sourced read-only profile. Draft creation requires this single-use token. The backend overwrites client-supplied first, middle, and last name, birthdate, LRN, school name, and grade level with the verified values.
+Local and test settings use a synthetic registry record for that exact LRN/date pair. A successful response contains an opaque, 15-minute `verificationToken`, the registry-sourced read-only profile, and an immutable snapshot of the active Step 2 configuration. Draft creation requires this single-use token. The backend overwrites client-supplied first, middle, and last name, birthdate, LRN, school name, and grade level with the verified values.
 
 For local eligibility testing, synthetic LRN `901234567899` with birthdate `2008-05-15` represents a recognized learner who is not enrolled in Grade 12. No synthetic registry provider is enabled by base or production settings, and production rejects `LRN_REGISTRY_PROVIDER=mock`; the real DepEd provider remains `TBD`.
 
@@ -77,7 +81,7 @@ Submission request:
 
 Submission requires the documented personal contact/name fields, complete permanent address fields, school/LRN/academic fields, at least one complete course preference, privacy consent, and declaration acceptance. The LRN must contain exactly 12 digits. Invalid or missing data returns `400 VALIDATION_FAILED` with section errors. A `DRAFT` becomes `SUBMITTED`; a `FOR_CORRECTION` application becomes `RESUBMITTED`. Other states return `409 CONFLICT`. Successful submission increments `version` and sets `submittedAt`.
 
-Document metadata, binary upload, replacement/removal, reviewer-driven transitions to `FOR_CORRECTION`, `APPROVED`, or `REJECTED`, and their retention rules remain `TBD` and are not exposed by this slice. Application payloads are excluded from audit and request logging.
+Step 2 accepts `multipart/form-data` containing `mediaType` (`STUDENT_ID_FRONT`, `STUDENT_ID_BACK`, or `SELFIE`) and `file`, plus the LRN proof in `X-Registration-Token`. Files are private, limited to 5 MB, and accepted only when their bytes have a JPEG or PNG signature. A replacement supersedes the prior image of the same type. In Selfie-Only Mode, a valid selfie submission completes Step 2 without claiming identity or facial verification. In Student ID and Selfie Mode, the portrait extracted from `STUDENT_ID_FRONT` is the only permitted facial reference for comparison with `SELFIE`; the ID back must never be used as a facial reference. OCR and facial provider selection remains `TBD`; completed uploads therefore route to manual review when enabled or reject otherwise. Final submission is blocked until Step 2 is `PASSED`. File retention and production object storage remain `TBD`. Application payloads and images are excluded from audit and request logging.
 
 Admissions reviewers can load the review ledger with `GET /api/v1/applications/review-queue/`. The queue excludes `DRAFT` applications and includes submitted, resubmitted, correction, approved, and rejected registration records ordered by latest submission/creation time. Student and unauthenticated callers are denied.
 

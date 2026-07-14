@@ -63,6 +63,8 @@ interface MaintenancePageProps {
   sidePanel?: React.ReactNode;
   isSidePanelOpen?: boolean;
   aboveTableContent?: React.ReactNode;
+  showCreateAction?: boolean;
+  showRowActions?: boolean;
 }
 
 export default function MaintenancePageTemplate({
@@ -80,7 +82,9 @@ export default function MaintenancePageTemplate({
   extraHeaderActions,
   sidePanel,
   isSidePanelOpen,
-  aboveTableContent
+  aboveTableContent,
+  showCreateAction = true,
+  showRowActions = true,
 }: MaintenancePageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -154,12 +158,12 @@ export default function MaintenancePageTemplate({
               <Upload className="w-4 h-4" /> Bulk Import
             </button>
           )}
-          <button 
+          {showCreateAction && <button
             onClick={handleOpenCreate}
             className="bg-philsa-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-philsa-navy/10 hover:bg-philsa-navy/90 transition-all flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Create New Entry
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -200,7 +204,7 @@ export default function MaintenancePageTemplate({
                 ))}
                 <th className="px-8 py-5">Audit Details</th>
                 <th className="px-8 py-5">Approval</th>
-                <th className="px-8 py-5 text-right">Actions</th>
+                {showRowActions && <th className="px-8 py-5 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-philsa-border">
@@ -226,7 +230,7 @@ export default function MaintenancePageTemplate({
                   <td className="px-8 py-6">
                      <StatusBadge status={row.approvalStatus || 'Approved'} isApproval />
                   </td>
-                  <td className="px-8 py-6 text-right">
+                  {showRowActions && <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-1">
                       <button 
                         onClick={() => onView?.(row)}
@@ -247,12 +251,12 @@ export default function MaintenancePageTemplate({
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length + 3} className="px-8 py-20 text-center">
+                  <td colSpan={columns.length + (showRowActions ? 3 : 2)} className="px-8 py-20 text-center">
                     <div className="flex flex-col items-center justify-center grayscale opacity-30">
                        <Database className="w-16 h-16 mb-4" />
                        <p className="text-xl font-bold uppercase tracking-widest">No Records Found</p>

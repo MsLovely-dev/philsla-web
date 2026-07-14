@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -109,6 +110,15 @@ class ApplicationEndpointTests(TestCase):
         payload = complete_payload()
         payload["verificationToken"] = verification.data["verificationToken"]
         payload["submitOnCreate"] = True
+        selfie = SimpleUploadedFile("selfie.jpg", b"\xff\xd8\xff\xe0" + b"test-image", content_type="image/jpeg")
+        step2 = client.post(
+            reverse("applications:step2-verification"),
+            {"mediaType": "SELFIE", "file": selfie},
+            format="multipart",
+            HTTP_X_REGISTRATION_TOKEN=verification.data["verificationToken"],
+        )
+        self.assertEqual(step2.status_code, 200)
+        self.assertEqual(step2.data["status"], "PASSED")
 
         response = client.post(reverse("applications:create"), payload, format="json")
 
