@@ -101,9 +101,9 @@ Build these after P0 backend foundation is running and tested.
 
 ### 2. Student registration and application
 
-- [ ] Implement application draft create/read/update endpoints.
-- [ ] Implement application submission endpoint with server-side validation.
-- [ ] Persist personal, address, school, course preference, and review-step data.
+- [x] Implement application draft create/read/update endpoints.
+- [x] Implement application submission endpoint with server-side validation.
+- [x] Persist personal, address, school, course preference, and review-step data.
 - [ ] Implement document upload metadata and storage workflow after storage is selected (`TBD`).
 - [ ] Implement document replace/remove behavior with authorization and retention rules (`TBD`).
 - [ ] Implement application status transitions for draft, submitted, for-correction, resubmitted, approved, and rejected.
@@ -112,7 +112,7 @@ Build these after P0 backend foundation is running and tested.
 ### 3. Identity and school verification
 
 - [ ] Define PhilSys verification contract and integration boundary (`TBD`).
-- [ ] Define DepEd LRN verification contract and integration boundary (`TBD`).
+- [x] Define DepEd LRN verification contract and integration boundary; local/test use synthetic records while the production provider remains `TBD`.
 - [ ] Store verification attempts and outcomes without logging sensitive payloads.
 - [ ] Support idle, verifying, verified, mismatch, unavailable, retry, and manual-review outcomes.
 - [ ] Add timeout, retry, unavailable, mismatch, and audit tests.

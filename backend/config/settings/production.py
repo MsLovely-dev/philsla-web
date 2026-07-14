@@ -26,3 +26,8 @@ if not DATABASE_URL:
     raise ImproperlyConfigured("DATABASE_URL is required in production for Supabase Postgres.")
 
 DATABASES = {"default": database_config_from_url(DATABASE_URL)}
+
+if LRN_REGISTRY_PROVIDER == "mock":  # noqa: F405
+    raise ImproperlyConfigured("LRN_REGISTRY_PROVIDER=mock is not allowed in production.")
+if ACTIVE_EXAM_CYCLE_ID == "TBD":  # noqa: F405
+    raise ImproperlyConfigured("ACTIVE_EXAM_CYCLE_ID is required in production.")

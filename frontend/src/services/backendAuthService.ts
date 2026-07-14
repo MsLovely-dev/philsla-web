@@ -1,6 +1,6 @@
 import type { User, UserRole } from '../types';
 import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthService, AuthSession } from './contracts';
-import { createApiClient, type ApiClient } from './apiClient';
+import { sharedApiClient, type ApiClient } from './apiClient';
 import { authorizationError, serviceSuccess } from './serviceResult';
 import type { ServiceFailure, ServiceResult } from './serviceResult';
 
@@ -27,7 +27,7 @@ interface BackendTokenResponse {
 }
 
 export class BackendAuthService implements AuthService {
-  constructor(private readonly apiClient: ApiClient = createApiClient()) {}
+  constructor(private readonly apiClient: ApiClient = sharedApiClient) {}
 
   async getCurrentSession(): Promise<ServiceResult<AuthSession | null>> {
     const result = await this.apiClient.request<BackendSessionResponse>('/api/v1/auth/session/');

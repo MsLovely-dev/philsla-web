@@ -3,6 +3,8 @@ from .base import *  # noqa: F403
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 AUTH_LOCAL_EXPOSE_OTP = True
+ACTIVE_EXAM_CYCLE_ID = "2026"
+LRN_REGISTRY_PROVIDER = "mock"
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",

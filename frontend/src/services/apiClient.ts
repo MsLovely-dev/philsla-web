@@ -120,3 +120,5 @@ export function createApiClient(fetcher?: typeof fetch): ApiClient {
     fetcher,
   });
 }
+
+export const sharedApiClient = createApiClient();

@@ -1,6 +1,8 @@
 from .base import *  # noqa: F403
 
 SECRET_KEY = "test-only-secret-key"
+ACTIVE_EXAM_CYCLE_ID = "2026"
+LRN_REGISTRY_PROVIDER = "mock"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -15,4 +17,5 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {  # noqa: F405
     "auth_identifier": "1000/min",
     "auth_sensitive": "1000/min",
     "auth_recovery": "1000/hour",
+    "registration_lrn_verify": "1000/min",
 }

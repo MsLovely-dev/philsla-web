@@ -2,7 +2,7 @@
 
 ## Current state
 
-The baseline health endpoint, current-session endpoint boundary, three-step login endpoint boundaries, session token management endpoint boundaries, account activation endpoint boundaries, and recovery endpoint boundaries are implemented. The frontend currently uses mock/local services, and every business path below remains a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
+The baseline health and authentication boundaries plus the first student-application slice are implemented. The frontend currently uses mock/local services. Unimplemented business paths below remain a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
 
 ## Implemented baseline endpoints
 
@@ -21,6 +21,62 @@ The baseline health endpoint, current-session endpoint boundary, three-step logi
 | `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented boundary; email/token storage pending |
 | `POST` | `/api/v1/auth/recovery/password/complete/` | Public recovery link | `AllowAny` | Complete password reset from a recovery link | Implemented boundary; recovery-token storage pending |
 | `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented boundary; email/token storage pending |
+| `POST` | `/api/v1/applications/` | Public with LRN verification token; bearer token optional | `AllowAny` for initial registration | Create a registration draft, or create and submit final registration with `submitOnCreate` | Implemented |
+| `GET` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Read an owned application | Implemented |
+| `PATCH` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Update an editable owned application using optimistic concurrency | Implemented |
+| `POST` | `/api/v1/applications/{applicationId}/submit/` | Required bearer access token | Owning `STUDENT` | Validate and submit or resubmit an application | Implemented |
+| `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN and date of birth through the configured registry boundary | Implemented with synthetic local/test provider; production provider `TBD` |
+
+### Student application draft and submission
+
+Before draft creation, call `POST /api/v1/applications/registration/lrn/verify/`:
+
+```json
+{
+  "lrn": "123456789012",
+  "dateOfBirth": "2008-05-15"
+}
+```
+
+Local and test settings use a synthetic registry record for that exact LRN/date pair. A successful response contains an opaque, 15-minute `verificationToken` and the registry-sourced read-only profile. Draft creation requires this single-use token. The backend overwrites client-supplied first, middle, and last name, birthdate, LRN, school name, and grade level with the verified values.
+
+For local eligibility testing, synthetic LRN `901234567899` with birthdate `2008-05-15` represents a recognized learner who is not enrolled in Grade 12. No synthetic registry provider is enabled by base or production settings, and production rejects `LRN_REGISTRY_PROVIDER=mock`; the real DepEd provider remains `TBD`.
+
+Invalid LRN/DOB combinations return `400 LRN_VERIFICATION_FAILED`; an unavailable registry returns `503 LRN_REGISTRY_UNAVAILABLE`; an existing active application in `ACTIVE_EXAM_CYCLE_ID` returns `409 CONFLICT`. Five failed combinations for one LRN start a 15-minute `429 LRN_COOLDOWN`. A separate device/network throttle applies on top. A conditional database uniqueness constraint protects both LRN/cycle and owner/cycle against concurrent non-rejected registrations. LRN values and dates of birth are not written to request or audit logs.
+
+Application bodies persist five sections: `personal` (object), `address` (object), `school` (object), `coursePreferences` (array of `{university, course}` objects), and `reviewStep` (object). Create requires the single-use LRN proof token. Initial registration does not require an account; `owner` remains unset until a later approved-account provisioning flow. A second active/non-rejected registration for the same LRN and exam cycle returns `409 CONFLICT`.
+
+Final public registration submission is performed by adding `submitOnCreate: true` to the create request:
+
+```json
+{
+  "verificationToken": "opaque-lrn-proof",
+  "submitOnCreate": true,
+  "personal": {},
+  "address": {},
+  "school": {},
+  "coursePreferences": [],
+  "reviewStep": {}
+}
+```
+
+When `submitOnCreate` is true, the backend validates completeness in the same transaction and returns a `SUBMITTED` application. If validation fails, no draft is left behind. This is the expected path for applicants who do not yet have Student Portal accounts.
+
+Read and update require ownership. Anonymous pre-account registrations are not readable or editable through the protected owner endpoints. Updates are allowed only in `DRAFT` or `FOR_CORRECTION`. Every `PATCH` must include the last observed integer `version`; a stale value returns `409 CONFLICT` without overwriting newer data. A successful update increments `version`.
+
+Submission request:
+
+```json
+{
+  "version": 3
+}
+```
+
+Submission requires the documented personal contact/name fields, complete permanent address fields, school/LRN/academic fields, at least one complete course preference, privacy consent, and declaration acceptance. The LRN must contain exactly 12 digits. Invalid or missing data returns `400 VALIDATION_FAILED` with section errors. A `DRAFT` becomes `SUBMITTED`; a `FOR_CORRECTION` application becomes `RESUBMITTED`. Other states return `409 CONFLICT`. Successful submission increments `version` and sets `submittedAt`.
+
+Document metadata, binary upload, replacement/removal, reviewer-driven transitions to `FOR_CORRECTION`, `APPROVED`, or `REJECTED`, and their retention rules remain `TBD` and are not exposed by this slice. Application payloads are excluded from audit and request logging.
+
+Test coverage: `backend/apps/applications/tests/test_application_endpoints.py`.
 
 ### `GET /api/v1/health/`
 
@@ -497,7 +553,7 @@ Test coverage:
 | Capability | Candidate base path | Status |
 | --- | --- | --- |
 | Authentication and sessions | `/api/v1/auth` | Partially implemented: current-session, three-step login, logout, refresh, revocation, activation, and recovery boundaries only; account storage, token storage, email delivery, durable revocation, and audit events remain `TBD` |
-| Student registration/applications | `/api/v1/applications` | `TBD` |
+| Student registration/applications | `/api/v1/applications` | Partially implemented: owned draft create/read/update and submit/resubmit; documents and reviewer transitions remain `TBD` |
 | Student and registry verification | `/api/v1/verifications` | `TBD` |
 | Assessments and question banks | `/api/v1/assessments` | `TBD` |
 | Exam schedules, attempts, responses | `/api/v1/exams` | `TBD` |

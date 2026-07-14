@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "apps.accounts",
+    "apps.applications",
     "apps.core",
 ]
 
@@ -89,6 +90,7 @@ REST_FRAMEWORK = {
         "auth_identifier": "20/min",
         "auth_sensitive": "10/min",
         "auth_recovery": "5/hour",
+        "registration_lrn_verify": "20/min",
     },
     "PAGE_SIZE": 25,
 }
@@ -107,6 +109,12 @@ AUTH_STAFF_IDLE_TIMEOUT_MINUTES = env_int("AUTH_STAFF_IDLE_TIMEOUT_MINUTES", 10)
 AUTH_STUDENT_ABSOLUTE_TIMEOUT_HOURS = env_int("AUTH_STUDENT_ABSOLUTE_TIMEOUT_HOURS", 12)
 AUTH_STAFF_ABSOLUTE_TIMEOUT_HOURS = env_int("AUTH_STAFF_ABSOLUTE_TIMEOUT_HOURS", 8)
 AUTH_LOCAL_EXPOSE_OTP = env_bool("AUTH_LOCAL_EXPOSE_OTP", False)
+
+ACTIVE_EXAM_CYCLE_ID = os.environ.get("ACTIVE_EXAM_CYCLE_ID", "TBD")
+LRN_REGISTRY_PROVIDER = os.environ.get("LRN_REGISTRY_PROVIDER", "unavailable")
+LRN_VERIFICATION_TTL_MINUTES = env_int("LRN_VERIFICATION_TTL_MINUTES", 15)
+LRN_MAX_FAILED_ATTEMPTS = env_int("LRN_MAX_FAILED_ATTEMPTS", 5)
+LRN_FAILED_ATTEMPT_WINDOW_MINUTES = env_int("LRN_FAILED_ATTEMPT_WINDOW_MINUTES", 15)
 
 AUTH_EMAIL_PROVIDER = os.environ.get("AUTH_EMAIL_PROVIDER", "console")
 AZURE_COMMUNICATION_EMAIL_ENABLED = env_bool("AZURE_COMMUNICATION_EMAIL_ENABLED", False)

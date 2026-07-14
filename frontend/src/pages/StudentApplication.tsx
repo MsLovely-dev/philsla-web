@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { usePhilSA } from '../PhilSAContext';
 import { useMockData } from '../services/mockService';
+import {
+  backendApplicationService,
+  createBackendApplicationDraftInput,
+  mapBackendApplicationToFrontend,
+} from '../services/backendApplicationService';
 import { FileUp, CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, BookOpen, Plus, Trash2, MapPin, Activity, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, Check, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Scan, Eye, Video } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -278,6 +283,7 @@ export default function StudentApplication() {
   const [isIdVerified, setIsIdVerified] = useState(false);
   const [candidateId, setCandidateId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [lrnVerificationToken, setLrnVerificationToken] = useState('');
   const [visitedSections, setVisitedSections] = useState<number[]>([0]);
   const [isEditingCorrection, setIsEditingCorrection] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<'goodMoral' | 'form137' | 'form138' | 'enrollmentCert'>('form137');
@@ -632,6 +638,7 @@ export default function StudentApplication() {
     setFaceCountdown(5);
     setFaceOrientation('front');
     setSelfieStatus('idle');
+    setLrnVerificationToken('');
     setCurrentSection(0);
     setVisitedSections([0]);
     setIsSessionExpired(false);
@@ -859,16 +866,17 @@ export default function StudentApplication() {
     }, 1200);
   };
 
-  const handleVerifyLrnPath = (forcedLrn?: string) => {
+  const handleVerifyLrnPath = async (forcedLrn?: string, forcedDob?: string) => {
     if (lrnAttemptsLeft <= 0) {
       setShowLrnCooldownModal(true);
       return;
     }
 
     const currentLrn = forcedLrn !== undefined ? forcedLrn : formData.lrn;
+    const currentDob = forcedDob !== undefined ? forcedDob : formData.dob;
 
     if (!currentLrn) {
-      alert('Please enter your 12-digit Learner Reference Number (LRN) first.');
+      setErrors(prev => ({ ...prev, lrn: 'Please enter your LRN and Date of Birth.' }));
       return;
     }
     
@@ -877,58 +885,55 @@ export default function StudentApplication() {
       return;
     }
 
-    if (!formData.dob) {
-      setErrors(prev => ({ ...prev, dob: 'Date of Birth is required' }));
-      alert('Please enter your Date of Birth.');
+    if (!currentDob) {
+      setErrors(prev => ({ ...prev, dob: 'Please enter your LRN and Date of Birth.' }));
       return;
     }
     
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      
-      const isAlreadyRegistered = (applications.some(app => app.lrn === currentLrn && app.userId !== user?.id) || currentLrn === '123456789012' || currentLrn === '987654321098') && currentLrn !== '101234567890';
-      const isIncorrect = currentLrn.startsWith('9') || currentLrn.endsWith('9') || currentLrn === '901234567899';
+    const result = await backendApplicationService.verifyLrn(currentLrn, currentDob);
+    setIsSubmitting(false);
 
-      if (isAlreadyRegistered) {
-        const nextAttempts = Math.max(0, lrnAttemptsLeft - 1);
-        setLrnAttemptsLeft(nextAttempts);
-        setErrors(prev => ({ 
-          ...prev, 
-          lrn: `Input LRN is already registered. Please try again. Number of Attempts left: ${nextAttempts}` 
-        }));
-        addAuditLog('DEPED_LRN_VERIFICATION_ALREADY_REGISTERED', `LRN already registered: ${currentLrn}. Attempts left: ${nextAttempts}`);
-        if (nextAttempts <= 0) {
-          setShowLrnCooldownModal(true);
-        }
-      } else if (isIncorrect) {
-        const nextAttempts = Math.max(0, lrnAttemptsLeft - 1);
-        setLrnAttemptsLeft(nextAttempts);
-        setErrors(prev => ({ 
-          ...prev, 
-          lrn: `Input LRN is incorrect. Please try again. Number of Attempts left: ${nextAttempts}` 
-        }));
-        addAuditLog('DEPED_LRN_VERIFICATION_FAILED', `Verification failed for DepEd LRN: ${currentLrn}. Attempts left: ${nextAttempts}`);
-        if (nextAttempts <= 0) {
-          setShowLrnCooldownModal(true);
-        }
-      } else {
-        setIsIdVerified(true);
-        setFaceCheckStatus('success');
-        setSelfieStatus('success');
-        setFormData(prev => ({
-          ...autoFillWithPhilSys(prev),
-          lrn: currentLrn,
-          dob: prev.dob, // Preserve entered DOB
-          schoolName: 'Philippine Science High School - Main Campus',
-          schoolAddress: 'Agham Road, Diliman, Quezon City'
-        }));
-        addAuditLog('DEPED_LRN_VERIFIED', `Authenticated successfully via DepEd LRN: ${currentLrn}.`);
-        alert('Identity Authenticated Successfully with DepEd Registry. Official registry credentials and school details loaded.');
-        setVisitedSections(prev => [...new Set([...prev, 1])]);
-        setCurrentSection(1);
+    if (result.ok === false) {
+      const nextAttempts = result.error.code === 'LRN_COOLDOWN' ? 0 : Math.max(0, lrnAttemptsLeft - 1);
+      setLrnAttemptsLeft(nextAttempts);
+      setErrors(prev => ({
+        ...prev,
+        general: result.error.message,
+      }));
+      addAuditLog('DEPED_LRN_VERIFICATION_FAILED', `Verification failed for DepEd LRN. Code: ${result.error.code ?? 'UNKNOWN'}.`);
+      if (result.error.code === 'LRN_COOLDOWN' || nextAttempts <= 0) {
+        setShowLrnCooldownModal(true);
       }
-    }, 1200);
+      return;
+    }
+
+    const { profile, verificationToken } = result.data;
+    setLrnVerificationToken(verificationToken);
+    setLrnAttemptsLeft(5);
+    setIsIdVerified(true);
+    setFaceCheckStatus('success');
+    setSelfieStatus('success');
+    setErrors({});
+    setFormData(prev => ({
+      ...autoFillWithPhilSys(prev),
+      lrn: profile.lrn,
+      firstName: profile.firstName,
+      middleName: profile.middleName,
+      noMiddleName: !profile.middleName,
+      lastName: profile.lastName,
+      dob: profile.dateOfBirth,
+      schoolName: profile.schoolName,
+      schoolAddress: prev.schoolAddress || 'Verified from LRN registry',
+      academicTrack: prev.academicTrack || 'STEM',
+      gradeLevel: profile.gradeLevel,
+      gwa: prev.gwa || '0',
+      universities: prev.universities.length ? prev.universities : ['UP Diliman'],
+      courses: prev.courses.length ? prev.courses : ['BS Computer Science'],
+    }));
+    addAuditLog('DEPED_LRN_VERIFIED', 'Authenticated successfully via DepEd LRN registry.');
+    setVisitedSections(prev => [...new Set([...prev, 1])]);
+    setCurrentSection(1);
   };
 
   const handleSimulateFaceCheck = (file: File) => {
@@ -1157,7 +1162,39 @@ export default function StudentApplication() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
+      if (!lrnVerificationToken) {
+        setErrors({ general: 'Please verify your LRN and Date of Birth again before submitting.' });
+        setCurrentSection(0);
+        setVisitedSections(prev => [...new Set([...prev, 0])]);
+        return;
+      }
+
+      setIsSubmitting(true);
+      const result = await backendApplicationService.createAndSubmit(
+        createBackendApplicationDraftInput(lrnVerificationToken, formData),
+      );
+      setIsSubmitting(false);
+
+      if (result.ok === false) {
+        setErrors({ general: result.error.message });
+        addAuditLog('APPLICATION_SUBMISSION_FAILED', `Backend application submission failed. Code: ${result.error.code ?? 'UNKNOWN'}.`);
+        return;
+      }
+
+      const submittedApplication = mapBackendApplicationToFrontend(result.data, user?.id ?? result.data.id);
+      setApplications(prev => {
+        const withoutDuplicate = prev.filter(app => app.id !== submittedApplication.id);
+        return [...withoutDuplicate, submittedApplication];
+      });
+      addAuditLog('APPLICATION_SUBMITTED', `Candidate ${submittedApplication.id} submitted their application through the backend API.`);
+      setCandidateId(submittedApplication.id);
+      setLrnVerificationToken('');
+      setIsSubmitted(true);
+      return;
+    }
+
     setIsSubmitting(true);
     setTimeout(() => {
       if (isEditingCorrection && myApp) {
@@ -2010,6 +2047,8 @@ export default function StudentApplication() {
                             value={formData.lrn} 
                             onChange={(e) => {
                                setFormData({...formData, lrn: e.target.value});
+                               setLrnVerificationToken('');
+                               setIsIdVerified(false);
                                if (errors.lrn) setErrors(prev => ({...prev, lrn: ''}));
                             }} 
                          />
@@ -2025,6 +2064,8 @@ export default function StudentApplication() {
                             value={formData.dob} 
                             onChange={(e) => {
                                setFormData({...formData, dob: e.target.value});
+                               setLrnVerificationToken('');
+                               setIsIdVerified(false);
                                if (errors.dob) setErrors(prev => ({...prev, dob: ''}));
                             }} 
                          />
@@ -2052,22 +2093,22 @@ export default function StudentApplication() {
                          <button 
                             type="button" 
                             onClick={() => {
-                               setFormData(prev => ({ ...prev, lrn: '101234567890', dob: '2008-05-15' }));
-                               setTimeout(() => handleVerifyLrnPath('101234567890'), 100);
+                               setFormData(prev => ({ ...prev, lrn: '123456789012', dob: '2008-05-15' }));
+                               void handleVerifyLrnPath('123456789012', '2008-05-15');
                             }}
                             className="w-full text-[9px] font-black text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
                          >
-                            Simulate Valid Lrn & Dob Match
+                            Use Mock Valid LRN & DOB
                          </button>
                          <button 
                             type="button" 
                             onClick={() => {
                                setFormData(prev => ({ ...prev, lrn: '901234567899', dob: '2008-05-15' }));
-                               setTimeout(() => handleVerifyLrnPath('901234567899'), 100);
+                               void handleVerifyLrnPath('901234567899', '2008-05-15');
                             }}
                             className="w-full text-[9px] font-black text-red-600 hover:bg-red-50 border border-red-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
                          >
-                            Simulate Lrn Failure
+                            Use Mock Ineligible LRN
                          </button>
                       </div>
                    </div>
@@ -3799,7 +3840,14 @@ export default function StudentApplication() {
 
         </div>
 
-        <div className="p-4 sm:p-8 border-t border-philsa-border bg-philsa-bg/30 flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
+        <div className="p-4 sm:p-8 border-t border-philsa-border bg-philsa-bg/30 space-y-4">
+          {errors.general && currentSection !== 0 && (
+            <div className="rounded-2xl border border-philsa-red/20 bg-philsa-red/5 px-4 py-3 text-xs font-bold text-philsa-red">
+              {errors.general}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center">
            <button 
              onClick={handleBack} 
              disabled={currentSection === 0 || isSubmitting}
@@ -3825,6 +3873,7 @@ export default function StudentApplication() {
                 Continue <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
               </button>
             )}
+          </div>
          </div>
        </div>
 
