@@ -30,14 +30,24 @@ export class BackendAuthService implements AuthService {
   constructor(private readonly apiClient: ApiClient = sharedApiClient) {}
 
   async getCurrentSession(): Promise<ServiceResult<AuthSession | null>> {
-    const result = await this.apiClient.request<BackendSessionResponse>('/api/v1/auth/session/');
+    const result = await this.requestCurrentSession();
 
-    if (result.ok === false) {
-      if (result.error.status === 401 || result.error.code === 'NOT_AUTHENTICATED') {
+    if (result.ok === false && (result.error.status === 401 || result.error.code === 'NOT_AUTHENTICATED')) {
+      const refreshResult = await this.refreshSession();
+      if (refreshResult.ok === true) return serviceSuccess(refreshResult.data);
+      if (refreshResult.error.status === 401 || refreshResult.error.code === 'NOT_AUTHENTICATED') {
         return serviceSuccess(null);
       }
-      return result as ServiceFailure;
+      return refreshResult as ServiceFailure;
     }
+
+    return result;
+  }
+
+  private async requestCurrentSession(): Promise<ServiceResult<AuthSession | null>> {
+    const result = await this.apiClient.request<BackendSessionResponse>('/api/v1/auth/session/');
+
+    if (result.ok === false) return result as ServiceFailure;
 
     return serviceSuccess(this.mapSession(result.data));
   }
@@ -95,7 +105,7 @@ export class BackendAuthService implements AuthService {
     if (otpResult.ok === false) return otpResult as ServiceFailure;
 
     this.apiClient.setBearerToken(otpResult.data.accessToken);
-    const sessionResult = await this.getCurrentSession();
+    const sessionResult = await this.requestCurrentSession();
     if (sessionResult.ok === false) return sessionResult as ServiceFailure;
     if (!sessionResult.data) return authorizationError('The backend session was not created.', 'SESSION_NOT_CREATED');
     return serviceSuccess(sessionResult.data);
@@ -112,7 +122,7 @@ export class BackendAuthService implements AuthService {
     if (result.ok === false) return result as ServiceFailure;
 
     this.apiClient.setBearerToken(result.data.accessToken);
-    const sessionResult = await this.getCurrentSession();
+    const sessionResult = await this.requestCurrentSession();
     if (sessionResult.ok === false) return sessionResult as ServiceFailure;
     if (!sessionResult.data) return authorizationError('The backend session has expired.', 'SESSION_EXPIRED');
     return serviceSuccess(sessionResult.data);

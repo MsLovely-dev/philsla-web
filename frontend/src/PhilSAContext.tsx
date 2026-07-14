@@ -56,9 +56,15 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     void authService.getCurrentSession().then((result) => {
-      if (result.ok) {
+      if (isMounted && result.ok) {
         setUser(result.data?.user ?? null);
+      }
+    }).finally(() => {
+      if (isMounted) {
+        setIsLoading(false);
       }
     });
     
@@ -257,7 +263,9 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('philsa_tickets', JSON.stringify(initialTickets));
     }
     
-    setIsLoading(false);
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
