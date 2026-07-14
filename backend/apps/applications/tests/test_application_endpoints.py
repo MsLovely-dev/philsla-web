@@ -1,11 +1,13 @@
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 from apps.applications.models import ApplicationStatus, StudentApplication
 
@@ -29,6 +31,7 @@ def complete_payload():
             "email": "student@example.test",
             "mobile": "09171234567",
         },
+        "password": "Password1!",
         "address": {
             "region": "Test Region",
             "province": "Test Province",
@@ -114,6 +117,8 @@ class ApplicationEndpointTests(TestCase):
         self.assertIsNotNone(response.data["submittedAt"])
         application = StudentApplication.objects.get(id=response.data["id"])
         self.assertIsNone(application.owner_id)
+        self.assertTrue(application.password_hash)
+        self.assertNotEqual(application.password_hash, "Password1!")
 
     def test_draft_requires_a_valid_lrn_verification_proof(self):
         response = self.client.post(
@@ -172,6 +177,7 @@ class ApplicationEndpointTests(TestCase):
             school=payload["school"],
             course_preferences=payload["coursePreferences"],
             review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
         )
         submitted = self.client.post(reverse("applications:submit", args=[application.id]), {"version": 1}, format="json")
         self.assertEqual(submitted.status_code, 200)
@@ -196,3 +202,107 @@ class ApplicationEndpointTests(TestCase):
         response = self.client.post(reverse("applications:submit", args=[application.id]), {"version": 1}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], ApplicationStatus.RESUBMITTED)
+
+    def test_admissions_reviewer_can_list_submitted_registration_queue(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        StudentApplication.objects.create(owner=self.user, status=ApplicationStatus.DRAFT)
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:review-queue"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.data], [str(submitted.id)])
+
+    def test_student_cannot_list_review_queue(self):
+        response = self.client.get(reverse("applications:review-queue"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_reviewer_decision_updates_application_status_in_database(self):
+        payload = complete_payload()
+        payload["personal"]["email"] = "approved.student@example.test"
+        application = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.post(
+            reverse("applications:review-decision", args=[application.id]),
+            {"decision": "APPROVE", "reason": "Verified."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], ApplicationStatus.APPROVED)
+        application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.APPROVED)
+        self.assertEqual(application.review_step["reviewerDecision"], "APPROVE")
+        self.assertIsNotNone(application.owner_id)
+        self.assertEqual(application.password_hash, "")
+        self.assertEqual(application.owner.username, "test-student")
+        self.assertEqual(application.owner.first_name, "Test")
+        self.assertEqual(application.owner.last_name, "Student")
+        self.assertTrue(application.owner.check_password(payload["password"]))
+        self.assertTrue(
+            AccountProfile.objects.filter(
+                user=application.owner,
+                role=PortalRole.STUDENT.value,
+                lrn="123456789012",
+            ).exists()
+        )
+
+    def test_reviewer_reject_clears_pending_password_hash(self):
+        payload = complete_payload()
+        application = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.post(
+            reverse("applications:review-decision", args=[application.id]),
+            {"decision": "REJECT", "reason": "Not eligible."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.REJECTED)
+        self.assertEqual(application.password_hash, "")
+
+    def test_student_cannot_decide_application(self):
+        application = StudentApplication.objects.create(status=ApplicationStatus.SUBMITTED)
+        response = self.client.post(
+            reverse("applications:review-decision", args=[application.id]),
+            {"decision": "REJECT"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)

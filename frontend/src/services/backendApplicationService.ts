@@ -36,12 +36,15 @@ export interface BackendApplication {
 export interface BackendApplicationDraftInput {
   verificationToken: string;
   submitOnCreate?: boolean;
+  password?: string;
   personal: Record<string, unknown>;
   address: Record<string, unknown>;
   school: Record<string, unknown>;
   coursePreferences: Record<string, unknown>[];
   reviewStep: Record<string, unknown>;
 }
+
+export type BackendReviewerDecision = 'APPROVE' | 'REQUEST_CORRECTION' | 'REJECT';
 
 export class BackendApplicationService {
   constructor(private readonly apiClient: ApiClient = sharedApiClient) {}
@@ -70,6 +73,25 @@ export class BackendApplicationService {
   async createAndSubmit(input: BackendApplicationDraftInput): Promise<ServiceResult<BackendApplication>> {
     return this.createDraft({ ...input, submitOnCreate: true });
   }
+
+  async listReviewQueue(): Promise<ServiceResult<BackendApplication[]>> {
+    return this.apiClient.request<BackendApplication[]>('/api/v1/applications/review-queue/');
+  }
+
+  async decideApplication(
+    applicationId: string,
+    decision: BackendReviewerDecision,
+    input: { reason?: string; requiredCorrections?: string[] } = {},
+  ): Promise<ServiceResult<BackendApplication>> {
+    return this.apiClient.request<BackendApplication>(`/api/v1/applications/${applicationId}/review-decision/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        decision,
+        reason: input.reason ?? '',
+        requiredCorrections: input.requiredCorrections ?? [],
+      }),
+    });
+  }
 }
 
 export function createBackendApplicationDraftInput(
@@ -82,6 +104,7 @@ export function createBackendApplicationDraftInput(
     suffix: string;
     dob: string;
     email: string;
+    password: string;
     mobile: string;
     region: string;
     province: string;
@@ -103,6 +126,7 @@ export function createBackendApplicationDraftInput(
 ): BackendApplicationDraftInput {
   return {
     verificationToken,
+    password: formData.password,
     personal: {
       firstName: formData.firstName,
       middleName: formData.noMiddleName ? '' : formData.middleName,
@@ -151,7 +175,7 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
   return {
     id: application.id,
     userId,
-    status: application.status === 'SUBMITTED' || application.status === 'RESUBMITTED' ? 'PENDING' : application.status === 'APPROVED' ? 'APPROVED' : application.status === 'FOR_CORRECTION' ? 'FOR_CORRECTION' : 'REJECTED',
+    status: application.status === 'SUBMITTED' || application.status === 'RESUBMITTED' ? 'PENDING' : application.status === 'APPROVED' ? 'ACCEPTED' : application.status === 'FOR_CORRECTION' ? 'FOR_CORRECTION' : 'REJECTED',
     submittedAt: application.submittedAt ?? undefined,
     firstName: String(personal.firstName ?? ''),
     middleName: String(personal.middleName ?? ''),
@@ -182,6 +206,37 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
     courses: preferences.map((preference) => String(preference.course ?? '')),
     examScheduleId: '',
   };
+}
+
+export function mapBackendApplicationsToReviewRows(applications: BackendApplication[]): Array<Application & {
+  risk: string;
+  duplicateScore: number;
+  duplicateStatus: string;
+  center: string;
+  seat?: string;
+  history: Array<{ status: string; date: string; actor: string }>;
+}> {
+  return applications.map((application) => {
+    const mapped = mapBackendApplicationToFrontend(application, application.id);
+    const firstPreference = application.coursePreferences[0];
+    const submittedAt = application.submittedAt ?? application.createdAt;
+
+    return {
+      ...mapped,
+      risk: 'LOW',
+      duplicateScore: 0,
+      duplicateStatus: 'No Match',
+      center: String(firstPreference?.university ?? mapped.universities[0] ?? 'Not Assigned'),
+      seat: undefined,
+      history: [
+        {
+          status: application.status,
+          date: submittedAt ? new Date(submittedAt).toLocaleString() : 'Pending timestamp',
+          actor: 'System',
+        },
+      ],
+    };
+  });
 }
 
 export const backendApplicationService = new BackendApplicationService();

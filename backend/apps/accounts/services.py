@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import timedelta
 import hashlib
+import re
 import secrets
 from types import SimpleNamespace
 from typing import Any
@@ -8,6 +9,8 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import IntegrityError, transaction
+from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from rest_framework.exceptions import APIException
@@ -38,6 +41,19 @@ PENDING_IDENTIFIER_PREFIX = "auth:pending:identifier:"
 PENDING_OTP_PREFIX = "auth:pending:otp:"
 ACCESS_TOKEN_PREFIX = "auth:access:"
 REFRESH_TOKEN_PREFIX = "auth:refresh:"
+
+
+def _unique_username(UserModel, *, base: str, fallback: str) -> str:
+    max_length = UserModel._meta.get_field("username").max_length
+    normalized = slugify(base) or slugify(fallback) or "student"
+    normalized = re.sub(r"-+", "-", normalized).strip("-") or "student"
+    username = normalized[:max_length]
+    suffix = 1
+    while UserModel.objects.filter(username=username).exists():
+        suffix += 1
+        suffix_text = f"-{suffix}"
+        username = f"{normalized[: max_length - len(suffix_text)]}{suffix_text}"
+    return username
 
 
 def _account_from_user(user: object, profile: AccountProfile | None = None) -> dict[str, Any] | None:
@@ -275,10 +291,61 @@ def revoke_tokens(*, user: object, scope: str) -> None:
     return None
 
 
+@transaction.atomic
 def activate_student_registration_account(*, registration_application_id: str, actor: object) -> None:
     """Create and activate a student account after registration approval."""
 
-    raise ActivationUnavailable("Student account activation is unavailable until registration approval storage exists.")
+    from apps.applications.models import ApplicationStatus, StudentApplication
+
+    try:
+        application = StudentApplication.objects.select_for_update().get(id=registration_application_id)
+    except (StudentApplication.DoesNotExist, ValueError) as exc:
+        raise ActivationUnavailable("Approved registration application was not found.") from exc
+
+    if application.status != ApplicationStatus.APPROVED:
+        raise ActivationUnavailable("Student account activation requires an approved registration application.")
+
+    if application.owner_id:
+        application.owner.is_active = True
+        application.owner.save(update_fields=["is_active"])
+        if application.password_hash:
+            application.password_hash = ""
+            application.save(update_fields=["password_hash", "updated_at"])
+        return None
+
+    personal = application.personal or {}
+    email = str(personal.get("email", "")).strip().lower()
+    if not email:
+        raise ActivationUnavailable("Approved registration application is missing an email address.")
+    if not application.password_hash:
+        raise ActivationUnavailable("Approved registration application is missing pending account credentials.")
+
+    UserModel = get_user_model()
+    if UserModel.objects.filter(email__iexact=email).exists():
+        raise ActivationUnavailable("This email is already registered. Go to Login page.")
+    if AccountProfile.objects.filter(lrn=application.lrn, role=PortalRole.STUDENT.value).exists():
+        raise ActivationUnavailable("This LRN already has an active student account.")
+
+    first_name = str(personal.get("firstName", "")).strip()
+    last_name = str(personal.get("lastName", "")).strip()
+    username = _unique_username(
+        UserModel,
+        base=" ".join(part for part in (first_name, last_name) if part),
+        fallback=f"student-{application.lrn or application.id}",
+    )
+
+    user = UserModel(username=username, email=email, first_name=first_name, last_name=last_name, is_active=True)
+    user.password = application.password_hash
+    try:
+        user.save()
+        AccountProfile.objects.create(user=user, role=PortalRole.STUDENT.value, lrn=application.lrn)
+    except IntegrityError as exc:
+        raise ActivationUnavailable("Student account could not be activated because the credentials already exist.") from exc
+
+    application.owner = user
+    application.password_hash = ""
+    application.save(update_fields=["owner", "password_hash", "updated_at"])
+    return None
 
 
 def complete_staff_activation(*, activation_token: str, password: str) -> None:

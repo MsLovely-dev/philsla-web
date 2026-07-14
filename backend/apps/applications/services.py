@@ -2,10 +2,13 @@ import hashlib
 import secrets
 
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
+
+from apps.accounts.services import activate_student_registration_account
 
 from .models import ApplicationStatus, StudentApplication
 from .registry import RegistryUnavailable, get_lrn_registry
@@ -18,6 +21,7 @@ class ApplicationConflict(APIException):
 
 
 EDITABLE_STATUSES = {ApplicationStatus.DRAFT, ApplicationStatus.FOR_CORRECTION}
+REVIEWABLE_STATUSES = {ApplicationStatus.SUBMITTED, ApplicationStatus.RESUBMITTED, ApplicationStatus.FOR_CORRECTION}
 LRN_ATTEMPT_PREFIX = "registration:lrn-attempt:"
 LRN_PROOF_PREFIX = "registration:lrn-proof:"
 
@@ -101,6 +105,7 @@ def create_draft(*, owner=None, verification_token: str, data: dict, submit_on_c
     verified = cache.get(f"{LRN_PROOF_PREFIX}{verification_token}")
     if verified is None:
         raise LrnVerificationRejected("LRN verification has expired. Please verify your LRN and Date of Birth again.")
+    password = data.pop("password", "")
     personal = dict(data.get("personal", {}))
     school = dict(data.get("school", {}))
     personal.update({key: verified[key] for key in ("firstName", "middleName", "lastName", "dateOfBirth")})
@@ -112,6 +117,7 @@ def create_draft(*, owner=None, verification_token: str, data: dict, submit_on_c
             owner_id=owner_id,
             lrn=verified["lrn"],
             exam_cycle_id=settings.ACTIVE_EXAM_CYCLE_ID,
+            password_hash=make_password(password) if password else "",
             **data,
         )
         if submit_on_create:
@@ -192,3 +198,47 @@ def _validate_complete(application: StudentApplication) -> None:
         errors["reviewStep"] = ["Privacy consent and declaration acceptance are required."]
     if errors:
         raise ValidationError(errors)
+
+
+@transaction.atomic
+def decide_application(
+    *,
+    application_id,
+    actor,
+    decision: str,
+    reason: str = "",
+    required_corrections: list[str] | None = None,
+) -> StudentApplication:
+    application = StudentApplication.objects.select_for_update().get(id=application_id)
+    if application.status not in REVIEWABLE_STATUSES:
+        raise ApplicationConflict("Only submitted applications can receive a reviewer decision.")
+
+    if decision == "APPROVE":
+        application.status = ApplicationStatus.APPROVED
+    elif decision == "REQUEST_CORRECTION":
+        application.status = ApplicationStatus.FOR_CORRECTION
+    elif decision == "REJECT":
+        application.status = ApplicationStatus.REJECTED
+    else:
+        raise ValidationError({"decision": ["Unsupported reviewer decision."]})
+
+    review_step = dict(application.review_step or {})
+    review_step.update(
+        {
+            "reviewerDecision": decision,
+            "reviewerReason": reason,
+            "requiredCorrections": required_corrections or [],
+            "reviewedBy": str(getattr(actor, "user_id", getattr(actor, "id", ""))),
+            "reviewedAt": timezone.now().isoformat(),
+        }
+    )
+    application.review_step = review_step
+    application.version += 1
+    application.save(update_fields=["status", "review_step", "version", "updated_at"])
+    if decision == "APPROVE":
+        activate_student_registration_account(registration_application_id=str(application.id), actor=actor)
+        application.refresh_from_db()
+    elif decision == "REJECT" and application.password_hash:
+        application.password_hash = ""
+        application.save(update_fields=["password_hash", "updated_at"])
+    return application

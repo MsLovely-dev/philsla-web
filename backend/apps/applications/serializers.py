@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.accounts.serializers import validate_password_policy
+
 from .models import StudentApplication
 
 
@@ -58,6 +60,16 @@ class ApplicationSubmitSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 
 
+class ReviewerDecisionSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=("APPROVE", "REQUEST_CORRECTION", "REJECT"))
+    reason = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+    requiredCorrections = serializers.ListField(
+        child=serializers.CharField(max_length=200),
+        required=False,
+        allow_empty=True,
+    )
+
+
 class LrnVerificationSerializer(serializers.Serializer):
     lrn = serializers.RegexField(
         regex=r"^\d{12}$",
@@ -78,6 +90,21 @@ class LrnVerificationSerializer(serializers.Serializer):
 class ApplicationCreateSerializer(ApplicationSerializer):
     verificationToken = serializers.CharField(write_only=True, trim_whitespace=False)
     submitOnCreate = serializers.BooleanField(write_only=True, required=False, default=False)
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        trim_whitespace=False,
+        style={"input_type": "password"},
+    )
 
     class Meta(ApplicationSerializer.Meta):
-        fields = ApplicationSerializer.Meta.fields + ("verificationToken", "submitOnCreate")
+        fields = ApplicationSerializer.Meta.fields + ("verificationToken", "submitOnCreate", "password")
+
+    def validate_password(self, value: str) -> str:
+        return validate_password_policy(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs.get("submitOnCreate") and not attrs.get("password"):
+            raise serializers.ValidationError({"password": ["Password is required before final registration submission."]})
+        return attrs

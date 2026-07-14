@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Search, Filter, Eye, CheckCircle, XCircle, 
   AlertTriangle, RefreshCw, Edit3, MoreVertical,
@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { usePhilSA } from '../../PhilSAContext';
 import { useMockData, DUMMY_APPLICATIONS } from '../../services/mockService';
+import { backendApplicationService, mapBackendApplicationsToReviewRows } from '../../services/backendApplicationService';
 
 const STATUS_BADGES = {
   PENDING: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -53,6 +54,10 @@ export default function ReviewApplications() {
       ]
     };
   }));
+  const [isLoadingQueue, setIsLoadingQueue] = useState(false);
+  const [queueError, setQueueError] = useState('');
+  const [decisionError, setDecisionError] = useState('');
+  const [isSavingDecision, setIsSavingDecision] = useState(false);
 
   const [activeModal, setActiveModal] = useState<'APPROVE' | 'REASSIGN' | 'CORRECTION' | 'FRAUD' | null>(null);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -88,9 +93,67 @@ export default function ReviewApplications() {
     navigate(`/admin/reviewer/applications/${app.id}`);
   };
 
+  useEffect(() => {
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') return;
+
+    let cancelled = false;
+    setIsLoadingQueue(true);
+    setQueueError('');
+
+    void backendApplicationService.listReviewQueue().then((result) => {
+      if (cancelled) return;
+      setIsLoadingQueue(false);
+
+      if (result.ok === false) {
+        setQueueError(result.error.message);
+        return;
+      }
+
+      setApps(mapBackendApplicationsToReviewRows(result.data));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const closeModal = () => {
      setActiveModal(null);
      setSelectedApp(null);
+     setDecisionError('');
+  };
+
+  const handleReviewerDecision = async (
+    decision: 'APPROVE' | 'REQUEST_CORRECTION' | 'REJECT',
+    options: { reason?: string; requiredCorrections?: string[]; seat?: string } = {},
+  ) => {
+    if (!selectedApp) return;
+
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') {
+      const nextStatus = decision === 'APPROVE' ? 'ACCEPTED' : decision === 'REQUEST_CORRECTION' ? 'FOR_CORRECTION' : 'REJECTED';
+      setApps(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: nextStatus, seat: options.seat ?? a.seat } : a));
+      if (options.seat) localStorage.setItem(`philsa_applicant_seat_${selectedApp.id}`, options.seat);
+      closeModal();
+      return;
+    }
+
+    setIsSavingDecision(true);
+    setDecisionError('');
+    const result = await backendApplicationService.decideApplication(selectedApp.id, decision, {
+      reason: options.reason,
+      requiredCorrections: options.requiredCorrections,
+    });
+    setIsSavingDecision(false);
+
+    if (result.ok === false) {
+      setDecisionError(result.error.message);
+      return;
+    }
+
+    const [updated] = mapBackendApplicationsToReviewRows([result.data]);
+    setApps(prev => prev.map(a => a.id === selectedApp.id ? { ...a, ...updated, seat: options.seat ?? a.seat } : a));
+    if (options.seat) localStorage.setItem(`philsa_applicant_seat_${selectedApp.id}`, options.seat);
+    closeModal();
   };
 
   return (
@@ -152,6 +215,11 @@ export default function ReviewApplications() {
       </div>
 
       <div className="card-philsa !p-0 overflow-hidden">
+        {queueError && (
+          <div className="mx-6 mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+            {queueError}
+          </div>
+        )}
         <div className="p-6 border-b border-philsa-border flex flex-wrap gap-4 items-center justify-between">
            <div className="relative flex-1 min-w-[300px]">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray" />
@@ -197,7 +265,21 @@ export default function ReviewApplications() {
               </tr>
             </thead>
             <tbody className="divide-y divide-philsa-border">
-              {apps.filter(app => {
+              {isLoadingQueue && (
+                <tr>
+                  <td colSpan={4} className="px-8 py-10 text-center text-xs font-black uppercase tracking-widest text-philsa-gray">
+                    Loading backend review queue...
+                  </td>
+                </tr>
+              )}
+              {!isLoadingQueue && apps.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-8 py-10 text-center text-xs font-black uppercase tracking-widest text-philsa-gray">
+                    No submitted applications found.
+                  </td>
+                </tr>
+              )}
+              {!isLoadingQueue && apps.filter(app => {
                 const matchesSearch = `${app.firstName} ${app.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || app.id.toLowerCase().includes(searchTerm.toLowerCase());
                 const matchesStatus = statusFilter === 'ALL' || app.status === statusFilter;
                 return matchesSearch && matchesStatus;
@@ -300,18 +382,15 @@ export default function ReviewApplications() {
                 </p>
 
                 <div className="flex gap-3 justify-end border-t border-slate-100 pt-4">
+                   {decisionError && <p className="mr-auto text-[10px] font-bold text-philsa-red">{decisionError}</p>}
                    <button onClick={closeModal} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-all cursor-pointer">
                       Cancel
                    </button>
-                   <button onClick={() => {
+                   <button disabled={isSavingDecision} onClick={() => {
                        const seatVal = `Seat ${selectedApp.center ? selectedApp.center.split(" ").map((w) => w[0]).join("").toUpperCase() : "UPD"}-${100 + Math.floor(Math.random() * 900)}`;
-                       setApps(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: 'ACCEPTED', seat: seatVal } : a));
-                       const targetCenter = selectedApp.center || "UP Diliman";
-                       const centerCode = targetCenter.split(" ").map((w: string) => w[0]).join("").toUpperCase();
-                       localStorage.setItem(`philsa_applicant_seat_${selectedApp.id}`, seatVal);
-                       closeModal();
-                   }} className="px-5 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 hover:bg-emerald-700 transition-all cursor-pointer">
-                      Confirm
+                       void handleReviewerDecision('APPROVE', { reason: 'Verified by admissions reviewer.', seat: seatVal });
+                   }} className="px-5 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 hover:bg-emerald-700 transition-all cursor-pointer disabled:opacity-60">
+                      {isSavingDecision ? 'Saving...' : 'Confirm'}
                    </button>
                 </div>
              </div>
@@ -397,14 +476,17 @@ export default function ReviewApplications() {
                 </div>
 
                 <div className="flex gap-3 justify-end border-t border-slate-100 pt-4">
+                   {decisionError && <p className="mr-auto text-[10px] font-bold text-philsa-red">{decisionError}</p>}
                    <button onClick={closeModal} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-all cursor-pointer">
                       Cancel
                    </button>
-                   <button onClick={() => {
-                       setApps(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: 'FOR_CORRECTION' } : a));
-                       closeModal();
-                   }} className="px-5 py-2 bg-amber-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-amber-600/10 hover:bg-amber-700 transition-all cursor-pointer">
-                      For Correction Request
+                   <button disabled={isSavingDecision} onClick={() => {
+                       void handleReviewerDecision('REQUEST_CORRECTION', {
+                         reason: 'Applicant must correct the selected identity compliance items.',
+                         requiredCorrections: ['identityDocumentation'],
+                       });
+                   }} className="px-5 py-2 bg-amber-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-amber-600/10 hover:bg-amber-700 transition-all cursor-pointer disabled:opacity-60">
+                      {isSavingDecision ? 'Saving...' : 'For Correction Request'}
                    </button>
                 </div>
              </div>
@@ -451,14 +533,16 @@ export default function ReviewApplications() {
                 </div>
 
                 <div className="flex gap-3 justify-end border-t border-slate-100 pt-4">
+                   {decisionError && <p className="mr-auto text-[10px] font-bold text-philsa-red">{decisionError}</p>}
                    <button onClick={closeModal} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-all cursor-pointer">
                       Cancel
                    </button>
-                   <button onClick={() => {
-                       setApps(prev => prev.map(a => a.id === selectedApp.id ? { ...a, status: 'REJECTED' } : a));
-                       closeModal();
-                   }} className="px-5 py-2 bg-philsa-red text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-philsa-red/10 hover:bg-philsa-red/90 transition-all cursor-pointer">
-                      Confirm
+                   <button disabled={isSavingDecision} onClick={() => {
+                       void handleReviewerDecision('REJECT', {
+                         reason: customRejectionDetail ? `${rejectionReason}: ${customRejectionDetail}` : rejectionReason,
+                       });
+                   }} className="px-5 py-2 bg-philsa-red text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-philsa-red/10 hover:bg-philsa-red/90 transition-all cursor-pointer disabled:opacity-60">
+                      {isSavingDecision ? 'Saving...' : 'Confirm'}
                    </button>
                 </div>
              </div>

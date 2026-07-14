@@ -15,8 +15,9 @@ from .serializers import (
     ApplicationSubmitSerializer,
     ApplicationUpdateSerializer,
     LrnVerificationSerializer,
+    ReviewerDecisionSerializer,
 )
-from .services import create_draft, submit_application, update_draft, verify_lrn
+from .services import create_draft, decide_application, submit_application, update_draft, verify_lrn
 from .throttling import DeviceScopedRateThrottle
 
 
@@ -55,6 +56,42 @@ class ApplicationCreateView(APIView):
         event = "application_submitted" if submit_on_create else "application_draft_created"
         record_application_event(event=event, outcome="success", request=request, user=owner)
         return Response(ApplicationSerializer(application).data, status=status.HTTP_201_CREATED)
+
+
+class ApplicationReviewQueueView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request) -> Response:
+        applications = (
+            StudentApplication.objects.exclude(status__in=["DRAFT"])
+            .order_by("-submitted_at", "-created_at")
+        )
+        return Response(ApplicationSerializer(applications, many=True).data)
+
+
+class ApplicationReviewerDecisionView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def post(self, request, application_id) -> Response:
+        serializer = ReviewerDecisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        application = get_object_or_404(StudentApplication, id=application_id)
+        decided = decide_application(
+            application_id=application.id,
+            actor=request.user,
+            decision=serializer.validated_data["decision"],
+            reason=serializer.validated_data.get("reason", ""),
+            required_corrections=serializer.validated_data.get("requiredCorrections", []),
+        )
+        record_application_event(
+            event="application_reviewer_decision",
+            outcome="success",
+            request=request,
+            user=request.user,
+        )
+        return Response(ApplicationSerializer(decided).data)
 
 
 class ApplicationDetailView(APIView):

@@ -66,6 +66,7 @@ describe('BackendApplicationService', () => {
 
     const result = await service.createAndSubmit({
       verificationToken: 'verification-token',
+      password: 'Password1!',
       personal: {},
       address: {},
       school: {},
@@ -81,12 +82,84 @@ describe('BackendApplicationService', () => {
         method: 'POST',
         body: JSON.stringify({
           verificationToken: 'verification-token',
+          password: 'Password1!',
           personal: {},
           address: {},
           school: {},
           coursePreferences: [],
           reviewStep: {},
           submitOnCreate: true,
+        }),
+      }),
+    );
+  });
+
+  it('loads the protected admissions review queue', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        [
+          {
+            id: 'application-id',
+            status: 'SUBMITTED',
+            personal: { firstName: 'Sample', lastName: 'Learner' },
+            address: {},
+            school: {},
+            coursePreferences: [],
+            reviewStep: {},
+            examCycleId: '2026',
+            version: 2,
+            submittedAt: '2026-07-14T00:01:00Z',
+            createdAt: '2026-07-14T00:00:00Z',
+            updatedAt: '2026-07-14T00:01:00Z',
+          },
+        ],
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.listReviewQueue();
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/review-queue/',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('submits an admissions reviewer decision for an application', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          id: 'application-id',
+          status: 'APPROVED',
+          personal: {},
+          address: {},
+          school: {},
+          coursePreferences: [],
+          reviewStep: { reviewerDecision: 'APPROVE' },
+          examCycleId: '2026',
+          version: 3,
+          submittedAt: '2026-07-14T00:01:00Z',
+          createdAt: '2026-07-14T00:00:00Z',
+          updatedAt: '2026-07-14T00:02:00Z',
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.decideApplication('application-id', 'APPROVE', { reason: 'Verified.' });
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/application-id/review-decision/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          decision: 'APPROVE',
+          reason: 'Verified.',
+          requiredCorrections: [],
         }),
       }),
     );
@@ -101,6 +174,7 @@ describe('BackendApplicationService', () => {
       suffix: '',
       dob: '2008-05-15',
       email: 'student@example.test',
+      password: 'Password1!',
       mobile: '09171234567',
       region: 'NCR',
       province: 'Metro Manila',
@@ -122,6 +196,7 @@ describe('BackendApplicationService', () => {
 
     expect(payload).toMatchObject({
       verificationToken: 'token',
+      password: 'Password1!',
       personal: {
         firstName: 'Sample',
         dateOfBirth: '2008-05-15',

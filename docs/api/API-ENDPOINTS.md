@@ -16,7 +16,7 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented boundary; token store pending |
 | `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
-| `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create and activate a Student account after registration approval | Implemented boundary; registration/account storage pending |
+| `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create and activate a Student account after registration approval | Implemented |
 | `POST` | `/api/v1/auth/activation/staff/complete/` | Public activation link | `AllowAny` | Complete first-time staff/admin activation by setting the user's password | Implemented boundary; activation-token storage pending |
 | `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented boundary; email/token storage pending |
 | `POST` | `/api/v1/auth/recovery/password/complete/` | Public recovery link | `AllowAny` | Complete password reset from a recovery link | Implemented boundary; recovery-token storage pending |
@@ -25,6 +25,8 @@ The baseline health and authentication boundaries plus the first student-applica
 | `GET` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Read an owned application | Implemented |
 | `PATCH` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Update an editable owned application using optimistic concurrency | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/submit/` | Required bearer access token | Owning `STUDENT` | Validate and submit or resubmit an application | Implemented |
+| `GET` | `/api/v1/applications/review-queue/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | List submitted registration applications for admissions review | Implemented |
+| `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN and date of birth through the configured registry boundary | Implemented with synthetic local/test provider; production provider `TBD` |
 
 ### Student application draft and submission
@@ -44,7 +46,7 @@ For local eligibility testing, synthetic LRN `901234567899` with birthdate `2008
 
 Invalid LRN/DOB combinations return `400 LRN_VERIFICATION_FAILED`; an unavailable registry returns `503 LRN_REGISTRY_UNAVAILABLE`; an existing active application in `ACTIVE_EXAM_CYCLE_ID` returns `409 CONFLICT`. Five failed combinations for one LRN start a 15-minute `429 LRN_COOLDOWN`. A separate device/network throttle applies on top. A conditional database uniqueness constraint protects both LRN/cycle and owner/cycle against concurrent non-rejected registrations. LRN values and dates of birth are not written to request or audit logs.
 
-Application bodies persist five sections: `personal` (object), `address` (object), `school` (object), `coursePreferences` (array of `{university, course}` objects), and `reviewStep` (object). Create requires the single-use LRN proof token. Initial registration does not require an account; `owner` remains unset until a later approved-account provisioning flow. A second active/non-rejected registration for the same LRN and exam cycle returns `409 CONFLICT`.
+Application bodies persist five sections: `personal` (object), `address` (object), `school` (object), `coursePreferences` (array of `{university, course}` objects), and `reviewStep` (object). Create requires the single-use LRN proof token. Initial registration does not require an account; `owner` remains unset until reviewer approval activates the Student Portal account. The registration password is accepted only as a write-only top-level `password` field and is stored as a pending password hash, never in the JSON payload or API response. A second active/non-rejected registration for the same LRN and exam cycle returns `409 CONFLICT`.
 
 Final public registration submission is performed by adding `submitOnCreate: true` to the create request:
 
@@ -52,6 +54,7 @@ Final public registration submission is performed by adding `submitOnCreate: tru
 {
   "verificationToken": "opaque-lrn-proof",
   "submitOnCreate": true,
+  "password": "Password1!",
   "personal": {},
   "address": {},
   "school": {},
@@ -75,6 +78,20 @@ Submission request:
 Submission requires the documented personal contact/name fields, complete permanent address fields, school/LRN/academic fields, at least one complete course preference, privacy consent, and declaration acceptance. The LRN must contain exactly 12 digits. Invalid or missing data returns `400 VALIDATION_FAILED` with section errors. A `DRAFT` becomes `SUBMITTED`; a `FOR_CORRECTION` application becomes `RESUBMITTED`. Other states return `409 CONFLICT`. Successful submission increments `version` and sets `submittedAt`.
 
 Document metadata, binary upload, replacement/removal, reviewer-driven transitions to `FOR_CORRECTION`, `APPROVED`, or `REJECTED`, and their retention rules remain `TBD` and are not exposed by this slice. Application payloads are excluded from audit and request logging.
+
+Admissions reviewers can load the review ledger with `GET /api/v1/applications/review-queue/`. The queue excludes `DRAFT` applications and includes submitted, resubmitted, correction, approved, and rejected registration records ordered by latest submission/creation time. Student and unauthenticated callers are denied.
+
+Reviewer decisions are persisted through `POST /api/v1/applications/{applicationId}/review-decision/`:
+
+```json
+{
+  "decision": "APPROVE",
+  "reason": "Verified.",
+  "requiredCorrections": []
+}
+```
+
+Supported decisions are `APPROVE`, `REQUEST_CORRECTION`, and `REJECT`, which update the application status to `APPROVED`, `FOR_CORRECTION`, and `REJECTED` respectively. An `APPROVE` decision also activates the student's account using the registration email, LRN, and pending password hash, then clears the pending hash from the application record. A `REJECT` decision clears the pending hash without creating an account. Decisions are allowed only while the application is `SUBMITTED`, `RESUBMITTED`, or `FOR_CORRECTION`; other states return `409 CONFLICT`.
 
 Test coverage: `backend/apps/applications/tests/test_application_endpoints.py`.
 
@@ -306,9 +323,9 @@ Test coverage:
 
 ### `POST /api/v1/auth/activation/student-registration/`
 
-Use this endpoint boundary when an approved registration workflow needs to create and activate the associated Student account. This is not public self-registration; it is an internal/protected backend action after registration approval.
+Use this endpoint when an approved registration workflow needs to create and activate the associated Student account. This is not public self-registration; it is an internal/protected backend action after registration approval.
 
-Current implementation status: route, role boundary, request validation, safe conflict response, and tests exist. Registration approval storage, student account persistence, role assignment, duplicate-account checks, session invalidation, and audit events remain pending until the registration/account model slices exist.
+Current implementation status: route, role boundary, request validation, approved-application lookup, student account persistence, role assignment, duplicate-account checks, and tests exist. Session invalidation and notification/audit side effects remain pending.
 
 Request:
 
@@ -318,23 +335,14 @@ Request:
 }
 ```
 
-Current response behavior:
+Response behavior:
 
 - `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
 - `403 PERMISSION_DENIED` is returned for roles other than `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN`.
-- `409 CONFLICT` is returned until registration approval/account storage exists.
+- `201 Created` is returned after the Student account is created or an already linked account is reactivated.
+- `409 CONFLICT` is returned when the registration is not approved, is missing account credentials, or conflicts with an existing email/LRN account.
 
-Future successful response:
-
-```json
-{
-  "accountId": "opaque-account-id",
-  "role": "STUDENT",
-  "status": "active"
-}
-```
-
-The backend must assign the Student role automatically. Students must never be allowed to assign, modify, or elevate their own roles.
+The backend assigns the Student role automatically. Students must never be allowed to assign, modify, or elevate their own roles. The pending registration password hash is cleared after account activation.
 
 Test coverage:
 

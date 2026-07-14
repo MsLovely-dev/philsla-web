@@ -30,6 +30,7 @@ class StudentApplication(models.Model):
     school = models.JSONField(default=dict, blank=True)
     course_preferences = models.JSONField(default=list, blank=True)
     review_step = models.JSONField(default=dict, blank=True)
+    password_hash = models.CharField(max_length=128, blank=True, default="")
     version = models.PositiveIntegerField(default=1)
     submitted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
