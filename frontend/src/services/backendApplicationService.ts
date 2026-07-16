@@ -7,9 +7,15 @@ export interface LrnVerificationProfile {
   firstName: string;
   middleName: string;
   lastName: string;
+  extensionName: string;
+  sex: string;
   dateOfBirth: string;
+  schoolId: string;
   schoolName: string;
   gradeLevel: string;
+  enrollmentStatus: string;
+  schoolYear: string;
+  identityVerified: boolean;
 }
 
 export interface LrnVerificationResult {
@@ -41,6 +47,25 @@ export interface Step2ConfigurationInput extends Omit<Step2Configuration, 'confi
   effectiveDate: string;
   status: boolean;
 }
+
+export interface StudentRegistrationFieldConfig {
+  id: number | string;
+  module?: string;
+  section: string;
+  type: string;
+  value: string;
+  fieldSection?: string;
+  inputType?: 'text' | 'date' | 'dropdown' | string;
+  optionValues?: string[];
+  priority?: 'High Priority' | 'Medium Priority' | 'Low Priority' | string;
+  remarks?: string;
+  status: boolean | 'Active' | 'Inactive';
+  display_order?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type StudentRegistrationFieldInput = Omit<StudentRegistrationFieldConfig, 'id' | 'createdAt' | 'updatedAt'>;
 
 export interface Step2VerificationResult {
   id: string;
@@ -82,10 +107,10 @@ export type BackendReviewerDecision = 'APPROVE' | 'REQUEST_CORRECTION' | 'REJECT
 export class BackendApplicationService {
   constructor(private readonly apiClient: ApiClient = sharedApiClient) {}
 
-  verifyLrn(lrn: string, dateOfBirth: string): Promise<ServiceResult<LrnVerificationResult>> {
+  verifyLrn(lrn: string): Promise<ServiceResult<LrnVerificationResult>> {
     return this.apiClient.request<LrnVerificationResult>('/api/v1/applications/registration/lrn/verify/', {
       method: 'POST',
-      body: JSON.stringify({ lrn, dateOfBirth }),
+      body: JSON.stringify({ lrn }),
     });
   }
 
@@ -118,6 +143,34 @@ export class BackendApplicationService {
   async createStep2Configuration(input: Step2ConfigurationInput): Promise<ServiceResult<Step2Configuration>> {
     return this.apiClient.request<Step2Configuration>('/api/v1/applications/configuration/step-2/', {
       method: 'POST', body: JSON.stringify(input),
+    });
+  }
+
+  async listPublicStudentRegistrationFields(): Promise<ServiceResult<StudentRegistrationFieldConfig[]>> {
+    return this.apiClient.request<StudentRegistrationFieldConfig[]>('/api/v1/configuration/fields/?module=student_registration');
+  }
+
+  async listStudentRegistrationFields(): Promise<ServiceResult<StudentRegistrationFieldConfig[]>> {
+    return this.apiClient.request<StudentRegistrationFieldConfig[]>('/api/v1/configuration/admin/fields/?module=student_registration');
+  }
+
+  async createStudentRegistrationField(input: StudentRegistrationFieldInput): Promise<ServiceResult<StudentRegistrationFieldConfig>> {
+    return this.apiClient.request<StudentRegistrationFieldConfig>('/api/v1/configuration/admin/fields/', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async updateStudentRegistrationField(id: number | string, input: Partial<StudentRegistrationFieldInput>): Promise<ServiceResult<StudentRegistrationFieldConfig>> {
+    return this.apiClient.request<StudentRegistrationFieldConfig>(`/api/v1/configuration/admin/fields/${id}/`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deleteStudentRegistrationField(id: number | string): Promise<ServiceResult<null>> {
+    return this.apiClient.request<null>(`/api/v1/configuration/admin/fields/${id}/`, {
+      method: 'DELETE',
     });
   }
 
@@ -164,6 +217,7 @@ export function createBackendApplicationDraftInput(
     email: string;
     password: string;
     mobile: string;
+    gender: string;
     region: string;
     province: string;
     city: string;
@@ -172,14 +226,16 @@ export function createBackendApplicationDraftInput(
     zipCode: string;
     lrn: string;
     schoolName: string;
+    schoolId: string;
     schoolAddress: string;
     academicTrack: string;
     gradeLevel: string;
+    enrollmentStatus: string;
+    schoolYear: string;
     gwa: string;
     universities: string[];
     courses: string[];
-    photoUrl: string;
-    selfieUrl: string;
+    customStep1Fields?: Record<string, string>;
   },
 ): BackendApplicationDraftInput {
   return {
@@ -191,10 +247,10 @@ export function createBackendApplicationDraftInput(
       lastName: formData.lastName,
       suffix: formData.suffix,
       dateOfBirth: formData.dob,
+      sex: formData.gender,
       email: formData.email,
       mobile: formData.mobile,
-      studentIdPhotoUrl: formData.photoUrl,
-      selfiePhotoUrl: formData.selfieUrl,
+      additionalHighPriorityFields: formData.customStep1Fields ?? {},
     },
     address: {
       region: formData.region,
@@ -206,10 +262,13 @@ export function createBackendApplicationDraftInput(
     },
     school: {
       lrn: formData.lrn,
+      schoolId: formData.schoolId,
       name: formData.schoolName,
       address: formData.schoolAddress,
       academicTrack: formData.academicTrack,
       gradeLevel: formData.gradeLevel,
+      enrollmentStatus: formData.enrollmentStatus,
+      schoolYear: formData.schoolYear,
       gwa: formData.gwa,
     },
     coursePreferences: formData.universities.map((university, index) => ({

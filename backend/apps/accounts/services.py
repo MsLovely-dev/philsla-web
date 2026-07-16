@@ -293,17 +293,21 @@ def revoke_tokens(*, user: object, scope: str) -> None:
 
 @transaction.atomic
 def activate_student_registration_account(*, registration_application_id: str, actor: object) -> None:
-    """Create and activate a student account after registration approval."""
+    """Create and activate a student account after registration submission."""
 
     from apps.applications.models import ApplicationStatus, StudentApplication
 
     try:
         application = StudentApplication.objects.select_for_update().get(id=registration_application_id)
     except (StudentApplication.DoesNotExist, ValueError) as exc:
-        raise ActivationUnavailable("Approved registration application was not found.") from exc
+        raise ActivationUnavailable("Submitted registration application was not found.") from exc
 
-    if application.status != ApplicationStatus.APPROVED:
-        raise ActivationUnavailable("Student account activation requires an approved registration application.")
+    if application.status not in {
+        ApplicationStatus.SUBMITTED,
+        ApplicationStatus.RESUBMITTED,
+        ApplicationStatus.APPROVED,
+    }:
+        raise ActivationUnavailable("Student account activation requires a submitted registration application.")
 
     if application.owner_id:
         application.owner.is_active = True
@@ -316,14 +320,15 @@ def activate_student_registration_account(*, registration_application_id: str, a
     personal = application.personal or {}
     email = str(personal.get("email", "")).strip().lower()
     if not email:
-        raise ActivationUnavailable("Approved registration application is missing an email address.")
+        raise ActivationUnavailable("Submitted registration application is missing an email address.")
     if not application.password_hash:
-        raise ActivationUnavailable("Approved registration application is missing pending account credentials.")
+        raise ActivationUnavailable("Submitted registration application is missing pending account credentials.")
 
     UserModel = get_user_model()
     if UserModel.objects.filter(email__iexact=email).exists():
         raise ActivationUnavailable("This email is already registered. Go to Login page.")
-    if AccountProfile.objects.filter(lrn=application.lrn, role=PortalRole.STUDENT.value).exists():
+    profile_lrn = application.lrn or None
+    if profile_lrn and AccountProfile.objects.filter(lrn=profile_lrn, role=PortalRole.STUDENT.value).exists():
         raise ActivationUnavailable("This LRN already has an active student account.")
 
     first_name = str(personal.get("firstName", "")).strip()
@@ -338,7 +343,7 @@ def activate_student_registration_account(*, registration_application_id: str, a
     user.password = application.password_hash
     try:
         user.save()
-        AccountProfile.objects.create(user=user, role=PortalRole.STUDENT.value, lrn=application.lrn)
+        AccountProfile.objects.create(user=user, role=PortalRole.STUDENT.value, lrn=profile_lrn)
     except IntegrityError as exc:
         raise ActivationUnavailable("Student account could not be activated because the credentials already exist.") from exc
 

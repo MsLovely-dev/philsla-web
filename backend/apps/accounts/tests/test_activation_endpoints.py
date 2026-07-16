@@ -36,11 +36,11 @@ class ActivationEndpointTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["error"]["code"], "PERMISSION_DENIED")
 
-    def test_student_registration_activation_creates_student_account_for_approved_application(self) -> None:
+    def test_student_registration_activation_creates_student_account_for_submitted_application(self) -> None:
         application = StudentApplication.objects.create(
             lrn="123456789012",
             exam_cycle_id="2026",
-            status=ApplicationStatus.APPROVED,
+            status=ApplicationStatus.SUBMITTED,
             personal={"email": "student@example.test", "firstName": "Juan", "lastName": "Dela Cruz"},
             password_hash=make_password("Password1!"),
         )

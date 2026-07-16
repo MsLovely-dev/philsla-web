@@ -6,196 +6,22 @@ import {
   backendApplicationService,
   createBackendApplicationDraftInput,
   mapBackendApplicationToFrontend,
-  type Step2Configuration,
+  type StudentRegistrationFieldConfig,
 } from '../services/backendApplicationService';
-import { FileUp, CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, BookOpen, Plus, Trash2, MapPin, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, Check, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Scan, Eye, Video } from 'lucide-react';
+import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const SECTIONS = [
   'LRN & Profile Setup',
-  'Biometric & ID Upload',
   'Contact & Security Setup',
   'Review & Submit'
 ];
+const STEP_TRACKER_LABELS = ['Student Profile Setup', 'Account Set Up', 'Review & Submit'];
 
 const COUNTRIES = [
   "Philippines", "United States", "Canada", "United Kingdom", "Australia", "Japan", 
   "Singapore", "South Korea", "Germany", "Saudi Arabia", "United Arab Emirates", 
   "Malaysia", "Indonesia", "Thailand", "Vietnam", "Taiwan", "Hong Kong", "China", "India"
-];
-
-const GEOGRAPHY_DATA = [
-  {
-    region: 'NCR',
-    provinces: [
-      {
-        name: 'Metro Manila',
-        cities: [
-          {
-            name: 'Mandaluyong',
-            barangays: ['Brgy. Addition Hills', 'Brgy. Highway Hills', 'Brgy. Wack-Wack Greenhills', 'Brgy. Plainview']
-          },
-          {
-            name: 'Quezon City',
-            barangays: ['Diliman', 'Brgy. Commonwealth', 'Brgy. Katipunan', 'Brgy. Batasan Hills']
-          },
-          {
-            name: 'Manila',
-            barangays: ['Intramuros', 'Sampaloc', 'Malate', 'Ermita']
-          }
-        ]
-      }
-    ]
-  },
-  {
-    region: 'Region III',
-    provinces: [
-      {
-        name: 'Pampanga',
-        cities: [
-          {
-            name: 'San Fernando',
-            barangays: ['Brgy. Dolores', 'Brgy. San Jose', 'Brgy. Del Pilar']
-          },
-          {
-            name: 'Angeles City',
-            barangays: ['Brgy. Balibago', 'Brgy. Pulung Maragul', 'Brgy. Sto. Rosario']
-          }
-        ]
-      },
-      {
-        name: 'Bulacan',
-        cities: [
-          {
-            name: 'Malolos',
-            barangays: ['Brgy. Catmon', 'Brgy. San Gabriel', 'Brgy. Guinhawa']
-          }
-        ]
-      }
-    ]
-  },
-  {
-    region: 'Region IV-A',
-    provinces: [
-      {
-        name: 'Laguna',
-        cities: [
-          {
-            name: 'Los Baños',
-            barangays: ['Brgy. Batong Malake', 'Brgy. Lalakay', 'Brgy. Maahas']
-          },
-          {
-            name: 'Calamba',
-            barangays: ['Brgy. Halang', 'Brgy. Real', 'Brgy. Bucal']
-          }
-        ]
-      },
-      {
-        name: 'Cavite',
-        cities: [
-          {
-            name: 'Dasmariñas',
-            barangays: ['Brgy. Sampaloc I', 'Brgy. Burol', 'Brgy. Salitran II']
-          }
-        ]
-      }
-    ]
-  }
-];
-
-const UNIVERSITY_DATA = [
-  { 
-    name: 'UP Diliman', 
-    courses: ['BS Computer Science', 'BS Physics', 'BS Mathematics', 'BS Geodetic Engineering', 'BS Mechanical Engineering', 'BS Electronics Engineering', 'BS Chemical Engineering', 'BS Biology'] 
-  },
-  { 
-    name: 'UP Los Baños', 
-    courses: ['BS Computer Science', 'BS Physics', 'BS Mathematics', 'BS Chemical Engineering', 'BS Biology', 'BS Electrical Engineering', 'BS Civil Engineering'] 
-  },
-  { 
-    name: 'UP Manila', 
-    courses: ['BS Biochemistry', 'BS Biology', 'BS Computer Science', 'BS Nursing', 'BS Pharmacy', 'BS Public Health'] 
-  },
-  { 
-    name: 'UP Visayas', 
-    courses: ['BS Fisheries', 'BS Biology', 'BS Computer Science', 'BS Chemistry', 'BS Mathematics'] 
-  },
-  { 
-    name: 'UP Open University', 
-    courses: ['Bachelor of Arts in Multimedia Studies', 'Associate in Arts', 'BS Education'] 
-  },
-  { 
-    name: 'UP Mindanao', 
-    courses: ['BS Computer Science', 'BS Applied Mathematics', 'BS Biology', 'BS Food Technology'] 
-  },
-  { 
-    name: 'UP Baguio', 
-    courses: ['BS Computer Science', 'BS Biology', 'BS Mathematics', 'BS Physics'] 
-  },
-  { 
-    name: 'UP Cebu', 
-    courses: ['BS Computer Science', 'BS Mathematics', 'BS Biology', 'BA Product Design'] 
-  },
-  { 
-    name: 'UP Tacloban', 
-    courses: ['BS Computer Science', 'BS Biology', 'BS Mathematics'] 
-  },
-  { 
-    name: 'PUP Manila', 
-    courses: ['BS Computer Science', 'BS Information Technology', 'BS Mechanical Engineering', 'BS Accountancy', 'BS Civil Engineering'] 
-  },
-  { 
-    name: 'PUP Quezon City', 
-    courses: ['BS Information Technology', 'BS Business Administration', 'BS Office Administration'] 
-  },
-  { 
-    name: 'PUP Taguig', 
-    courses: ['BS Information Technology', 'BS Mechanical Engineering', 'BS Civil Engineering'] 
-  },
-  { 
-    name: 'PUP Bataan', 
-    courses: ['BS Industrial Engineering', 'BS Information Technology', 'BS Accountancy'] 
-  },
-  { 
-    name: 'UST Manila', 
-    courses: ['BS Nursing', 'BS Accountancy', 'BS Architecture', 'BS Biology', 'BS Civil Engineering', 'BS Medical Technology'] 
-  },
-  { 
-    name: 'UST General Santos', 
-    courses: ['BS Medical Technology', 'BS Accountancy', 'BS Business Administration'] 
-  },
-  { 
-    name: 'Ateneo de Manila University', 
-    courses: ['AB Political Science', 'BS Management Engineering', 'BS Psychology', 'BS Computer Science', 'BS Physics'] 
-  },
-  { 
-    name: 'De La Salle University Manila', 
-    courses: ['BS Computer Science', 'BS Accountancy', 'BS Mechanical Engineering', 'BS Psychology', 'BS Biology'] 
-  },
-  { 
-    name: 'De La Salle University Laguna', 
-    courses: ['BS Interactive Mobile Technologies', 'BS Computer Science', 'BS Information Technology'] 
-  },
-  { 
-    name: 'Mapua University Manila', 
-    courses: ['BS Mechanical Engineering', 'BS Civil Engineering', 'BS Architecture', 'BS Computer Science', 'BS Information Technology'] 
-  },
-  { 
-    name: 'Mapua Malayan Colleges Laguna', 
-    courses: ['BS Computer Science', 'BS Mechanical Engineering', 'BS Electronics Engineering'] 
-  },
-  { 
-    name: 'TUP Manila', 
-    courses: ['BS Mechanical Engineering', 'BS Civil Engineering', 'BS Electrical Engineering', 'BS Architecture'] 
-  },
-  { 
-    name: 'TUP Visayas', 
-    courses: ['BS Mechanical Engineering', 'BS Electronics Engineering', 'BS Power Technology'] 
-  },
-  { 
-    name: 'PLM (Pamantasan ng Lungsod ng Maynila)', 
-    courses: ['BS Nursing', 'BS Computer Science', 'BS Accountancy', 'BS Biology', 'BS Psychology'] 
-  }
 ];
 
 const HIGH_SCHOOLS = [
@@ -246,7 +72,7 @@ export default function StudentApplication() {
   const isSuffixActive = inputModules?.find(m => m.id === 'student_reg_suffix')?.isActive !== false;
 
   // Load verification methods configuration dynamically
-  const [regConfigs, setRegConfigs] = useState<any[]>(() => {
+  const [regConfigs, setRegConfigs] = useState<StudentRegistrationFieldConfig[]>(() => {
     const saved = localStorage.getItem('philsa_registration_configs');
     if (saved) {
       try {
@@ -256,28 +82,78 @@ export default function StudentApplication() {
       }
     }
     return [
-      { id: 'v1', section: 'Personal Information', type: 'Verification Method', value: 'Learner Reference Number (LRN)', status: 'Active' },
-      { id: 'v2', section: 'Personal Information', type: 'Verification Method', value: 'PhilSys National ID', status: 'Active' },
-      { id: 'v3', section: 'Personal Information', type: 'Verification Method', value: 'Manual Entry', status: 'Active' },
+      { id: 'v1', section: 'Step 1 Registration', type: 'Verification Method', value: 'Learner Reference Number (LRN)', status: 'Active' },
+      { id: 'v2', section: 'Step 1 Registration', type: 'Verification Method', value: 'PhilSys National ID', status: 'Inactive' },
+      { id: 'v3', section: 'Step 1 Registration', type: 'Verification Method', value: 'Manual Entry', status: 'Inactive' },
     ];
   });
 
   useEffect(() => {
-    const saved = localStorage.getItem('philsa_registration_configs');
-    if (saved) {
-      try {
-        setRegConfigs(JSON.parse(saved));
-      } catch (e) {
-        console.error(e);
+    let isMounted = true;
+    const loadRegistrationFields = async () => {
+      const result = await backendApplicationService.listPublicStudentRegistrationFields();
+      if (!isMounted) return;
+      if (result.ok !== false && result.data.length > 0) {
+        setRegConfigs(result.data);
+        localStorage.setItem('philsa_registration_configs', JSON.stringify(result.data));
+        return;
       }
-    }
+      const saved = localStorage.getItem('philsa_registration_configs');
+      if (saved) {
+        try {
+          setRegConfigs(JSON.parse(saved));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    };
+    void loadRegistrationFields();
+    return () => { isMounted = false; };
   }, []);
 
-  const lrnActive = regConfigs.find(c => c.type === 'Verification Method' && c.value?.includes('LRN'))?.status === 'Active';
-  const philsysActive = regConfigs.find(c => c.type === 'Verification Method' && c.value?.includes('PhilSys'))?.status === 'Active';
-  const manualActive = regConfigs.find(c => c.type === 'Verification Method' && c.value?.includes('Manual'))?.status === 'Active';
+  const isActiveConfig = (config: { status?: boolean | string }) => config.status === 'Active' || config.status === true;
+  const verificationMethodConfigs = regConfigs.filter(c => c.section === 'Step 1 Registration' && c.type === 'Verification Method');
+  const activeVerificationMethod = verificationMethodConfigs.find(c => isActiveConfig(c) && c.value !== 'PhilSys National ID');
+  const lrnActive = Boolean(activeVerificationMethod?.value?.includes('LRN'));
+  const philsysActive = Boolean(activeVerificationMethod?.value?.includes('PhilSys'));
+  const manualActive = Boolean(activeVerificationMethod?.value?.includes('Manual'));
+  const step1FieldConfigs = regConfigs.filter(c => c.section === 'Step 1 Registration' && c.type === 'Student Registration Field');
+  const hasStep1FieldMaintenance = step1FieldConfigs.length > 0;
+  const knownStep1FieldNames = new Set([
+    'LRN', 'Birth Date', 'First Name', 'Middle Name', 'Last Name', 'Extension Name',
+    'Sex', 'School ID', 'School Name', 'Grade Level', 'Enrollment Status', 'School Year',
+  ]);
+  const isStep1FieldEnabled = (fieldName: string) => !hasStep1FieldMaintenance || step1FieldConfigs.some(c => c.value === fieldName && isActiveConfig(c));
+  const getStep1FieldConfig = (fieldName: string) => step1FieldConfigs.find(c => c.value === fieldName);
+  const defaultStep1FieldSections: Record<string, string> = {
+    'Birth Date': 'Personal Information',
+    'First Name': 'Personal Information',
+    'Middle Name': 'Personal Information',
+    'Last Name': 'Personal Information',
+    'Extension Name': 'Personal Information',
+    'Sex': 'Personal Information',
+    'School ID': 'School Information',
+    'School Name': 'School Information',
+    'Grade Level': 'School Information',
+    'Enrollment Status': 'School Information',
+    'School Year': 'School Information',
+  };
+  const getStep1FieldSection = (fieldName: string) => getStep1FieldConfig(fieldName)?.fieldSection || defaultStep1FieldSections[fieldName] || 'Additional Information';
+  const getStep1FieldOptions = (fieldName: string, fallback: string[]) => {
+    const configured = getStep1FieldConfig(fieldName)?.optionValues;
+    return Array.isArray(configured) && configured.length > 0 ? configured : fallback;
+  };
+  const additionalHighPriorityFields = step1FieldConfigs.filter(c =>
+    isActiveConfig(c) &&
+    c.priority === 'High Priority' &&
+    !knownStep1FieldNames.has(c.value)
+  );
+  const additionalHighPriorityFieldsBySection = (section: string) => additionalHighPriorityFields.filter(field => (field.fieldSection || 'Additional Information') === section);
+  const [registryLockedFields, setRegistryLockedFields] = useState<string[]>([]);
+  const isRegistryLocked = (fieldName: string) => isIdVerified && registryLockedFields.includes(fieldName);
+  const activeVerificationPath: 'lrn' | 'philsys' | 'manual' | null = lrnActive ? 'lrn' : philsysActive ? 'philsys' : manualActive ? 'manual' : null;
 
-  const { applications, setApplications, schedules } = useMockData();
+  const { applications, setApplications } = useMockData();
   const [currentSection, setCurrentSection] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -287,9 +163,6 @@ export default function StudentApplication() {
   const [lrnVerificationToken, setLrnVerificationToken] = useState('');
   const [visitedSections, setVisitedSections] = useState<number[]>([0]);
   const [isEditingCorrection, setIsEditingCorrection] = useState(false);
-  const [selectedDocType, setSelectedDocType] = useState<'goodMoral' | 'form137' | 'form138' | 'enrollmentCert'>('form137');
-  const [focusedUniIndex, setFocusedUniIndex] = useState<number | null>(null);
-  const [uniQuery, setUniQuery] = useState<string[]>(['', '', '']);
 
   // Gap Features (Inactivity Timeout & Helpdesk Routing)
   const [timeLeft, setTimeLeft] = useState(1800); // 30 minutes = 1800 seconds
@@ -302,6 +175,15 @@ export default function StudentApplication() {
 
   // New Verification Path States
   const [verificationPath, setVerificationPath] = useState<'philsys' | 'lrn' | 'manual' | null>(null);
+  const visibleVerificationPath = verificationPath ?? activeVerificationPath;
+  const step1ModeTitle = visibleVerificationPath === 'philsys' ? 'PhilSys ID Setup' : visibleVerificationPath === 'manual' ? 'Manual Profile Setup' : 'LRN & Profile Setup';
+  const step1ModeSubtitle = visibleVerificationPath === 'philsys' ? 'PhilSys Identity Verification' : visibleVerificationPath === 'manual' ? 'Manual High Priority Entry' : 'DepEd Learner Verification';
+  const step1ModeDescription = visibleVerificationPath === 'philsys'
+    ? 'Enter your PhilSys ID to retrieve verified identity records. Complete any remaining high-priority school information before account creation.'
+    : visibleVerificationPath === 'manual'
+      ? 'Enter the required high-priority identity and school information manually. You can provide your LRN later after account creation.'
+      : 'Enter your official 12-digit Learner Reference Number (LRN) to fetch verified enrollment and identity records from DepEd.';
+  const showStep1ModeDescription = !(activeVerificationPath === 'lrn' && verificationPath === 'manual');
   const [lrnAttemptsLeft, setLrnAttemptsLeft] = useState(5);
   const [showLrnCooldownModal, setShowLrnCooldownModal] = useState(false);
   const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(900); // 15 minutes = 900 seconds
@@ -314,6 +196,7 @@ export default function StudentApplication() {
           if (prev <= 1) {
             setShowLrnCooldownModal(false);
             setLrnAttemptsLeft(5);
+            setRegistryLockedFields([]);
             setErrors({});
             setFormData(p => ({ ...p, lrn: '' }));
             return 900;
@@ -327,161 +210,25 @@ export default function StudentApplication() {
     };
   }, [showLrnCooldownModal, cooldownSecondsLeft]);
 
-  // Auto-redirect if only one active verification method exists
+  // Maintenance controls which single registration mode is visible.
   useEffect(() => {
-    if (!showPrivacyConsent && verificationPath === null) {
-      const activeCount = (lrnActive ? 1 : 0) + (philsysActive ? 1 : 0) + (manualActive ? 1 : 0);
-      if (activeCount === 1) {
-        if (lrnActive) setVerificationPath('lrn');
-        else if (philsysActive) setVerificationPath('philsys');
-        else if (manualActive) setVerificationPath('manual');
+    if (!showPrivacyConsent) {
+      setVerificationPath(activeVerificationPath);
+      if (activeVerificationPath !== 'lrn') setLrnVerificationToken('');
+      if (activeVerificationPath === 'manual') {
+        setIsIdVerified(false);
+        setRegistryLockedFields([]);
       }
     }
-  }, [showPrivacyConsent, verificationPath, lrnActive, philsysActive, manualActive]);
+  }, [showPrivacyConsent, activeVerificationPath]);
   const [philsysInputMode, setPhilsysInputMode] = useState<'qr' | 'manual'>('manual');
   const [qrScanning, setQrScanning] = useState(false);
   const [qrScanningMessage, setQrScanningMessage] = useState('');
   const [failedVerificationMethod, setFailedVerificationMethod] = useState('');
-  const [simulateFaceFailure, setSimulateFaceFailure] = useState(false);
-  const [faceCheckStatus, setFaceCheckStatus] = useState<'idle' | 'scanning' | 'success' | 'failed'>('idle');
-  const [faceCheckLog, setFaceCheckLog] = useState('');
-  const [selfieStatus, setSelfieStatus] = useState<'idle' | 'opening' | 'live' | 'capturing' | 'analyzing' | 'success' | 'failed'>('idle');
-  const [selfieLog, setSelfieLog] = useState('');
-  const [shutterFlash, setShutterFlash] = useState(false);
-  const [step2SubStage, setStep2SubStage] = useState<'upload_photo' | 'selfie'>('upload_photo');
-  const [step2Configuration, setStep2Configuration] = useState<Step2Configuration | null>(null);
-  const [step2UploadedMedia, setStep2UploadedMedia] = useState<string[]>([]);
-  const [step2BackendStatus, setStep2BackendStatus] = useState<'IN_PROGRESS' | 'PASSED' | 'MANUAL_REVIEW' | 'REJECTED'>('IN_PROGRESS');
-  const [idBackPreview, setIdBackPreview] = useState('');
-  useEffect(() => {
-    if (step2Configuration && !step2Configuration.requireStudentIdVerification) setStep2SubStage('selfie');
-  }, [step2Configuration]);
   const [emailOtp, setEmailOtp] = useState('');
   const [generatedEmailOtp, setGeneratedEmailOtp] = useState('');
   const [emailOtpSentTo, setEmailOtpSentTo] = useState('');
   const [isEmailVerified, setIsEmailVerified] = useState(false);
-
-  // New multi-angle Face Verification states
-  const [faceVerificationStage, setFaceVerificationStage] = useState<'not_started' | 'camera_ready' | 'countdown' | 'verifying' | 'success' | 'failed' | 'failed_unrecognized' | 'failed_mismatch' | 'selfie_verification' | 'selfie_checking' | 'selfie_recorded' | 'selfie_failed_unrecognized' | 'selfie_failed_mismatch'>('not_started');
-  const [faceCountdown, setFaceCountdown] = useState(5);
-  const [faceOrientation, setFaceOrientation] = useState<'front' | 'left' | 'right' | 'done'>('front');
-
-  // Custom interactive simulation scenarios for Face Verification Setup
-  const [simulationScenario, setSimulationScenario] = useState<'none' | 'unrecognized' | 'mismatch'>('none');
-  const [faceAttemptsLeft, setFaceAttemptsLeft] = useState(5);
-  const [showFaceAttemptsModal, setShowFaceAttemptsModal] = useState(false);
-  const [faceAttemptsModalMessage, setFaceAttemptsModalMessage] = useState('');
-
-  // Selfie Verification specific states for retry limit & cooldown
-  const [selfieAttemptsLeft, setSelfieAttemptsLeft] = useState(5);
-  const [showSelfieCooldownModal, setShowSelfieCooldownModal] = useState(false);
-  const [selfieCooldownSecondsLeft, setSelfieCooldownSecondsLeft] = useState(900); // 15 mins
-
-  useEffect(() => {
-    let interval: any = null;
-    if (showSelfieCooldownModal && selfieCooldownSecondsLeft > 0) {
-      interval = setInterval(() => {
-        setSelfieCooldownSecondsLeft(prev => {
-          if (prev <= 1) {
-            setShowSelfieCooldownModal(false);
-            setSelfieAttemptsLeft(5);
-            setFaceVerificationStage('selfie_verification');
-            setSelfieStatus('live');
-            return 900;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [showSelfieCooldownModal, selfieCooldownSecondsLeft]);
-
-  useEffect(() => {
-    let interval: any = null;
-    if (faceVerificationStage === 'countdown') {
-      setFaceCountdown(5);
-      setFaceOrientation('front');
-      interval = setInterval(() => {
-        setFaceCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            setFaceVerificationStage('verifying');
-            setFaceOrientation('done');
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [faceVerificationStage]);
-
-  useEffect(() => {
-    if (faceVerificationStage === 'verifying') {
-      const timer = setTimeout(() => {
-        if (simulationScenario === 'unrecognized') {
-          setFaceAttemptsLeft(prev => {
-            const nextAttempts = prev - 1;
-            if (nextAttempts <= 0) {
-              setFaceAttemptsModalMessage("You reached 5 attempts. Will proceed to Selfie Verification.");
-              setShowFaceAttemptsModal(true);
-            }
-            setFaceVerificationStage('failed_unrecognized');
-            setSelfieStatus('failed');
-            return nextAttempts;
-          });
-          addAuditLog('SELFIE_VERIFICATION_FAILED', 'Biometric face match failed: Student not recognized (unrecognized face or random object).');
-        } else if (simulationScenario === 'mismatch') {
-          setFaceAttemptsLeft(prev => {
-            const nextAttempts = prev - 1;
-            if (nextAttempts <= 0) {
-              setFaceAttemptsModalMessage("You reached 5 attempts. Will proceed to Selfie Verification.");
-              setShowFaceAttemptsModal(true);
-            }
-            setFaceVerificationStage('failed_mismatch');
-            setSelfieStatus('failed');
-            return nextAttempts;
-          });
-          addAuditLog('SELFIE_VERIFICATION_FAILED', 'Biometric face match failed: Student face does not match LRN records.');
-        } else if (simulateFaceFailure) {
-          setFaceVerificationStage('failed');
-          setSelfieStatus('failed');
-          addAuditLog('SELFIE_VERIFICATION_FAILED', 'Biometric face match failed during automated multi-angle scan.');
-        } else {
-          setFaceVerificationStage('success');
-          setSelfieStatus('success');
-          setFormData(prev => ({
-            ...prev,
-            selfieUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-            selfieFilename: 'captured_biometric_selfie.png'
-          }));
-          addAuditLog('SELFIE_VERIFICATION_SUCCESS', 'Biometric liveness camera multi-angle verification succeeded.');
-          
-          // Auto-advance to Step 03 Security after 2 seconds
-          const advanceTimer = setTimeout(() => {
-            const nextSection = 2;
-            setVisitedSections(prev => [...new Set([...prev, nextSection, 1])]);
-            setCurrentSection(nextSection);
-          }, 2000);
-          
-          return () => clearTimeout(advanceTimer);
-        }
-      }, 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [faceVerificationStage, simulateFaceFailure, simulationScenario]);
-
-  const isSelfieVerificationActive = currentSection === 1 && [
-    'selfie_verification',
-    'selfie_checking',
-    'selfie_recorded',
-    'selfie_failed_unrecognized',
-    'selfie_failed_mismatch'
-  ].includes(faceVerificationStage);
 
   // Helpdesk Ticket Form States
   const [ticketContactEmail, setTicketContactEmail] = useState('');
@@ -614,10 +361,14 @@ export default function StudentApplication() {
       currentZipCode: '',
       sameAsPermanent: false,
       lrn: '',
+      schoolId: '',
       schoolName: '',
       schoolAddress: '',
       academicTrack: '',
       gradeLevel: 'Grade 12',
+      enrollmentStatus: '',
+      schoolYear: '2026-2027',
+      customStep1Fields: {},
       gwa: '',
       birthCertificateFilename: '',
       goodMoralFilename: '',
@@ -628,28 +379,13 @@ export default function StudentApplication() {
       universities: [],
       courses: [],
       examScheduleId: '',
-      photoUrl: '',
-      selfieUrl: '',
-      selfieFilename: ''
     });
     setIsIdVerified(false);
-    const activeCount = (lrnActive ? 1 : 0) + (philsysActive ? 1 : 0) + (manualActive ? 1 : 0);
-    if (activeCount === 1) {
-      if (lrnActive) setVerificationPath('lrn');
-      else if (philsysActive) setVerificationPath('philsys');
-      else if (manualActive) setVerificationPath('manual');
-    } else {
-      setVerificationPath(null);
-    }
+    setRegistryLockedFields([]);
+    setVerificationPath(activeVerificationPath);
     setPhilsysInputMode('manual');
     setQrScanning(false);
     setFailedVerificationMethod('');
-    setFaceCheckStatus('idle');
-    setFaceCheckLog('');
-    setFaceVerificationStage('not_started');
-    setFaceCountdown(5);
-    setFaceOrientation('front');
-    setSelfieStatus('idle');
     setLrnVerificationToken('');
     setEmailOtp('');
     setGeneratedEmailOtp('');
@@ -724,10 +460,14 @@ export default function StudentApplication() {
 
     // Education
     lrn: '',
+    schoolId: '',
     schoolName: '',
     schoolAddress: '',
     academicTrack: '',
     gradeLevel: 'Grade 12',
+    enrollmentStatus: '',
+    schoolYear: '2026-2027',
+    customStep1Fields: {} as Record<string, string>,
     gwa: '',
 
     // Uploads
@@ -742,10 +482,69 @@ export default function StudentApplication() {
     universities: [] as string[],
     courses: [] as string[],
     examScheduleId: '',
-    photoUrl: '',
-    selfieUrl: '',
-    selfieFilename: ''
   });
+
+  const renderAdditionalStep1Field = (field: StudentRegistrationFieldConfig) => {
+    const errorKey = `customStep1:${field.value}`;
+    return (
+      <div key={field.id || field.value} className="space-y-2">
+        <label className="label-philsa">{field.value} *</label>
+        {field.inputType === 'dropdown' && Array.isArray(field.optionValues) && field.optionValues.length > 0 ? (
+          <select
+            className="input-philsa"
+            value={formData.customStep1Fields[field.value] || ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              setFormData(prev => ({
+                ...prev,
+                customStep1Fields: {
+                  ...prev.customStep1Fields,
+                  [field.value]: value,
+                },
+              }));
+              if (errors[errorKey]) {
+                setErrors(prev => {
+                  const next = { ...prev };
+                  delete next[errorKey];
+                  return next;
+                });
+              }
+            }}
+          >
+            <option value="">Select {field.value}</option>
+            {field.optionValues.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type={field.inputType === 'date' ? 'date' : 'text'}
+            className="input-philsa"
+            value={formData.customStep1Fields[field.value] || ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              setFormData(prev => ({
+                ...prev,
+                customStep1Fields: {
+                  ...prev.customStep1Fields,
+                  [field.value]: value,
+                },
+              }));
+              if (errors[errorKey]) {
+                setErrors(prev => {
+                  const next = { ...prev };
+                  delete next[errorKey];
+                  return next;
+                });
+              }
+            }}
+            placeholder={field.remarks || `Enter ${field.value}`}
+          />
+        )}
+        {errors[errorKey] && <p className="text-xs text-philsa-red font-bold">{errors[errorKey]}</p>}
+      </div>
+    );
+  };
 
   const handleBack = () => setCurrentSection(s => Math.max(s - 1, 0));
 
@@ -795,9 +594,11 @@ export default function StudentApplication() {
       currentStreet: '12 Laurel Street, Area 1',
       currentZipCode: '1550',
       sameAsPermanent: true,
-      photoUrl: '',
-      selfieUrl: '',
-      selfieFilename: ''
+      schoolId: currentFormData.schoolId || '301234',
+      schoolName: currentFormData.schoolName || 'Philippine Science High School - Main Campus',
+      gradeLevel: currentFormData.gradeLevel || 'Grade 12',
+      enrollmentStatus: currentFormData.enrollmentStatus || 'Enrolled',
+      schoolYear: currentFormData.schoolYear || '2026-2027',
     };
   };
 
@@ -818,13 +619,9 @@ export default function StudentApplication() {
           
           if (simulateSuccess) {
             setIsIdVerified(true);
-            setFaceCheckStatus('success');
-            setSelfieStatus('success');
             setFormData(prev => ({
               ...autoFillWithPhilSys(prev),
               nationalId: prev.nationalId || '1234-5678-9012',
-              // School is manual for PhilSys, let's reset it to empty or keep current
-              schoolName: prev.schoolName || ''
             }));
             addAuditLog('PHILSYS_QR_VERIFIED', 'Authenticated successfully via PhilSys QR code scan.');
             alert('Identity Authenticated Successfully with PhilSys Registry. Official registry credentials loaded.');
@@ -869,12 +666,9 @@ export default function StudentApplication() {
         addAuditLog('PHILSYS_MANUAL_VERIFICATION_FAILED', `Verification failed for PhilSys PCN: ${formData.nationalId}. Generated Support Reference Number: ${randomTicket}`);
       } else {
         setIsIdVerified(true);
-        setFaceCheckStatus('success');
-        setSelfieStatus('success');
         setFormData(prev => ({
           ...autoFillWithPhilSys(prev),
           nationalId: prev.nationalId,
-          schoolName: prev.schoolName || ''
         }));
         addAuditLog('PHILSYS_MANUAL_VERIFIED', `Authenticated successfully via PhilSys PCN: ${formData.nationalId}.`);
         alert('Identity Authenticated Successfully with PhilSys Registry. Official registry credentials loaded.');
@@ -931,17 +725,28 @@ export default function StudentApplication() {
     });
   };
 
-  const handleVerifyLrnPath = async (forcedLrn?: string, forcedDob?: string) => {
+  const continueWithManualStep1 = () => {
+    setShowLrnCooldownModal(false);
+    setVerificationPath('manual');
+    setLrnVerificationToken('');
+    setIsIdVerified(false);
+    setRegistryLockedFields([]);
+    setErrors({});
+    setCooldownSecondsLeft(900);
+    setFormData(prev => ({ ...prev, lrn: '' }));
+    addAuditLog('LRN_MANUAL_FALLBACK_SELECTED', 'Student selected manual Step 1 input after LRN verification attempts were exhausted.');
+  };
+
+  const handleVerifyLrnPath = async (forcedLrn?: string) => {
     if (lrnAttemptsLeft <= 0) {
       setShowLrnCooldownModal(true);
       return;
     }
 
     const currentLrn = forcedLrn !== undefined ? forcedLrn : formData.lrn;
-    const currentDob = forcedDob !== undefined ? forcedDob : formData.dob;
 
     if (!currentLrn) {
-      setErrors(prev => ({ ...prev, lrn: 'Please enter your LRN and Date of Birth.' }));
+      setErrors(prev => ({ ...prev, lrn: 'Please enter your LRN.' }));
       return;
     }
     
@@ -950,13 +755,8 @@ export default function StudentApplication() {
       return;
     }
 
-    if (!currentDob) {
-      setErrors(prev => ({ ...prev, dob: 'Please enter your LRN and Date of Birth.' }));
-      return;
-    }
-    
     setIsSubmitting(true);
-    const result = await backendApplicationService.verifyLrn(currentLrn, currentDob);
+    const result = await backendApplicationService.verifyLrn(currentLrn);
     setIsSubmitting(false);
 
     if (result.ok === false) {
@@ -973,15 +773,24 @@ export default function StudentApplication() {
       return;
     }
 
-    const { profile, verificationToken, step2 } = result.data;
+    const { profile, verificationToken } = result.data;
     setLrnVerificationToken(verificationToken);
-    setStep2Configuration(step2);
-    setStep2UploadedMedia([]);
-    setStep2BackendStatus('IN_PROGRESS');
     setLrnAttemptsLeft(5);
     setIsIdVerified(true);
-    setFaceCheckStatus('success');
-    setSelfieStatus('success');
+    setRegistryLockedFields([
+      ['lrn', profile.lrn],
+      ['firstName', profile.firstName],
+      ['middleName', profile.middleName],
+      ['lastName', profile.lastName],
+      ['suffix', profile.extensionName],
+      ['dob', profile.dateOfBirth],
+      ['schoolName', profile.schoolName],
+      ['schoolId', profile.schoolId],
+      ['gradeLevel', profile.gradeLevel],
+      ['enrollmentStatus', profile.enrollmentStatus],
+      ['schoolYear', profile.schoolYear],
+      ['gender', profile.sex],
+    ].filter(([, value]) => String(value ?? '').trim() !== '').map(([fieldName]) => fieldName));
     setErrors({});
     setFormData(prev => ({
       ...autoFillWithPhilSys(prev),
@@ -990,195 +799,53 @@ export default function StudentApplication() {
       middleName: profile.middleName,
       noMiddleName: !profile.middleName,
       lastName: profile.lastName,
+      suffix: profile.extensionName || '',
       dob: profile.dateOfBirth,
+      email: profile.lrn === '123456789012' ? 'lovely@yopmail.com' : (prev.email || 'aurelio.delacruz@philsys.gov.ph'),
       schoolName: profile.schoolName,
+      schoolId: profile.schoolId,
       schoolAddress: prev.schoolAddress || 'Verified from LRN registry',
       academicTrack: prev.academicTrack || 'STEM',
       gradeLevel: profile.gradeLevel,
+      enrollmentStatus: profile.enrollmentStatus,
+      schoolYear: profile.schoolYear,
+      gender: profile.sex,
       gwa: prev.gwa || '0',
       universities: prev.universities.length ? prev.universities : ['UP Diliman'],
       courses: prev.courses.length ? prev.courses : ['BS Computer Science'],
     }));
     addAuditLog('DEPED_LRN_VERIFIED', 'Authenticated successfully via DepEd LRN registry.');
-    setVisitedSections(prev => [...new Set([...prev, 1])]);
-    setCurrentSection(1);
-  };
-
-  const uploadRealStep2Media = async (
-    mediaType: 'STUDENT_ID_FRONT' | 'STUDENT_ID_BACK' | 'SELFIE',
-    file: File,
-  ) => {
-    if (!lrnVerificationToken) {
-      setErrors(prev => ({ ...prev, general: 'Please verify your LRN again before uploading identity images.' }));
-      return;
-    }
-    setIsSubmitting(true);
-    const result = await backendApplicationService.uploadStep2Media(lrnVerificationToken, mediaType, file);
-    setIsSubmitting(false);
-    if (result.ok === false) {
-      setErrors(prev => ({ ...prev, general: result.error.message }));
-      return;
-    }
-    const preview = URL.createObjectURL(file);
-    setStep2UploadedMedia(result.data.uploadedMedia);
-    setStep2BackendStatus(result.data.status);
-    if (mediaType === 'STUDENT_ID_FRONT') {
-      setFormData(prev => ({ ...prev, photoUrl: preview, photoFilename: file.name }));
-    } else if (mediaType === 'STUDENT_ID_BACK') {
-      setIdBackPreview(preview);
-    } else {
-      setFormData(prev => ({ ...prev, selfieUrl: preview, selfieFilename: file.name }));
-      setSelfieStatus(result.data.status === 'PASSED' ? 'success' : 'failed');
-      if (result.data.status === 'PASSED') setFaceVerificationStage('selfie_recorded');
-    }
-    setErrors(prev => { const next = { ...prev }; delete next.general; delete next.photoUrl; delete next.selfieUrl; return next; });
-  };
-
-  const handleStartCamera = () => {
-    setSelfieStatus('opening');
-    setSelfieLog('Initializing hardware video device stream...');
-    setTimeout(() => {
-      setSelfieStatus('live');
-      setSelfieLog('');
-    }, 1200);
-  };
-
-  const handleCaptureSelfie = () => {
-    setShutterFlash(true);
-    setSelfieStatus('capturing');
-    setTimeout(() => {
-      setShutterFlash(false);
-      setSelfieStatus('analyzing');
-      setSelfieLog('Detecting active bounding boxes and matching coordinates...');
-      
-      setTimeout(() => {
-        setSelfieLog('Verifying biological liveness indicators (anti-spoofing)...');
-        
-        setTimeout(() => {
-          if (simulateFaceFailure) {
-            setSelfieStatus('failed');
-            setSelfieLog('');
-            setFormData(prev => ({ ...prev, selfieUrl: '', selfieFilename: '' }));
-            setErrors(prev => ({ ...prev, selfieUrl: "Biometric match failed: Face recognition detected low lighting or unexpected rotation." }));
-            addAuditLog('SELFIE_VERIFICATION_FAILED', 'Biometric liveness camera selfie verify failed: face match confidence below threshold.');
-          } else {
-            setSelfieStatus('success');
-            setSelfieLog('Facial liveness cross-verification succeeded.');
-            setFormData(prev => ({
-              ...prev,
-              selfieUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-              selfieFilename: 'captured_biometric_selfie.png'
-            }));
-            setErrors(prev => {
-              const next = { ...prev };
-              delete next.selfieUrl;
-              return next;
-            });
-            addAuditLog('SELFIE_VERIFICATION_SUCCESS', 'Biometric liveness camera selfie verify succeeded. Match confirmed with uploaded profile.');
-          }
-        }, 1000);
-      }, 1000);
-    }, 400);
-  };
-
-  const handleCaptureFallbackSelfie = () => {
-    setShutterFlash(true);
-    setFaceVerificationStage('selfie_checking');
-    setSelfieStatus('capturing');
-    
-    setTimeout(() => {
-      setShutterFlash(false);
-      setSelfieStatus('analyzing');
-      setSelfieLog('Detecting face coordinates and computing confidence metric...');
-      
-      setTimeout(() => {
-        setSelfieLog('Verifying manual biometric liveness parameters...');
-        
-        setTimeout(() => {
-          if (simulationScenario === 'unrecognized') {
-            setSelfieAttemptsLeft(prev => {
-              const nextAttempts = Math.max(0, prev - 1);
-              if (nextAttempts <= 0) {
-                setShowSelfieCooldownModal(true);
-              }
-              setFaceVerificationStage('selfie_failed_unrecognized');
-              setSelfieStatus('failed');
-              return nextAttempts;
-            });
-            addAuditLog('SELFIE_VERIFICATION_FALLBACK_FAILED_UNRECOGNIZED', 'Manual selfie backup failed: Student face not recognized.');
-          } else if (simulationScenario === 'mismatch' || simulateFaceFailure) {
-            setSelfieAttemptsLeft(prev => {
-              const nextAttempts = Math.max(0, prev - 1);
-              if (nextAttempts <= 0) {
-                setShowSelfieCooldownModal(true);
-              }
-              setFaceVerificationStage('selfie_failed_mismatch');
-              setSelfieStatus('failed');
-              return nextAttempts;
-            });
-            addAuditLog('SELFIE_VERIFICATION_FALLBACK_FAILED_MISMATCH', 'Manual selfie backup failed: Identity mismatch with registration records.');
-          } else {
-            setFaceVerificationStage('selfie_recorded');
-            setSelfieStatus('success');
-            setFormData(prev => ({
-              ...prev,
-              selfieUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-              selfieFilename: 'captured_biometric_selfie.png'
-            }));
-            setErrors(prev => {
-              const next = { ...prev };
-              delete next.selfieUrl;
-              return next;
-            });
-            addAuditLog('SELFIE_VERIFICATION_FALLBACK_SUCCESS', 'Manual selfie backup captured and verified. Matches LRN biometric signature.');
-            
-            // Proceed to Step 03 Security after 2 seconds
-            setTimeout(() => {
-              const nextSection = 2;
-              setVisitedSections(prev => [...new Set([...prev, nextSection, 1])]);
-              setCurrentSection(nextSection);
-            }, 2000);
-          }
-        }, 1200);
-      }, 1200);
-    }, 400);
   };
 
   const validateCurrentSection = () => {
     const newErrors: Record<string, string> = {};
     
     if (currentSection === 0) {
-      if (!formData.lrn) {
-        newErrors.lrn = 'Learner Reference Number (LRN) is required';
-      } else if (!/^\d{12}$/.test(formData.lrn)) {
+      if (formData.lrn && !/^\d{12}$/.test(formData.lrn)) {
         newErrors.lrn = 'LRN must be exactly 12 numeric digits.';
       }
-      if (!formData.dob) {
+      if (isStep1FieldEnabled('Birth Date') && !formData.dob) {
         newErrors.dob = 'Date of birth is required';
       }
-      if (!isIdVerified) {
-        newErrors.general = 'You must verify your LRN records before continuing.';
+      if (isStep1FieldEnabled('First Name') && !formData.firstName) newErrors.firstName = 'First name is required';
+      if (isStep1FieldEnabled('Last Name') && !formData.lastName) newErrors.lastName = 'Last name is required';
+      if (isStep1FieldEnabled('Sex') && !formData.gender) newErrors.gender = 'Sex is required';
+      if (isStep1FieldEnabled('School ID') && !formData.schoolId) newErrors.schoolId = 'School ID is required';
+      if (isStep1FieldEnabled('School Name') && !formData.schoolName) newErrors.schoolName = 'School name is required';
+      if (isStep1FieldEnabled('Grade Level') && !formData.gradeLevel) newErrors.gradeLevel = 'Grade level is required';
+      if (isStep1FieldEnabled('Enrollment Status') && !formData.enrollmentStatus) newErrors.enrollmentStatus = 'Enrollment status is required';
+      if (isStep1FieldEnabled('School Year') && !formData.schoolYear) newErrors.schoolYear = 'School year is required';
+      additionalHighPriorityFields.forEach(field => {
+        if (!formData.customStep1Fields[field.value]?.trim()) {
+          newErrors[`customStep1:${field.value}`] = `${field.value} is required`;
+        }
+      });
+      if (!isIdVerified && verificationPath !== 'manual') {
+        newErrors.general = 'Verify your LRN or PhilSys ID, or choose manual entry if verification is unavailable.';
       }
     }
 
     if (currentSection === 1) {
-      if (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) {
-        newErrors.photoUrl = 'Student ID front image is required';
-        setStep2SubStage('upload_photo');
-      } else if (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK')) {
-        newErrors.photoUrl = 'Student ID back image is required';
-        setStep2SubStage('upload_photo');
-      } else if (!step2UploadedMedia.includes('SELFIE')) {
-        newErrors.selfieUrl = 'Live Biometric Selfie Scan is required';
-        setStep2SubStage('selfie');
-      } else if (step2BackendStatus !== 'PASSED') {
-        newErrors.general = step2BackendStatus === 'MANUAL_REVIEW'
-          ? 'Your identity verification requires authorized manual review.'
-          : 'Identity verification has not passed.';
-      }
-    }
-
-    if (currentSection === 2) {
       if (!formData.email) {
         newErrors.email = 'Email address is required';
       } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
@@ -1230,13 +897,6 @@ export default function StudentApplication() {
 
   const handleSubmit = async () => {
     if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
-      if (!lrnVerificationToken) {
-        setErrors({ general: 'Please verify your LRN and Date of Birth again before submitting.' });
-        setCurrentSection(0);
-        setVisitedSections(prev => [...new Set([...prev, 0])]);
-        return;
-      }
-
       setIsSubmitting(true);
       const result = await backendApplicationService.createAndSubmit(
         createBackendApplicationDraftInput(lrnVerificationToken, formData),
@@ -1307,9 +967,9 @@ export default function StudentApplication() {
           <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner">
             <CheckCircle className="w-12 h-12" />
           </div>
-          <h2 className="text-4xl font-black text-philsa-navy mb-4 tracking-tighter transition-all">Application Submitted</h2>
+          <h2 className="text-4xl font-black text-philsa-navy mb-4 tracking-tighter transition-all">Registration Submitted</h2>
           <p className="text-philsa-gray mb-10 max-w-sm mx-auto font-medium">
-            We have received your application. It is now being reviewed. Please save your Candidate ID.
+            Your student account is now active. You can log in using the email and password you provided, then complete the remaining profile information.
           </p>
           
           <div className="bg-philsa-bg rounded-3xl p-10 border border-philsa-border mb-10 shadow-sm relative group">
@@ -1915,14 +1575,7 @@ export default function StudentApplication() {
               onClick={() => {
                 setShowPrivacyConsent(false);
                 addAuditLog('PRIVACY_POLICY_ACCEPTED', 'Student accepted the Data Privacy Consent Notice at entry.');
-                const activeCount = (lrnActive ? 1 : 0) + (philsysActive ? 1 : 0) + (manualActive ? 1 : 0);
-                if (activeCount === 1) {
-                  if (lrnActive) setVerificationPath('lrn');
-                  else if (philsysActive) setVerificationPath('philsys');
-                  else if (manualActive) setVerificationPath('manual');
-                } else {
-                  setVerificationPath(null);
-                }
+                setVerificationPath(activeVerificationPath);
               }}
               className="flex-1 px-5 py-3 bg-[#00563F] hover:bg-[#00402E] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all cursor-pointer text-center"
             >
@@ -2034,39 +1687,32 @@ export default function StudentApplication() {
       )}
 
       <div className="mb-8 sticky top-0 bg-philsa-bg/95 backdrop-blur-md z-30 py-3 border-b border-philsa-border/30 -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4 w-full">
+        <div className="flex items-start justify-center gap-3 sm:gap-5 w-full">
            {SECTIONS.map((section, i) => (
-             <div key={section} className="flex-1 sm:flex-initial flex items-center gap-2 sm:gap-4">
-                <button 
-                  type="button"
-                  onClick={() => jumpToSection(i)}
-                  disabled={!visitedSections.includes(i) && i > currentSection}
-                  className={cn(
-                    "flex items-center gap-2 sm:gap-3 px-2 py-2 sm:px-5 sm:py-3 rounded-xl sm:rounded-2xl transition-all border-2 text-left disabled:cursor-not-allowed w-full sm:w-auto justify-center sm:justify-start",
-                    i === currentSection ? "bg-philsa-red text-white border-philsa-red shadow-lg shadow-philsa-red/10 scale-102 z-10" : 
-                    i < currentSection ? "bg-green-50 text-green-700 border-green-100 hover:bg-green-100" : 
-                    visitedSections.includes(i) ? "bg-white text-philsa-navy border-philsa-navy/30 hover:border-philsa-red" : "bg-white text-philsa-gray border-philsa-border opacity-50"
-                  )}
-                >
-                   <div className={cn(
-                     "w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-black shrink-0",
-                     i === currentSection ? "bg-white text-philsa-red" : 
-                     i < currentSection ? "bg-green-600 text-white" : "bg-philsa-bg text-philsa-gray"
-                   )}>
-                      {i < currentSection ? <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : i + 1}
-                   </div>
-                   <div className="hidden sm:block">
-                      <span className="text-[10px] font-black uppercase tracking-widest block leading-none opacity-70">Step 0{i + 1}</span>
-                      <span className="text-xs font-black uppercase tracking-widest">
-                         {section}
-                      </span>
-                   </div>
-                   {/* Compact Mobile Title */}
-                   <span className="text-[10px] font-black uppercase tracking-wider block sm:hidden">
-                      {i === 0 ? "Profile" : i === 1 ? "Biometric" : i === 2 ? "Security" : "Review"}
-                   </span>
-                </button>
-                {i < SECTIONS.length - 1 && <div className="flex-1 sm:flex-initial sm:w-8 h-[2px] bg-philsa-border" />}
+             <div key={section} className="flex items-start gap-3 sm:gap-5">
+                <div className="flex w-20 sm:w-28 flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => jumpToSection(i)}
+                    disabled={!visitedSections.includes(i) && i > currentSection}
+                    className={cn(
+                      "w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 flex items-center justify-center text-sm sm:text-base font-black transition-all disabled:cursor-not-allowed",
+                      i === currentSection ? "bg-philsa-red text-white border-philsa-red shadow-lg shadow-philsa-red/20 scale-105" :
+                      i < currentSection ? "bg-green-600 text-white border-green-600 hover:bg-green-700" :
+                      visitedSections.includes(i) ? "bg-white text-philsa-navy border-philsa-navy/30 hover:border-philsa-red" : "bg-white text-philsa-gray border-philsa-border opacity-50"
+                    )}
+                    aria-label={`Step ${i + 1}: ${STEP_TRACKER_LABELS[i]}`}
+                  >
+                    {i + 1}
+                  </button>
+                  <span className={cn(
+                    "text-center text-[9px] sm:text-[10px] font-black uppercase leading-tight tracking-wider",
+                    i === currentSection ? "text-philsa-red" : i < currentSection ? "text-green-700" : "text-philsa-gray"
+                  )}>
+                    {STEP_TRACKER_LABELS[i]}
+                  </span>
+                </div>
+                {i < SECTIONS.length - 1 && <div className="mt-5 sm:mt-6 w-8 sm:w-16 h-[2px] bg-philsa-border" />}
              </div>
            ))}
         </div>
@@ -2087,69 +1733,191 @@ export default function StudentApplication() {
         <div className="p-4 sm:p-8">
           {currentSection === 0 && (
              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-                <div className="max-w-md mx-auto bg-white rounded-3xl border border-philsa-border p-8 shadow-md space-y-6">
+                <div className="w-full max-w-5xl mx-auto bg-white rounded-3xl border border-philsa-border p-6 sm:p-8 shadow-md space-y-6">
                    <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
                       <div className="w-10 h-10 bg-blue-50 text-blue-700 rounded-xl flex items-center justify-center">
                          <School className="w-5 h-5" />
                       </div>
                       <div>
-                         <h4 className="text-sm font-black text-philsa-navy uppercase tracking-widest">LRN & Profile Setup</h4>
-                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">DepEd Learner Verification</p>
+                         <h4 className="text-sm font-black text-philsa-navy uppercase tracking-widest">{step1ModeTitle}</h4>
+                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{step1ModeSubtitle}</p>
                       </div>
                    </div>
 
-                   <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                      Enter your official 12-digit **Learner Reference Number (LRN)** and **Date of Birth** to fetch verified enrollment and identity records from DepEd.
-                   </p>
+                   {showStep1ModeDescription && (
+                     <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                        {step1ModeDescription}
+                     </p>
+                   )}
 
-                   <div className="space-y-4">
+                   <div className="space-y-6">
+                      {!verificationPath && (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-800">
+                          No registration verification method is enabled. Please contact an administrator.
+                        </div>
+                      )}
+
+                      {verificationPath === 'philsys' && (
+                        <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_auto] md:items-end">
+                          <div className="space-y-2">
+                          <label className="label-philsa text-philsa-gray">PhilSys ID / PCN *</label>
+                          <input type="text" className="input-philsa font-mono tracking-wider bg-white w-full" placeholder="e.g. 1234-5678-9012" value={formData.nationalId} onChange={(e) => setFormData({...formData, nationalId: e.target.value})} />
+                          </div>
+                          <button type="button" onClick={handleVerifyPhilSysManual} className="w-full md:w-auto btn-primary py-3 px-8 font-black uppercase text-xs tracking-widest cursor-pointer flex items-center justify-center gap-2">
+                            <ShieldCheck className="w-4 h-4" /> Verify PhilSys ID
+                          </button>
+                        </div>
+                      )}
+
                       {/* LRN Input */}
-                      <div className="space-y-2">
-                         <label className="label-philsa text-philsa-gray">Learner Reference Number (LRN) *</label>
-                         <input 
-                            type="text" 
-                            placeholder="e.g. 101234567890" 
-                            className="input-philsa font-mono tracking-wider bg-white w-full"
-                            value={formData.lrn} 
-                            onChange={(e) => {
-                               setFormData({...formData, lrn: e.target.value});
+                      {verificationPath === 'lrn' && (
+                        <div className="space-y-3">
+                          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_auto] md:items-end">
+                            <div className="space-y-2">
+                            <label className="label-philsa text-philsa-gray">Learner Reference Number (LRN) *</label>
+                            <input 
+                              type="text" 
+                              placeholder="e.g. 101234567890" 
+                              className="input-philsa font-mono tracking-wider bg-white w-full"
+                              value={formData.lrn} 
+                              onChange={(e) => {
+                                setFormData({...formData, lrn: e.target.value});
                                setLrnVerificationToken('');
                                setIsIdVerified(false);
+                               setRegistryLockedFields([]);
                                if (errors.lrn) setErrors(prev => ({...prev, lrn: ''}));
-                            }} 
-                         />
-                         {errors.lrn && <p className="text-xs text-philsa-red font-bold pl-1">{errors.lrn}</p>}
-                      </div>
-
-                      {/* DOB Input */}
-                      <div className="space-y-2">
-                         <label className="label-philsa text-philsa-gray">Date of Birth *</label>
-                         <input 
-                            type="date" 
-                            className="input-philsa w-full font-sans font-bold" 
-                            value={formData.dob} 
-                            onChange={(e) => {
-                               setFormData({...formData, dob: e.target.value});
-                               setLrnVerificationToken('');
-                               setIsIdVerified(false);
-                               if (errors.dob) setErrors(prev => ({...prev, dob: ''}));
-                            }} 
-                         />
-                         {errors.dob && <p className="text-xs text-philsa-red font-bold pl-1">{errors.dob}</p>}
-                      </div>
+                              }} 
+                            />
+                            {errors.lrn && <p className="text-xs text-philsa-red font-bold pl-1">{errors.lrn}</p>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleVerifyLrnPath()}
+                              className="w-full md:w-auto btn-primary py-3 px-8 font-black uppercase text-xs tracking-widest cursor-pointer flex items-center justify-center gap-2"
+                            >
+                              <School className="w-4 h-4" /> Verify
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {errors.general && (
                          <p className="text-xs text-philsa-red font-bold pl-1 border-l-2 border-philsa-red py-0.5 mt-1">{errors.general}</p>
                       )}
 
-                      {/* Verify Button */}
-                      <button
-                         type="button"
-                         onClick={() => handleVerifyLrnPath()}
-                         className="w-full btn-primary py-3 font-black uppercase text-xs tracking-widest cursor-pointer flex items-center justify-center gap-2 mt-2"
-                      >
-                         <School className="w-4 h-4" /> Verify & Continue
-                      </button>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Personal Information</p>
+                            <p className="text-[10px] text-slate-500 font-bold">Demographics required for account creation. Verified records are locked.</p>
+                          </div>
+                          {isIdVerified && <span className="rounded-full bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-700 border border-emerald-100">Verified</span>}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                          {isStep1FieldEnabled('First Name') && getStep1FieldSection('First Name') === 'Personal Information' && <div className="space-y-2">
+                            <label className="label-philsa">First Name *</label>
+                            <input className="input-philsa" value={formData.firstName} readOnly={isRegistryLocked('firstName')} onChange={(e) => setFormData({...formData, firstName: e.target.value})} />
+                            {errors.firstName && <p className="text-xs text-philsa-red font-bold">{errors.firstName}</p>}
+                          </div>}
+                          {isStep1FieldEnabled('Middle Name') && getStep1FieldSection('Middle Name') === 'Personal Information' && <div className="space-y-2">
+                            <label className="label-philsa">Middle Name</label>
+                            <input className="input-philsa" value={formData.middleName} readOnly={isRegistryLocked('middleName')} onChange={(e) => setFormData({...formData, middleName: e.target.value})} />
+                          </div>}
+                          {isStep1FieldEnabled('Last Name') && getStep1FieldSection('Last Name') === 'Personal Information' && <div className="space-y-2">
+                            <label className="label-philsa">Last Name *</label>
+                            <input className="input-philsa" value={formData.lastName} readOnly={isRegistryLocked('lastName')} onChange={(e) => setFormData({...formData, lastName: e.target.value})} />
+                            {errors.lastName && <p className="text-xs text-philsa-red font-bold">{errors.lastName}</p>}
+                          </div>}
+                          {isStep1FieldEnabled('Extension Name') && getStep1FieldSection('Extension Name') === 'Personal Information' && <div className="space-y-2">
+                            <label className="label-philsa">Extension Name</label>
+                            <input className="input-philsa" value={formData.suffix} readOnly={isRegistryLocked('suffix')} onChange={(e) => setFormData({...formData, suffix: e.target.value})} placeholder="Jr., Sr., III" />
+                          </div>}
+                          {isStep1FieldEnabled('Sex') && getStep1FieldSection('Sex') === 'Personal Information' && <div className="space-y-2">
+                            <label className="label-philsa">Sex *</label>
+                            <select className="input-philsa" value={formData.gender} disabled={isRegistryLocked('gender')} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
+                              <option value="">Select Sex</option>
+                              {getStep1FieldOptions('Sex', ['Female', 'Male']).map(option => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                            </select>
+                            {errors.gender && <p className="text-xs text-philsa-red font-bold">{errors.gender}</p>}
+                          </div>}
+                          {isStep1FieldEnabled('Birth Date') && getStep1FieldSection('Birth Date') === 'Personal Information' && <div className="space-y-2">
+                            <label className="label-philsa">Birth Date *</label>
+                            <input
+                              type="date"
+                              className="input-philsa"
+                              value={formData.dob}
+                              readOnly={isRegistryLocked('dob')}
+                              onChange={(e) => {
+                                setFormData({...formData, dob: e.target.value});
+                                if (errors.dob) setErrors(prev => ({...prev, dob: ''}));
+                              }}
+                            />
+                            {errors.dob && <p className="text-xs text-philsa-red font-bold">{errors.dob}</p>}
+                          </div>}
+                          {additionalHighPriorityFieldsBySection('Personal Information').map(renderAdditionalStep1Field)}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">School Information</p>
+                            <p className="text-[10px] text-slate-500 font-bold">Academic record required for Step 1 registration.</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                          {isStep1FieldEnabled('School ID') && getStep1FieldSection('School ID') === 'School Information' && <div className="space-y-2">
+                            <label className="label-philsa">School ID *</label>
+                            <input className="input-philsa" value={formData.schoolId} readOnly={isRegistryLocked('schoolId')} onChange={(e) => setFormData({...formData, schoolId: e.target.value})} />
+                            {errors.schoolId && <p className="text-xs text-philsa-red font-bold">{errors.schoolId}</p>}
+                          </div>}
+                          {isStep1FieldEnabled('School Name') && getStep1FieldSection('School Name') === 'School Information' && <div className="sm:col-span-2 xl:col-span-2 space-y-2">
+                            <label className="label-philsa">School Name *</label>
+                            <input className="input-philsa" value={formData.schoolName} readOnly={isRegistryLocked('schoolName')} onChange={(e) => setFormData({...formData, schoolName: e.target.value})} />
+                            {errors.schoolName && <p className="text-xs text-philsa-red font-bold">{errors.schoolName}</p>}
+                          </div>}
+                          {isStep1FieldEnabled('Grade Level') && getStep1FieldSection('Grade Level') === 'School Information' && <div className="space-y-2">
+                            <label className="label-philsa">Grade Level *</label>
+                            <select className="input-philsa" value={formData.gradeLevel} disabled={isRegistryLocked('gradeLevel')} onChange={(e) => setFormData({...formData, gradeLevel: e.target.value})}>
+                              <option value="">Select Grade Level</option>
+                              {getStep1FieldOptions('Grade Level', ['Grade 12', 'Grade 11']).map(option => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                            </select>
+                            {errors.gradeLevel && <p className="text-xs text-philsa-red font-bold">{errors.gradeLevel}</p>}
+                          </div>}
+                          {isStep1FieldEnabled('Enrollment Status') && getStep1FieldSection('Enrollment Status') === 'School Information' && <div className="space-y-2">
+                            <label className="label-philsa">Enrollment Status *</label>
+                            <select className="input-philsa" value={formData.enrollmentStatus} disabled={isRegistryLocked('enrollmentStatus')} onChange={(e) => setFormData({...formData, enrollmentStatus: e.target.value})}>
+                              <option value="">Select Status</option>
+                              {getStep1FieldOptions('Enrollment Status', ['Enrolled', 'Graduating', 'Pending Enrollment']).map(option => (
+                                <option key={option} value={option}>{option}</option>
+                              ))}
+                            </select>
+                            {errors.enrollmentStatus && <p className="text-xs text-philsa-red font-bold">{errors.enrollmentStatus}</p>}
+                          </div>}
+                          {isStep1FieldEnabled('School Year') && getStep1FieldSection('School Year') === 'School Information' && <div className="space-y-2">
+                            <label className="label-philsa">School Year *</label>
+                            <input className="input-philsa" value={formData.schoolYear} readOnly={isRegistryLocked('schoolYear')} onChange={(e) => setFormData({...formData, schoolYear: e.target.value})} />
+                            {errors.schoolYear && <p className="text-xs text-philsa-red font-bold">{errors.schoolYear}</p>}
+                          </div>}
+                          {additionalHighPriorityFieldsBySection('School Information').map(renderAdditionalStep1Field)}
+                        </div>
+                      </div>
+
+                      {additionalHighPriorityFieldsBySection('Additional Information').length > 0 && (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-5">
+                          <div>
+                            <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Additional Information</p>
+                            <p className="text-[10px] text-slate-500 font-bold">Additional high-priority fields configured by maintenance.</p>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {additionalHighPriorityFieldsBySection('Additional Information').map(renderAdditionalStep1Field)}
+                          </div>
+                        </div>
+                      )}
                    </div>
 
                    {/* Simulation Controls for ease of testing */}
@@ -2159,18 +1927,18 @@ export default function StudentApplication() {
                          <button 
                             type="button" 
                             onClick={() => {
-                               setFormData(prev => ({ ...prev, lrn: '123456789012', dob: '2008-05-15' }));
-                               void handleVerifyLrnPath('123456789012', '2008-05-15');
+                               setFormData(prev => ({ ...prev, lrn: '123456789012' }));
+                               void handleVerifyLrnPath('123456789012');
                             }}
                             className="w-full text-[9px] font-black text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
                          >
-                            Use Mock Valid LRN & DOB
+                            Use Mock Valid LRN
                          </button>
                          <button 
                             type="button" 
                             onClick={() => {
-                               setFormData(prev => ({ ...prev, lrn: '901234567899', dob: '2008-05-15' }));
-                               void handleVerifyLrnPath('901234567899', '2008-05-15');
+                               setFormData(prev => ({ ...prev, lrn: '901234567899' }));
+                               void handleVerifyLrnPath('901234567899');
                             }}
                             className="w-full text-[9px] font-black text-red-600 hover:bg-red-50 border border-red-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
                          >
@@ -2182,773 +1950,8 @@ export default function StudentApplication() {
              </motion.div>
           )}
 
+
           {currentSection === 1 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-               <div className="max-w-2xl mx-auto space-y-8">
-                  <div className="bg-philsa-bg/50 p-8 rounded-3xl border border-philsa-border space-y-6">
-                     <div className="flex items-center gap-4 mb-2">
-                        <div className="w-12 h-12 rounded-2xl bg-[#8B0D11] flex items-center justify-center text-white shadow-lg">
-                           <Camera className="w-6 h-6" />
-                        </div>
-                        <div>
-                           <h4 className="text-lg font-black text-philsa-navy leading-tight">
-                             {step2Configuration?.requireStudentIdVerification ? 'Student ID & Selfie Verification' : 'Selfie Submission'}
-                           </h4>
-                           <p className="text-xs text-philsa-gray font-medium uppercase tracking-wider">
-                             {step2Configuration?.requireStudentIdVerification
-                               ? (step2SubStage === 'upload_photo' ? 'Upload Student ID Front and Back' : 'Capture Selfie')
-                               : 'Selfie-Only Mode — no ID or facial comparison required'}
-                           </p>
-                        </div>
-                     </div>
-
-                     {/* Sub-steps Segmented Control */}
-                     {step2Configuration?.requireStudentIdVerification && <div className="flex flex-col sm:flex-row items-center justify-center gap-3 border-b border-philsa-border/20 pb-6">
-                       <button
-                         type="button"
-                         onClick={() => setStep2SubStage('upload_photo')}
-                         className={cn(
-                           "w-full sm:flex-1 py-3 px-4 rounded-2xl border text-center transition-all cursor-pointer",
-                           step2SubStage === 'upload_photo'
-                             ? "bg-[#8B0D11] text-white border-[#8B0D11] font-black shadow-md"
-                             : "bg-white text-slate-500 border-slate-200 font-bold hover:bg-slate-50"
-                         )}
-                       >
-                         <span className="text-[9px] uppercase tracking-wider block opacity-75 mb-0.5">Sub-Step 1</span>
-                         <span className="text-xs uppercase tracking-widest font-black">1. Upload Student ID</span>
-                       </button>
-
-                       <button
-                         type="button"
-                         onClick={() => {
-                           if (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) {
-                             alert('Please upload the front of your Student ID first.');
-                             return;
-                           }
-                           if (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK')) {
-                             alert('Please upload the back of your Student ID first.');
-                             return;
-                           }
-                           setStep2SubStage('selfie');
-                         }}
-                         disabled={
-                           (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) ||
-                           (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK'))
-                         }
-                         className={cn(
-                           "w-full sm:flex-1 py-3 px-4 rounded-2xl border text-center transition-all cursor-pointer",
-                           step2SubStage === 'selfie'
-                             ? "bg-[#8B0D11] text-white border-[#8B0D11] font-black shadow-md"
-                             : "bg-white text-slate-500 border-slate-200 font-bold hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                         )}
-                       >
-                         <span className="text-[9px] uppercase tracking-wider block opacity-75 mb-0.5">Sub-Step 2</span>
-                         <span className="text-xs uppercase tracking-widest font-black">2. Selfie Verification</span>
-                       </button>
-                     </div>}
-
-                     {step2SubStage === 'upload_photo' && (
-                       <div className="space-y-6">
-                         <div className="bg-amber-500/5 p-4 rounded-2xl border border-amber-500/10 text-left">
-                           <h5 className="text-[10px] font-black text-amber-800 uppercase tracking-widest flex items-center gap-2 mb-1">
-                             <AlertTriangle className="w-4 h-4 text-amber-600" /> Upload Requirements
-                           </h5>
-                           <p className="text-[10px] text-slate-600 font-bold uppercase tracking-wider leading-relaxed">
-                             Upload a clear, uncropped image of the front and back of your valid Student ID. The portrait on the ID front will be compared with your selfie, so it must be clearly visible.
-                           </p>
-                         </div>
-
-                         <div className="grid gap-5 md:grid-cols-2">
-                         {step2Configuration?.requireStudentIdFront && <div className="border-2 border-dashed border-slate-300 hover:border-[#8B0D11]/50 rounded-3xl p-6 text-center transition-all bg-slate-50/50 relative">
-                           {formData.photoUrl ? (
-                             <div className="space-y-4">
-                               <div className="w-full aspect-[1.6/1] mx-auto rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md relative group bg-white">
-                                 <img referrerPolicy="no-referrer" src={formData.photoUrl} alt="Student ID front preview" className="w-full h-full object-contain" />
-                                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
-                                   <button
-                                     type="button"
-                                     onClick={() => document.getElementById('student-id-front-replace')?.click()}
-                                     className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-all cursor-pointer"
-                                   >
-                                     <Upload className="w-5 h-5" />
-                                   </button>
-                                   <input
-                                     id="student-id-front-replace"
-                                     type="file"
-                                     accept="image/jpeg,image/png"
-                                     className="hidden"
-                                     onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadRealStep2Media('STUDENT_ID_FRONT', file); }}
-                                   />
-                                 </div>
-                               </div>
-                               <div>
-                                 <p className="text-xs font-black text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1">
-                                   <CheckCircle className="w-4 h-4" /> Student ID Front Uploaded
-                                  </p>
-                                 <button type="button" onClick={() => document.getElementById('student-id-front-replace')?.click()} className="mt-2 text-[9px] font-black uppercase tracking-wider text-[#8B0D11] hover:underline">Replace Front Image</button>
-                               </div>
-                             </div>
-                           ) : (
-                             <div className="space-y-4">
-                               <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto border border-slate-200">
-                                 <Upload className="w-8 h-8 text-[#8B0D11]" />
-                               </div>
-                               <div>
-                                 <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Select the front image of your Student ID</p>
-                                 <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">or click to browse local files (JPG, PNG, max 5MB)</p>
-                               </div>
-                               <input
-                                 type="file"
-                                 accept="image/jpeg,image/png"
-                                 id="student-id-front-upload"
-                                 className="hidden"
-                                 onChange={(e) => {
-                                   const file = e.target.files?.[0];
-                                   if (file) {
-                                     void uploadRealStep2Media('STUDENT_ID_FRONT', file);
-                                   }
-                                 }}
-                               />
-                               <div className="flex justify-center pt-2">
-                                 <button
-                                   type="button"
-                                   onClick={() => document.getElementById('student-id-front-upload')?.click()}
-                                   className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm cursor-pointer"
-                                 >
-                                 Select Student ID Front
-                                 </button>
-                               </div>
-                             </div>
-                           )}
-                         </div>}
-
-                         {step2Configuration?.requireStudentIdBack && (
-                           <div className="border-2 border-dashed border-slate-300 hover:border-[#8B0D11]/50 rounded-3xl p-6 text-center transition-all bg-slate-50/50 relative">
-                             {idBackPreview ? (
-                               <div className="space-y-4">
-                                 <div className="w-full aspect-[1.6/1] mx-auto rounded-2xl overflow-hidden border-2 border-emerald-500 shadow-md relative group bg-white">
-                                   <img src={idBackPreview} alt="Student ID back preview" className="w-full h-full object-contain" />
-                                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
-                                     <button type="button" onClick={() => document.getElementById('student-id-back-replace')?.click()} className="p-2 bg-red-600 text-white rounded-full hover:bg-red-700 transition-all cursor-pointer"><Upload className="w-5 h-5" /></button>
-                                   </div>
-                                 </div>
-                                 <p className="text-xs font-black text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1"><CheckCircle className="w-4 h-4" /> Student ID Back Uploaded</p>
-                                 <button type="button" onClick={() => document.getElementById('student-id-back-replace')?.click()} className="text-[9px] font-black uppercase tracking-wider text-[#8B0D11] hover:underline">Replace Back Image</button>
-                               </div>
-                             ) : (
-                               <div className="space-y-4">
-                                 <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mx-auto border border-slate-200"><Upload className="w-8 h-8 text-[#8B0D11]" /></div>
-                                 <div>
-                                   <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Select the back image of your Student ID</p>
-                                   <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Click to browse local files (JPG, PNG, max 5MB)</p>
-                                 </div>
-                                 <button type="button" onClick={() => document.getElementById('student-id-back-replace')?.click()} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm cursor-pointer">Select Student ID Back</button>
-                               </div>
-                             )}
-                             <input id="student-id-back-replace" type="file" accept="image/jpeg,image/png" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadRealStep2Media('STUDENT_ID_BACK', file); }} />
-                           </div>
-                         )}
-                         </div>
-
-                         <button
-                           type="button"
-                           disabled={
-                             (step2Configuration?.requireStudentIdFront && !step2UploadedMedia.includes('STUDENT_ID_FRONT')) ||
-                             (step2Configuration?.requireStudentIdBack && !step2UploadedMedia.includes('STUDENT_ID_BACK'))
-                           }
-                           onClick={() => setStep2SubStage('selfie')}
-                           className="px-6 py-3 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2 mx-auto cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                         >
-                           Proceed to Selfie Verification <ChevronRight className="w-3.5 h-3.5" />
-                         </button>
-                         
-                         {errors.photoUrl && (
-                           <p className="text-xs text-philsa-red font-bold pl-1 mt-1 leading-relaxed border-l-2 border-philsa-red py-0.5 text-center">
-                             {errors.photoUrl}
-                           </p>
-                         )}
-                       </div>
-                     )}
-
-                     {step2SubStage === 'selfie' && (
-                       <div className="space-y-6">
-                         <div className="rounded-2xl border-2 border-dashed border-[#8B0D11]/30 bg-red-50/30 p-5 text-center space-y-3">
-                           <Camera className="w-8 h-8 text-[#8B0D11] mx-auto" />
-                           <p className="text-xs font-black uppercase tracking-wider text-slate-700">Capture or select a current selfie</p>
-                           <input
-                             type="file"
-                             accept="image/jpeg,image/png"
-                             capture="user"
-                             disabled={isSubmitting}
-                             onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadRealStep2Media('SELFIE', file); }}
-                             className="block w-full text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[#8B0D11] file:px-4 file:py-2 file:text-white disabled:opacity-50"
-                           />
-                           {step2BackendStatus === 'PASSED' && <p className="text-xs font-black text-emerald-700">Step 2 completed by the backend.</p>}
-                           {step2BackendStatus === 'MANUAL_REVIEW' && <p className="text-xs font-black text-amber-700">Submitted for authorized manual review.</p>}
-                         </div>
-                         {/* Interactive Biometric Simulation Control Panel */}
-                         <div className="p-3 bg-slate-50 text-slate-800 rounded-2xl border border-slate-200 space-y-2">
-                            <div className="flex items-center justify-between">
-                               <h5 className="text-[10px] font-black text-slate-700 uppercase tracking-widest flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                  Simulation Control
-                               </h5>
-                               <span className="text-[8px] font-black text-slate-400 px-2 py-0.5 rounded uppercase tracking-wider">
-                                  Interactive Testing
-                               </span>
-                            </div>
-                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                               {/* Normal Scenario */}
-                               <button
-                                  type="button"
-                                  onClick={() => {
-                                     setSimulationScenario('none');
-                                     setFaceAttemptsLeft(5);
-                                     setErrors(prev => ({ ...prev, selfieUrl: '' }));
-                                  }}
-                                  className={cn(
-                                     "p-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wider",
-                                     simulationScenario === 'none' 
-                                        ? "bg-emerald-50 border-emerald-300 text-emerald-800" 
-                                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  )}
-                                >
-                                  Scenario: Normal Match
-                               </button>
-
-                               {/* Scenario 1 */}
-                               <button
-                                  type="button"
-                                  onClick={() => {
-                                     setSimulationScenario('unrecognized');
-                                     setFaceAttemptsLeft(5);
-                                     setErrors(prev => ({ ...prev, selfieUrl: '' }));
-                                  }}
-                                  className={cn(
-                                     "p-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wider",
-                                     simulationScenario === 'unrecognized' 
-                                        ? "bg-red-50 border-red-300 text-red-800" 
-                                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  )}
-                               >
-                                  Scenario 1: No Face
-                               </button>
-
-                               {/* Scenario 2 */}
-                               <button
-                                  type="button"
-                                  onClick={() => {
-                                     setSimulationScenario('mismatch');
-                                     setFaceAttemptsLeft(5);
-                                     setErrors(prev => ({ ...prev, selfieUrl: '' }));
-                                  }}
-                                  className={cn(
-                                     "p-2 rounded-xl border text-center transition-all cursor-pointer font-bold text-[9px] uppercase tracking-wider",
-                                     simulationScenario === 'mismatch' 
-                                        ? "bg-amber-50 border-amber-300 text-amber-800" 
-                                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                                  )}
-                               >
-                                  Scenario 2: Mismatch
-                               </button>
-                            </div>
-                         </div>
-
-                         {/* Custom Instructions for Selfie Scan */}
-                         <div className="p-5 bg-amber-500/5 rounded-2xl border border-amber-500/10 space-y-3">
-                            <h5 className="text-[10px] font-black text-amber-800 uppercase tracking-widest flex items-center gap-2">
-                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600 animate-pulse" /> Important Instructions for Selfie Scan
-                            </h5>
-                            <ul className="space-y-2 text-[10px] text-slate-600 font-bold uppercase tracking-wide leading-relaxed list-none pl-0">
-                               <li className="flex items-start gap-2">
-                                 <span className="text-amber-600 mt-0.5">•</span>
-                                 <span><strong>Bright Lighting is Required:</strong> You must be in a well-lit, bright room. Avoid dark environments or strong backlighting.</span>
-                               </li>
-                               <li className="flex items-start gap-2">
-                                 <span className="text-amber-600 mt-0.5">•</span>
-                                 <span><strong>Clear Face Visibility:</strong> Remove hats, sunglasses, caps, face masks, or heavy eyeglasses before capturing.</span>
-                               </li>
-                               <li className="flex items-start gap-2">
-                                 <span className="text-amber-600 mt-0.5">•</span>
-                                 <span><strong>Hold Steady & Align:</strong> Center your face inside the camera overlay guide box and hold your device completely still.</span>
-                               </li>
-                               <li className="flex items-start gap-2">
-                                 <span className="text-amber-600 mt-0.5">•</span>
-                                 <span><strong>Liveness Detection:</strong> The scanner simulates active bounding box mapping and biological indicators to confirm authentic verification.</span>
-                               </li>
-                            </ul>
-                         </div>
-
-                         {/* Live Biometric Camera Selfie Card */}
-                         <div className="pt-2 space-y-3">
-                           <label className="label-philsa flex items-center justify-between">
-                             <span>Biometric Selfie Verification *</span>
-                             <span className="text-[8px] font-black bg-emerald-600 text-white px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1">
-                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" /> Live Scan
-                             </span>
-                           </label>
-
-                       {/* NOT STARTED STEP */}
-                       {faceVerificationStage === 'not_started' && (
-                         <div className="flex flex-col items-center text-center p-8 bg-slate-50 border border-slate-200/60 rounded-3xl shadow-sm">
-                           <div className="w-16 h-16 rounded-2xl bg-[#8B0D11]/5 border border-[#8B0D11]/10 shadow-sm flex items-center justify-center mb-4">
-                             <Camera className="w-8 h-8 text-[#8B0D11]" />
-                           </div>
-                           <h4 className="text-sm font-extrabold text-philsa-navy uppercase tracking-wider mb-2">Biometric Verification Required</h4>
-                           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wide max-w-sm mb-6 leading-relaxed">
-                             To secure your registry identity and ensure academic integrity, please complete the biometric liveness verification scan. Start selfie verification now?
-                           </p>
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFaceVerificationStage('camera_ready');
-                               setSelfieStatus('opening');
-                               setSelfieLog('Initializing camera hardware...');
-                               setTimeout(() => {
-                                 setSelfieStatus('live');
-                                 setSelfieLog('');
-                               }, 1200);
-                             }}
-                             className="px-6 py-3 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-xs font-black uppercase tracking-widest rounded-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 cursor-pointer animate-pulse"
-                           >
-                             <Scan className="w-4 h-4" /> Start Selfie Verification
-                           </button>
-                         </div>
-                       )}
-
-                       {/* CAMERA READY STEP */}
-                       {faceVerificationStage === 'camera_ready' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border border-[#8B0D11]/30 bg-slate-950 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative shadow-inner">
-                           {selfieStatus === 'opening' ? (
-                             <div className="flex flex-col items-center text-center p-4 text-slate-300">
-                               <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mb-3" />
-                               <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest animate-pulse mb-1">Starting Camera Feed</p>
-                               <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider">{selfieLog}</p>
-                             </div>
-                           ) : (
-                             <div className="w-full h-full relative flex flex-col items-center justify-center p-4">
-                               {/* Video simulation background */}
-                               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.4)_0%,rgba(15,23,42,0.9)_100%)] flex items-center justify-center">
-                                 {/* Corner marks */}
-                                 <div className="absolute top-4 left-4 w-4 h-4 border-t-2 border-l-2 border-[#8B0D11] rounded-tl-md" />
-                                 <div className="absolute top-4 right-4 w-4 h-4 border-t-2 border-r-2 border-[#8B0D11] rounded-tr-md" />
-                                 <div className="absolute bottom-4 left-4 w-4 h-4 border-b-2 border-l-2 border-[#8B0D11] rounded-bl-md" />
-                                 <div className="absolute bottom-4 right-4 w-4 h-4 border-b-2 border-r-2 border-[#8B0D11] rounded-br-md" />
-                                 
-                                 {/* Guide box */}
-                                 <div className="w-28 h-36 rounded-[50%] border-2 border-dashed border-slate-500/30 flex items-center justify-center animate-pulse" />
-                               </div>
-                               
-                               {/* Telemetry overlays */}
-                               <div className="absolute top-3 left-3 flex flex-col font-mono text-[7px] text-emerald-400 gap-0.5">
-                                 <span>REC [●] READY</span>
-                                 <span>LIGHTING: OPTIMAL</span>
-                                </div>
-                               
-                               {/* Start Facial Recognition Button */}
-                               <div className="relative z-10 flex flex-col items-center gap-3 bg-slate-900/95 p-5 rounded-2xl border border-white/10 backdrop-blur-md max-w-[260px] text-center shadow-2xl">
-                                 <Camera className="w-6 h-6 text-[#8B0D11] animate-bounce" />
-                                 <p className="text-[10px] font-black text-white uppercase tracking-widest">Camera Stream Live</p>
-                                 <p className="text-[8px] text-slate-400 font-bold uppercase">Click below to begin the biometric selfie verification scan.</p>
-                                 <button
-                                   type="button"
-                                   onClick={() => setFaceVerificationStage('countdown')}
-                                   className="w-full py-2.5 bg-gradient-to-r from-[#8B0D11] to-[#60080B] hover:opacity-95 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-lg active:scale-95 cursor-pointer border border-[#8B0D11]/30"
-                                 >
-                                   Start Selfie Verification?
-                                 </button>
-                               </div>
-                             </div>
-                           )}
-                         </div>
-                       )}
-
-                       {/* COUNTDOWN STEP */}
-                        {faceVerificationStage === 'countdown' && (
-                          <div className="aspect-square max-w-sm mx-auto w-full border border-amber-500/30 bg-slate-950 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative shadow-inner">
-                            {/* Camera overlay stream background */}
-                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(15,23,42,0.4)_0%,rgba(15,23,42,0.9)_100%)] flex items-center justify-center">
-                              {/* Glowing scan laser line */}
-                              <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-amber-500 to-transparent shadow-md shadow-amber-500/50 animate-bounce top-[30%] z-10" style={{ animationDuration: '1.8s' }} />
-
-                              {/* Corner marks */}
-                              <div className="absolute top-4 left-4 w-4 h-4 border-t-2 border-l-2 border-amber-500 rounded-tl-md" />
-                              <div className="absolute top-4 right-4 w-4 h-4 border-t-2 border-r-2 border-amber-500 rounded-tr-md" />
-                              <div className="absolute bottom-4 left-4 w-4 h-4 border-b-2 border-l-2 border-amber-500 rounded-bl-md" />
-                              <div className="absolute bottom-4 right-4 w-4 h-4 border-b-2 border-r-2 border-amber-500 rounded-br-md" />
-
-                              {/* Target Head Guideline */}
-                              <div className="w-28 h-36 rounded-[50%] border-2 border-emerald-500/60 shadow-[0_0_15px_rgba(16,185,129,0.2)] flex flex-col items-center justify-center relative">
-                                <Scan className="w-6 h-6 opacity-30" />
-                                <span className="absolute bottom-2 text-[7px] font-mono uppercase tracking-widest bg-slate-950/80 px-1 py-0.5 rounded text-white">
-                                  Center Align
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Center HUD Telemetry with Circular Countdown */}
-                            <div className="absolute top-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 z-10">
-                              <div className="w-12 h-12 rounded-full border-2 border-amber-500/30 bg-slate-900/90 backdrop-blur-md flex items-center justify-center shadow-lg animate-pulse">
-                                <span className="text-lg font-black text-amber-500 font-mono">{faceCountdown}s</span>
-                              </div>
-                            </div>
-
-                            {/* Bottom instruction prompt */}
-                            <div className="absolute bottom-6 inset-x-4 flex justify-center z-10">
-                              <div className="bg-slate-900/90 border border-white/10 backdrop-blur-md py-2.5 px-4 rounded-xl text-center shadow-md max-w-[280px]">
-                                <p className="text-[10px] font-black uppercase tracking-wider text-white">
-                                  Please face front and look directly at the camera
-                                </p>
-                                <p className="text-[7px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">
-                                  Keep your device steady
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* VERIFYING STEP */}
-                       {faceVerificationStage === 'verifying' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border border-emerald-500/30 bg-slate-950 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative shadow-inner">
-                           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.05)_0%,transparent_70%)]" />
-                           <div className="relative w-16 h-16 rounded-full border border-slate-800 flex items-center justify-center mb-4 z-10">
-                             <div className="absolute inset-0 rounded-full border-t-2 border-emerald-500 animate-spin" />
-                             <Scan className="w-6 h-6 text-emerald-500 animate-pulse" />
-                           </div>
-                           <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest animate-pulse mb-1.5 z-10">Verifying Biometric Scan</p>
-                           <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest max-w-[200px] leading-relaxed z-10 text-center">
-                             Comparing selfie biometric vectors with DepEd LRN record database...
-                           </p>
-                         </div>
-                       )}
-
-                       {/* SUCCESS STEP */}
-                       {faceVerificationStage === 'success' && formData.selfieUrl && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border-2 border-green-500 bg-slate-950 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative shadow-md">
-                           <img referrerPolicy="no-referrer" src={formData.selfieUrl} alt="Verified Selfie" className="w-full h-full object-cover opacity-80" />
-                           
-                           {/* Success badge */}
-                           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-slate-950/60 p-4 flex flex-col justify-between">
-                             <div className="flex items-center justify-between">
-                               <span className="text-[8px] font-black text-white uppercase tracking-widest bg-emerald-600 border border-emerald-400/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                 <Check className="w-2.5 h-2.5" /> Biometrics Match
-                               </span>
-                               <span className="text-[8px] font-black text-white uppercase tracking-widest bg-black/40 backdrop-blur-md px-2 py-0.5 rounded">
-                                 Match: 99.8%
-                               </span>
-                             </div>
-                             
-                             {/* Big Success Banner "Selfie Recorded" */}
-                             <div className="bg-emerald-900/95 border border-emerald-500/30 backdrop-blur-md p-4 rounded-2xl text-center shadow-lg mb-2">
-                               <p className="text-xs font-black text-white uppercase tracking-widest flex items-center justify-center gap-1.5">
-                                 <ShieldCheck className="w-5 h-5 text-emerald-400 animate-bounce" /> Selfie Recorded
-                               </p>
-                               <p className="text-[8px] text-emerald-300 font-bold uppercase tracking-wider mt-1">
-                                 Proceeding to step 03 security...
-                               </p>
-                             </div>
-                           </div>
-                         </div>
-                       )}
-
-                       {/* FAILED STEP */}
-                       {faceVerificationStage === 'failed' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border-2 border-red-500 bg-red-50/10 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative p-6">
-                           <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 shadow-sm flex items-center justify-center mb-3">
-                             <AlertCircle className="w-6 h-6 text-red-600 animate-bounce" />
-                           </div>
-                           <h4 className="text-xs font-black text-red-700 uppercase tracking-widest mb-1">Selfie Verification Mismatch</h4>
-                           <p className="text-[8px] text-slate-500 font-bold max-w-[200px] leading-normal uppercase mb-4 text-center">
-                             Automated selfie verification was unable to match biometric indicators with LRN records.
-                           </p>
-                           <button
-                             type="button"
-                             onClick={() => {
-                               setFaceVerificationStage('camera_ready');
-                               setSelfieStatus('live');
-                               setFaceCountdown(5);
-                               setFaceOrientation('front');
-                             }}
-                             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
-                           >
-                             Try Again
-                           </button>
-                         </div>
-                       )}
-
-                       {/* FAILED UNRECOGNIZED STEP */}
-                       {faceVerificationStage === 'failed_unrecognized' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border-2 border-red-500 bg-red-50/10 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative p-6 text-center">
-                           <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 shadow-sm flex items-center justify-center mb-3">
-                             <AlertCircle className="w-6 h-6 text-red-600 animate-bounce" />
-                           </div>
-                           <h4 className="text-xs font-black text-red-700 uppercase tracking-widest mb-1">Student Not Recognized</h4>
-                           <p className="text-[10px] text-slate-600 font-bold max-w-[240px] leading-normal uppercase mb-4 text-center">
-                             Student not recognized. Please try again. Number of Attempts left: <span className="text-[#8B0D11] font-black text-xs font-mono">{faceAttemptsLeft}</span>
-                           </p>
-                           {faceAttemptsLeft > 0 ? (
-                             <button
-                               type="button"
-                               onClick={() => {
-                                 setFaceVerificationStage('countdown');
-                                 setSelfieStatus('live');
-                                 setFaceCountdown(5);
-                                 setFaceOrientation('front');
-                               }}
-                               className="px-5 py-2.5 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5 mx-auto"
-                             >
-                               <RefreshCw className="w-3.5 h-3.5" /> Retry
-                             </button>
-                           ) : (
-                             <div className="text-center space-y-2">
-                               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest animate-pulse">
-                                 Attempts Exhausted
-                                </p>
-                               <button
-                                 type="button"
-                                 onClick={() => setShowFaceAttemptsModal(true)}
-                                 className="px-4 py-2 bg-slate-900 text-white text-[8px] font-black uppercase tracking-wider rounded-lg"
-                               >
-                                 View Action Modal
-                               </button>
-                             </div>
-                           )}
-                         </div>
-                       )}
-
-                       {/* FAILED MISMATCH STEP */}
-                       {faceVerificationStage === 'failed_mismatch' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border-2 border-red-500 bg-red-50/10 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative p-6 text-center">
-                           <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 shadow-sm flex items-center justify-center mb-3">
-                             <AlertCircle className="w-6 h-6 text-red-600 animate-bounce" />
-                           </div>
-                           <h4 className="text-xs font-black text-red-700 uppercase tracking-widest mb-1">Identity Mismatch</h4>
-                           <p className="text-[10px] text-slate-600 font-bold max-w-[240px] leading-normal uppercase mb-4 text-center font-sans">
-                             Student does not match. Please try again. Number of Attempts left: <span className="text-[#8B0D11] font-black text-xs font-mono">{faceAttemptsLeft}</span>
-                           </p>
-                           {faceAttemptsLeft > 0 ? (
-                             <button
-                               type="button"
-                               onClick={() => {
-                                 setFaceVerificationStage('countdown');
-                                 setSelfieStatus('live');
-                                 setFaceCountdown(5);
-                                 setFaceOrientation('front');
-                               }}
-                               className="px-5 py-2.5 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5 mx-auto"
-                             >
-                               <RefreshCw className="w-3.5 h-3.5" /> Retry
-                             </button>
-                           ) : (
-                             <div className="text-center space-y-2">
-                               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest animate-pulse">
-                                 Attempts Exhausted
-                               </p>
-                               <button
-                                 type="button"
-                                 onClick={() => setShowFaceAttemptsModal(true)}
-                                 className="px-4 py-2 bg-slate-900 text-white text-[8px] font-black uppercase tracking-wider rounded-lg"
-                               >
-                                 View Action Modal
-                               </button>
-                             </div>
-                           )}
-                         </div>
-                       )}
-
-                       {/* SELFIE FAILED UNRECOGNIZED STEP */}
-                       {faceVerificationStage === 'selfie_failed_unrecognized' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border-2 border-red-500 bg-red-50/10 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative p-6 text-center">
-                           <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 shadow-sm flex items-center justify-center mb-3">
-                             <AlertCircle className="w-6 h-6 text-red-600 animate-bounce" />
-                           </div>
-                           <h4 className="text-xs font-black text-red-700 uppercase tracking-widest mb-1">Student Not Recognized</h4>
-                           <p className="text-[10px] text-slate-600 font-bold max-w-[240px] leading-normal uppercase mb-4 text-center">
-                             Student not recognized. Please try again. Number of Attempts left: <span className="text-[#8B0D11] font-black text-xs font-mono">{selfieAttemptsLeft}</span>
-                           </p>
-                           {selfieAttemptsLeft > 0 ? (
-                             <button
-                               type="button"
-                               onClick={() => {
-                                 setFaceVerificationStage('selfie_verification');
-                                 setSelfieStatus('live');
-                               }}
-                               className="px-5 py-2.5 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5 mx-auto"
-                             >
-                               <RefreshCw className="w-3.5 h-3.5" /> Retry
-                             </button>
-                           ) : (
-                             <div className="text-center space-y-2">
-                               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest animate-pulse">
-                                 Attempts Exhausted
-                               </p>
-                               <button
-                                 type="button"
-                                 onClick={() => setShowSelfieCooldownModal(true)}
-                                 className="px-4 py-2 bg-slate-900 text-white text-[8px] font-black uppercase tracking-wider rounded-lg"
-                               >
-                                 View Action Modal
-                               </button>
-                             </div>
-                           )}
-                         </div>
-                       )}
-
-                       {/* SELFIE FAILED MISMATCH STEP */}
-                       {faceVerificationStage === 'selfie_failed_mismatch' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border-2 border-red-500 bg-red-50/10 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative p-6 text-center">
-                           <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 shadow-sm flex items-center justify-center mb-3">
-                             <AlertCircle className="w-6 h-6 text-red-600 animate-bounce" />
-                           </div>
-                           <h4 className="text-xs font-black text-red-700 uppercase tracking-widest mb-1">Identity Mismatch</h4>
-                           <p className="text-[10px] text-slate-600 font-bold max-w-[240px] leading-normal uppercase mb-4 text-center font-sans">
-                             Student does not match. Please try again. Number of Attempts left: <span className="text-[#8B0D11] font-black text-xs font-mono">{selfieAttemptsLeft}</span>
-                           </p>
-                           {selfieAttemptsLeft > 0 ? (
-                             <button
-                               type="button"
-                               onClick={() => {
-                                 setFaceVerificationStage('selfie_verification');
-                                 setSelfieStatus('live');
-                               }}
-                               className="px-5 py-2.5 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5 mx-auto"
-                             >
-                               <RefreshCw className="w-3.5 h-3.5" /> Retry
-                             </button>
-                           ) : (
-                             <div className="text-center space-y-2">
-                               <p className="text-[9px] text-red-600 font-black uppercase tracking-widest animate-pulse">
-                                 Attempts Exhausted
-                                </p>
-                               <button
-                                 type="button"
-                                 onClick={() => setShowSelfieCooldownModal(true)}
-                                 className="px-4 py-2 bg-slate-900 text-white text-[8px] font-black uppercase tracking-wider rounded-lg"
-                               >
-                                 View Action Modal
-                               </button>
-                             </div>
-                           )}
-                         </div>
-                       )}
-
-                       {/* SELFIE VERIFICATION STEP (FALLBACK CAPTURE) */}
-                       {faceVerificationStage === 'selfie_verification' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border border-slate-700 bg-slate-950 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative shadow-inner">
-                           {/* Live video background simulation */}
-                           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(30,41,59,0.3)_0%,rgba(15,23,42,0.95)_100%)] flex items-center justify-center">
-                             {/* Glowing scan overlay */}
-                             <div className="absolute inset-0 bg-slate-900/10 pointer-events-none" />
-                             
-                             {/* Corner marks */}
-                             <div className="absolute top-4 left-4 w-4 h-4 border-t-2 border-l-2 border-amber-500 rounded-tl-md" />
-                             <div className="absolute top-4 right-4 w-4 h-4 border-t-2 border-r-2 border-amber-500 rounded-tr-md" />
-                             <div className="absolute bottom-4 left-4 w-4 h-4 border-b-2 border-l-2 border-amber-500 rounded-bl-md" />
-                             <div className="absolute bottom-4 right-4 w-4 h-4 border-b-2 border-r-2 border-amber-500 rounded-br-md" />
-                             
-                             {/* Guideline Oval (Manual Selfie guide) */}
-                             <div className="w-40 h-48 rounded-[50%] border-2 border-dashed border-amber-500/40 flex flex-col items-center justify-center relative animate-pulse">
-                               <Scan className="w-8 h-8 opacity-25 text-amber-500" />
-                               <span className="absolute bottom-4 text-[8px] font-black uppercase tracking-widest bg-slate-950/80 px-2 py-0.5 rounded text-amber-400 border border-amber-500/20">
-                                 Position Face Here
-                               </span>
-                             </div>
-                           </div>
-
-                           {/* Telemetry HUD */}
-                           <div className="absolute top-3 left-3 flex flex-col font-mono text-[7px] text-amber-400 gap-0.5 z-10 bg-slate-950/60 p-1.5 rounded border border-white/5 backdrop-blur-xs">
-                             <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" /> MANUAL SELFIE STREAM</span>
-                             <span>RESOL: 1080P ACTIVE</span>
-                             <span>SPOOF SHIELD: ENABLED</span>
-                           </div>
-
-                           {/* Shutter Flash effect */}
-                           {shutterFlash && (
-                             <div className="absolute inset-0 bg-white z-50 animate-fade-out" style={{ animationDuration: '0.4s' }} />
-                           )}
-
-                           {/* Capture Control Button Overlay */}
-                           <div className="absolute bottom-6 inset-x-4 flex flex-col items-center gap-2 z-10">
-                             <p className="text-[8px] font-black uppercase tracking-wider text-white bg-slate-900/90 py-1 px-3 rounded-full border border-white/10 backdrop-blur-md animate-pulse">
-                               Keep eyes open and look directly at camera
-                             </p>
-                             <button
-                               type="button"
-                               onClick={handleCaptureFallbackSelfie}
-                               className="w-full max-w-[220px] py-3 bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white text-[10px] font-black uppercase tracking-widest rounded-2xl transition-all shadow-xl active:scale-95 cursor-pointer border border-[#8B0D11]/30 flex items-center justify-center gap-2"
-                             >
-                               <Camera className="w-4 h-4" /> Capture Selfie & Verify
-                             </button>
-                           </div>
-                         </div>
-                       )}
-
-                       {/* SELFIE VERIFYING/CHECKING STEP */}
-                       {faceVerificationStage === 'selfie_checking' && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border border-amber-500/30 bg-slate-950 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative shadow-inner text-center p-6">
-                           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.05)_0%,transparent_70%)]" />
-                           <div className="relative w-16 h-16 rounded-full border border-slate-800 flex items-center justify-center mb-4 z-10">
-                             <div className="absolute inset-0 rounded-full border-t-2 border-amber-500 animate-spin" />
-                             <Scan className="w-6 h-6 text-amber-500 animate-pulse" />
-                           </div>
-                           <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest animate-pulse mb-1.5 z-10">Checking Student Match...</p>
-                           <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest max-w-[220px] leading-relaxed z-10">
-                             {selfieLog || "Verifying biological signature against registration records..."}
-                           </p>
-                         </div>
-                       )}
-
-                       {/* SELFIE RECORDED SUCCESS STEP */}
-                       {faceVerificationStage === 'selfie_recorded' && formData.selfieUrl && (
-                         <div className="aspect-square max-w-sm mx-auto w-full border-2 border-emerald-500 bg-slate-950 rounded-3xl flex flex-col items-center justify-center transition-all overflow-hidden relative shadow-md">
-                           <img referrerPolicy="no-referrer" src={formData.selfieUrl} alt="Recorded Selfie" className="w-full h-full object-cover opacity-80" />
-                           
-                           {/* Success overlay */}
-                           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-slate-950/60 p-4 flex flex-col justify-between">
-                             <div className="flex items-center justify-between">
-                               <span className="text-[8px] font-black text-white uppercase tracking-widest bg-emerald-600 border border-emerald-400/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                                 <Check className="w-2.5 h-2.5" /> Selfie Match Approved
-                               </span>
-                               <span className="text-[8px] font-black text-white uppercase tracking-widest bg-black/40 backdrop-blur-md px-2 py-0.5 rounded">
-                                 Confidence: 98.4%
-                               </span>
-                             </div>
-                             
-                             {/* Big Success Banner "Selfie Recorded" */}
-                             <div className="bg-emerald-900/95 border border-emerald-500/30 backdrop-blur-md p-4 rounded-2xl text-center shadow-lg mb-2">
-                               <p className="text-xs font-black text-white uppercase tracking-widest flex items-center justify-center gap-1.5">
-                                 <ShieldCheck className="w-5 h-5 text-emerald-400 animate-bounce" /> Selfie Recorded
-                               </p>
-                               <p className="text-[8px] text-emerald-300 font-bold uppercase tracking-wider mt-1 font-sans">
-                                 Selfie Verified. Proceeding to step 03 security...
-                               </p>
-                             </div>
-                           </div>
-                         </div>
-                       )}
-
-                       {/* Verification info message */}
-                       {formData.selfieUrl && (
-                         <p className="text-[9px] text-emerald-700 font-black uppercase tracking-wider pl-1 mt-1.5 flex items-center gap-1 justify-center">
-                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Selfie Verification Passed
-                         </p>
-                       )}
-
-                       {errors.selfieUrl && (
-                         <p className="text-xs text-philsa-red font-bold pl-1 mt-1 leading-relaxed border-l-2 border-philsa-red py-0.5 text-center">
-                           {errors.selfieUrl}
-                         </p>
-                       )}
-                     </div>
-                    </div>
-                  )}
-
-                  </div>
-               </div>
-            </motion.div>
-          )}
-
-          {currentSection === 2 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
                <div className="max-w-2xl mx-auto space-y-8">
                   <div className="bg-philsa-bg/50 p-8 rounded-3xl border border-philsa-border space-y-6">
@@ -3151,779 +2154,19 @@ export default function StudentApplication() {
             </motion.div>
           )}
 
-          {currentSection === 99 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-               <div className="grid md:grid-cols-3 gap-6">
-                  {/* Father Info */}
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-center pr-1 mb-4 border-l-4 border-philsa-navy pl-4">
-                         <h4 className="text-sm font-black text-philsa-navy uppercase tracking-[0.2em]">Father</h4>
-                         <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="checkbox" onChange={(e) => {
-                               if(e.target.checked) setFormData({...formData, fatherName: 'N/A', fatherOccupation: 'N/A', fatherMonthlyIncome: 'N/A', fatherMobile: 'N/A'});
-                            }} className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red scale-75" />
-                            <span className="text-xs font-bold text-philsa-gray uppercase">N/A</span>
-                         </label>
-                      </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Full Name</label>
-                        <input type="text" className="input-philsa" value={formData.fatherName} onChange={(e) => setFormData({...formData, fatherName: e.target.value})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Occupation</label>
-                        <input type="text" className="input-philsa" value={formData.fatherOccupation} onChange={(e) => setFormData({...formData, fatherOccupation: e.target.value})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Contact Number</label>
-                        <input type="tel" className="input-philsa" value={formData.fatherMobile} onChange={(e) => setFormData({...formData, fatherMobile: e.target.value})} />
-                     </div>
-                  </div>
-
-                  {/* Mother Info */}
-                  <div className="space-y-4">
-                     <div className="flex justify-between items-center pr-1 mb-4 border-l-4 border-philsa-red pl-4">
-                         <h4 className="text-sm font-black text-philsa-navy uppercase tracking-[0.2em]">Mother</h4>
-                         <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="checkbox" onChange={(e) => {
-                               if(e.target.checked) setFormData({...formData, motherName: 'N/A', motherOccupation: 'N/A', motherMonthlyIncome: 'N/A', motherMobile: 'N/A'});
-                            }} className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red scale-75" />
-                            <span className="text-xs font-bold text-philsa-gray uppercase">N/A</span>
-                         </label>
-                      </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Full Name</label>
-                        <input type="text" className="input-philsa" value={formData.motherName} onChange={(e) => setFormData({...formData, motherName: e.target.value})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Occupation</label>
-                        <input type="text" className="input-philsa" value={formData.motherOccupation} onChange={(e) => setFormData({...formData, motherOccupation: e.target.value})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Contact Number</label>
-                        <input type="tel" className="input-philsa" value={formData.motherMobile} onChange={(e) => setFormData({...formData, motherMobile: e.target.value})} />
-                     </div>
-                  </div>
-
-                  {/* Guardian Info */}
-                  <div className="space-y-4">
-                     <h4 className="text-sm font-black text-philsa-navy uppercase tracking-[0.2em] mb-4 border-l-4 border-philsa-border pl-4">Guardian (Optional)</h4>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Full Name</label>
-                        <input type="text" className="input-philsa" value={formData.guardianName} onChange={(e) => setFormData({...formData, guardianName: e.target.value})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Occupation</label>
-                        <input type="text" className="input-philsa" value={formData.guardianOccupation} onChange={(e) => setFormData({...formData, guardianOccupation: e.target.value})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Contact Number</label>
-                        <input type="tel" className="input-philsa" value={formData.guardianMobile} onChange={(e) => setFormData({...formData, guardianMobile: e.target.value})} />
-                     </div>
-                  </div>
-               </div>
-
-               <div className="grid md:grid-cols-3 gap-6 pt-8 border-t border-philsa-border">
-                  <div className="space-y-2">
-                    <label className="label-philsa">Number of Siblings</label>
-                    <input type="number" className="input-philsa" value={formData.siblingsCount} onChange={(e) => setFormData({...formData, siblingsCount: parseInt(e.target.value)})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="label-philsa">Father Monthly Income *</label>
-                    <select className="input-philsa" value={formData.fatherMonthlyIncome} onChange={(e) => setFormData({...formData, fatherMonthlyIncome: e.target.value})}>
-                       <option value="">Select Range</option>
-                       <option value="P10,000 below">P10,000 below</option>
-                       <option value="P10,000 - P20,000">P10,000 - P20,000</option>
-                       <option value="P20,000 - P40,000">P20,000 - P40,000</option>
-                       <option value="P40,000 - P50,000">P40,000 - P50,000</option>
-                       <option value="P50,000+">P50,000+</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="label-philsa">Mother Monthly Income *</label>
-                    <select className="input-philsa" value={formData.motherMonthlyIncome} onChange={(e) => setFormData({...formData, motherMonthlyIncome: e.target.value})}>
-                       <option value="">Select Range</option>
-                       <option value="P10,000 below">P10,000 below</option>
-                       <option value="P10,000 - P20,000">P10,000 - P20,000</option>
-                       <option value="P20,000 - P40,000">P20,000 - P40,000</option>
-                       <option value="P40,000 - P50,000">P40,000 - P50,000</option>
-                       <option value="P50,000+">P50,000+</option>
-                    </select>
-                  </div>
-               </div>
-            </motion.div>
-          )}
-
-          {currentSection === 99 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-12">
-               {/* Permanent Address */}
-               <div className="space-y-6">
-                  <div className="flex items-center gap-3 border-l-4 border-philsa-navy pl-4">
-                     <h4 className="text-sm font-black text-philsa-navy uppercase tracking-[0.2em]">Permanent Address</h4>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-6">
-                     <div className="space-y-2">
-                        <label className="label-philsa">Region *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.region} 
-                           onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData(prev => ({
-                                 ...prev,
-                                 region: val,
-                                 province: '',
-                                 city: '',
-                                 barangay: ''
-                              }));
-                           }}
-                        >
-                           <option value="">Select Region</option>
-                           <option value="NCR">NCR</option>
-                           <option value="Region III">Region III</option>
-                           <option value="Region IV-A">Region IV-A</option>
-                        </select>
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Province *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.province} 
-                           disabled={!formData.region}
-                           onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData(prev => ({
-                                 ...prev,
-                                 province: val,
-                                 city: '',
-                                 barangay: ''
-                              }));
-                           }}
-                        >
-                           <option value="">Select Province</option>
-                           {GEOGRAPHY_DATA.find(r => r.region === formData.region)?.provinces.map(p => (
-                              <option key={p.name} value={p.name}>{p.name}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">City/Municipality *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.city} 
-                           disabled={!formData.province}
-                           onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData(prev => ({
-                                 ...prev,
-                                 city: val,
-                                 barangay: '',
-                                 zipCode: val === 'Mandaluyong' ? '1550' : prev.zipCode
-                              }));
-                           }}
-                        >
-                           <option value="">Select City/Municipality</option>
-                           {GEOGRAPHY_DATA.find(r => r.region === formData.region)
-                              ?.provinces.find(p => p.name === formData.province)
-                              ?.cities.map(c => (
-                                 <option key={c.name} value={c.name}>{c.name}</option>
-                              ))}
-                        </select>
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Barangay *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.barangay} 
-                           disabled={!formData.city}
-                           onChange={(e) => setFormData({...formData, barangay: e.target.value})}
-                        >
-                           <option value="">Select Barangay</option>
-                           {GEOGRAPHY_DATA.find(r => r.region === formData.region)
-                              ?.provinces.find(p => p.name === formData.province)
-                              ?.cities.find(c => c.name === formData.city)
-                              ?.barangays.map(b => (
-                                 <option key={b} value={b}>{b}</option>
-                              ))}
-                        </select>
-                     </div>
-                     <div className="md:col-span-2 space-y-2">
-                        <label className="label-philsa">Street Address *</label>
-                        <input type="text" className="input-philsa" value={formData.street} onChange={(e) => setFormData({...formData, street: e.target.value})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">ZIP Code *</label>
-                        <input type="text" className="input-philsa" value={formData.zipCode} onChange={(e) => setFormData({...formData, zipCode: e.target.value})} />
-                     </div>
-                  </div>
-               </div>
-
-               {/* Current Address */}
-               <div className="space-y-6 pt-10 border-t border-philsa-border">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-l-4 border-philsa-red pl-4">
-                     <h4 className="text-sm font-black text-philsa-navy uppercase tracking-[0.2em]">Current Address</h4>
-                     <label className="flex items-center gap-3 p-3 bg-white border border-philsa-border rounded-xl cursor-pointer hover:border-philsa-red transition-all shadow-sm">
-                        <input 
-                           type="checkbox" 
-                           className="w-5 h-5 rounded border-philsa-border text-philsa-red focus:ring-philsa-red"
-                           checked={formData.sameAsPermanent}
-                           onChange={(e) => {
-                              const checked = e.target.checked;
-                              if (checked) {
-                                 setFormData({
-                                    ...formData,
-                                    sameAsPermanent: true,
-                                    currentRegion: formData.region,
-                                    currentProvince: formData.province,
-                                    currentCity: formData.city,
-                                    currentBarangay: formData.barangay,
-                                    currentStreet: formData.street,
-                                    currentZipCode: formData.zipCode
-                                 });
-                              } else {
-                                 setFormData({...formData, sameAsPermanent: false});
-                              }
-                           }}
-                        />
-                        <span className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Same as Permanent Address</span>
-                     </label>
-                  </div>
-                  <div className="grid md:grid-cols-2 gap-6">
-                     <div className="space-y-2">
-                        <label className={cn("label-philsa", errors.currentRegion && "text-philsa-red")}>Region *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.currentRegion} 
-                           onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData(prev => ({
-                                 ...prev,
-                                 currentRegion: val,
-                                 currentProvince: '',
-                                 currentCity: '',
-                                 currentBarangay: '',
-                                 sameAsPermanent: false
-                              }));
-                           }}
-                        >
-                           <option value="">Select Region</option>
-                           <option value="NCR">NCR</option>
-                           <option value="Region III">Region III</option>
-                           <option value="Region IV-A">Region IV-A</option>
-                        </select>
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Province *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.currentProvince} 
-                           disabled={!formData.currentRegion}
-                           onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData(prev => ({
-                                 ...prev,
-                                 currentProvince: val,
-                                 currentCity: '',
-                                 currentBarangay: '',
-                                 sameAsPermanent: false
-                              }));
-                           }}
-                        >
-                           <option value="">Select Province</option>
-                           {GEOGRAPHY_DATA.find(r => r.region === formData.currentRegion)?.provinces.map(p => (
-                              <option key={p.name} value={p.name}>{p.name}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div className="space-y-2">
-                        <label className={cn("label-philsa", errors.currentCity && "text-philsa-red")}>City/Municipality *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.currentCity} 
-                           disabled={!formData.currentProvince}
-                           onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData(prev => ({
-                                 ...prev,
-                                 currentCity: val,
-                                 currentBarangay: '',
-                                 currentZipCode: val === 'Mandaluyong' ? '1550' : prev.currentZipCode,
-                                 sameAsPermanent: false
-                              }));
-                           }}
-                        >
-                           <option value="">Select City/Municipality</option>
-                           {GEOGRAPHY_DATA.find(r => r.region === formData.currentRegion)
-                              ?.provinces.find(p => p.name === formData.currentProvince)
-                              ?.cities.map(c => (
-                                 <option key={c.name} value={c.name}>{c.name}</option>
-                              ))}
-                        </select>
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">Barangay *</label>
-                        <select 
-                           className="input-philsa" 
-                           value={formData.currentBarangay} 
-                           disabled={!formData.currentCity}
-                           onChange={(e) => setFormData({...formData, currentBarangay: e.target.value, sameAsPermanent: false})}
-                        >
-                           <option value="">Select Barangay</option>
-                           {GEOGRAPHY_DATA.find(r => r.region === formData.currentRegion)
-                              ?.provinces.find(p => p.name === formData.currentProvince)
-                              ?.cities.find(c => c.name === formData.currentCity)
-                              ?.barangays.map(b => (
-                                 <option key={b} value={b}>{b}</option>
-                              ))}
-                        </select>
-                     </div>
-                     <div className="md:col-span-2 space-y-2">
-                        <label className="label-philsa">Street Address *</label>
-                        <input type="text" className="input-philsa" value={formData.currentStreet} onChange={(e) => setFormData({...formData, currentStreet: e.target.value, sameAsPermanent: false})} />
-                     </div>
-                     <div className="space-y-2">
-                        <label className="label-philsa">ZIP Code *</label>
-                        <input type="text" className="input-philsa" value={formData.currentZipCode} onChange={(e) => setFormData({...formData, currentZipCode: e.target.value, sameAsPermanent: false})} />
-                     </div>
-                  </div>
-               </div>
-            </motion.div>
-          )}
-
-          {currentSection === 99 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-               <div className="grid md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="label-philsa">Learner Reference Number (LRN) *</label>
-                    <input type="text" className="input-philsa" value={formData.lrn} onChange={(e) => setFormData({...formData, lrn: e.target.value})} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="label-philsa">General Weighted Average (GWA) *</label>
-                    <input type="text" placeholder="e.g. 92.5" className="input-philsa" value={formData.gwa} onChange={(e) => setFormData({...formData, gwa: e.target.value})} />
-                  </div>
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="label-philsa">School Name *</label>
-                    <input type="text" className="input-philsa" value={formData.schoolName} onChange={(e) => setFormData({...formData, schoolName: e.target.value})} />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="label-philsa">Academic Track *</label>
-                    <select className="input-philsa" value={formData.academicTrack} onChange={(e) => setFormData({...formData, academicTrack: e.target.value})}>
-                       <option value="">Select Track</option>
-                       <option value="STEM">STEM</option>
-                       <option value="ABM">ABM</option>
-                       <option value="HUMSS">HUMSS</option>
-                       <option value="GAS">GAS</option>
-                       <option value="TVL">TVL</option>
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="label-philsa">Grade Level *</label>
-                    <select className="input-philsa" value={formData.gradeLevel} onChange={(e) => setFormData({...formData, gradeLevel: e.target.value})}>
-                       <option value="Grade 12">Grade 12</option>
-                       <option value="Grade 11">Grade 11 (Accelerated)</option>
-                    </select>
-                  </div>
-               </div>
-               <div className="pt-8 border-t border-philsa-border">
-                  <h4 className="text-sm font-black text-philsa-navy uppercase tracking-widest mb-4 font-sans text-center">Required Documentation *</h4>
-                  <p className="text-xs text-philsa-gray mb-6 font-medium text-center max-w-md mx-auto">Please select a document type below and upload the corresponding file. Only at least one verified document is required for submission.</p>
-                  
-                  <div className="max-w-xl mx-auto space-y-6">
-                     <div className="space-y-4">
-                        <div className="space-y-2">
-                           <label className="label-philsa">Select Document Type to Upload *</label>
-                           <select 
-                              className="input-philsa font-sans font-bold text-sm" 
-                              value={selectedDocType} 
-                              onChange={(e) => setSelectedDocType(e.target.value as any)}
-                           >
-                              <option value="form137">Form 137 (Permanent Academic Record)</option>
-                              <option value="form138">Form 138 (Report Card)</option>
-                              <option value="goodMoral">Certificate of Good Moral Character</option>
-                              <option value="enrollmentCert">Certificate of Enrollment</option>
-                           </select>
-                        </div>
-
-                        {/* Single Premium File Upload Area */}
-                        <div className="space-y-3">
-                           <div className="flex items-center justify-between">
-                              <label className="text-[10px] font-black uppercase tracking-widest text-philsa-gray">
-                                 {selectedDocType === 'form137' && "Form 137 File *"}
-                                 {selectedDocType === 'form138' && "Form 138 File *"}
-                                 {selectedDocType === 'goodMoral' && "Good Moral Character Cert *"}
-                                 {selectedDocType === 'enrollmentCert' && "Certificate of Enrollment *"}
-                              </label>
-                              {((selectedDocType === 'form137' && formData.form137Filename) ||
-                                (selectedDocType === 'form138' && formData.form138Filename) ||
-                                (selectedDocType === 'goodMoral' && formData.goodMoralFilename) ||
-                                (selectedDocType === 'enrollmentCert' && formData.enrollmentCertFilename)) && (
-                                 <button 
-                                    onClick={() => {
-                                       if (selectedDocType === 'form137') setFormData({...formData, form137Filename: ''});
-                                       if (selectedDocType === 'form138') setFormData({...formData, form138Filename: ''});
-                                       if (selectedDocType === 'goodMoral') setFormData({...formData, goodMoralFilename: ''});
-                                       if (selectedDocType === 'enrollmentCert') setFormData({...formData, enrollmentCertFilename: ''});
-                                    }} 
-                                    className="text-[9px] font-black text-philsa-red uppercase hover:underline"
-                                 >
-                                    Remove
-                                 </button>
-                              )}
-                           </div>
-                           <div 
-                              onClick={() => {
-                                 if (selectedDocType === 'form137') setFormData({...formData, form137Filename: 'F137_DelaCruz.pdf'});
-                                 if (selectedDocType === 'form138') setFormData({...formData, form138Filename: 'F138_DelaCruz.pdf'});
-                                 if (selectedDocType === 'goodMoral') setFormData({...formData, goodMoralFilename: 'GOODMORAL_DelaCruz.pdf'});
-                                 if (selectedDocType === 'enrollmentCert') setFormData({...formData, enrollmentCertFilename: 'ENROLL_DelaCruz.pdf'});
-                              }}
-                              className={cn(
-                                 "p-8 border-2 border-dashed rounded-[2rem] flex flex-col items-center justify-center transition-all cursor-pointer group bg-philsa-bg",
-                                 ((selectedDocType === 'form137' && formData.form137Filename) ||
-                                  (selectedDocType === 'form138' && formData.form138Filename) ||
-                                  (selectedDocType === 'goodMoral' && formData.goodMoralFilename) ||
-                                  (selectedDocType === 'enrollmentCert' && formData.enrollmentCertFilename)) 
-                                  ? "border-green-400 bg-green-50/50" 
-                                  : "border-philsa-border hover:border-philsa-navy/30"
-                              )}
-                           >
-                              <FileUp className={cn(
-                                 "w-8 h-8 mb-3", 
-                                 ((selectedDocType === 'form137' && formData.form137Filename) ||
-                                  (selectedDocType === 'form138' && formData.form138Filename) ||
-                                  (selectedDocType === 'goodMoral' && formData.goodMoralFilename) ||
-                                  (selectedDocType === 'enrollmentCert' && formData.enrollmentCertFilename)) 
-                                  ? "text-green-600" 
-                                  : "text-philsa-gray group-hover:text-philsa-red"
-                              )} />
-                              <span className="text-[10px] font-black text-philsa-navy uppercase tracking-widest text-center">
-                                 {selectedDocType === 'form137' && (formData.form137Filename || 'Select Form 137')}
-                                 {selectedDocType === 'form138' && (formData.form138Filename || 'Select Form 138')}
-                                 {selectedDocType === 'goodMoral' && (formData.goodMoralFilename || 'Select Good Moral Cert')}
-                                 {selectedDocType === 'enrollmentCert' && (formData.enrollmentCertFilename || 'Select Certificate')}
-                               </span>
-                               <p className="text-[9px] text-philsa-gray font-bold mt-1 uppercase">Official Digitized Document (PDF/JPG)</p>
-                           </div>
-                        </div>
 
 
-                     </div>
-                  </div>
-                  {errors.documentation && (
-                     <p className="text-xs text-philsa-red font-bold mt-6 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" /> {errors.documentation}
-                     </p>
-                  )}
-                  {/* Overwritten standard uploaders */}
-                  <div className="hidden">
-                     {/* Good Moral */}
-                     <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                           <label className={cn("text-[10px] font-black uppercase tracking-widest", errors.goodMoral ? "text-philsa-red" : "text-philsa-gray")}>Good Moral Conduct</label>
-                           {formData.goodMoralFilename && (
-                              <button onClick={() => setFormData({...formData, goodMoralFilename: ''})} className="text-[9px] font-black text-philsa-red uppercase">Remove</button>
-                           )}
-                        </div>
-                        <div 
-                           onClick={() => setFormData({...formData, goodMoralFilename: 'MORAL_CERT.pdf'})}
-                           className={cn(
-                              "p-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer group",
-                              formData.goodMoralFilename ? "border-green-400 bg-green-50" : "border-philsa-border bg-philsa-bg hover:border-philsa-red/30"
-                           )}
-                        >
-                           <FileUp className={cn("w-6 h-6 mb-2", formData.goodMoralFilename ? "text-green-600" : "text-philsa-gray group-hover:text-philsa-red")} />
-                           <p className="text-[10px] font-black text-philsa-navy uppercase">{formData.goodMoralFilename || 'Upload Document'}</p>
-                        </div>
-                     </div>
 
-                     {/* Form 137 */}
-                     <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                           <label className={cn("text-[10px] font-black uppercase tracking-widest", errors.form137 ? "text-philsa-red" : "text-philsa-gray")}>Form 137</label>
-                           {formData.form137Filename && (
-                              <button onClick={() => setFormData({...formData, form137Filename: ''})} className="text-[9px] font-black text-philsa-red uppercase">Remove</button>
-                           )}
-                        </div>
-                        <div 
-                           onClick={() => setFormData({...formData, form137Filename: 'FORM_137.pdf'})}
-                           className={cn(
-                              "p-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer group",
-                              formData.form137Filename ? "border-green-400 bg-green-50" : "border-philsa-border bg-philsa-bg hover:border-philsa-red/30"
-                           )}
-                        >
-                           <FileUp className={cn("w-6 h-6 mb-2", formData.form137Filename ? "text-green-600" : "text-philsa-gray group-hover:text-philsa-red")} />
-                           <p className="text-[10px] font-black text-philsa-navy uppercase">{formData.form137Filename || 'Upload Document'}</p>
-                        </div>
-                     </div>
 
-                     {/* Form 138 */}
-                     <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                           <label className={cn("text-[10px] font-black uppercase tracking-widest", errors.form138 ? "text-philsa-red" : "text-philsa-gray")}>Form 138</label>
-                           {formData.form138Filename && (
-                              <button onClick={() => setFormData({...formData, form138Filename: ''})} className="text-[9px] font-black text-philsa-red uppercase">Remove</button>
-                           )}
-                        </div>
-                        <div 
-                           onClick={() => setFormData({...formData, form138Filename: 'FORM_138.pdf'})}
-                           className={cn(
-                              "p-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer group",
-                              formData.form138Filename ? "border-green-400 bg-green-50" : "border-philsa-border bg-philsa-bg hover:border-philsa-red/30"
-                           )}
-                        >
-                           <FileUp className={cn("w-6 h-6 mb-2", formData.form138Filename ? "text-green-600" : "text-philsa-gray group-hover:text-philsa-red")} />
-                           <p className="text-[10px] font-black text-philsa-navy uppercase">{formData.form138Filename || 'Upload Document'}</p>
-                        </div>
-                     </div>
 
-                     {/* Enrollment Cert */}
-                     <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                           <label className={cn("text-[10px] font-black uppercase tracking-widest", errors.enrollmentCert ? "text-philsa-red" : "text-philsa-gray")}>Cert. of Enrollment</label>
-                           {formData.enrollmentCertFilename && (
-                              <button onClick={() => setFormData({...formData, enrollmentCertFilename: ''})} className="text-[9px] font-black text-philsa-red uppercase">Remove</button>
-                           )}
-                        </div>
-                        <div 
-                           onClick={() => setFormData({...formData, enrollmentCertFilename: 'ENROLLMENT_CERT.pdf'})}
-                           className={cn(
-                              "p-6 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer group",
-                              formData.enrollmentCertFilename ? "border-green-400 bg-green-50" : "border-philsa-border bg-philsa-bg hover:border-philsa-red/30"
-                           )}
-                        >
-                           <FileUp className={cn("w-6 h-6 mb-2", formData.enrollmentCertFilename ? "text-green-600" : "text-philsa-gray group-hover:text-philsa-red")} />
-                           <p className="text-[10px] font-black text-philsa-navy uppercase">{formData.enrollmentCertFilename || 'Upload Document'}</p>
-                        </div>
-                     </div>
-                  </div>
-                  {(errors.goodMoral || errors.form137 || errors.form138 || errors.enrollmentCert) && (
-                     <p className="text-xs text-philsa-red font-bold mt-6 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4" /> Please upload all required educational documents before proceeding.
-                     </p>
-                  )}
-               </div>
-            </motion.div>
-          )}
-
-          {currentSection === 99 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-               <div className="space-y-10">
-                  <div>
-                    <h4 className="text-sm font-black text-philsa-navy uppercase tracking-[0.2em] mb-2 flex items-center gap-2">
-                       <School className="w-5 h-5 text-philsa-red" /> Institutional Preferences
-                    </h4>
-                    <p className="text-xs text-philsa-gray font-medium mb-8">Please establish your Priority Admissions track. You may select up to 3 university-program pairings.</p>
-                    
-                    <div className="space-y-4">
-                       {[0, 1, 2].map((index) => (
-                          <div key={index} className={cn(
-                             "p-6 rounded-[2rem] border-2 transition-all relative overflow-visible",
-                             formData.universities[index] ? "border-philsa-navy/20 bg-white shadow-sm" : "border-philsa-border bg-philsa-bg/50"
-                          )}>
-                             <div className="flex flex-col md:flex-row gap-6 items-start">
-                                <div className="shrink-0 pt-2">
-                                   <div className={cn(
-                                      "w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black",
-                                      formData.universities[index] ? "bg-philsa-navy text-white" : "bg-philsa-border text-philsa-gray"
-                                   )}>
-                                      {index + 1}
-                                   </div>
-                                </div>
-                                
-                                <div className="flex-1 grid md:grid-cols-2 gap-6 w-full">
-                                   {/* University Selection */}
-                                   <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-philsa-gray uppercase tracking-widest flex items-center gap-1.5">
-                                         <School className="w-3 h-3 text-philsa-navy" /> Preferred University {index + 1}
-                                      </label>
-                                      <div className="relative">
-                                         <input 
-                                            type="text"
-                                            placeholder="Type university name..."
-                                            className={cn(
-                                               "input-philsa !py-4 font-bold font-sans",
-                                               errors.universities && index === 0 && !formData.universities[0] && "border-philsa-red"
-                                            )}
-                                            value={focusedUniIndex === index ? (uniQuery[index] || '') : (formData.universities[index] || '')}
-                                            onFocus={() => {
-                                               setFocusedUniIndex(index);
-                                               const updatedQuery = [...uniQuery];
-                                               updatedQuery[index] = formData.universities[index] || '';
-                                               setUniQuery(updatedQuery);
-                                            }}
-                                            onBlur={() => {
-                                               setTimeout(() => {
-                                                  setFocusedUniIndex(null);
-                                               }, 250);
-                                            }}
-                                            onChange={(e) => {
-                                               const updatedQuery = [...uniQuery];
-                                               updatedQuery[index] = e.target.value;
-                                               setUniQuery(updatedQuery);
-                                            }}
-                                         />
-                                         {focusedUniIndex === index && (
-                                            <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-philsa-border rounded-2xl shadow-xl max-h-56 overflow-y-auto divide-y divide-gray-100">
-                                               {UNIVERSITY_DATA.filter(uni => 
-                                                  uni.name.toLowerCase().includes((uniQuery[index] || '').toLowerCase()) &&
-                                                  (!formData.universities.includes(uni.name) || formData.universities[index] === uni.name)
-                                               ).length === 0 ? (
-                                                  <div className="p-4 text-xs text-philsa-gray italic font-bold">No universities matched</div>
-                                               ) : (
-                                                  UNIVERSITY_DATA.filter(uni => 
-                                                     uni.name.toLowerCase().includes((uniQuery[index] || '').toLowerCase()) &&
-                                                     (!formData.universities.includes(uni.name) || formData.universities[index] === uni.name)
-                                                  ).map(uni => (
-                                                     <button
-                                                        key={uni.name}
-                                                        type="button"
-                                                        onClick={() => {
-                                                           const newUniversities = [...formData.universities];
-                                                           const newCourses = [...formData.courses];
-                                                           newUniversities[index] = uni.name;
-                                                           newCourses[index] = ''; // Reset course on change
-                                                           setFormData({...formData, universities: newUniversities, courses: newCourses});
-                                                           
-                                                           const updatedQuery = [...uniQuery];
-                                                           updatedQuery[index] = uni.name;
-                                                           setUniQuery(updatedQuery);
-                                                           
-                                                           setFocusedUniIndex(null);
-                                                           if (errors.universities) setErrors(prev => ({...prev, universities: ''}));
-                                                        }}
-                                                        className="w-full text-left p-3 hover:bg-philsa-navy hover:text-white text-xs font-bold transition-colors font-sans flex items-center justify-between"
-                                                     >
-                                                        <span>{uni.name}</span>
-                                                        <span className="text-[9px] uppercase font-black text-philsa-gray/60 shrink-0">Select</span>
-                                                     </button>
-                                                  ))
-                                               )}
-                                            </div>
-                                         )}
-                                      </div>
-                                   </div>
-
-                                   {/* Course Selection - Cascading */}
-                                   <div className={cn(
-                                      "space-y-2 transition-all duration-300",
-                                      formData.universities[index] ? "opacity-100 translate-y-0" : "opacity-30 pointer-events-none translate-y-2"
-                                   )}>
-                                      <label className="text-[10px] font-black text-philsa-gray uppercase tracking-widest flex items-center gap-1.5">
-                                         <BookOpen className="w-3 h-3" /> Degree Programs
-                                      </label>
-                                      <select 
-                                         className={cn(
-                                            "input-philsa !py-4",
-                                            errors.courses && index === 0 && !formData.courses[0] && "border-philsa-red"
-                                         )}
-                                         value={formData.courses[index] || ''}
-                                         onChange={(e) => {
-                                            const newCourses = [...formData.courses];
-                                            newCourses[index] = e.target.value;
-                                            setFormData({...formData, courses: newCourses});
-                                            if (errors.courses) setErrors(prev => ({...prev, courses: ''}));
-                                         }}
-                                      >
-                                         <option value="">Select Degree Program</option>
-                                         {UNIVERSITY_DATA.find(u => u.name === formData.universities[index])?.courses.map(course => (
-                                            <option key={course} value={course}>{course}</option>
-                                         ))}
-                                      </select>
-                                   </div>
-                                </div>
-
-                                {formData.universities[index] && (
-                                   <button 
-                                      onClick={() => {
-                                         const newUniversities = [...formData.universities];
-                                         const newCourses = [...formData.courses];
-                                         newUniversities[index] = '';
-                                         newCourses[index] = '';
-                                         setFormData({...formData, universities: newUniversities, courses: newCourses});
-                                      }}
-                                      className="shrink-0 p-3 text-philsa-gray hover:text-philsa-red transition-colors"
-                                   >
-                                      <Trash2 className="w-5 h-5" />
-                                   </button>
-                                )}
-                             </div>
-
-                             {index === 0 && (errors.universities || errors.courses) && !formData.universities[0] && (
-                                <div className="mt-4 flex items-center gap-2 text-philsa-red text-[10px] font-black uppercase tracking-widest animate-pulse">
-                                   <AlertCircle className="w-4 h-4" /> Primary Preference Required
-                                </div>
-                             )}
-                          </div>
-                       ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-philsa-navy/5 p-8 rounded-3xl border border-philsa-navy/10 flex items-start gap-4">
-                     <AlertCircle className="w-6 h-6 text-philsa-navy shrink-0 mt-1" />
-                     <div className="space-y-1">
-                        <p className="text-xs font-black text-philsa-navy uppercase tracking-widest">Enrollment Advisory</p>
-                        <p className="text-[11px] text-philsa-navy/70 font-medium leading-relaxed">
-                           PhilSA strictly enforces a 1-to-1 mapping during the initial roster verification. Please ensure that your Primary Choice is your absolute priority as it will be the primary target for scholarship allocation.
-                        </p>
-                     </div>
-                  </div>
-               </div>
-            </motion.div>
-          )}
-
-          {currentSection === 99 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-               <div className="space-y-6">
-                  <label className="label-philsa">Available Examination Slots *</label>
-                  {errors.examScheduleId && <p className="text-xs text-philsa-red font-black uppercase tracking-widest mt-2">{errors.examScheduleId}</p>}
-                  <div className="grid gap-4">
-                     {schedules.map(slot => (
-                       <label key={slot.id} className={cn(
-                         "flex flex-col md:flex-row md:items-center justify-between p-6 rounded-3xl border-2 transition-all cursor-pointer group",
-                         formData.examScheduleId === slot.id ? "border-philsa-red bg-philsa-red/5" : "border-philsa-border hover:bg-philsa-bg"
-                       )}>
-                          <div className="flex items-center gap-4">
-                             <input 
-                                type="radio" 
-                                name="schedule"
-                                className="w-5 h-5 border-philsa-border text-philsa-red focus:ring-philsa-red"
-                                checked={formData.examScheduleId === slot.id}
-                                onChange={() => setFormData({...formData, examScheduleId: slot.id})}
-                             />
-                             <div>
-                                <p className="text-sm font-black text-philsa-navy group-hover:text-philsa-red transition-colors">{slot.testCenter}</p>
-                                <p className="text-xs text-philsa-gray font-bold uppercase tracking-widest mt-0.5">{slot.room}</p>
-                             </div>
-                          </div>
-                          <div className="mt-4 md:mt-0 flex gap-8">
-                             <div className="text-right">
-                                <p className="text-[10px] text-philsa-gray font-bold uppercase tracking-[0.1em]">Date</p>
-                                <p className="text-sm font-black text-philsa-navy tracking-tight">{slot.date}</p>
-                             </div>
-                             <div className="text-right">
-                                <p className="text-[10px] text-philsa-gray font-bold uppercase tracking-[0.1em]">Time</p>
-                                <p className="text-sm font-black text-philsa-navy tracking-tight">{slot.time}</p>
-                             </div>
-                             <div className="text-right">
-                                <p className="text-[10px] text-philsa-gray font-bold uppercase tracking-[0.1em]">Availability</p>
-                                <p className="text-sm font-black text-philsa-navy tracking-tight">{slot.remainingSlots} / {slot.totalSlots}</p>
-                             </div>
-                          </div>
-                       </label>
-                     ))}
-                  </div>
-               </div>
-            </motion.div>
-          )}
-
-          {currentSection === 3 && (
+          {currentSection === 2 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
                <div className="card-philsa !p-0 bg-white border border-slate-200 overflow-hidden shadow-xl rounded-[2rem]">
                   {/* Simplified Header */}
                   <div className="p-6 sm:p-10 border-b border-philsa-border bg-gradient-to-br from-slate-50 to-philsa-bg/40 relative">
                      <div className="relative z-10">
                         <div className="flex items-center gap-3 mb-3">
-                           <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-philsa-navy text-white text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] rounded-md">Step 04</div>
+                           <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-philsa-navy text-white text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] rounded-md">Step 03</div>
                            <span className="text-[9px] sm:text-[10px] font-black text-philsa-gray uppercase tracking-[0.2em]">Review & Submit</span>
                         </div>
                         <h4 className="text-xl sm:text-2xl font-black text-philsa-navy tracking-tight uppercase">Student Registration <span className="text-philsa-red">Details</span></h4>
@@ -3932,63 +2175,7 @@ export default function StudentApplication() {
                   </div>
 
                   <div className="p-4 sm:p-10 space-y-8 sm:space-y-12">
-                     {/* Row 1: Profile Photo & Core Info */}
-                     <div className="flex flex-col lg:flex-row gap-6 sm:gap-12">
-                        {/* Profile Photo & Selfie */}
-                        <div className="shrink-0 flex flex-col sm:flex-row lg:flex-col gap-6 items-center">
-                           {/* Student ID Front Card */}
-                           <div className="flex flex-col items-center">
-                              <div className="w-44 sm:w-52 aspect-[1.6/1] rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white shadow-xl ring-1 ring-philsa-border relative group">
-                                 {formData.photoUrl ? (
-                                    <img referrerPolicy="no-referrer" src={formData.photoUrl} alt="Student ID front" className="w-full h-full object-contain" />
-                                 ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-philsa-gray opacity-30">
-                                       <User className="w-10 h-10 mb-1" />
-                                       <span className="text-[9px] font-black uppercase">Missing ID Front</span>
-                                    </div>
-                                 )}
-                                 <div className="absolute top-2 right-2 px-2 py-0.5 bg-philsa-red text-white text-[7px] font-black uppercase tracking-widest rounded shadow">
-                                    ID FRONT
-                                 </div>
-                              </div>
-                              <div className="mt-2 text-center">
-                                 <p className="text-[8px] sm:text-[9px] font-black text-philsa-red uppercase tracking-widest leading-none">Student ID Front</p>
-                                 <p className="text-[7px] sm:text-[8px] text-philsa-gray font-bold mt-1 uppercase tracking-tight">Uploaded identity document</p>
-                              </div>
-                           </div>
-
-                           {step2Configuration?.requireStudentIdBack && <div className="flex flex-col items-center">
-                              <div className="w-44 sm:w-52 aspect-[1.6/1] rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white shadow-xl ring-1 ring-philsa-border relative">
-                                 {idBackPreview ? <img src={idBackPreview} alt="Student ID back" className="w-full h-full object-contain" /> : <div className="w-full h-full flex items-center justify-center text-[9px] font-black uppercase text-philsa-gray opacity-40">Missing ID Back</div>}
-                                 <div className="absolute top-2 right-2 px-2 py-0.5 bg-philsa-red text-white text-[7px] font-black uppercase tracking-widest rounded shadow">ID BACK</div>
-                              </div>
-                              <p className="mt-2 text-[8px] sm:text-[9px] font-black text-philsa-red uppercase tracking-widest">Student ID Back</p>
-                           </div>}
-
-                           {/* Selfie Verification Card */}
-                           <div className="flex flex-col items-center">
-                              <div className="w-32 sm:w-36 aspect-square rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white shadow-xl ring-1 ring-philsa-border relative group">
-                                 {formData.selfieUrl ? (
-                                    <img referrerPolicy="no-referrer" src={formData.selfieUrl} alt="Captured Selfie" className="w-full h-full object-cover" />
-                                 ) : (
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-philsa-gray opacity-30">
-                                       <Camera className="w-10 h-10 mb-1" />
-                                       <span className="text-[9px] font-black uppercase">Missing Selfie</span>
-                                    </div>
-                                 )}
-                                 <div className="absolute top-2 right-2 px-2 py-0.5 bg-emerald-600 text-white text-[7px] font-black uppercase tracking-widest rounded shadow">
-                                    LIVE SELFIE
-                                 </div>
-                              </div>
-                              <div className="mt-2 text-center">
-                                 <p className="text-[8px] sm:text-[9px] font-black text-emerald-700 uppercase tracking-widest leading-none">Verification Selfie</p>
-                                 <p className="text-[7px] sm:text-[8px] text-philsa-gray font-bold mt-1 uppercase tracking-tight">Matched: 99.8% Liveness</p>
-                              </div>
-                           </div>
-                        </div>
-
-                        {/* Core Personal Details */}
-                        <div className="flex-1 space-y-4">
+                     <div className="space-y-4">
                            <h5 className="text-xs font-bold text-philsa-navy uppercase tracking-wider pb-1.5 border-b border-philsa-border/50 flex items-center gap-2">
                               <User className="w-4 h-4 text-philsa-red" /> Personal & Academic Information
                            </h5>
@@ -4005,7 +2192,6 @@ export default function StudentApplication() {
                               <ReviewItem label="High School Address" value={formData.schoolAddress || '—'} />
                               <ReviewItem label="Account Email" value={formData.email} />
                            </div>
-                        </div>
                      </div>
 
                      {/* Legal Certifications */}
@@ -4109,10 +2295,10 @@ export default function StudentApplication() {
 
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-left mb-6 space-y-2">
               <p className="text-xs text-slate-600 font-bold leading-relaxed">
-                You reached 5 attempts. Please Wait or Exit Registration. Cooldown 15 mins
+                Your LRN could not be verified after 5 attempts. You can wait 15 minutes and try again, or continue by manually entering the required high-priority information.
               </p>
               <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                For security and registry protection, LRN verification has been locked.
+                Manual registration will create your account without verified LRN details for now. You may provide your LRN later to complete identity verification.
               </p>
             </div>
 
@@ -4120,16 +2306,26 @@ export default function StudentApplication() {
               <button 
                 type="button"
                 onClick={() => {
-                  setShowLrnCooldownModal(false);
-                  setLrnAttemptsLeft(5);
-                  setCooldownSecondsLeft(900); // reset timer
-                  setErrors({});
-                  setFormData(prev => ({ ...prev, lrn: '' }));
-                  addAuditLog('LRN_COOLDOWN_SIMULATED', 'Student simulated 15-minute cooldown expiry and retried.');
+                  if (cooldownSecondsLeft <= 0) {
+                    setShowLrnCooldownModal(false);
+                    setLrnAttemptsLeft(5);
+                    setCooldownSecondsLeft(900);
+                    setErrors({});
+                    setFormData(prev => ({ ...prev, lrn: '' }));
+                  }
                 }}
-                className="w-full btn-primary py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg shadow-philsa-red/20 active:scale-95 transition-all cursor-pointer"
+                disabled={cooldownSecondsLeft > 0}
+                className="w-full btn-primary py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg shadow-philsa-red/20 active:scale-95 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <RefreshCw className="w-4 h-4" /> Simulate 15 mins to retry
+                <RefreshCw className="w-4 h-4" /> Wait for timer to retry
+              </button>
+
+              <button
+                type="button"
+                onClick={continueWithManualStep1}
+                className="w-full px-5 py-4 bg-philsa-navy hover:bg-[#00162B] text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
+              >
+                <User className="w-4 h-4" /> Continue with manual input
               </button>
 
               <button 
@@ -4151,119 +2347,6 @@ export default function StudentApplication() {
         </div>
       )}
 
-      {showFaceAttemptsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 transition-all">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} 
-            animate={{ opacity: 1, scale: 1 }} 
-            className="max-w-md w-full bg-white rounded-[2.5rem] border border-slate-200 p-8 text-center shadow-2xl relative overflow-hidden font-sans"
-          >
-            {/* Decorative Top Border */}
-            <div className="absolute top-0 left-0 w-full h-2 bg-[#8B0D11]" />
-            
-            <div className="w-20 h-20 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-md border border-amber-100">
-              <Camera className="w-10 h-10 animate-pulse" />
-            </div>
-
-            <h2 className="text-2xl font-black text-philsa-navy mb-1 tracking-tight">Biometric Limit Reached</h2>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-5 font-sans">Exception Handled Successfully</p>
-            
-            <div className="p-6 bg-amber-50/50 rounded-2xl border border-amber-100 text-left mb-6 space-y-3">
-              <p className="text-xs text-[#8B0D11] font-black uppercase tracking-wider leading-relaxed font-sans">
-                Verification Limit Exceeded
-              </p>
-              <p className="text-xs text-slate-600 font-bold leading-relaxed font-sans">
-                You reached 5 attempts. Will proceed to Selfie Verification.
-              </p>
-              <p className="text-[11px] text-slate-500 font-semibold leading-relaxed font-sans">
-                A manual backup check will review the portrait and identity details printed on your uploaded Student ID.
-              </p>
-            </div>
-
-            <button 
-              type="button"
-              onClick={() => {
-                setShowFaceAttemptsModal(false);
-                setFaceVerificationStage('selfie_verification');
-                setSelfieStatus('live');
-                setSelfieLog('Initializing hardware video device stream...');
-                addAuditLog('SELFIE_VERIFICATION_FALLBACK_TRIGGERED', 'Biometric attempts limit reached; student initiated manual Selfie Verification fallback.');
-              }}
-              className="w-full bg-[#8B0D11] hover:bg-[#8B0D11]/90 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg shadow-[#8B0D11]/20 active:scale-95 transition-all cursor-pointer border border-[#8B0D11]/30"
-            >
-              <Check className="w-4 h-4" /> Proceed to Selfie Verification
-            </button>
-          </motion.div>
-        </div>
-      )}
-
-      {showSelfieCooldownModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 transition-all">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} 
-            animate={{ opacity: 1, scale: 1 }} 
-            className="max-w-md w-full bg-white rounded-[2.5rem] border border-slate-200 p-8 text-center shadow-2xl relative overflow-hidden"
-          >
-            {/* Decorative Background */}
-            <div className="absolute top-0 left-0 w-full h-2 bg-philsa-red" />
-            
-            <div className="w-20 h-20 bg-red-50 text-philsa-red rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-md border border-red-100">
-              <Lock className="w-10 h-10 animate-pulse" />
-            </div>
-
-            <h2 className="text-2xl font-black text-philsa-navy mb-1 tracking-tight">Security Cooldown Active</h2>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Maximum Attempts Exceeded</p>
-            
-            {/* Timer countdown display */}
-            <div className="mb-6 p-4 bg-red-50/50 rounded-2xl border border-red-100/50 inline-block px-8">
-              <p className="text-[10px] font-black text-philsa-red uppercase tracking-widest mb-1">Time Remaining</p>
-              <p className="text-4xl font-mono font-black text-philsa-red">
-                {Math.floor(selfieCooldownSecondsLeft / 60).toString().padStart(2, '0')}:
-                {(selfieCooldownSecondsLeft % 60).toString().padStart(2, '0')}
-              </p>
-            </div>
-
-            <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-left mb-6 space-y-2">
-              <p className="text-xs text-slate-600 font-bold leading-relaxed">
-                You reached 5 attempts. Please Wait or Exit. Cooldown 15 mins
-              </p>
-              <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                For security and registry protection, selfie biometric verification has been temporarily locked.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowSelfieCooldownModal(false);
-                  setSelfieAttemptsLeft(5);
-                  setSelfieCooldownSecondsLeft(900); // reset timer
-                  setFaceVerificationStage('selfie_verification');
-                  setSelfieStatus('live');
-                  addAuditLog('SELFIE_COOLDOWN_SIMULATED', 'Student simulated 15-minute cooldown expiry and retried selfie verification.');
-                }}
-                className="w-full btn-primary py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 shadow-lg shadow-philsa-red/20 active:scale-95 transition-all cursor-pointer"
-              >
-                <RefreshCw className="w-4 h-4" /> Simulate 15 mins to retry
-              </button>
-
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowSelfieCooldownModal(false);
-                  setSelfieAttemptsLeft(5);
-                  setSelfieCooldownSecondsLeft(900); // reset timer
-                  window.location.href = '/login';
-                }}
-                className="w-full px-5 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer border border-slate-200"
-              >
-                Exit Registration
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   );
 }
@@ -4277,15 +2360,3 @@ function ReviewItem({ label, value, className }: { label: string; value: string;
   );
 }
 
-function DocReviewCard({ label, filename }: { label: string; filename: string }) {
-   return (
-      <div className={cn(
-         "p-4 rounded-2xl border flex flex-col items-center justify-center text-center transition-all",
-         filename ? "bg-philsa-bg border-philsa-border" : "bg-slate-50 border-philsa-border opacity-40 border-dashed"
-      )}>
-         <FileUp className={cn("w-5 h-5 mb-2", filename ? "text-philsa-navy" : "text-philsa-gray")} />
-         <p className="text-[9px] font-black text-philsa-navy uppercase tracking-widest leading-tight">{label}</p>
-         <p className="text-[8px] font-bold text-philsa-gray uppercase mt-1 truncate w-full">{filename || 'Not Uploaded'}</p>
-      </div>
-   );
-}

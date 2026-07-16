@@ -28,10 +28,10 @@ Authentication and session approach:
 Account provisioning approach:
 
 - Students may begin public self-registration through the Student Registration process.
-- Submitting a registration application does not immediately create an active student account.
-- The registration application must complete required identity verification, validation, and review.
-- A student account is created and activated only after approval by an authorized reviewer or an approved system-controlled approval process.
-- Upon approval, the backend creates the student account and automatically assigns the Student role.
+- Successful registration submission creates and activates the student account immediately.
+- The registration application must complete required Step 1 validation before account activation.
+- Admissions review may still approve, reject, or request correction for the registration application, but reviewer approval no longer controls student account activation.
+- Upon successful submission, the backend creates the student account and automatically assigns the Student role.
 - Students may not assign, modify, or elevate their own roles.
 - Accounts for System Administrators, Admission Reviewers, Proctors, Proctor Admins, University Admins, Testing Center Admins, Exam Admins, CHED Admins, DepEd Admins, TESDA Admins, Executives, Support Personnel, and other internal users are not available through public self-registration.
 - During initial deployment, the development or deployment team may create initial administrative accounts only with documented authorization from the designated business or system owner.

@@ -29,5 +29,7 @@ DATABASES = {"default": database_config_from_url(DATABASE_URL)}
 
 if LRN_REGISTRY_PROVIDER == "mock":  # noqa: F405
     raise ImproperlyConfigured("LRN_REGISTRY_PROVIDER=mock is not allowed in production.")
+if STEP2_DOCUMENT_RECOGNITION_PROVIDER == "mock":  # noqa: F405
+    raise ImproperlyConfigured("STEP2_DOCUMENT_RECOGNITION_PROVIDER=mock is not allowed in production.")
 if ACTIVE_EXAM_CYCLE_ID == "TBD":  # noqa: F405
     raise ImproperlyConfigured("ACTIVE_EXAM_CYCLE_ID is required in production.")

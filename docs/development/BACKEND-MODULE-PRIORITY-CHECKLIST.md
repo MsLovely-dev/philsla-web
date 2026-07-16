@@ -94,7 +94,7 @@ Build these after P0 backend foundation is running and tested.
 - [x] Implement current-session endpoint with server-derived role, permission, and scope claims.
 - [x] Implement three-step login endpoint boundaries for identifier resolution, password verification, and email OTP verification; account lookup, pending-token storage, password verification, OTP delivery, and session issuance remain in later auth slices.
 - [x] Implement logout, refresh-token rotation, token revocation, and session-expiry endpoint boundaries; durable token storage, rotation, revocation records, and audit events remain in later auth slices.
-- [x] Implement student registration account activation and staff/admin provisioning activation endpoint boundaries; account, registration approval, activation-token storage, email delivery, and audit events remain in later auth/account slices.
+- [x] Implement student registration account activation on successful submission and staff/admin provisioning activation endpoint boundaries; activation-token storage, email delivery, and audit events remain in later auth/account slices.
 - [x] Implement password recovery and account recovery endpoint boundaries from ADR-011; recovery-token storage, email delivery, password hashing, session revocation, and audit events remain in later auth/account slices.
 - [x] Return safe, actionable auth errors without exposing account existence or sensitive details.
 - [x] Add auth, throttling, audit, and permission tests.

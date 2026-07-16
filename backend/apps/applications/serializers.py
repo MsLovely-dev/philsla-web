@@ -2,7 +2,11 @@ from rest_framework import serializers
 
 from apps.accounts.serializers import validate_password_policy
 
-from .models import IdentityMediaType, Step2VerificationConfiguration, StudentApplication
+from .models import (
+    IdentityMediaType,
+    Step2VerificationConfiguration,
+    StudentApplication,
+)
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -75,20 +79,14 @@ class LrnVerificationSerializer(serializers.Serializer):
         regex=r"^\d{12}$",
         error_messages={
             "invalid": "Please enter a valid 12-digit LRN.",
-            "blank": "Please enter your LRN and Date of Birth.",
-            "required": "Please enter your LRN and Date of Birth.",
+            "blank": "Please enter your LRN.",
+            "required": "Please enter your LRN.",
         },
-    )
-    dateOfBirth = serializers.DateField(
-        error_messages={
-            "invalid": "Please enter a valid Date of Birth.",
-            "required": "Please enter your LRN and Date of Birth.",
-        }
     )
 
 
 class ApplicationCreateSerializer(ApplicationSerializer):
-    verificationToken = serializers.CharField(write_only=True, trim_whitespace=False)
+    verificationToken = serializers.CharField(write_only=True, trim_whitespace=False, required=False, allow_blank=True)
     submitOnCreate = serializers.BooleanField(write_only=True, required=False, default=False)
     password = serializers.CharField(
         write_only=True,
@@ -147,6 +145,8 @@ class Step2ConfigurationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Student ID processing and comparison must be disabled in Selfie-Only Mode.")
         if require_id and not (attrs.get("require_student_id_front", False) or attrs.get("require_student_id_back", False)):
             raise serializers.ValidationError("At least one Student ID side must be required.")
+        if require_id and (not attrs.get("enable_student_id_information_extraction") or not attrs.get("compare_student_name")):
+            raise serializers.ValidationError("Student ID mode requires information extraction and Student Name comparison.")
         if (attrs.get("compare_student_name") or attrs.get("compare_school_name")) and not attrs.get("enable_student_id_information_extraction"):
             raise serializers.ValidationError("Student ID information extraction is required for name or school comparison.")
         if attrs.get("enable_facial_comparison") and not attrs.get("require_student_id_front"):

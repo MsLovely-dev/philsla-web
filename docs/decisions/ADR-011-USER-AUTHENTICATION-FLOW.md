@@ -72,7 +72,7 @@ Password and account recovery:
 
 Invitation and activation:
 
-- Student accounts are not invited by staff/admin users. Students may begin public self-registration, but account activation occurs only after approved registration review.
+- Student accounts are not invited by staff/admin users. Students may begin public self-registration, and successful registration submission activates the Student account immediately.
 - Staff/admin accounts are provisioned only by an authorized `SYSTEM_ADMIN`.
 - Staff/admin provisioning sends a secure activation link to the provisioned email address.
 - Activation links must be single-use, stored server-side only as hashes, and expire after 24-48 hours.

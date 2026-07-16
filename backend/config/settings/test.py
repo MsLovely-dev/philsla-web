@@ -3,6 +3,7 @@ from .base import *  # noqa: F403
 SECRET_KEY = "test-only-secret-key"
 ACTIVE_EXAM_CYCLE_ID = "2026"
 LRN_REGISTRY_PROVIDER = "mock"
+STEP2_DOCUMENT_RECOGNITION_PROVIDER = "mock"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",

@@ -3,7 +3,6 @@ from types import SimpleNamespace
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -29,6 +28,7 @@ def complete_payload():
             "firstName": "Test",
             "lastName": "Student",
             "dateOfBirth": "2008-05-15",
+            "sex": "Female",
             "email": "student@example.test",
             "mobile": "09171234567",
         },
@@ -43,9 +43,12 @@ def complete_payload():
         },
         "school": {
             "lrn": "123456789012",
+            "schoolId": "301234",
             "name": "Test School",
             "academicTrack": "STEM",
             "gradeLevel": "Grade 12",
+            "enrollmentStatus": "Enrolled",
+            "schoolYear": "2026-2027",
             "gwa": "92.5",
         },
         "coursePreferences": [{"university": "Test University", "course": "Test Course"}],
@@ -65,7 +68,7 @@ class ApplicationEndpointTests(TestCase):
     def create(self, payload=None):
         verification = self.client.post(
             reverse("applications:verify-lrn"),
-            {"lrn": "123456789012", "dateOfBirth": "2008-05-15"},
+            {"lrn": "123456789012"},
             format="json",
         )
         body = dict(payload or {})
@@ -79,8 +82,8 @@ class ApplicationEndpointTests(TestCase):
 
         read = self.client.get(reverse("applications:detail", args=[application_id]))
         self.assertEqual(read.status_code, 200)
-        self.assertEqual(read.data["personal"]["firstName"], "Sample")
-        self.assertEqual(read.data["school"]["name"], "Sample National High School")
+        self.assertEqual(read.data["personal"]["firstName"], "Lovely Mae")
+        self.assertEqual(read.data["school"]["name"], "Taysan High School and Child Development Center")
 
         updated = self.client.patch(
             reverse("applications:detail", args=[application_id]),
@@ -94,31 +97,23 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(self.create().status_code, 201)
         duplicate = self.client.post(
             reverse("applications:verify-lrn"),
-            {"lrn": "123456789012", "dateOfBirth": "2008-05-15"},
+            {"lrn": "123456789012"},
             format="json",
         )
         self.assertEqual(duplicate.status_code, 409)
         self.assertEqual(duplicate.data["error"]["code"], "CONFLICT")
 
-    def test_public_registration_can_create_submitted_application_without_account(self):
+    def test_public_registration_can_create_step1_account_registration_without_step2(self):
         client = APIClient()
         verification = client.post(
             reverse("applications:verify-lrn"),
-            {"lrn": "123456789012", "dateOfBirth": "2008-05-15"},
+            {"lrn": "123456789012"},
             format="json",
         )
         payload = complete_payload()
+        payload["personal"]["email"] = "new.student@example.test"
         payload["verificationToken"] = verification.data["verificationToken"]
         payload["submitOnCreate"] = True
-        selfie = SimpleUploadedFile("selfie.jpg", b"\xff\xd8\xff\xe0" + b"test-image", content_type="image/jpeg")
-        step2 = client.post(
-            reverse("applications:step2-verification"),
-            {"mediaType": "SELFIE", "file": selfie},
-            format="multipart",
-            HTTP_X_REGISTRATION_TOKEN=verification.data["verificationToken"],
-        )
-        self.assertEqual(step2.status_code, 200)
-        self.assertEqual(step2.data["status"], "PASSED")
 
         response = client.post(reverse("applications:create"), payload, format="json")
 
@@ -126,9 +121,43 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(response.data["status"], ApplicationStatus.SUBMITTED)
         self.assertIsNotNone(response.data["submittedAt"])
         application = StudentApplication.objects.get(id=response.data["id"])
-        self.assertIsNone(application.owner_id)
-        self.assertTrue(application.password_hash)
-        self.assertNotEqual(application.password_hash, "Password1!")
+        self.assertIsNotNone(application.owner_id)
+        self.assertEqual(application.password_hash, "")
+        self.assertEqual(application.owner.email, "new.student@example.test")
+        self.assertTrue(application.owner.check_password(payload["password"]))
+        self.assertTrue(
+            AccountProfile.objects.filter(
+                user=application.owner,
+                role=PortalRole.STUDENT.value,
+                lrn="123456789012",
+            ).exists()
+        )
+        self.assertEqual(application.personal["identityVerificationStatus"], "VERIFIED")
+        self.assertEqual(application.personal["sex"], "Female")
+        self.assertEqual(application.school["schoolId"], "301234")
+
+    def test_public_manual_high_priority_registration_can_create_account_without_lrn(self):
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "manual.student.one@example.test"
+        payload["school"]["lrn"] = ""
+        payload["submitOnCreate"] = True
+        second_payload = complete_payload()
+        second_payload["personal"]["email"] = "manual.student.two@example.test"
+        second_payload["school"]["lrn"] = ""
+        second_payload["submitOnCreate"] = True
+
+        first = client.post(reverse("applications:create"), payload, format="json")
+        second = client.post(reverse("applications:create"), second_payload, format="json")
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(first.data["personal"]["identityVerificationStatus"], "MANUAL_PENDING")
+        self.assertEqual(first.data["school"]["schoolId"], "301234")
+        first_application = StudentApplication.objects.get(id=first.data["id"])
+        second_application = StudentApplication.objects.get(id=second.data["id"])
+        self.assertIsNotNone(first_application.owner_id)
+        self.assertIsNotNone(second_application.owner_id)
 
     def test_draft_requires_a_valid_lrn_verification_proof(self):
         response = self.client.post(
@@ -143,7 +172,7 @@ class ApplicationEndpointTests(TestCase):
         client = APIClient()
         verification = client.post(
             reverse("applications:verify-lrn"),
-            {"lrn": "123456789012", "dateOfBirth": "2008-05-15"},
+            {"lrn": "123456789012"},
             format="json",
         )
 
@@ -267,19 +296,8 @@ class ApplicationEndpointTests(TestCase):
         application.refresh_from_db()
         self.assertEqual(application.status, ApplicationStatus.APPROVED)
         self.assertEqual(application.review_step["reviewerDecision"], "APPROVE")
-        self.assertIsNotNone(application.owner_id)
-        self.assertEqual(application.password_hash, "")
-        self.assertEqual(application.owner.username, "test-student")
-        self.assertEqual(application.owner.first_name, "Test")
-        self.assertEqual(application.owner.last_name, "Student")
-        self.assertTrue(application.owner.check_password(payload["password"]))
-        self.assertTrue(
-            AccountProfile.objects.filter(
-                user=application.owner,
-                role=PortalRole.STUDENT.value,
-                lrn="123456789012",
-            ).exists()
-        )
+        self.assertIsNone(application.owner_id)
+        self.assertTrue(application.password_hash)
 
     def test_reviewer_reject_clears_pending_password_hash(self):
         payload = complete_payload()

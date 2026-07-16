@@ -34,14 +34,14 @@ describe('BackendApplicationService', () => {
     );
     const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
 
-    const result = await service.verifyLrn('123456789012', '2008-05-15');
+    const result = await service.verifyLrn('123456789012');
 
     expect(result.ok).toBe(true);
     expect(fetcher).toHaveBeenCalledWith(
       'http://backend.test/api/v1/applications/registration/lrn/verify/',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ lrn: '123456789012', dateOfBirth: '2008-05-15' }),
+        body: JSON.stringify({ lrn: '123456789012' }),
       }),
     );
   });
@@ -176,6 +176,7 @@ describe('BackendApplicationService', () => {
       email: 'student@example.test',
       password: 'Password1!',
       mobile: '09171234567',
+      gender: 'Female',
       region: 'NCR',
       province: 'Metro Manila',
       city: 'Quezon City',
@@ -183,15 +184,16 @@ describe('BackendApplicationService', () => {
       street: 'Agham Road',
       zipCode: '1101',
       lrn: '123456789012',
+      schoolId: '301234',
       schoolName: 'Sample National High School',
       schoolAddress: 'Quezon City',
       academicTrack: 'STEM',
       gradeLevel: 'Grade 12',
+      enrollmentStatus: 'Enrolled',
+      schoolYear: '2026-2027',
       gwa: '94',
       universities: ['UP Diliman'],
       courses: ['BS Computer Science'],
-      photoUrl: 'student-id.png',
-      selfieUrl: 'selfie.png',
     });
 
     expect(payload).toMatchObject({
@@ -200,8 +202,6 @@ describe('BackendApplicationService', () => {
       personal: {
         firstName: 'Sample',
         dateOfBirth: '2008-05-15',
-        studentIdPhotoUrl: 'student-id.png',
-        selfiePhotoUrl: 'selfie.png',
       },
       address: {
         postalCode: '1101',

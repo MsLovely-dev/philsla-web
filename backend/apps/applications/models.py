@@ -41,7 +41,7 @@ class StudentApplication(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=("lrn", "exam_cycle_id"),
-                condition=~models.Q(status=ApplicationStatus.REJECTED),
+                condition=~models.Q(status=ApplicationStatus.REJECTED) & ~models.Q(lrn=""),
                 name="unique_active_lrn_per_exam_cycle",
             ),
             models.UniqueConstraint(

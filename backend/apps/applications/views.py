@@ -39,7 +39,6 @@ class LrnVerificationView(APIView):
         serializer.is_valid(raise_exception=True)
         result = verify_lrn(
             lrn=serializer.validated_data["lrn"],
-            date_of_birth=serializer.validated_data["dateOfBirth"],
         )
         record_application_event(event="registration_lrn_verified", outcome="success", request=request)
         return Response(result)
@@ -107,7 +106,7 @@ class ApplicationCreateView(APIView):
     def post(self, request) -> Response:
         serializer = ApplicationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        verification_token = serializer.validated_data.pop("verificationToken")
+        verification_token = serializer.validated_data.pop("verificationToken", "")
         submit_on_create = serializer.validated_data.pop("submitOnCreate", False)
         owner = request.user if getattr(request.user, "is_authenticated", False) else None
         application = create_draft(

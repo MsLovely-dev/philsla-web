@@ -1,10 +1,6 @@
 from django.contrib import admin
 
-from .models import ApplicationIdentityMedia, Step2Verification, Step2VerificationConfiguration, StudentApplication
-
-admin.site.register(Step2VerificationConfiguration)
-admin.site.register(Step2Verification)
-admin.site.register(ApplicationIdentityMedia)
+from .models import StudentApplication
 
 
 @admin.register(StudentApplication)
