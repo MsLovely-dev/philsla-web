@@ -10,8 +10,16 @@ class LrnVerificationTests(TestCase):
         self.client = APIClient()
         self.url = reverse("applications:verify-lrn")
 
-    def verify(self, lrn="123456789012"):
-        return self.client.post(self.url, {"lrn": lrn}, format="json")
+    def verify(self, lrn="123456789012", verification_category="email", verification_value="lovely@yopmail.com"):
+        return self.client.post(
+            self.url,
+            {
+                "lrn": lrn,
+                "verificationCategory": verification_category,
+                "verificationValue": verification_value,
+            },
+            format="json",
+        )
 
     def test_valid_lrn_returns_read_only_registry_profile_and_proof(self):
         response = self.verify()
@@ -41,8 +49,22 @@ class LrnVerificationTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["error"]["code"], "LRN_VERIFICATION_FAILED")
 
+    def test_registered_information_mismatch_is_rejected(self):
+        response = self.verify(verification_value="different@example.test")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "LRN_VERIFICATION_FAILED")
+        self.assertIn("does not match", response.data["error"]["message"])
+
+    def test_can_verify_with_registered_birthday(self):
+        response = self.verify(verification_category="birthday", verification_value="2008-05-15")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["verificationToken"])
+
     def test_non_grade_12_student_is_ineligible(self):
-        response = self.verify(lrn="901234567899")
+        response = self.verify(
+            lrn="901234567899",
+            verification_value="ineligible.learner@example.test",
+        )
         self.assertEqual(response.status_code, 400)
         self.assertIn("not currently enrolled in Grade 12", response.data["error"]["message"])
 
@@ -52,7 +74,12 @@ class LrnVerificationTests(TestCase):
         fifth = self.verify(lrn="111111111111")
         self.assertEqual(fifth.status_code, 429)
         self.assertEqual(fifth.data["error"]["code"], "LRN_COOLDOWN")
+        self.assertGreater(fifth.data["error"]["meta"]["retryAfterSeconds"], 0)
+        self.assertLessEqual(fifth.data["error"]["meta"]["retryAfterSeconds"], 900)
         self.assertEqual(self.verify(lrn="111111111111").status_code, 429)
+        different_lrn = self.verify(lrn="123456789012")
+        self.assertEqual(different_lrn.status_code, 429)
+        self.assertEqual(different_lrn.data["error"]["code"], "LRN_COOLDOWN")
 
     @override_settings(LRN_REGISTRY_PROVIDER="unavailable")
     def test_registry_unavailable_has_specific_retryable_error(self):

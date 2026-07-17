@@ -76,6 +76,13 @@ export interface Step2VerificationResult {
   results: Record<string, unknown>;
 }
 
+export interface RegistrationSelfieFaceValidationResult {
+  faceDetected: boolean;
+  faceCount: number;
+  confidence: number;
+  boundingBox: { x: number; y: number; width: number; height: number };
+}
+
 export interface BackendApplication {
   id: string;
   status: 'DRAFT' | 'SUBMITTED' | 'FOR_CORRECTION' | 'RESUBMITTED' | 'APPROVED' | 'REJECTED';
@@ -84,6 +91,7 @@ export interface BackendApplication {
   school: Record<string, unknown>;
   coursePreferences: Record<string, unknown>[];
   reviewStep: Record<string, unknown>;
+  lrnProfile?: Record<string, unknown>;
   examCycleId: string;
   version: number;
   submittedAt: string | null;
@@ -107,10 +115,19 @@ export type BackendReviewerDecision = 'APPROVE' | 'REQUEST_CORRECTION' | 'REJECT
 export class BackendApplicationService {
   constructor(private readonly apiClient: ApiClient = sharedApiClient) {}
 
-  verifyLrn(lrn: string): Promise<ServiceResult<LrnVerificationResult>> {
+  verifyLrn(
+    lrn: string,
+    verification?: { category: string; value: string },
+  ): Promise<ServiceResult<LrnVerificationResult>> {
     return this.apiClient.request<LrnVerificationResult>('/api/v1/applications/registration/lrn/verify/', {
       method: 'POST',
-      body: JSON.stringify({ lrn }),
+      body: JSON.stringify({
+        lrn,
+        ...(verification ? {
+          verificationCategory: verification.category,
+          verificationValue: verification.value,
+        } : {}),
+      }),
     });
   }
 
@@ -123,13 +140,39 @@ export class BackendApplicationService {
 
   async uploadStep2Media(
     registrationToken: string,
-    mediaType: 'STUDENT_ID_FRONT' | 'STUDENT_ID_BACK' | 'SELFIE',
+    mediaType: 'STUDENT_ID_FRONT' | 'STUDENT_ID_BACK',
     file: File,
   ): Promise<ServiceResult<Step2VerificationResult>> {
     const body = new FormData();
     body.append('mediaType', mediaType);
     body.append('file', file);
     return this.apiClient.request<Step2VerificationResult>('/api/v1/applications/registration/step-2/', {
+      method: 'POST',
+      headers: { 'X-Registration-Token': registrationToken },
+      body,
+    });
+  }
+
+  async uploadRegistrationSelfie(
+    registrationToken: string,
+    file: File,
+  ): Promise<ServiceResult<Step2VerificationResult>> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.apiClient.request<Step2VerificationResult>('/api/v1/applications/registration/identity/selfie/', {
+      method: 'POST',
+      headers: { 'X-Registration-Token': registrationToken },
+      body,
+    });
+  }
+
+  async validateRegistrationSelfieFace(
+    registrationToken: string,
+    file: File,
+  ): Promise<ServiceResult<RegistrationSelfieFaceValidationResult>> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.apiClient.request<RegistrationSelfieFaceValidationResult>('/api/v1/applications/registration/identity/selfie-face/', {
       method: 'POST',
       headers: { 'X-Registration-Token': registrationToken },
       body,
@@ -187,6 +230,10 @@ export class BackendApplicationService {
 
   async listReviewQueue(): Promise<ServiceResult<BackendApplication[]>> {
     return this.apiClient.request<BackendApplication[]>('/api/v1/applications/review-queue/');
+  }
+
+  async getApplication(applicationId: string): Promise<ServiceResult<BackendApplication>> {
+    return this.apiClient.request<BackendApplication>(`/api/v1/applications/${applicationId}/`);
   }
 
   async decideApplication(
@@ -288,22 +335,23 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
   const address = application.address;
   const school = application.school;
   const preferences = application.coursePreferences;
+  const lrnProfile = application.lrnProfile ?? {};
 
   return {
     id: application.id,
     userId,
     status: application.status === 'SUBMITTED' || application.status === 'RESUBMITTED' ? 'PENDING' : application.status === 'APPROVED' ? 'ACCEPTED' : application.status === 'FOR_CORRECTION' ? 'FOR_CORRECTION' : 'REJECTED',
     submittedAt: application.submittedAt ?? undefined,
-    firstName: String(personal.firstName ?? ''),
-    middleName: String(personal.middleName ?? ''),
-    noMiddleName: !personal.middleName,
-    lastName: String(personal.lastName ?? ''),
-    suffix: String(personal.suffix ?? ''),
-    dob: String(personal.dateOfBirth ?? ''),
+    firstName: String(lrnProfile.firstName ?? personal.firstName ?? ''),
+    middleName: String(lrnProfile.middleName ?? personal.middleName ?? ''),
+    noMiddleName: !(lrnProfile.middleName ?? personal.middleName),
+    lastName: String(lrnProfile.lastName ?? personal.lastName ?? ''),
+    suffix: String(lrnProfile.extensionName ?? personal.suffix ?? ''),
+    dob: String(lrnProfile.dateOfBirth ?? personal.dateOfBirth ?? ''),
     photoUrl: String(personal.studentIdPhotoUrl ?? ''),
     birthPlace: '',
     nationality: 'Filipino',
-    gender: '',
+    gender: String(lrnProfile.sex ?? personal.sex ?? ''),
     email: String(personal.email ?? ''),
     mobile: String(personal.mobile ?? ''),
     nationalId: '',
@@ -313,11 +361,11 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
     barangay: String(address.barangay ?? ''),
     street: String(address.street ?? ''),
     zipCode: String(address.postalCode ?? ''),
-    lrn: String(school.lrn ?? ''),
-    schoolName: String(school.name ?? ''),
+    lrn: String(lrnProfile.lrn ?? school.lrn ?? ''),
+    schoolName: String(lrnProfile.schoolName ?? school.name ?? ''),
     schoolAddress: String(school.address ?? ''),
     academicTrack: String(school.academicTrack ?? ''),
-    gradeLevel: String(school.gradeLevel ?? ''),
+    gradeLevel: String(lrnProfile.gradeLevel ?? school.gradeLevel ?? ''),
     gwa: Number(school.gwa ?? 0),
     universities: preferences.map((preference) => String(preference.university ?? '')),
     courses: preferences.map((preference) => String(preference.course ?? '')),
@@ -330,7 +378,7 @@ export function mapBackendApplicationsToReviewRows(applications: BackendApplicat
   duplicateScore: number;
   duplicateStatus: string;
   center: string;
-  seat?: string;
+  seat: string;
   history: Array<{ status: string; date: string; actor: string }>;
 }> {
   return applications.map((application) => {
@@ -344,7 +392,7 @@ export function mapBackendApplicationsToReviewRows(applications: BackendApplicat
       duplicateScore: 0,
       duplicateStatus: 'No Match',
       center: String(firstPreference?.university ?? mapped.universities[0] ?? 'Not Assigned'),
-      seat: undefined,
+      seat: '',
       history: [
         {
           status: application.status,

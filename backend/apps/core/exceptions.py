@@ -28,6 +28,7 @@ def api_exception_handler(exc: Exception, context: dict[str, object]) -> Respons
             "code": code,
             "message": message,
             "fields": fields,
+            "meta": getattr(exc, "error_meta", {}),
             "correlationId": getattr(context.get("request"), "correlation_id", None),
         }
     }

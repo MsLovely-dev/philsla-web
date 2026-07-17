@@ -16,13 +16,13 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented boundary; token store pending |
 | `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
-| `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create or reactivate a Student account for a submitted registration | Implemented |
+| `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create or reactivate a Student account for an approved registration | Implemented |
 | `POST` | `/api/v1/auth/activation/staff/complete/` | Public activation link | `AllowAny` | Complete first-time staff/admin activation by setting the user's password | Implemented boundary; activation-token storage pending |
 | `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented boundary; email/token storage pending |
 | `POST` | `/api/v1/auth/recovery/password/complete/` | Public recovery link | `AllowAny` | Complete password reset from a recovery link | Implemented boundary; recovery-token storage pending |
 | `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented boundary; email/token storage pending |
 | `POST` | `/api/v1/applications/` | Public with LRN verification token; bearer token optional | `AllowAny` for initial registration | Create a registration draft, or create and submit final registration with `submitOnCreate` | Implemented |
-| `GET` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Read an owned application | Implemented |
+| `GET` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT`, or `ADMISSIONS_REVIEWER`/`SYSTEM_ADMIN` for non-draft applications | Read an application detail record | Implemented |
 | `PATCH` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Update an editable owned application using optimistic concurrency | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/submit/` | Required bearer access token | Owning `STUDENT` | Validate and submit or resubmit an application | Implemented |
 | `GET` | `/api/v1/applications/review-queue/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | List submitted registration applications for admissions review | Implemented |
@@ -42,11 +42,22 @@ Before draft creation, call `POST /api/v1/applications/registration/lrn/verify/`
 
 ```json
 {
-  "lrn": "123456789012"
+  "lrn": "123456789012",
+  "verificationCategory": "email",
+  "verificationValue": "lovely@yopmail.com"
 }
 ```
 
-Local and test settings use a synthetic registry record for that LRN. A successful response contains an opaque, 15-minute `verificationToken`, the registry-sourced read-only profile, and an immutable snapshot of the active Step 2 configuration. The profile contains the Step 1 high-priority information returned by the registry: LRN, birth date, first/middle/last name, extension name when applicable, sex, school ID, school name, grade level, enrollment status, and school year. When a verification token is supplied during account creation, the backend overwrites those high-priority fields with verified registry values and marks the identity state as `VERIFIED`.
+`verificationCategory` may be `email`, `birthday`, `student_id`, `mobile`, or `mother_name`. The backend compares `verificationValue` with the corresponding registered value in the configured LRN registry provider when those fields are supplied. A mismatch returns `400 LRN_VERIFICATION_FAILED`.
+
+Local and test settings use a synthetic registry record for that LRN. A successful response contains an opaque, 15-minute `verificationToken`, the registry-sourced read-only profile, and an immutable snapshot of the active identity verification configuration. The profile contains the Step 1 high-priority information returned by the registry: LRN, birth date, first/middle/last name, extension name when applicable, sex, school ID, school name, grade level, enrollment status, and school year. The student must then complete the Step 1 Identity & Biometrics selfie flow using the same registration token. When a verification token is supplied during account creation, the backend overwrites those high-priority fields with verified registry values and marks the identity state as `VERIFIED`.
+
+Step 1 Identity & Biometrics uses two token-protected selfie endpoints:
+
+- `POST /api/v1/applications/registration/identity/selfie-face/` accepts `multipart/form-data` with `file` and returns server-side live-frame face validation without storing media.
+- `POST /api/v1/applications/registration/identity/selfie/` accepts `multipart/form-data` with `file`, validates that exactly one centered frontal face is present server-side, and stores the image as the student's enrolled biometric reference.
+
+Both endpoints require `X-Registration-Token` from successful LRN verification. Files are private, limited to 5 MB, and accepted only when their bytes have a JPEG or PNG signature. Local development uses `STEP1_SELFIE_FACE_PROVIDER=opencv`, tests use a deterministic mock, and production refuses `mock` or `unavailable`. File retention and production object storage remain `TBD`. Application payloads and images are excluded from audit and request logging.
 
 Step 1 field visibility and priority are driven by the shared configurable field maintenance table. Public registration reads enabled rows from `GET /api/v1/configuration/fields/?module=student_registration`. The maintenance row shape is `{id, module, section, type, value, fieldSection, inputType, optionValues, priority, remarks, status, display_order}`. Student registration rows use `module: "student_registration"` and `section: "Step 1 Registration"`. `fieldSection` controls the panel where the field appears on the Step 1 form, such as `Personal Information`, `School Information`, or `Additional Information`. Rows with `type: "Student Registration Field"`, `priority: "High Priority"`, and enabled `status` are required during registration. `inputType` controls rendering, such as `text`, `date`, or `dropdown`; dropdown rows must include `optionValues`, for example `["Grade 11", "Grade 12"]`. Known fields returned by LRN are autopopulated when available; enabled high-priority fields that are not present in the LRN response remain visible and must be manually entered by the student. Low-priority rows are not required for account creation, but they still belong to the Step 1 registration configuration rather than a separate post-login section.
 
@@ -56,7 +67,7 @@ The primary local test learner (`123456789012`, birthdate `2008-05-15`) is Lovel
 
 Unknown LRNs return `400 LRN_VERIFICATION_FAILED`; an unavailable registry returns `503 LRN_REGISTRY_UNAVAILABLE`; an existing active application in `ACTIVE_EXAM_CYCLE_ID` returns `409 CONFLICT`. Five failed attempts for one LRN start a 15-minute `429 LRN_COOLDOWN`. A separate device/network throttle applies on top. A conditional database uniqueness constraint protects both LRN/cycle and owner/cycle against concurrent non-rejected registrations. LRN values and dates of birth are not written to request or audit logs.
 
-Application bodies persist five sections: `personal` (object), `address` (object), `school` (object), `coursePreferences` (array of `{university, course}` objects), and `reviewStep` (object). Create accepts either a successful LRN verification token or manual Step 1 high-priority information when LRN/PhilSys verification is unavailable. Manual Step 1 account creation requires first name, last name, birth date, sex, school ID, school name, grade level, enrollment status, school year, email, mobile number, and password. Manual records are marked `MANUAL_PENDING` so the student can later add LRN or PhilSys ID for identity verification. Initial registration does not require an existing account before submission. When submission succeeds, the backend creates and activates the Student account immediately, links it as `owner`, and clears the pending password hash. The registration password is accepted only as a write-only top-level `password` field and is never returned in the JSON payload or API response. A second active/non-rejected registration for the same non-blank LRN and exam cycle returns `409 CONFLICT`; blank manual LRN values do not collide with one another, but each submitted registration still requires a unique account email.
+Application bodies persist five sections: `personal` (object), `address` (object), `school` (object), `coursePreferences` (array of `{university, course}` objects), and `reviewStep` (object). Responses also include read-only `lrnProfile` when the application was created from a verified LRN token, allowing admissions review screens to display the registry-sourced identity and school values used during registration. Create accepts either a successful LRN verification token or manual Step 1 high-priority information when LRN/PhilSys verification is unavailable. Manual Step 1 account creation requires first name, last name, birth date, sex, school ID, school name, grade level, enrollment status, school year, email, mobile number, and password. Manual records are marked `MANUAL_PENDING` so the student can later add LRN or PhilSys ID for identity verification. Initial registration does not require an existing account before submission. When submission succeeds, the backend stores the pending registration credentials on the application but does not create or activate the Student account. The account is created, activated, linked as `owner`, and cleared of the pending password hash only after an admissions reviewer or system admin approves the application. The registration password is accepted only as a write-only top-level `password` field and is never returned in the JSON payload or API response. A second active/non-rejected registration for the same non-blank LRN and exam cycle returns `409 CONFLICT`; blank manual LRN values do not collide with one another, but each submitted registration still requires a unique account email.
 
 Final public registration submission is performed by adding `submitOnCreate: true` to the create request:
 
@@ -73,9 +84,9 @@ Final public registration submission is performed by adding `submitOnCreate: tru
 }
 ```
 
-When `submitOnCreate` is true for initial account creation, the backend validates Step 1 high-priority information plus account credentials, creates the Student account, activates it immediately, links it to the submitted registration, and returns a `SUBMITTED` registration record. Low-priority application details such as address, course preferences, and other profile fields can be completed after login. If validation or account activation fails, no draft is left behind. This is the expected path for applicants who do not yet have Student Portal accounts.
+When `submitOnCreate` is true for initial registration, the backend validates Step 1 high-priority information plus account credentials, stores the pending password hash, and returns a `SUBMITTED` registration record without creating an active Student account. The Student account becomes usable only after admissions approval. If validation fails, no draft is left behind. This is the expected path for applicants who do not yet have Student Portal accounts.
 
-Read and update require ownership. Publicly submitted registrations are linked to the newly activated Student account before the response is returned. Updates are allowed only in `DRAFT` or `FOR_CORRECTION`. Every `PATCH` must include the last observed integer `version`; a stale value returns `409 CONFLICT` without overwriting newer data. A successful update increments `version`.
+Read and update require ownership. Publicly submitted registrations are not linked to a Student account until approval. Updates are allowed only in `DRAFT` or `FOR_CORRECTION`. Every `PATCH` must include the last observed integer `version`; a stale value returns `409 CONFLICT` without overwriting newer data. A successful update increments `version`.
 
 Submission request:
 
@@ -87,11 +98,11 @@ Submission request:
 
 Submission requires the documented personal contact/name fields, complete permanent address fields, school/LRN/academic fields, at least one complete course preference, privacy consent, and declaration acceptance. The LRN must contain exactly 12 digits. Invalid or missing data returns `400 VALIDATION_FAILED` with section errors. A `DRAFT` becomes `SUBMITTED`; a `FOR_CORRECTION` application becomes `RESUBMITTED`. Other states return `409 CONFLICT`. Successful submission increments `version` and sets `submittedAt`.
 
-Step 2 accepts `multipart/form-data` containing `mediaType` (`STUDENT_ID_FRONT`, `STUDENT_ID_BACK`, or `SELFIE`) and `file`, plus the LRN proof in `X-Registration-Token`. Files are private, limited to 5 MB, and accepted only when their bytes have a JPEG or PNG signature. A replacement supersedes the prior image of the same type. In Selfie-Only Mode, a valid selfie submission completes Step 2 without claiming identity or facial verification. In Student ID and Selfie Mode, the portrait extracted from `STUDENT_ID_FRONT` is the only permitted facial reference for comparison with `SELFIE`; the ID back must never be used as a facial reference. OCR and facial provider selection remains `TBD`; completed uploads therefore route to manual review when enabled or reject otherwise. Step 2 remains available for configured identity review workflows, but successful LRN or PhilSys Step 1 verification is sufficient for the new initial account-creation path. File retention and production object storage remain `TBD`. Application payloads and images are excluded from audit and request logging.
+Step 2 accepts `multipart/form-data` containing `mediaType` (`STUDENT_ID_FRONT` or `STUDENT_ID_BACK`) and `file`, plus the LRN proof in `X-Registration-Token`, for configured identity review workflows that still require Student ID media. A replacement supersedes the prior image of the same type. Step 2 no longer accepts selfie upload or selfie face validation; all selfie capture, validation, and storage belongs to the Step 1 Identity & Biometrics endpoints above. OCR provider selection remains `TBD`; completed Student ID uploads therefore route to manual review when enabled or reject otherwise.
 
-Before selfie submission in Student ID mode, the backend extracts the Student ID name and compares its normalized value with the full name returned by the verified LRN record. The configured name threshold is authoritative. The API returns both compared names, the score, and `informationComparisonPassed`; selfie upload is rejected until this is true. Local/test settings use a deterministic mock recognizer for the Lovely Mae R Chavez fixture. Production explicitly rejects that mock provider and routes unavailable real recognition to manual review or rejection according to the captured configuration.
+In Student ID mode, the backend extracts the Student ID name and compares its normalized value with the full name returned by the verified LRN record. The configured name threshold is authoritative. The API returns both compared names, the score, and `informationComparisonPassed`. Local/test settings use a deterministic mock recognizer for the Lovely Mae R Chavez fixture. Production explicitly rejects that mock provider and routes unavailable real recognition to manual review or rejection according to the captured configuration.
 
-Admissions reviewers can load the review ledger with `GET /api/v1/applications/review-queue/`. The queue excludes `DRAFT` applications and includes submitted, resubmitted, correction, approved, and rejected registration records ordered by latest submission/creation time. Student and unauthenticated callers are denied.
+Admissions reviewers can load the review ledger with `GET /api/v1/applications/review-queue/`. The queue excludes `DRAFT` applications and includes submitted, resubmitted, correction, approved, and rejected registration records ordered by latest submission/creation time. Admissions reviewers and system admins can read a non-draft application detail with `GET /api/v1/applications/{applicationId}/`; draft detail remains limited to the owning student. Student and unauthenticated callers are denied from the review queue.
 
 Reviewer decisions are persisted through `POST /api/v1/applications/{applicationId}/review-decision/`:
 
@@ -103,7 +114,7 @@ Reviewer decisions are persisted through `POST /api/v1/applications/{application
 }
 ```
 
-Supported decisions are `APPROVE`, `REQUEST_CORRECTION`, and `REJECT`, which update the application status to `APPROVED`, `FOR_CORRECTION`, and `REJECTED` respectively. Reviewer approval no longer controls Student account activation; the account is activated when registration submission succeeds. A `REJECT` decision clears any remaining pending password hash without creating an account. Decisions are allowed only while the application is `SUBMITTED`, `RESUBMITTED`, or `FOR_CORRECTION`; other states return `409 CONFLICT`.
+Supported decisions are `APPROVE`, `REQUEST_CORRECTION`, and `REJECT`, which update the application status to `APPROVED`, `FOR_CORRECTION`, and `REJECTED` respectively. Reviewer approval creates and activates the Student account, links it to the application, and clears the pending password hash. A `REJECT` decision clears any remaining pending password hash without creating an account. Decisions are allowed only while the application is `SUBMITTED`, `RESUBMITTED`, or `FOR_CORRECTION`; other states return `409 CONFLICT`.
 
 Test coverage: `backend/apps/applications/tests/test_application_endpoints.py` and `backend/apps/configuration/tests/test_configurable_field_endpoints.py`.
 
@@ -335,9 +346,9 @@ Test coverage:
 
 ### `POST /api/v1/auth/activation/student-registration/`
 
-Use this endpoint only as an internal/protected fallback when a submitted registration needs its associated Student account created or reactivated. Public self-registration normally activates the account during successful submission.
+Use this endpoint only as an internal/protected fallback when an approved registration needs its associated Student account created or reactivated. Reviewer approval normally activates the account as part of the application decision.
 
-Current implementation status: route, role boundary, request validation, submitted-application lookup, student account persistence, role assignment, duplicate-account checks, and tests exist. Session invalidation and notification/audit side effects remain pending.
+Current implementation status: route, role boundary, request validation, approved-application lookup, student account persistence, role assignment, duplicate-account checks, and tests exist. Session invalidation and notification/audit side effects remain pending.
 
 Request:
 
@@ -352,7 +363,7 @@ Response behavior:
 - `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
 - `403 PERMISSION_DENIED` is returned for roles other than `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN`.
 - `201 Created` is returned after the Student account is created or an already linked account is reactivated.
-- `409 CONFLICT` is returned when the registration is not submitted, is missing account credentials, or conflicts with an existing email/LRN account.
+- `409 CONFLICT` is returned when the registration is not approved, is missing account credentials, or conflicts with an existing email/LRN account.
 
 The backend assigns the Student role automatically. Students must never be allowed to assign, modify, or elevate their own roles. The pending registration password hash is cleared after account activation.
 

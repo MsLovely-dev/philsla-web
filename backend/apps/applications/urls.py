@@ -8,6 +8,8 @@ from .views import (
     ApplicationSubmitView,
     LrnVerificationView,
     PublicStep2ConfigurationView,
+    RegistrationIdentitySelfieFaceValidationView,
+    RegistrationIdentitySelfieView,
     Step2ConfigurationAdminView,
     Step2VerificationView,
     Step2ManualDecisionView,
@@ -15,6 +17,8 @@ from .views import (
 
 urlpatterns = [
     path("registration/lrn/verify/", LrnVerificationView.as_view(), name="verify-lrn"),
+    path("registration/identity/selfie/", RegistrationIdentitySelfieView.as_view(), name="registration-identity-selfie"),
+    path("registration/identity/selfie-face/", RegistrationIdentitySelfieFaceValidationView.as_view(), name="registration-identity-selfie-face"),
     path("registration/step-2/configuration/", PublicStep2ConfigurationView.as_view(), name="step2-public-configuration"),
     path("registration/step-2/", Step2VerificationView.as_view(), name="step2-verification"),
     path("configuration/step-2/", Step2ConfigurationAdminView.as_view(), name="step2-configuration-admin"),

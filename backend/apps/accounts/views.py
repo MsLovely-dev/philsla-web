@@ -218,7 +218,6 @@ class StudentRegistrationActivationView(APIView):
 
         activate_student_registration_account(
             registration_application_id=serializer.validated_data["registrationApplicationId"],
-            actor=request.user,
         )
         return Response(status=201)
 

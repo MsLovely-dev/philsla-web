@@ -13,7 +13,7 @@ function jsonResponse(body: unknown, init: ResponseInit): Response {
 }
 
 describe('BackendApplicationService', () => {
-  it('calls the public LRN verification endpoint with LRN and date of birth', async () => {
+  it('calls the public LRN verification endpoint with LRN and selected registered information', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(
         {
@@ -34,14 +34,18 @@ describe('BackendApplicationService', () => {
     );
     const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
 
-    const result = await service.verifyLrn('123456789012');
+    const result = await service.verifyLrn('123456789012', { category: 'email', value: 'student@example.test' });
 
     expect(result.ok).toBe(true);
     expect(fetcher).toHaveBeenCalledWith(
       'http://backend.test/api/v1/applications/registration/lrn/verify/',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ lrn: '123456789012' }),
+        body: JSON.stringify({
+          lrn: '123456789012',
+          verificationCategory: 'email',
+          verificationValue: 'student@example.test',
+        }),
       }),
     );
   });
@@ -90,6 +94,64 @@ describe('BackendApplicationService', () => {
           reviewStep: {},
           submitOnCreate: true,
         }),
+      }),
+    );
+  });
+
+  it('validates a selfie frame through the token-protected face validation endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          faceDetected: true,
+          faceCount: 1,
+          confidence: 92,
+          boundingBox: { x: 10, y: 12, width: 100, height: 100 },
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const frame = new File(['frame'], 'frame.jpg', { type: 'image/jpeg' });
+
+    const result = await service.validateRegistrationSelfieFace('verification-token', frame);
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/registration/identity/selfie-face/',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-Registration-Token': 'verification-token' }),
+        body: expect.any(FormData),
+      }),
+    );
+  });
+
+  it('uploads the enrolled selfie through the Step 1 identity endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          id: 'verification-id',
+          status: 'PASSED',
+          attempts: 1,
+          configuration: {},
+          uploadedMedia: ['SELFIE'],
+          results: {},
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const selfie = new File(['selfie'], 'selfie.jpg', { type: 'image/jpeg' });
+
+    const result = await service.uploadRegistrationSelfie('verification-token', selfie);
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/registration/identity/selfie/',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-Registration-Token': 'verification-token' }),
+        body: expect.any(FormData),
       }),
     );
   });

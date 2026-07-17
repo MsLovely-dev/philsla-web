@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import ObjectScopePermission, RoleRequiredPermission, require_roles
-from apps.accounts.roles import PortalRole
+from apps.accounts.roles import PortalRole, get_user_role
 
 from .audit import record_application_event
 from .models import StudentApplication
@@ -16,6 +16,8 @@ from .serializers import (
     ApplicationSubmitSerializer,
     ApplicationUpdateSerializer,
     LrnVerificationSerializer,
+    RegistrationIdentitySelfieFaceValidationSerializer,
+    RegistrationIdentitySelfieUploadSerializer,
     ReviewerDecisionSerializer,
     Step2ConfigurationSerializer,
     Step2MediaUploadSerializer,
@@ -23,8 +25,8 @@ from .serializers import (
 )
 from .services import (active_step2_configuration, create_draft, decide_application,
                        decide_step2_manual_review, get_step2_verification, serialize_step2, submit_application,
-                       update_draft, upload_step2_media, verify_lrn)
-from .models import Step2VerificationConfiguration
+                       update_draft, upload_step2_media, validate_registration_selfie_face, verify_lrn)
+from .models import IdentityMediaType, Step2VerificationConfiguration
 from .throttling import DeviceScopedRateThrottle
 
 
@@ -39,6 +41,9 @@ class LrnVerificationView(APIView):
         serializer.is_valid(raise_exception=True)
         result = verify_lrn(
             lrn=serializer.validated_data["lrn"],
+            verification_category=serializer.validated_data.get("verificationCategory", ""),
+            verification_value=serializer.validated_data.get("verificationValue", ""),
+            client_identifier=DeviceScopedRateThrottle().get_ident(request),
         )
         record_application_event(event="registration_lrn_verified", outcome="success", request=request)
         return Response(result)
@@ -71,6 +76,43 @@ class Step2VerificationView(APIView):
                                           uploaded_file=serializer.validated_data["file"])
         record_application_event(event="registration_step2_media_uploaded", outcome="success", request=request)
         return Response(serialize_step2(verification))
+
+
+class RegistrationIdentitySelfieView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    parser_classes = [MultiPartParser, FormParser]
+
+    @staticmethod
+    def token(request) -> str:
+        return request.headers.get("X-Registration-Token", "")
+
+    def post(self, request) -> Response:
+        serializer = RegistrationIdentitySelfieUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        verification = upload_step2_media(
+            token=self.token(request),
+            media_type=IdentityMediaType.SELFIE,
+            uploaded_file=serializer.validated_data["file"],
+            step1_identity_selfie=True,
+        )
+        record_application_event(event="registration_identity_selfie_uploaded", outcome="success", request=request)
+        return Response(serialize_step2(verification))
+
+
+class RegistrationIdentitySelfieFaceValidationView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    parser_classes = [MultiPartParser, FormParser]
+
+    @staticmethod
+    def token(request) -> str:
+        return request.headers.get("X-Registration-Token", "")
+
+    def post(self, request) -> Response:
+        serializer = RegistrationIdentitySelfieFaceValidationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(validate_registration_selfie_face(token=self.token(request), uploaded_file=serializer.validated_data["file"]))
 
 
 class Step2ConfigurationAdminView(APIView):
@@ -158,7 +200,13 @@ class ApplicationReviewerDecisionView(APIView):
 
 class ApplicationDetailView(APIView):
     permission_classes = [RoleRequiredPermission, ObjectScopePermission]
-    required_roles = require_roles(PortalRole.STUDENT)
+    required_roles = require_roles(PortalRole.STUDENT, PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def can_access_object(self, user, obj, request) -> bool:
+        role = get_user_role(user)
+        if request.method.lower() == "get" and role in {PortalRole.ADMISSIONS_REVIEWER.value, PortalRole.SYSTEM_ADMIN.value}:
+            return obj.status != "DRAFT"
+        return obj.can_be_accessed_by(user, request.method.lower())
 
     def get_object(self, request, application_id) -> StudentApplication:
         application = get_object_or_404(StudentApplication, id=application_id)

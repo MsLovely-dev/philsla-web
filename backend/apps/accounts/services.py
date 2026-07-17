@@ -292,8 +292,8 @@ def revoke_tokens(*, user: object, scope: str) -> None:
 
 
 @transaction.atomic
-def activate_student_registration_account(*, registration_application_id: str, actor: object) -> None:
-    """Create and activate a student account after registration submission."""
+def activate_student_registration_account(*, registration_application_id: str) -> None:
+    """Create and activate a student account after admission approval."""
 
     from apps.applications.models import ApplicationStatus, StudentApplication
 
@@ -302,12 +302,8 @@ def activate_student_registration_account(*, registration_application_id: str, a
     except (StudentApplication.DoesNotExist, ValueError) as exc:
         raise ActivationUnavailable("Submitted registration application was not found.") from exc
 
-    if application.status not in {
-        ApplicationStatus.SUBMITTED,
-        ApplicationStatus.RESUBMITTED,
-        ApplicationStatus.APPROVED,
-    }:
-        raise ActivationUnavailable("Student account activation requires a submitted registration application.")
+    if application.status != ApplicationStatus.APPROVED:
+        raise ActivationUnavailable("Student account activation requires an approved registration application.")
 
     if application.owner_id:
         application.owner.is_active = True

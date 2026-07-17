@@ -1,6 +1,7 @@
 from .base import *  # noqa: F403
 
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = "mock"
+STEP1_SELFIE_FACE_PROVIDER = "opencv"
 
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]

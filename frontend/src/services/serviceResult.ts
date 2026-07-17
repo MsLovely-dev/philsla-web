@@ -23,6 +23,7 @@ export interface ServiceError {
   status?: number;
   code?: string;
   fieldErrors?: Record<string, string[]>;
+  meta?: Record<string, unknown>;
   retryable?: boolean;
 }
 
@@ -50,6 +51,7 @@ export function validationError(
       code,
       message,
       fieldErrors,
+      meta: {},
       retryable: false,
     },
   };

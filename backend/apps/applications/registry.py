@@ -23,6 +23,9 @@ class LrnRecord:
     enrollment_status: str
     school_year: str
     is_recognized_school: bool
+    email: str = ""
+    mobile_number: str = ""
+    mother_maiden_full_name: str = ""
 
 
 class LrnRegistry:
@@ -48,6 +51,9 @@ class MockLrnRegistry(LrnRegistry):
             enrollment_status="Enrolled",
             school_year="2026-2027",
             is_recognized_school=True,
+            email="lovely@yopmail.com",
+            mobile_number="09171234567",
+            mother_maiden_full_name="Maria Santos Reyes",
         ),
         ("901234567899", date(2008, 5, 15)): LrnRecord(
             lrn="901234567899",
@@ -63,6 +69,9 @@ class MockLrnRegistry(LrnRegistry):
             enrollment_status="Enrolled",
             school_year="2026-2027",
             is_recognized_school=True,
+            email="ineligible.learner@example.test",
+            mobile_number="09179999999",
+            mother_maiden_full_name="Sample Mother Learner",
         ),
     }
 

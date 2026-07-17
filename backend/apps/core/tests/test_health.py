@@ -62,7 +62,23 @@ class HealthEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://frontend.example.test")
         self.assertEqual(response.headers["Access-Control-Allow-Credentials"], "true")
+        self.assertIn("X-Registration-Token", response.headers["Access-Control-Allow-Headers"])
         self.assertIn("Origin", response.headers["Vary"])
+
+    @override_settings(CORS_ALLOWED_ORIGINS=["https://frontend.example.test"])
+    def test_cors_preflight_allows_registration_token_header(self) -> None:
+        response = self.client.options(
+            "/api/v1/applications/registration/identity/selfie/",
+            headers={
+                "Origin": "https://frontend.example.test",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "x-registration-token",
+            },
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.headers["Access-Control-Allow-Origin"], "https://frontend.example.test")
+        self.assertIn("X-Registration-Token", response.headers["Access-Control-Allow-Headers"])
 
     @override_settings(CORS_ALLOWED_ORIGINS=["https://frontend.example.test"])
     def test_cors_allowlist_ignores_untrusted_origin(self) -> None:

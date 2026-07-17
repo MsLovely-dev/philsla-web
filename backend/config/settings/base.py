@@ -82,6 +82,7 @@ MEDIA_ROOT = BASE_DIR / "private-media"
 MEDIA_URL = "/private-media/"
 STEP2_MAX_IMAGE_BYTES = env_int("STEP2_MAX_IMAGE_BYTES", 5 * 1024 * 1024)
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = os.environ.get("STEP2_DOCUMENT_RECOGNITION_PROVIDER", "unavailable")
+STEP1_SELFIE_FACE_PROVIDER = os.environ.get("STEP1_SELFIE_FACE_PROVIDER", "unavailable")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {

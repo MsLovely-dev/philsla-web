@@ -6,6 +6,7 @@ interface ApiErrorEnvelope {
     code?: string;
     message?: string;
     fields?: Record<string, string[] | string>;
+    meta?: Record<string, unknown>;
     correlationId?: string;
   };
 }
@@ -97,13 +98,17 @@ export class ApiClient {
     const code = payload.error?.code ?? 'API_ERROR';
     const message = payload.error?.message ?? 'The request could not be processed.';
     const fields = this.normalizeFieldErrors(payload.error?.fields);
+    const meta = payload.error?.meta ?? {};
 
-    if (response.status === 400) return validationError(message, fields, code);
-    if (response.status === 401 || response.status === 403) return authorizationError(message, code);
-    if (response.status === 404) return notFoundError(message, code);
-    if (response.status === 409) return conflictError(message, code);
-    if (response.status === 429) return networkError(message, code);
-    return unknownError(message, code);
+    const failure =
+      response.status === 400 ? validationError(message, fields, code) :
+      response.status === 401 || response.status === 403 ? authorizationError(message, code) :
+      response.status === 404 ? notFoundError(message, code) :
+      response.status === 409 ? conflictError(message, code) :
+      response.status === 429 ? networkError(message, code) :
+      unknownError(message, code);
+    failure.error.meta = meta;
+    return failure;
   }
 
   private normalizeFieldErrors(fields: ApiErrorEnvelope['error'] extends infer T ? T extends { fields?: infer F } ? F : never : never): Record<string, string[]> {

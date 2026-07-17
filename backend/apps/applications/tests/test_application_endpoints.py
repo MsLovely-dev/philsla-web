@@ -84,6 +84,8 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(read.status_code, 200)
         self.assertEqual(read.data["personal"]["firstName"], "Lovely Mae")
         self.assertEqual(read.data["school"]["name"], "Taysan High School and Child Development Center")
+        self.assertEqual(read.data["lrnProfile"]["firstName"], "Lovely Mae")
+        self.assertEqual(read.data["lrnProfile"]["lrn"], "123456789012")
 
         updated = self.client.patch(
             reverse("applications:detail", args=[application_id]),
@@ -103,7 +105,7 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(duplicate.status_code, 409)
         self.assertEqual(duplicate.data["error"]["code"], "CONFLICT")
 
-    def test_public_registration_can_create_step1_account_registration_without_step2(self):
+    def test_public_registration_submission_keeps_account_pending_until_approval(self):
         client = APIClient()
         verification = client.post(
             reverse("applications:verify-lrn"),
@@ -121,17 +123,9 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(response.data["status"], ApplicationStatus.SUBMITTED)
         self.assertIsNotNone(response.data["submittedAt"])
         application = StudentApplication.objects.get(id=response.data["id"])
-        self.assertIsNotNone(application.owner_id)
-        self.assertEqual(application.password_hash, "")
-        self.assertEqual(application.owner.email, "new.student@example.test")
-        self.assertTrue(application.owner.check_password(payload["password"]))
-        self.assertTrue(
-            AccountProfile.objects.filter(
-                user=application.owner,
-                role=PortalRole.STUDENT.value,
-                lrn="123456789012",
-            ).exists()
-        )
+        self.assertIsNone(application.owner_id)
+        self.assertTrue(application.password_hash)
+        self.assertFalse(get_user_model().objects.filter(email="new.student@example.test").exists())
         self.assertEqual(application.personal["identityVerificationStatus"], "VERIFIED")
         self.assertEqual(application.personal["sex"], "Female")
         self.assertEqual(application.school["schoolId"], "301234")
@@ -156,8 +150,10 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(first.data["school"]["schoolId"], "301234")
         first_application = StudentApplication.objects.get(id=first.data["id"])
         second_application = StudentApplication.objects.get(id=second.data["id"])
-        self.assertIsNotNone(first_application.owner_id)
-        self.assertIsNotNone(second_application.owner_id)
+        self.assertIsNone(first_application.owner_id)
+        self.assertIsNone(second_application.owner_id)
+        self.assertTrue(first_application.password_hash)
+        self.assertTrue(second_application.password_hash)
 
     def test_draft_requires_a_valid_lrn_verification_proof(self):
         response = self.client.post(
@@ -264,6 +260,35 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["id"] for item in response.data], [str(submitted.id)])
 
+    def test_admissions_reviewer_can_read_submitted_application_detail(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:detail", args=[submitted.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["id"], str(submitted.id))
+
+    def test_admissions_reviewer_cannot_read_draft_application_detail(self):
+        draft = StudentApplication.objects.create(owner=self.user, status=ApplicationStatus.DRAFT)
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:detail", args=[draft.id]))
+
+        self.assertEqual(response.status_code, 403)
+
     def test_student_cannot_list_review_queue(self):
         response = self.client.get(reverse("applications:review-queue"))
         self.assertEqual(response.status_code, 403)
@@ -296,8 +321,18 @@ class ApplicationEndpointTests(TestCase):
         application.refresh_from_db()
         self.assertEqual(application.status, ApplicationStatus.APPROVED)
         self.assertEqual(application.review_step["reviewerDecision"], "APPROVE")
-        self.assertIsNone(application.owner_id)
-        self.assertTrue(application.password_hash)
+        self.assertIsNotNone(application.owner_id)
+        self.assertEqual(application.password_hash, "")
+        self.assertEqual(application.owner.email, "approved.student@example.test")
+        self.assertTrue(application.owner.check_password(payload["password"]))
+        self.assertTrue(application.owner.is_active)
+        self.assertTrue(
+            AccountProfile.objects.filter(
+                user=application.owner,
+                role=PortalRole.STUDENT.value,
+                lrn="123456789012",
+            ).exists()
+        )
 
     def test_reviewer_reject_clears_pending_password_hash(self):
         payload = complete_payload()

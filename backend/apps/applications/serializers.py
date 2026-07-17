@@ -12,6 +12,7 @@ from .models import (
 class ApplicationSerializer(serializers.ModelSerializer):
     coursePreferences = serializers.JSONField(source="course_preferences", required=False)
     reviewStep = serializers.JSONField(source="review_step", required=False)
+    lrnProfile = serializers.SerializerMethodField()
     submittedAt = serializers.DateTimeField(source="submitted_at", read_only=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
@@ -21,9 +22,15 @@ class ApplicationSerializer(serializers.ModelSerializer):
         model = StudentApplication
         fields = (
             "id", "status", "personal", "address", "school", "coursePreferences",
-            "reviewStep", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
+            "reviewStep", "lrnProfile", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
         )
-        read_only_fields = ("id", "status", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
+        read_only_fields = ("id", "status", "lrnProfile", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
+
+    def get_lrnProfile(self, obj):
+        verification = getattr(obj, "step2_verification", None)
+        if verification is None:
+            return {}
+        return verification.lrn_profile or {}
 
     def validate_personal(self, value):
         if not isinstance(value, dict):
@@ -75,6 +82,14 @@ class ReviewerDecisionSerializer(serializers.Serializer):
 
 
 class LrnVerificationSerializer(serializers.Serializer):
+    VERIFICATION_CATEGORIES = (
+        ("email", "Email Address"),
+        ("birthday", "Birthday"),
+        ("student_id", "Student ID / School Card Number"),
+        ("mobile", "Mobile Number"),
+        ("mother_name", "Mother's Name"),
+    )
+
     lrn = serializers.RegexField(
         regex=r"^\d{12}$",
         error_messages={
@@ -83,6 +98,8 @@ class LrnVerificationSerializer(serializers.Serializer):
             "required": "Please enter your LRN.",
         },
     )
+    verificationCategory = serializers.ChoiceField(choices=VERIFICATION_CATEGORIES, required=False, allow_blank=True)
+    verificationValue = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True, max_length=200)
 
 
 class ApplicationCreateSerializer(ApplicationSerializer):
@@ -155,7 +172,15 @@ class Step2ConfigurationSerializer(serializers.ModelSerializer):
 
 
 class Step2MediaUploadSerializer(serializers.Serializer):
-    mediaType = serializers.ChoiceField(choices=IdentityMediaType.choices)
+    mediaType = serializers.ChoiceField(choices=(IdentityMediaType.STUDENT_ID_FRONT, IdentityMediaType.STUDENT_ID_BACK))
+    file = serializers.FileField()
+
+
+class RegistrationIdentitySelfieUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+
+class RegistrationIdentitySelfieFaceValidationSerializer(serializers.Serializer):
     file = serializers.FileField()
 
 

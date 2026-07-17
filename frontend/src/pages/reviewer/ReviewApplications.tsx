@@ -32,7 +32,7 @@ export default function ReviewApplications() {
   const isManualRegActive = inputModules?.find(m => m.id === 'admin_manual_reg')?.isActive !== false;
   const { schedules } = useMockData();
   const navigate = useNavigate();
-  const [apps, setApps] = useState(DUMMY_APPLICATIONS.map(a => {
+  const [apps, setApps] = useState<any[]>(DUMMY_APPLICATIONS.map(a => {
     const score = Math.floor(Math.random() * 100);
     let duplicateStatus = 'No Match';
     if (score > 85) duplicateStatus = 'High Risk Duplicate';

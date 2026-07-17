@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { usePhilSA } from '../PhilSAContext';
 import { useMockData } from '../services/mockService';
@@ -8,67 +8,99 @@ import {
   mapBackendApplicationToFrontend,
   type StudentRegistrationFieldConfig,
 } from '../services/backendApplicationService';
-import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone } from 'lucide-react';
+import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const SECTIONS = [
-  'LRN & Profile Setup',
+  'Identity & Biometrics',
   'Contact & Security Setup',
   'Review & Submit'
 ];
-const STEP_TRACKER_LABELS = ['Student Profile Setup', 'Account Set Up', 'Review & Submit'];
+const STEP_TRACKER_LABELS = ['Identity & Biometrics', 'Account Set Up', 'Review & Submit'];
 
-const COUNTRIES = [
-  "Philippines", "United States", "Canada", "United Kingdom", "Australia", "Japan", 
-  "Singapore", "South Korea", "Germany", "Saudi Arabia", "United Arab Emirates", 
-  "Malaysia", "Indonesia", "Thailand", "Vietnam", "Taiwan", "Hong Kong", "China", "India"
+type LrnVerificationCategory = 'email' | 'birthday' | 'student_id' | 'mobile' | 'mother_name';
+type LrnVerificationReview = {
+  lrn: string;
+  categoryLabel: string;
+  inputLabel: string;
+  value: string;
+};
+
+const LRN_VERIFICATION_CATEGORIES: Array<{
+  value: LrnVerificationCategory;
+  label: string;
+  inputLabel: string;
+  placeholder: string;
+  helpText: string;
+  inputType?: 'text' | 'email' | 'date' | 'tel';
+}> = [
+  {
+    value: 'email',
+    label: 'Email Address',
+    inputLabel: 'Registered Email Address',
+    placeholder: 'Enter the email address linked to your LRN.',
+    helpText: 'Provide the registered email address in the LRN database associated with your LRN.',
+    inputType: 'email',
+  },
+  {
+    value: 'birthday',
+    label: 'Birthday (Format: YYYY-MM-DD)',
+    inputLabel: 'Registered Birthday',
+    placeholder: 'YYYY-MM-DD',
+    helpText: 'Provide the birth date recorded against your LRN.',
+    inputType: 'date',
+  },
+  {
+    value: 'student_id',
+    label: 'Student ID / School Card Number',
+    inputLabel: 'Student ID / School Card Number',
+    placeholder: 'Enter your school card or student ID number.',
+    helpText: 'Provide the student ID or school card number registered with your learner record.',
+  },
+  {
+    value: 'mobile',
+    label: 'Mobile Number (Format: 11-digit)',
+    inputLabel: 'Registered Mobile Number',
+    placeholder: 'e.g. 09171234567',
+    helpText: 'Provide the 11-digit mobile number linked to your LRN.',
+    inputType: 'tel',
+  },
+  {
+    value: 'mother_name',
+    label: "Mother's Name (Maiden Full Name)",
+    inputLabel: "Mother's Maiden Full Name",
+    placeholder: "Enter your mother's maiden full name.",
+    helpText: 'Provide the registered maiden full name associated with your LRN record.',
+  },
 ];
 
-const HIGH_SCHOOLS = [
-  "Philippine Science High School - Main Campus",
-  "Philippine Science High School - Ilocos Region Campus",
-  "Philippine Science High School - Cordillera Administrative Region Campus",
-  "Philippine Science High School - Cagayan Valley Campus",
-  "Philippine Science High School - Central Luzon Campus",
-  "Philippine Science High School - CALABARZON Campus",
-  "Philippine Science High School - MIMAROPA Campus",
-  "Philippine Science High School - Bicol Region Campus",
-  "Philippine Science High School - Western Visayas Campus",
-  "Philippine Science High School - Central Visayas Campus",
-  "Philippine Science High School - Eastern Visayas Campus",
-  "Philippine Science High School - Zamboanga Peninsula Campus",
-  "Philippine Science High School - Central Mindanao Campus",
-  "Philippine Science High School - Southern Mindanao Campus",
-  "Philippine Science High School - SOCCSKSARGEN Campus",
-  "Philippine Science High School - Caraga Region Campus",
-  "Manila Science High School",
-  "Quezon City Science High School",
-  "Makati Science High School",
-  "Pasig City Science High School",
-  "Ateneo de Manila High School",
-  "De La Salle University Integrated School",
-  "University of Santo Tomas High School",
-  "University of the Philippines High School In Diliman",
-  "University of the Philippines High School In Cebu",
-  "Chiang Kai Shek College",
-  "Xavier School",
-  "San Beda University Senior High School",
-  "Miriam College High School",
-  "Philippine Christian University High School",
-  "Far Eastern University High School",
-  "Adamson University High School",
-  "Mapua University Senior High School",
-  "National University Senior High School"
-];
+const LRN_COOLDOWN_SECONDS = 900;
+const LRN_COOLDOWN_STORAGE_KEY = 'philsa_lrn_cooldown_expires_at';
+
+function getStoredLrnCooldownSecondsLeft() {
+  const storedExpiry = Number(localStorage.getItem(LRN_COOLDOWN_STORAGE_KEY));
+  if (!Number.isFinite(storedExpiry) || storedExpiry <= 0) return 0;
+
+  const secondsLeft = Math.ceil((storedExpiry - Date.now()) / 1000);
+  if (secondsLeft <= 0) {
+    localStorage.removeItem(LRN_COOLDOWN_STORAGE_KEY);
+    return 0;
+  }
+  return secondsLeft;
+}
+
+function storeLrnCooldownExpiry(secondsLeft = LRN_COOLDOWN_SECONDS) {
+  localStorage.setItem(LRN_COOLDOWN_STORAGE_KEY, String(Date.now() + secondsLeft * 1000));
+}
+
+function clearStoredLrnCooldown() {
+  localStorage.removeItem(LRN_COOLDOWN_STORAGE_KEY);
+}
 
 export default function StudentApplication() {
   const isPwaMode = new URLSearchParams(window.location.search).get('pwa') === 'true';
   const { user, addAuditLog, inputModules, addTicket } = usePhilSA();
   const isRegActive = inputModules?.find(m => m.id === 'student_reg')?.isActive !== false;
-  const isGenderActive = inputModules?.find(m => m.id === 'student_reg_gender')?.isActive !== false;
-  const isNationalIdActive = inputModules?.find(m => m.id === 'student_reg_national_id')?.isActive !== false;
-  const isMiddleNameActive = inputModules?.find(m => m.id === 'student_reg_middle_name')?.isActive !== false;
-  const isBirthPlaceActive = inputModules?.find(m => m.id === 'student_reg_birth_place')?.isActive !== false;
   const isSuffixActive = inputModules?.find(m => m.id === 'student_reg_suffix')?.isActive !== false;
 
   // Load verification methods configuration dynamically
@@ -158,6 +190,23 @@ export default function StudentApplication() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isIdVerified, setIsIdVerified] = useState(false);
+  const [lrnVerificationCategory, setLrnVerificationCategory] = useState<LrnVerificationCategory>('email');
+  const [lrnRegisteredValue, setLrnRegisteredValue] = useState('');
+  const [lrnVerificationReview, setLrnVerificationReview] = useState<LrnVerificationReview | null>(null);
+  const [biometricSelfieFileName, setBiometricSelfieFileName] = useState('');
+  const [biometricSelfieStatus, setBiometricSelfieStatus] = useState<'idle' | 'reviewing' | 'uploading' | 'stored' | 'failed'>('idle');
+  const [biometricSelfieMessage, setBiometricSelfieMessage] = useState('');
+  const [capturedSelfiePreview, setCapturedSelfiePreview] = useState('');
+  const [pendingSelfieFile, setPendingSelfieFile] = useState<File | null>(null);
+  const [isSelfieCameraActive, setIsSelfieCameraActive] = useState(false);
+  const [selfieFaceStatus, setSelfieFaceStatus] = useState<'idle' | 'scanning' | 'detected' | 'counting' | 'captured'>('idle');
+  const [selfieCountdown, setSelfieCountdown] = useState<number | null>(null);
+  const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
+  const selfieStreamRef = useRef<MediaStream | null>(null);
+  const selfieDetectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selfieCountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selfieAutoCaptureRef = useRef(false);
+  const selfieDetectionRequestInFlightRef = useRef(false);
   const [candidateId, setCandidateId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [lrnVerificationToken, setLrnVerificationToken] = useState('');
@@ -171,44 +220,46 @@ export default function StudentApplication() {
   const [supportReferenceNumber, setSupportReferenceNumber] = useState('');
   const [showPrivacyConsent, setShowPrivacyConsent] = useState(true);
   const [privacyChecked, setPrivacyChecked] = useState(false);
-  const [showSimulator, setShowSimulator] = useState(false);
+  const [reviewCertified, setReviewCertified] = useState(false);
 
   // New Verification Path States
   const [verificationPath, setVerificationPath] = useState<'philsys' | 'lrn' | 'manual' | null>(null);
   const visibleVerificationPath = verificationPath ?? activeVerificationPath;
-  const step1ModeTitle = visibleVerificationPath === 'philsys' ? 'PhilSys ID Setup' : visibleVerificationPath === 'manual' ? 'Manual Profile Setup' : 'LRN & Profile Setup';
-  const step1ModeSubtitle = visibleVerificationPath === 'philsys' ? 'PhilSys Identity Verification' : visibleVerificationPath === 'manual' ? 'Manual High Priority Entry' : 'DepEd Learner Verification';
+  const step1ModeTitle = visibleVerificationPath === 'philsys' ? 'PhilSys ID Setup' : 'Identity & Biometrics';
+  const step1ModeSubtitle = visibleVerificationPath === 'philsys' ? 'PhilSys Identity Verification' : 'LRN Registry Verification';
   const step1ModeDescription = visibleVerificationPath === 'philsys'
     ? 'Enter your PhilSys ID to retrieve verified identity records. Complete any remaining high-priority school information before account creation.'
-    : visibleVerificationPath === 'manual'
-      ? 'Enter the required high-priority identity and school information manually. You can provide your LRN later after account creation.'
-      : 'Enter your official 12-digit Learner Reference Number (LRN) to fetch verified enrollment and identity records from DepEd.';
-  const showStep1ModeDescription = !(activeVerificationPath === 'lrn' && verificationPath === 'manual');
-  const [lrnAttemptsLeft, setLrnAttemptsLeft] = useState(5);
-  const [showLrnCooldownModal, setShowLrnCooldownModal] = useState(false);
-  const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(900); // 15 minutes = 900 seconds
+    : 'Verify your Learner Reference Number (LRN) against registered information, then capture your live biometric verification selfie.';
+  const [initialLrnCooldownSecondsLeft] = useState(() => getStoredLrnCooldownSecondsLeft());
+  const [lrnAttemptsLeft, setLrnAttemptsLeft] = useState(initialLrnCooldownSecondsLeft > 0 ? 0 : 5);
+  const [showLrnCooldownModal, setShowLrnCooldownModal] = useState(initialLrnCooldownSecondsLeft > 0);
+  const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(initialLrnCooldownSecondsLeft || LRN_COOLDOWN_SECONDS);
 
   useEffect(() => {
-    let interval: any = null;
-    if (showLrnCooldownModal && cooldownSecondsLeft > 0) {
-      interval = setInterval(() => {
-        setCooldownSecondsLeft(prev => {
-          if (prev <= 1) {
-            setShowLrnCooldownModal(false);
-            setLrnAttemptsLeft(5);
-            setRegistryLockedFields([]);
-            setErrors({});
-            setFormData(p => ({ ...p, lrn: '' }));
-            return 900;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
+    if (!showLrnCooldownModal) return undefined;
+
+    const syncCooldownFromStorage = () => {
+      const secondsLeft = getStoredLrnCooldownSecondsLeft();
+      if (secondsLeft <= 0) {
+        setShowLrnCooldownModal(false);
+        setLrnAttemptsLeft(5);
+        setCooldownSecondsLeft(LRN_COOLDOWN_SECONDS);
+        setRegistryLockedFields([]);
+        setErrors({});
+        setFormData(p => ({ ...p, lrn: '' }));
+        return;
+      }
+
+      setCooldownSecondsLeft(secondsLeft);
+      setLrnAttemptsLeft(0);
     };
-  }, [showLrnCooldownModal, cooldownSecondsLeft]);
+
+    syncCooldownFromStorage();
+    const interval = setInterval(syncCooldownFromStorage, 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [showLrnCooldownModal]);
 
   // Maintenance controls which single registration mode is visible.
   useEffect(() => {
@@ -221,10 +272,6 @@ export default function StudentApplication() {
       }
     }
   }, [showPrivacyConsent, activeVerificationPath]);
-  const [philsysInputMode, setPhilsysInputMode] = useState<'qr' | 'manual'>('manual');
-  const [qrScanning, setQrScanning] = useState(false);
-  const [qrScanningMessage, setQrScanningMessage] = useState('');
-  const [failedVerificationMethod, setFailedVerificationMethod] = useState('');
   const [emailOtp, setEmailOtp] = useState('');
   const [generatedEmailOtp, setGeneratedEmailOtp] = useState('');
   const [emailOtpSentTo, setEmailOtpSentTo] = useState('');
@@ -382,10 +429,15 @@ export default function StudentApplication() {
     });
     setIsIdVerified(false);
     setRegistryLockedFields([]);
+    setLrnVerificationCategory('email');
+    setLrnRegisteredValue('');
+    setLrnVerificationReview(null);
+    setBiometricSelfieFileName('');
+    setBiometricSelfieStatus('idle');
+    setBiometricSelfieMessage('');
+    setCapturedSelfiePreview('');
+    stopSelfieCamera();
     setVerificationPath(activeVerificationPath);
-    setPhilsysInputMode('manual');
-    setQrScanning(false);
-    setFailedVerificationMethod('');
     setLrnVerificationToken('');
     setEmailOtp('');
     setGeneratedEmailOtp('');
@@ -395,6 +447,7 @@ export default function StudentApplication() {
     setVisitedSections([0]);
     setIsSessionExpired(false);
     setShowHelpdeskTicket(false);
+    setReviewCertified(false);
     setTimeLeft(1800);
     setErrors({});
     setTicketContactEmail('');
@@ -604,17 +657,10 @@ export default function StudentApplication() {
 
   const handleVerifyPhilSysQR = (simulateSuccess: boolean) => {
     setIsSubmitting(true);
-    setQrScanning(true);
-    setQrScanningMessage('Initializing live camera feed...');
     
     setTimeout(() => {
-      setQrScanningMessage('Locating ePhilID secure QR border...');
-      
       setTimeout(() => {
-        setQrScanningMessage('Reading digital signature blocks...');
-        
         setTimeout(() => {
-          setQrScanning(false);
           setIsSubmitting(false);
           
           if (simulateSuccess) {
@@ -628,7 +674,6 @@ export default function StudentApplication() {
           } else {
             const randomTicket = 'SRN-2026-' + Math.floor(10000 + Math.random() * 90000);
             setSupportReferenceNumber(randomTicket);
-            setFailedVerificationMethod('PhilSys QR Code Scan');
             setTicketContactEmail(formData.email || user?.email || '');
             setTicketDescription('QR Scan mismatch during secure token handshake.');
             setTicketAttachment('');
@@ -656,7 +701,6 @@ export default function StudentApplication() {
       if (cleanPcn.startsWith('9') || cleanPcn.endsWith('9')) {
         const randomTicket = 'SRN-2026-' + Math.floor(10000 + Math.random() * 90000);
         setSupportReferenceNumber(randomTicket);
-        setFailedVerificationMethod('PhilSys PCN Verification');
         setTicketContactEmail(formData.email || user?.email || '');
         setTicketDescription(`Registry query failed for PCN: ${formData.nationalId}`);
         setTicketAttachment('');
@@ -682,6 +726,253 @@ export default function StudentApplication() {
     setEmailOtpSentTo('');
     setIsEmailVerified(false);
   };
+
+  const selectedLrnVerificationCategory = LRN_VERIFICATION_CATEGORIES.find(category => category.value === lrnVerificationCategory) ?? LRN_VERIFICATION_CATEGORIES[0];
+  const dossierVerificationLabel = (lrnVerificationReview?.inputLabel || selectedLrnVerificationCategory.inputLabel).replace(/^Registered /, 'Verified ');
+
+  function clearSelfieTimers() {
+    if (selfieDetectionIntervalRef.current) {
+      clearInterval(selfieDetectionIntervalRef.current);
+      selfieDetectionIntervalRef.current = null;
+    }
+    if (selfieCountdownIntervalRef.current) {
+      clearInterval(selfieCountdownIntervalRef.current);
+      selfieCountdownIntervalRef.current = null;
+    }
+    selfieAutoCaptureRef.current = false;
+    setSelfieCountdown(null);
+  }
+
+  function stopSelfieCamera() {
+    clearSelfieTimers();
+    selfieStreamRef.current?.getTracks().forEach(track => track.stop());
+    selfieStreamRef.current = null;
+    if (selfieVideoRef.current) {
+      selfieVideoRef.current.srcObject = null;
+    }
+    setIsSelfieCameraActive(false);
+  }
+
+  async function createSelfieFileFromCamera(options: { updatePreview: boolean }) {
+    const video = selfieVideoRef.current;
+    if (!video || !selfieStreamRef.current || video.videoWidth === 0 || video.videoHeight === 0) {
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage('Start the live camera before taking a selfie.');
+      return null;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage('Unable to capture a selfie from the live camera.');
+      return null;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (options.updatePreview) {
+      setCapturedSelfiePreview(canvas.toDataURL('image/jpeg', 0.92));
+    }
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+    if (!blob) {
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage('Unable to prepare the captured selfie image.');
+      return null;
+    }
+
+    return new File([blob], `biometric-selfie-${Date.now()}.jpg`, { type: 'image/jpeg' });
+  }
+
+  async function captureSelfieFromCamera() {
+    const file = await createSelfieFileFromCamera({ updatePreview: true });
+    if (!file) return;
+    stopSelfieCamera();
+    setPendingSelfieFile(file);
+    setBiometricSelfieFileName(file.name);
+    setBiometricSelfieStatus('reviewing');
+    setSelfieFaceStatus('captured');
+    setBiometricSelfieMessage('Review your captured selfie. Save it only if the photo is clear and acceptable.');
+  }
+
+  function startSelfieCountdown() {
+    if (selfieCountdownIntervalRef.current || selfieAutoCaptureRef.current) return;
+    if (selfieDetectionIntervalRef.current) {
+      clearInterval(selfieDetectionIntervalRef.current);
+      selfieDetectionIntervalRef.current = null;
+    }
+    setSelfieFaceStatus('counting');
+    setSelfieCountdown(3);
+    setBiometricSelfieMessage('Face detected. Hold still for automatic capture.');
+    selfieCountdownIntervalRef.current = setInterval(() => {
+      setSelfieCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          if (selfieCountdownIntervalRef.current) {
+            clearInterval(selfieCountdownIntervalRef.current);
+            selfieCountdownIntervalRef.current = null;
+          }
+          selfieAutoCaptureRef.current = true;
+          setSelfieFaceStatus('captured');
+          void captureSelfieFromCamera();
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function startSelfieFaceDetection() {
+    clearSelfieTimers();
+    setSelfieFaceStatus('scanning');
+    setBiometricSelfieMessage('Scanning for your face with server-side validation. Keep your face centered in the frame.');
+
+    selfieDetectionIntervalRef.current = setInterval(() => {
+      if (selfieDetectionRequestInFlightRef.current || selfieAutoCaptureRef.current) return;
+      selfieDetectionRequestInFlightRef.current = true;
+
+      void createSelfieFileFromCamera({ updatePreview: false }).then(async file => {
+        if (!file) return;
+        const result = await backendApplicationService.validateRegistrationSelfieFace(lrnVerificationToken, file);
+        if (result.ok !== false && result.data.faceDetected && !selfieAutoCaptureRef.current) {
+          setSelfieFaceStatus('detected');
+          startSelfieCountdown();
+          return;
+        }
+        if (!selfieAutoCaptureRef.current && selfieCountdown === null) {
+          setSelfieFaceStatus('scanning');
+          setBiometricSelfieMessage(result.ok === false
+            ? result.error.message
+            : 'No face detected yet. Keep your face centered in the frame.');
+        }
+      }).catch(() => {
+        setSelfieFaceStatus('idle');
+        setBiometricSelfieStatus('failed');
+        setBiometricSelfieMessage('Server-side face detection failed. Please restart the camera and try again.');
+        stopSelfieCamera();
+      }).finally(() => {
+        selfieDetectionRequestInFlightRef.current = false;
+      });
+    }, 1200);
+  }
+
+  const startSelfieCamera = async () => {
+    if (!isIdVerified) {
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage('Verify your LRN details before starting live camera capture.');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage('Live camera capture is not supported by this browser.');
+      return;
+    }
+
+    try {
+      stopSelfieCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false,
+      });
+      selfieStreamRef.current = stream;
+      if (selfieVideoRef.current) {
+        selfieVideoRef.current.srcObject = stream;
+        await selfieVideoRef.current.play();
+      }
+      setIsSelfieCameraActive(true);
+      setBiometricSelfieStatus('idle');
+      setBiometricSelfieFileName('');
+      setCapturedSelfiePreview('');
+      setPendingSelfieFile(null);
+      startSelfieFaceDetection();
+    } catch {
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage('Camera permission was denied or no camera is available.');
+      stopSelfieCamera();
+    }
+  };
+
+  const resetLrnIdentityVerification = () => {
+    setLrnVerificationToken('');
+    setLrnVerificationReview(null);
+    setIsIdVerified(false);
+    setRegistryLockedFields([]);
+    setBiometricSelfieFileName('');
+    setBiometricSelfieStatus('idle');
+    setBiometricSelfieMessage('');
+    setCapturedSelfiePreview('');
+    setPendingSelfieFile(null);
+    setSelfieFaceStatus('idle');
+    stopSelfieCamera();
+  };
+
+  const handleConfirmSelfie = async () => {
+    const file = pendingSelfieFile;
+    if (!file) return;
+    if (!lrnVerificationToken) {
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage('Verify your LRN details before capturing your biometric selfie.');
+      return;
+    }
+
+    setBiometricSelfieStatus('uploading');
+    setBiometricSelfieFileName(file.name);
+    setBiometricSelfieMessage('');
+    const result = await backendApplicationService.uploadRegistrationSelfie(lrnVerificationToken, file);
+
+    if (result.ok === false) {
+      stopSelfieCamera();
+      setSelfieFaceStatus('idle');
+      setBiometricSelfieStatus('failed');
+      setBiometricSelfieMessage(result.error.message);
+      addAuditLog('BIOMETRIC_SELFIE_UPLOAD_FAILED', `Selfie upload failed. Code: ${result.error.code ?? 'UNKNOWN'}.`);
+      return;
+    }
+
+    if (result.data.status === 'PASSED' || result.data.uploadedMedia.includes('SELFIE')) {
+      setBiometricSelfieStatus('stored');
+      setBiometricSelfieMessage('Selfie captured and stored as your enrolled biometric reference.');
+      setSelfieFaceStatus('captured');
+      setPendingSelfieFile(null);
+      stopSelfieCamera();
+      addAuditLog('BIOMETRIC_SELFIE_CAPTURED', 'Student captured selfie after successful LRN identity verification.');
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next.selfie;
+        delete next.general;
+        return next;
+      });
+      return;
+    }
+
+    setBiometricSelfieStatus('failed');
+    stopSelfieCamera();
+    setSelfieFaceStatus('idle');
+    setBiometricSelfieMessage('Selfie was uploaded but biometric enrollment is still pending review.');
+  };
+
+  const handleRetakeSelfie = () => {
+    setBiometricSelfieFileName('');
+    setBiometricSelfieStatus('idle');
+    setBiometricSelfieMessage('');
+    setCapturedSelfiePreview('');
+    setPendingSelfieFile(null);
+    setSelfieFaceStatus('idle');
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next.selfie;
+      return next;
+    });
+    void startSelfieCamera();
+  };
+
+  useEffect(() => {
+    return () => {
+      clearSelfieTimers();
+      selfieStreamRef.current?.getTracks().forEach(track => track.stop());
+      selfieStreamRef.current = null;
+    };
+  }, []);
 
   const handleSendEmailOtp = () => {
     const email = formData.email.trim();
@@ -725,25 +1016,19 @@ export default function StudentApplication() {
     });
   };
 
-  const continueWithManualStep1 = () => {
-    setShowLrnCooldownModal(false);
-    setVerificationPath('manual');
-    setLrnVerificationToken('');
-    setIsIdVerified(false);
-    setRegistryLockedFields([]);
-    setErrors({});
-    setCooldownSecondsLeft(900);
-    setFormData(prev => ({ ...prev, lrn: '' }));
-    addAuditLog('LRN_MANUAL_FALLBACK_SELECTED', 'Student selected manual Step 1 input after LRN verification attempts were exhausted.');
-  };
-
-  const handleVerifyLrnPath = async (forcedLrn?: string) => {
+  const handleVerifyLrnPath = async (
+    forcedLrn?: string,
+    forcedVerification?: { category: LrnVerificationCategory; value: string },
+  ) => {
     if (lrnAttemptsLeft <= 0) {
       setShowLrnCooldownModal(true);
       return;
     }
 
     const currentLrn = forcedLrn !== undefined ? forcedLrn : formData.lrn;
+    const currentCategory = forcedVerification?.category ?? lrnVerificationCategory;
+    const currentValue = forcedVerification?.value ?? lrnRegisteredValue;
+    const currentCategoryConfig = LRN_VERIFICATION_CATEGORIES.find(category => category.value === currentCategory) ?? selectedLrnVerificationCategory;
 
     if (!currentLrn) {
       setErrors(prev => ({ ...prev, lrn: 'Please enter your LRN.' }));
@@ -755,28 +1040,59 @@ export default function StudentApplication() {
       return;
     }
 
+    if (!currentValue.trim()) {
+      setErrors(prev => ({ ...prev, lrnRegisteredValue: `${currentCategoryConfig.inputLabel} is required.` }));
+      return;
+    }
+
     setIsSubmitting(true);
-    const result = await backendApplicationService.verifyLrn(currentLrn);
+    const result = await backendApplicationService.verifyLrn(currentLrn, {
+      category: currentCategory,
+      value: currentValue.trim(),
+    });
     setIsSubmitting(false);
 
     if (result.ok === false) {
       const nextAttempts = result.error.code === 'LRN_COOLDOWN' ? 0 : Math.max(0, lrnAttemptsLeft - 1);
-      setLrnAttemptsLeft(nextAttempts);
-      setErrors(prev => ({
-        ...prev,
-        general: result.error.message,
-      }));
+      setErrors(prev => {
+        const next: Record<string, string> = {
+          ...prev,
+          lrnRegisteredValue: result.error.message,
+        };
+        delete next.general;
+        return next;
+      });
       addAuditLog('DEPED_LRN_VERIFICATION_FAILED', `Verification failed for DepEd LRN. Code: ${result.error.code ?? 'UNKNOWN'}.`);
       if (result.error.code === 'LRN_COOLDOWN' || nextAttempts <= 0) {
+        const serverRetryAfterSeconds = Number(result.error.meta?.retryAfterSeconds);
+        const cooldownSeconds = Number.isFinite(serverRetryAfterSeconds) && serverRetryAfterSeconds > 0
+          ? Math.ceil(serverRetryAfterSeconds)
+          : LRN_COOLDOWN_SECONDS;
+        storeLrnCooldownExpiry(cooldownSeconds);
+        setLrnAttemptsLeft(0);
+        setCooldownSecondsLeft(cooldownSeconds);
         setShowLrnCooldownModal(true);
+      } else {
+        setLrnAttemptsLeft(nextAttempts);
       }
       return;
     }
 
     const { profile, verificationToken } = result.data;
+    clearStoredLrnCooldown();
     setLrnVerificationToken(verificationToken);
+    setLrnVerificationReview({
+      lrn: profile.lrn,
+      categoryLabel: currentCategoryConfig.label,
+      inputLabel: currentCategoryConfig.inputLabel,
+      value: currentValue.trim(),
+    });
     setLrnAttemptsLeft(5);
+    setCooldownSecondsLeft(LRN_COOLDOWN_SECONDS);
     setIsIdVerified(true);
+    setBiometricSelfieFileName('');
+    setBiometricSelfieStatus('idle');
+    setBiometricSelfieMessage('');
     setRegistryLockedFields([
       ['lrn', profile.lrn],
       ['firstName', profile.firstName],
@@ -824,24 +1140,17 @@ export default function StudentApplication() {
       if (formData.lrn && !/^\d{12}$/.test(formData.lrn)) {
         newErrors.lrn = 'LRN must be exactly 12 numeric digits.';
       }
-      if (isStep1FieldEnabled('Birth Date') && !formData.dob) {
-        newErrors.dob = 'Date of birth is required';
+      if (verificationPath === 'lrn' && !lrnRegisteredValue.trim()) {
+        newErrors.lrnRegisteredValue = `${selectedLrnVerificationCategory.inputLabel} is required.`;
       }
-      if (isStep1FieldEnabled('First Name') && !formData.firstName) newErrors.firstName = 'First name is required';
-      if (isStep1FieldEnabled('Last Name') && !formData.lastName) newErrors.lastName = 'Last name is required';
-      if (isStep1FieldEnabled('Sex') && !formData.gender) newErrors.gender = 'Sex is required';
-      if (isStep1FieldEnabled('School ID') && !formData.schoolId) newErrors.schoolId = 'School ID is required';
-      if (isStep1FieldEnabled('School Name') && !formData.schoolName) newErrors.schoolName = 'School name is required';
-      if (isStep1FieldEnabled('Grade Level') && !formData.gradeLevel) newErrors.gradeLevel = 'Grade level is required';
-      if (isStep1FieldEnabled('Enrollment Status') && !formData.enrollmentStatus) newErrors.enrollmentStatus = 'Enrollment status is required';
-      if (isStep1FieldEnabled('School Year') && !formData.schoolYear) newErrors.schoolYear = 'School year is required';
-      additionalHighPriorityFields.forEach(field => {
-        if (!formData.customStep1Fields[field.value]?.trim()) {
-          newErrors[`customStep1:${field.value}`] = `${field.value} is required`;
-        }
-      });
       if (!isIdVerified && verificationPath !== 'manual') {
-        newErrors.general = 'Verify your LRN or PhilSys ID, or choose manual entry if verification is unavailable.';
+        if (verificationPath === 'lrn') {
+          newErrors.lrnRegisteredValue = 'Verify your LRN with the selected registered information before continuing.';
+        } else {
+          newErrors.general = 'Complete identity verification before continuing.';
+        }
+      } else if (verificationPath === 'lrn' && biometricSelfieStatus !== 'stored') {
+        newErrors.selfie = 'Capture and store your biometric selfie before continuing.';
       }
     }
 
@@ -896,6 +1205,11 @@ export default function StudentApplication() {
   };
 
   const handleSubmit = async () => {
+    if (!reviewCertified) {
+      setErrors({ general: 'Certify that the reviewed registration details are accurate before submitting.' });
+      return;
+    }
+
     if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
       setIsSubmitting(true);
       const result = await backendApplicationService.createAndSubmit(
@@ -1744,11 +2058,9 @@ export default function StudentApplication() {
                       </div>
                    </div>
 
-                   {showStep1ModeDescription && (
-                     <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                        {step1ModeDescription}
-                     </p>
-                   )}
+                   <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                      {step1ModeDescription}
+                   </p>
 
                    <div className="space-y-6">
                       {!verificationPath && (
@@ -1771,32 +2083,220 @@ export default function StudentApplication() {
 
                       {/* LRN Input */}
                       {verificationPath === 'lrn' && (
-                        <div className="space-y-3">
-                          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[1fr_auto] md:items-end">
-                            <div className="space-y-2">
-                            <label className="label-philsa text-philsa-gray">Learner Reference Number (LRN) *</label>
-                            <input 
-                              type="text" 
-                              placeholder="e.g. 101234567890" 
-                              className="input-philsa font-mono tracking-wider bg-white w-full"
-                              value={formData.lrn} 
-                              onChange={(e) => {
-                                setFormData({...formData, lrn: e.target.value});
-                               setLrnVerificationToken('');
-                               setIsIdVerified(false);
-                               setRegistryLockedFields([]);
-                               if (errors.lrn) setErrors(prev => ({...prev, lrn: ''}));
-                              }} 
-                            />
-                            {errors.lrn && <p className="text-xs text-philsa-red font-bold pl-1">{errors.lrn}</p>}
+                        <div className="space-y-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+                          <div className="flex items-center gap-3">
+                            <Shield className="w-4 h-4 text-philsa-red" />
+                            <div>
+                              <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">LRN Registered Information Verification</p>
+                              <p className="text-[10px] text-slate-500 font-bold">Enter your LRN and one registered detail associated with that learner record.</p>
                             </div>
+                          </div>
+
+                          <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                            <div className="space-y-2">
+                              <label className="label-philsa text-philsa-gray">LRN Number *</label>
+                              <input 
+                                type="text" 
+                                inputMode="numeric"
+                                placeholder="e.g. 101234567890" 
+                                className="input-philsa font-mono tracking-wider bg-white w-full"
+                                value={formData.lrn} 
+                                onChange={(e) => {
+                                  setFormData({...formData, lrn: e.target.value});
+                                  resetLrnIdentityVerification();
+                                  if (errors.lrn || errors.general) {
+                                    setErrors(prev => {
+                                      const next = {...prev};
+                                      delete next.lrn;
+                                      delete next.general;
+                                      return next;
+                                    });
+                                  }
+                                }} 
+                              />
+                              {errors.lrn && <p className="text-xs text-philsa-red font-bold pl-1">{errors.lrn}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                              <label className="label-philsa text-philsa-gray">1. Select Verification Category *</label>
+                              <select
+                                className="input-philsa bg-white"
+                                value={lrnVerificationCategory}
+                                onChange={(e) => {
+                                  setLrnVerificationCategory(e.target.value as LrnVerificationCategory);
+                                  setLrnRegisteredValue('');
+                                  resetLrnIdentityVerification();
+                                  if (errors.lrnRegisteredValue || errors.general) {
+                                    setErrors(prev => {
+                                      const next = {...prev};
+                                      delete next.lrnRegisteredValue;
+                                      delete next.general;
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              >
+                                {LRN_VERIFICATION_CATEGORIES.map(category => (
+                                  <option key={category.value} value={category.value}>{category.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-start">
+                            <div className="space-y-2">
+                              <label className="label-philsa text-philsa-gray">2. Enter Your {selectedLrnVerificationCategory.inputLabel} *</label>
+                              <input
+                                type={selectedLrnVerificationCategory.inputType ?? 'text'}
+                                className="input-philsa bg-white w-full"
+                                placeholder={selectedLrnVerificationCategory.placeholder}
+                                value={lrnRegisteredValue}
+                                onChange={(e) => {
+                                  setLrnRegisteredValue(e.target.value);
+                                  resetLrnIdentityVerification();
+                                  if (errors.lrnRegisteredValue || errors.general) {
+                                    setErrors(prev => {
+                                      const next = {...prev};
+                                      delete next.lrnRegisteredValue;
+                                      delete next.general;
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              />
+                              <p className="text-[10px] text-slate-500 font-bold">{selectedLrnVerificationCategory.helpText}</p>
+                              {errors.lrnRegisteredValue && <p className="text-xs text-philsa-red font-bold pl-1">{errors.lrnRegisteredValue}</p>}
+                            </div>
+
                             <button
                               type="button"
                               onClick={() => handleVerifyLrnPath()}
-                              className="w-full md:w-auto btn-primary py-3 px-8 font-black uppercase text-xs tracking-widest cursor-pointer flex items-center justify-center gap-2"
+                              disabled={isSubmitting}
+                              className="w-full lg:w-auto lg:mt-[27px] btn-primary py-3 px-8 font-black uppercase text-xs tracking-widest cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
                             >
-                              <School className="w-4 h-4" /> Verify
+                              <School className="w-4 h-4" /> Verify Information
                             </button>
+                          </div>
+
+                          {isIdVerified && (
+                            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-xs font-bold text-emerald-800 flex items-start gap-2">
+                              <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                              LRN identity verified. Capture your selfie to enroll your biometric reference.
+                            </div>
+                          )}
+
+                          <div className={cn("rounded-2xl border bg-white p-4 sm:p-5 space-y-4", isIdVerified ? "border-slate-200" : "border-slate-200 opacity-60")}>
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-philsa-navy text-white flex items-center justify-center">
+                                  <Camera className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Biometric Selfie Capture *</p>
+                                  <p className="text-[10px] text-slate-500 font-bold">This selfie becomes your enrolled facial identity reference.</p>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                                {biometricSelfieStatus === 'reviewing' && pendingSelfieFile ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={handleConfirmSelfie}
+                                      className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                      Use This Photo
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleRetakeSelfie}
+                                      className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-philsa-navy bg-white text-philsa-navy hover:bg-philsa-bg transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                      <RefreshCw className="w-4 h-4" />
+                                      Retake Photo
+                                    </button>
+                                  </>
+                                ) : biometricSelfieStatus === 'stored' || (biometricSelfieStatus === 'failed' && Boolean(capturedSelfiePreview)) ? (
+                                    <button
+                                      type="button"
+                                      onClick={handleRetakeSelfie}
+                                      className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-philsa-navy bg-white text-philsa-navy hover:bg-philsa-bg transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                      <RefreshCw className="w-4 h-4" />
+                                      Retake Photo
+                                    </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={startSelfieCamera}
+                                    disabled={!isIdVerified || biometricSelfieStatus === 'uploading' || isSelfieCameraActive}
+                                    className={cn(
+                                      "px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200 flex items-center justify-center gap-2",
+                                      isIdVerified ? "bg-philsa-navy text-white border-philsa-navy hover:bg-philsa-navy/90 cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed" : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                                    )}
+                                  >
+                                    <Camera className="w-4 h-4" />
+                                    {isSelfieCameraActive ? 'Detecting Face' : 'Start Camera'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 aspect-video">
+                              <video
+                                ref={selfieVideoRef}
+                                className={cn("h-full w-full object-cover", !isSelfieCameraActive && "hidden")}
+                                playsInline
+                                muted
+                              />
+                              {!isSelfieCameraActive && capturedSelfiePreview && (
+                                <>
+                                  <img
+                                    src={capturedSelfiePreview}
+                                    alt="Captured biometric selfie preview"
+                                    className="h-full w-full object-cover"
+                                  />
+                                  <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white">Captured selfie preview</p>
+                                  </div>
+                                </>
+                              )}
+                              {!isSelfieCameraActive && !capturedSelfiePreview && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
+                                  <Camera className="w-10 h-10 text-slate-400 mb-3" />
+                                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Live camera preview</p>
+                                  <p className="text-[10px] text-slate-500 font-bold mt-1">Start the camera after LRN verification.</p>
+                                </div>
+                              )}
+                              {isSelfieCameraActive && (
+                                <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-white">
+                                    {selfieCountdown !== null
+                                      ? `Auto capture in ${selfieCountdown}`
+                                      : selfieFaceStatus === 'scanning'
+                                        ? 'Server validating face'
+                                        : selfieFaceStatus === 'detected'
+                                          ? 'Face detected'
+                                          : 'Hold still'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {(biometricSelfieFileName || biometricSelfieMessage || errors.selfie) && (
+                              <div className={cn(
+                                "rounded-xl px-4 py-3 text-xs font-bold border",
+                                biometricSelfieStatus === 'stored' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                biometricSelfieStatus === 'failed' || errors.selfie ? "bg-philsa-red/5 text-philsa-red border-philsa-red/20" :
+                                biometricSelfieStatus === 'reviewing' ? "bg-amber-50 text-amber-700 border-amber-100" :
+                                "bg-slate-50 text-slate-600 border-slate-200"
+                              )}>
+                                {biometricSelfieStatus === 'uploading'
+                                  ? 'Storing captured selfie...'
+                                  : biometricSelfieMessage || biometricSelfieFileName || errors.selfie}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}
@@ -1805,119 +2305,6 @@ export default function StudentApplication() {
                          <p className="text-xs text-philsa-red font-bold pl-1 border-l-2 border-philsa-red py-0.5 mt-1">{errors.general}</p>
                       )}
 
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-5">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Personal Information</p>
-                            <p className="text-[10px] text-slate-500 font-bold">Demographics required for account creation. Verified records are locked.</p>
-                          </div>
-                          {isIdVerified && <span className="rounded-full bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-700 border border-emerald-100">Verified</span>}
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                          {isStep1FieldEnabled('First Name') && getStep1FieldSection('First Name') === 'Personal Information' && <div className="space-y-2">
-                            <label className="label-philsa">First Name *</label>
-                            <input className="input-philsa" value={formData.firstName} readOnly={isRegistryLocked('firstName')} onChange={(e) => setFormData({...formData, firstName: e.target.value})} />
-                            {errors.firstName && <p className="text-xs text-philsa-red font-bold">{errors.firstName}</p>}
-                          </div>}
-                          {isStep1FieldEnabled('Middle Name') && getStep1FieldSection('Middle Name') === 'Personal Information' && <div className="space-y-2">
-                            <label className="label-philsa">Middle Name</label>
-                            <input className="input-philsa" value={formData.middleName} readOnly={isRegistryLocked('middleName')} onChange={(e) => setFormData({...formData, middleName: e.target.value})} />
-                          </div>}
-                          {isStep1FieldEnabled('Last Name') && getStep1FieldSection('Last Name') === 'Personal Information' && <div className="space-y-2">
-                            <label className="label-philsa">Last Name *</label>
-                            <input className="input-philsa" value={formData.lastName} readOnly={isRegistryLocked('lastName')} onChange={(e) => setFormData({...formData, lastName: e.target.value})} />
-                            {errors.lastName && <p className="text-xs text-philsa-red font-bold">{errors.lastName}</p>}
-                          </div>}
-                          {isStep1FieldEnabled('Extension Name') && getStep1FieldSection('Extension Name') === 'Personal Information' && <div className="space-y-2">
-                            <label className="label-philsa">Extension Name</label>
-                            <input className="input-philsa" value={formData.suffix} readOnly={isRegistryLocked('suffix')} onChange={(e) => setFormData({...formData, suffix: e.target.value})} placeholder="Jr., Sr., III" />
-                          </div>}
-                          {isStep1FieldEnabled('Sex') && getStep1FieldSection('Sex') === 'Personal Information' && <div className="space-y-2">
-                            <label className="label-philsa">Sex *</label>
-                            <select className="input-philsa" value={formData.gender} disabled={isRegistryLocked('gender')} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
-                              <option value="">Select Sex</option>
-                              {getStep1FieldOptions('Sex', ['Female', 'Male']).map(option => (
-                                <option key={option} value={option}>{option}</option>
-                              ))}
-                            </select>
-                            {errors.gender && <p className="text-xs text-philsa-red font-bold">{errors.gender}</p>}
-                          </div>}
-                          {isStep1FieldEnabled('Birth Date') && getStep1FieldSection('Birth Date') === 'Personal Information' && <div className="space-y-2">
-                            <label className="label-philsa">Birth Date *</label>
-                            <input
-                              type="date"
-                              className="input-philsa"
-                              value={formData.dob}
-                              readOnly={isRegistryLocked('dob')}
-                              onChange={(e) => {
-                                setFormData({...formData, dob: e.target.value});
-                                if (errors.dob) setErrors(prev => ({...prev, dob: ''}));
-                              }}
-                            />
-                            {errors.dob && <p className="text-xs text-philsa-red font-bold">{errors.dob}</p>}
-                          </div>}
-                          {additionalHighPriorityFieldsBySection('Personal Information').map(renderAdditionalStep1Field)}
-                        </div>
-                      </div>
-
-                      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-5">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">School Information</p>
-                            <p className="text-[10px] text-slate-500 font-bold">Academic record required for Step 1 registration.</p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                          {isStep1FieldEnabled('School ID') && getStep1FieldSection('School ID') === 'School Information' && <div className="space-y-2">
-                            <label className="label-philsa">School ID *</label>
-                            <input className="input-philsa" value={formData.schoolId} readOnly={isRegistryLocked('schoolId')} onChange={(e) => setFormData({...formData, schoolId: e.target.value})} />
-                            {errors.schoolId && <p className="text-xs text-philsa-red font-bold">{errors.schoolId}</p>}
-                          </div>}
-                          {isStep1FieldEnabled('School Name') && getStep1FieldSection('School Name') === 'School Information' && <div className="sm:col-span-2 xl:col-span-2 space-y-2">
-                            <label className="label-philsa">School Name *</label>
-                            <input className="input-philsa" value={formData.schoolName} readOnly={isRegistryLocked('schoolName')} onChange={(e) => setFormData({...formData, schoolName: e.target.value})} />
-                            {errors.schoolName && <p className="text-xs text-philsa-red font-bold">{errors.schoolName}</p>}
-                          </div>}
-                          {isStep1FieldEnabled('Grade Level') && getStep1FieldSection('Grade Level') === 'School Information' && <div className="space-y-2">
-                            <label className="label-philsa">Grade Level *</label>
-                            <select className="input-philsa" value={formData.gradeLevel} disabled={isRegistryLocked('gradeLevel')} onChange={(e) => setFormData({...formData, gradeLevel: e.target.value})}>
-                              <option value="">Select Grade Level</option>
-                              {getStep1FieldOptions('Grade Level', ['Grade 12', 'Grade 11']).map(option => (
-                                <option key={option} value={option}>{option}</option>
-                              ))}
-                            </select>
-                            {errors.gradeLevel && <p className="text-xs text-philsa-red font-bold">{errors.gradeLevel}</p>}
-                          </div>}
-                          {isStep1FieldEnabled('Enrollment Status') && getStep1FieldSection('Enrollment Status') === 'School Information' && <div className="space-y-2">
-                            <label className="label-philsa">Enrollment Status *</label>
-                            <select className="input-philsa" value={formData.enrollmentStatus} disabled={isRegistryLocked('enrollmentStatus')} onChange={(e) => setFormData({...formData, enrollmentStatus: e.target.value})}>
-                              <option value="">Select Status</option>
-                              {getStep1FieldOptions('Enrollment Status', ['Enrolled', 'Graduating', 'Pending Enrollment']).map(option => (
-                                <option key={option} value={option}>{option}</option>
-                              ))}
-                            </select>
-                            {errors.enrollmentStatus && <p className="text-xs text-philsa-red font-bold">{errors.enrollmentStatus}</p>}
-                          </div>}
-                          {isStep1FieldEnabled('School Year') && getStep1FieldSection('School Year') === 'School Information' && <div className="space-y-2">
-                            <label className="label-philsa">School Year *</label>
-                            <input className="input-philsa" value={formData.schoolYear} readOnly={isRegistryLocked('schoolYear')} onChange={(e) => setFormData({...formData, schoolYear: e.target.value})} />
-                            {errors.schoolYear && <p className="text-xs text-philsa-red font-bold">{errors.schoolYear}</p>}
-                          </div>}
-                          {additionalHighPriorityFieldsBySection('School Information').map(renderAdditionalStep1Field)}
-                        </div>
-                      </div>
-
-                      {additionalHighPriorityFieldsBySection('Additional Information').length > 0 && (
-                        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-6 space-y-5">
-                          <div>
-                            <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Additional Information</p>
-                            <p className="text-[10px] text-slate-500 font-bold">Additional high-priority fields configured by maintenance.</p>
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                            {additionalHighPriorityFieldsBySection('Additional Information').map(renderAdditionalStep1Field)}
-                          </div>
-                        </div>
-                      )}
                    </div>
 
                    {/* Simulation Controls for ease of testing */}
@@ -1927,8 +2314,10 @@ export default function StudentApplication() {
                          <button 
                             type="button" 
                             onClick={() => {
+                               setLrnVerificationCategory('email');
+                               setLrnRegisteredValue('lovely@yopmail.com');
                                setFormData(prev => ({ ...prev, lrn: '123456789012' }));
-                               void handleVerifyLrnPath('123456789012');
+                               void handleVerifyLrnPath('123456789012', { category: 'email', value: 'lovely@yopmail.com' });
                             }}
                             className="w-full text-[9px] font-black text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
                          >
@@ -1937,8 +2326,10 @@ export default function StudentApplication() {
                          <button 
                             type="button" 
                             onClick={() => {
+                               setLrnVerificationCategory('email');
+                               setLrnRegisteredValue('wrong@example.test');
                                setFormData(prev => ({ ...prev, lrn: '901234567899' }));
-                               void handleVerifyLrnPath('901234567899');
+                               void handleVerifyLrnPath('901234567899', { category: 'email', value: 'wrong@example.test' });
                             }}
                             className="w-full text-[9px] font-black text-red-600 hover:bg-red-50 border border-red-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
                          >
@@ -2161,75 +2552,115 @@ export default function StudentApplication() {
 
           {currentSection === 2 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-               <div className="card-philsa !p-0 bg-white border border-slate-200 overflow-hidden shadow-xl rounded-[2rem]">
-                  {/* Simplified Header */}
-                  <div className="p-6 sm:p-10 border-b border-philsa-border bg-gradient-to-br from-slate-50 to-philsa-bg/40 relative">
-                     <div className="relative z-10">
-                        <div className="flex items-center gap-3 mb-3">
-                           <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 bg-philsa-navy text-white text-[8px] sm:text-[9px] font-black uppercase tracking-[0.2em] rounded-md">Step 03</div>
-                           <span className="text-[9px] sm:text-[10px] font-black text-philsa-gray uppercase tracking-[0.2em]">Review & Submit</span>
+               <div className="card-philsa !p-6 sm:!p-8 bg-white border border-slate-200 shadow-xl rounded-2xl space-y-8">
+                  <div className="space-y-2 border-b border-slate-200 pb-5">
+                     <p className="text-[9px] font-black text-philsa-red uppercase tracking-[0.35em]">Step 03</p>
+                     <h4 className="text-xl sm:text-2xl font-black text-philsa-navy tracking-tight">Review Your Registration Dossier</h4>
+                     <p className="text-xs text-slate-600 font-medium">Please inspect and verify your profile summary before executing your final admission registry submission.</p>
+                  </div>
+
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50">
+                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 bg-slate-50 px-5 py-5">
+                        <div>
+                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.35em]">Registry Profile Digest</p>
+                           <h5 className="mt-1 text-sm font-black uppercase tracking-[0.18em] text-philsa-navy">Candidate Identity Record</h5>
                         </div>
-                        <h4 className="text-xl sm:text-2xl font-black text-philsa-navy tracking-tight uppercase">Student Registration <span className="text-philsa-red">Details</span></h4>
-                        <p className="text-philsa-gray text-[10px] sm:text-xs font-bold mt-1.5 uppercase tracking-widest opacity-70">Review all registered details before finalizing your submission</p>
+                        <span className="w-fit rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[8px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                           Ready to Submit
+                        </span>
+                     </div>
+
+                     <div className="grid gap-6 p-5 lg:grid-cols-[210px_1fr]">
+                        <div className="space-y-3">
+                           <p className="text-[8px] font-black uppercase tracking-[0.25em] text-slate-400">Biometric Face Record</p>
+                           <div className="relative h-36 w-36 overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-md">
+                              {capturedSelfiePreview ? (
+                                 <img src={capturedSelfiePreview} alt="Verified biometric face record" className="h-full w-full object-cover" />
+                              ) : (
+                                 <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 via-slate-600 to-slate-900">
+                                    <User className="h-16 w-16 text-slate-300" />
+                                 </div>
+                              )}
+                              <span className="absolute inset-x-5 bottom-2 rounded-md bg-emerald-600 py-1 text-center text-[8px] font-black uppercase tracking-widest text-white">
+                                 Verified
+                              </span>
+                           </div>
+                        </div>
+
+                        <div className="grid content-start gap-4 sm:grid-cols-2">
+                           <DossierField label="Learner Reference Number (LRN)" value={lrnVerificationReview?.lrn || formData.lrn || 'Pending verification'} />
+                           <DossierField
+                              label={dossierVerificationLabel}
+                              value={lrnVerificationReview?.value || lrnRegisteredValue || 'Pending verification'}
+                           />
+                           <DossierField
+                              className="sm:col-span-2"
+                              label="Authorized Testing School Profile"
+                              value={`${formData.schoolName || 'Pending school'} — ${formData.gradeLevel || 'Pending grade'}${formData.academicTrack ? ` (${formData.academicTrack} Track)` : ''}`}
+                           />
+                        </div>
                      </div>
                   </div>
 
-                  <div className="p-4 sm:p-10 space-y-8 sm:space-y-12">
-                     <div className="space-y-4">
-                           <h5 className="text-xs font-bold text-philsa-navy uppercase tracking-wider pb-1.5 border-b border-philsa-border/50 flex items-center gap-2">
-                              <User className="w-4 h-4 text-philsa-red" /> Personal & Academic Information
-                           </h5>
-                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 bg-slate-50/50 p-6 rounded-2xl border border-slate-100">
-                              <ReviewItem label="Mobile Number" value={formData.mobile} />
-                              <ReviewItem label="Learner Reference Number (LRN)" value={formData.lrn} />
-                              <ReviewItem label="First Name" value={formData.firstName} />
-                              <ReviewItem label="Middle Name" value={formData.noMiddleName ? 'NONE' : (formData.middleName || '—')} />
-                              <ReviewItem label="Last Name" value={formData.lastName} />
-                              {isSuffixActive && formData.suffix && <ReviewItem label="Suffix" value={formData.suffix} />}
-                              <ReviewItem label="Date of Birth" value={formData.dob} />
-                              <ReviewItem label="Official Gender" value={formData.gender || '—'} />
-                              <ReviewItem label="High School Name" value={formData.schoolName} />
-                              <ReviewItem label="High School Address" value={formData.schoolAddress || '—'} />
-                              <ReviewItem label="Account Email" value={formData.email} />
-                           </div>
-                     </div>
+                  <label className={cn(
+                     "flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-colors",
+                     reviewCertified ? "border-emerald-200 bg-emerald-50" : "border-philsa-red/20 bg-philsa-red/5 hover:border-philsa-red/40"
+                  )}>
+                     <input
+                        type="checkbox"
+                        checked={reviewCertified}
+                        onChange={(e) => {
+                           setReviewCertified(e.target.checked);
+                           if (e.target.checked && errors.general) {
+                              setErrors(prev => {
+                                 const next = { ...prev };
+                                 delete next.general;
+                                 return next;
+                              });
+                           }
+                        }}
+                        className="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300 text-philsa-red focus:ring-philsa-red"
+                     />
+                     <span className="text-[11px] font-bold leading-relaxed text-philsa-navy">
+                        I certify that all details above are accurate and match my DepEd identification records. I authorize PhilSLA to transmit my compiled registration profile for spatial testing-center allocations and admission evaluation.
+                     </span>
+                  </label>
 
-                     {/* Legal Certifications */}
-                     <div className="pt-8 sm:pt-12 border-t border-slate-200">
-                        <div className="bg-slate-50/50 p-5 sm:p-10 rounded-2xl sm:rounded-[2.5rem] border border-slate-200 relative overflow-hidden">
-                           <Shield className="absolute -bottom-10 -right-10 w-32 sm:w-48 h-32 sm:h-48 text-philsa-navy opacity-5" />
-                           <div className="relative z-10 space-y-6">
-                              <h5 className="text-[10px] sm:text-[11px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-3 sm:mb-4 flex items-center gap-2">
-                                 <Shield className="w-4 h-4 text-[#00563F]" /> Declaration and Undertaking
-                              </h5>
-                              <div className="text-xs text-philsa-navy/80 leading-relaxed space-y-4 max-w-4xl font-medium">
-                                 <p className="font-bold">By submitting this application, I declare and undertake that:</p>
-                                 <ul className="list-disc pl-5 space-y-3">
-                                    <li>All information provided in this registration — including my personal details, educational background, and identification information — is true, accurate, and complete to the best of my knowledge;</li>
-                                    <li>I have not misrepresented, falsified, or omitted any material fact required for this application;</li>
-                                    <li>I authorize PhilSLA and its authorized government partners to verify my identity and records, including cross-checking against my Learner Reference Number (LRN), PSA civil registry records, and other relevant government databases;</li>
-                                    <li>I understand that any false statement, fraudulent claim, or deliberate omission — whether discovered before, during, or after the assessment — may result in the rejection of this application, disqualification from the assessment, invalidation of results, and referral to the appropriate government authorities for further action; and</li>
-                                    <li>I acknowledge that I have already read and agreed to the PhilSLA Data Privacy Notice at the start of this registration, and this Declaration does not modify or withdraw that consent.</li>
-                                 </ul>
-                              </div>
-                              <div className="pt-4">
-                                 <label className="flex items-start gap-3 sm:gap-4 p-4 sm:p-5 bg-white border border-philsa-border rounded-2xl cursor-pointer hover:border-philsa-red transition-all group shadow-sm">
-                                    <input type="checkbox" className="w-5 h-5 mt-0.5 rounded border-philsa-border text-philsa-red focus:ring-philsa-red shrink-0" />
-                                    <span className="text-[10px] sm:text-xs font-black text-philsa-navy group-hover:text-philsa-red transition-all uppercase tracking-widest leading-relaxed">
-                                       I have read, understood, and agree to this Declaration and Undertaking.
-                                    </span>
-                                 </label>
-                              </div>
-                           </div>
-                        </div>
+                  {errors.general && (
+                     <div className="rounded-xl border border-philsa-red/20 bg-philsa-red/5 px-4 py-3 text-xs font-bold text-philsa-red">
+                        {errors.general}
                      </div>
+                  )}
+
+                  <div className="flex flex-col gap-4 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+                     <button
+                        type="button"
+                        onClick={handleBack}
+                        disabled={isSubmitting}
+                        className="btn-secondary px-6 py-3 flex items-center justify-center gap-2 group disabled:opacity-30 w-full sm:w-auto"
+                     >
+                        <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" /> Back
+                     </button>
+                     <button
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={isSubmitting || !reviewCertified}
+                        className="btn-primary px-8 sm:px-12 flex items-center justify-center gap-3 py-3.5 text-sm font-black tracking-tight shadow-xl shadow-philsa-red/20 active:scale-95 transition-all w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                     >
+                        <CheckCircle className="w-4 h-4" />
+                        {isSubmitting ? 'Processing Registration...' : 'Submit Registration'}
+                     </button>
                   </div>
                </div>
+               <p className="text-center text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  Encountering issues with registry queries? Contact <span className="text-philsa-red">support@philsa.gov.ph</span>
+               </p>
             </motion.div>
           )}
 
         </div>
 
+        {currentSection !== SECTIONS.length - 1 && (
         <div className="p-4 sm:p-8 border-t border-philsa-border bg-philsa-bg/30 space-y-4">
           {errors.general && currentSection !== 0 && (
             <div className="rounded-2xl border border-philsa-red/20 bg-philsa-red/5 px-4 py-3 text-xs font-bold text-philsa-red">
@@ -2246,25 +2677,15 @@ export default function StudentApplication() {
               <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" /> Back
            </button>
 
-           {currentSection === SECTIONS.length - 1 ? (
-             <button 
-               onClick={handleSubmit} 
-               disabled={isSubmitting}
-               className="btn-primary px-6 sm:px-16 flex items-center justify-center gap-3 py-3.5 sm:py-4 text-sm sm:text-base font-black tracking-tight shadow-2xl shadow-philsa-red/30 active:scale-95 transition-all w-full sm:w-auto"
-             >
-                {isSubmitting ? 'Processing Roster...' : 'Submit Final Registration'}
-                <Save className="w-5 h-5" />
-             </button>
-           ) : (
-             <button 
-               onClick={handleNext} 
-               className="btn-primary px-6 sm:px-12 flex items-center justify-center gap-2 py-3.5 sm:py-4 group w-full sm:w-auto"
-             >
-                Continue <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
-              </button>
-            )}
+           <button
+             onClick={handleNext}
+             className="btn-primary px-6 sm:px-12 flex items-center justify-center gap-2 py-3.5 sm:py-4 group w-full sm:w-auto"
+           >
+              Continue <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+            </button>
           </div>
          </div>
+        )}
        </div>
 
       {showLrnCooldownModal && (
@@ -2295,10 +2716,10 @@ export default function StudentApplication() {
 
             <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 text-left mb-6 space-y-2">
               <p className="text-xs text-slate-600 font-bold leading-relaxed">
-                Your LRN could not be verified after 5 attempts. You can wait 15 minutes and try again, or continue by manually entering the required high-priority information.
+                Your LRN could not be verified after 5 attempts. You can wait 15 minutes and try again.
               </p>
               <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                Manual registration will create your account without verified LRN details for now. You may provide your LRN later to complete identity verification.
+                Registration requires a successful LRN identity match before biometric selfie enrollment.
               </p>
             </div>
 
@@ -2307,9 +2728,10 @@ export default function StudentApplication() {
                 type="button"
                 onClick={() => {
                   if (cooldownSecondsLeft <= 0) {
+                    clearStoredLrnCooldown();
                     setShowLrnCooldownModal(false);
                     setLrnAttemptsLeft(5);
-                    setCooldownSecondsLeft(900);
+                    setCooldownSecondsLeft(LRN_COOLDOWN_SECONDS);
                     setErrors({});
                     setFormData(prev => ({ ...prev, lrn: '' }));
                   }
@@ -2320,22 +2742,9 @@ export default function StudentApplication() {
                 <RefreshCw className="w-4 h-4" /> Wait for timer to retry
               </button>
 
-              <button
-                type="button"
-                onClick={continueWithManualStep1}
-                className="w-full px-5 py-4 bg-philsa-navy hover:bg-[#00162B] text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer"
-              >
-                <User className="w-4 h-4" /> Continue with manual input
-              </button>
-
               <button 
                 type="button"
                 onClick={() => {
-                  setShowLrnCooldownModal(false);
-                  setLrnAttemptsLeft(5);
-                  setCooldownSecondsLeft(900); // reset timer
-                  setErrors({});
-                  setFormData(prev => ({ ...prev, lrn: '' }));
                   window.location.href = '/login';
                 }}
                 className="w-full px-5 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black uppercase tracking-widest text-xs flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer border border-slate-200"
@@ -2351,12 +2760,11 @@ export default function StudentApplication() {
   );
 }
 
-function ReviewItem({ label, value, className }: { label: string; value: string; className?: string }) {
+function DossierField({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className={cn("space-y-1.5", className)}>
-      <p className="text-[9px] font-bold text-philsa-gray uppercase tracking-widest leading-none mb-1 opacity-60 font-sans">{label}</p>
-      <p className="text-sm font-medium text-philsa-navy tracking-normal break-words whitespace-normal font-sans leading-relaxed">{value || '—'}</p>
+    <div className={cn("rounded-xl border border-slate-200 bg-white px-4 py-4", className)}>
+      <p className="text-[8px] font-black uppercase tracking-[0.24em] text-slate-400">{label}</p>
+      <p className="mt-2 text-sm font-black leading-relaxed tracking-normal text-philsa-navy break-words">{value || '-'}</p>
     </div>
   );
 }
-
