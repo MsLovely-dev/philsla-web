@@ -155,6 +155,30 @@ class ApplicationEndpointTests(TestCase):
         self.assertTrue(first_application.password_hash)
         self.assertTrue(second_application.password_hash)
 
+    def test_public_manual_registration_allows_duplicate_entered_lrn_as_unverified_data_entry(self):
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "manual.duplicate.one@example.test"
+        payload["school"]["lrn"] = "123456789012"
+        payload["submitOnCreate"] = True
+        second_payload = complete_payload()
+        second_payload["personal"]["email"] = "manual.duplicate.two@example.test"
+        second_payload["school"]["lrn"] = "123456789012"
+        second_payload["submitOnCreate"] = True
+
+        first = client.post(reverse("applications:create"), payload, format="json")
+        second = client.post(reverse("applications:create"), second_payload, format="json")
+
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 201)
+        first_application = StudentApplication.objects.get(id=first.data["id"])
+        second_application = StudentApplication.objects.get(id=second.data["id"])
+        self.assertEqual(first_application.lrn, "")
+        self.assertEqual(second_application.lrn, "")
+        self.assertEqual(first_application.school["lrn"], "123456789012")
+        self.assertEqual(second_application.school["lrn"], "123456789012")
+        self.assertEqual(first_application.personal["identityVerificationStatus"], "MANUAL_PENDING")
+
     def test_draft_requires_a_valid_lrn_verification_proof(self):
         response = self.client.post(
             reverse("applications:create"),

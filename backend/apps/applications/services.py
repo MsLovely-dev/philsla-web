@@ -465,11 +465,12 @@ def create_draft(*, owner=None, verification_token: str = "", data: dict, submit
     data.update(personal=personal, school=school)
     try:
         if submit_on_create:
-            _validate_registration_account_creation(data, password)
+            _validate_registration_account_creation(data, password, require_valid_lrn=bool(verification_token))
         owner_id = None if owner is None else getattr(owner, "user_id", owner.id)
+        indexed_lrn = str(school.get("lrn", "")) if verification_token else ""
         application = StudentApplication.objects.create(
             owner_id=owner_id,
-            lrn=str(school.get("lrn", "")),
+            lrn=indexed_lrn,
             exam_cycle_id=settings.ACTIVE_EXAM_CYCLE_ID,
             password_hash=make_password(password) if password else "",
             **data,
@@ -483,7 +484,7 @@ def create_draft(*, owner=None, verification_token: str = "", data: dict, submit
             application.submitted_at = timezone.now()
             application.save(update_fields=["status", "version", "submitted_at", "updated_at"])
     except IntegrityError as exc:
-        if "unique_active_lrn_per_exam_cycle" in str(exc):
+        if "unique_active_lrn_per_exam_cycle" in str(exc) or "applications_studentapplication.lrn" in str(exc):
             raise ApplicationConflict("This LRN already has an existing application. View status.") from exc
         raise
     if verification_token:
@@ -491,7 +492,7 @@ def create_draft(*, owner=None, verification_token: str = "", data: dict, submit
     return application
 
 
-def _validate_registration_account_creation(data: dict, password: str) -> None:
+def _validate_registration_account_creation(data: dict, password: str, *, require_valid_lrn: bool = True) -> None:
     personal = data.get("personal", {})
     school = data.get("school", {})
     required = {
@@ -505,7 +506,7 @@ def _validate_registration_account_creation(data: dict, password: str) -> None:
         if missing:
             errors[section] = [f"Missing required field: {field}." for field in missing]
     lrn = str(school.get("lrn", ""))
-    if lrn and (len(lrn) != 12 or not lrn.isdigit()):
+    if require_valid_lrn and lrn and (len(lrn) != 12 or not lrn.isdigit()):
         errors.setdefault("school", []).append("LRN must be exactly 12 numeric digits.")
     if not password:
         errors["password"] = ["Password is required before account creation."]

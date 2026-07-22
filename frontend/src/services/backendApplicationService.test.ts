@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiClient } from './apiClient';
-import { BackendApplicationService, createBackendApplicationDraftInput } from './backendApplicationService';
+import { BackendApplicationService, createBackendApplicationDraftInput, mapBackendApplicationToFrontend } from './backendApplicationService';
 
 function jsonResponse(body: unknown, init: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -276,6 +276,85 @@ describe('BackendApplicationService', () => {
       reviewStep: {
         privacyConsent: true,
         declarationAccepted: true,
+      },
+    });
+  });
+
+  it('maps backend registration entries into reviewer-facing application fields', () => {
+    const application = mapBackendApplicationToFrontend({
+      id: 'application-id',
+      status: 'SUBMITTED',
+      personal: {
+        firstName: 'Lovely',
+        middleName: 'Mae',
+        lastName: 'Chavez',
+        dateOfBirth: '2026-07-21',
+        sex: 'Female',
+        email: 'student@example.test',
+        mobile: '09123456789',
+        birthPlace: 'Cavite',
+        photoUrl: 'selfie-url',
+        additionalHighPriorityFields: {
+          isPwd: 'Yes',
+          pwdType: 'Visual Disability',
+          pwdAccommodation: 'Large-print questionnaire',
+          strand: 'STEM',
+        },
+      },
+      address: {
+        region: 'Region IV-A',
+        postalCode: '4100',
+      },
+      school: {
+        lrn: '123456789012',
+        schoolId: '301234',
+        name: 'UB',
+        address: 'Batangas City',
+        academicTrack: 'Academic',
+        gradeLevel: 'Grade 12',
+        enrollmentStatus: 'Enrolled',
+        schoolYear: '2026-2027',
+        gwa: '94',
+      },
+      coursePreferences: [
+        { rank: 2, universityName: 'Second University', programName: 'BS Physics' },
+        { rank: 1, university: 'First University', course: 'BS Astronomy' },
+      ],
+      reviewStep: {},
+      examCycleId: 'cycle-id',
+      version: 1,
+      submittedAt: '2026-07-14T00:01:00Z',
+      createdAt: '2026-07-14T00:00:00Z',
+      updatedAt: '2026-07-14T00:01:00Z',
+      lrnProfile: {
+        firstName: '',
+        middleName: '',
+        lastName: '',
+        schoolName: '',
+      },
+    }, 'user-id');
+
+    expect(application).toMatchObject({
+      id: 'application-id',
+      status: 'PENDING',
+      firstName: 'Lovely',
+      middleName: 'Mae',
+      lastName: 'Chavez',
+      birthPlace: 'Cavite',
+      photoUrl: 'selfie-url',
+      schoolId: '301234',
+      schoolName: 'UB',
+      schoolAddress: 'Batangas City',
+      enrollmentStatus: 'Enrolled',
+      schoolYear: '2026-2027',
+      gwa: 94,
+      universities: ['First University', 'Second University'],
+      courses: ['BS Astronomy', 'BS Physics'],
+      additionalHighPriorityFields: {
+        isPwd: 'Yes',
+        pwdType: 'Visual Disability',
+        pwdAccommodation: 'Large-print questionnaire',
+        strand: 'STEM',
       },
     });
   });

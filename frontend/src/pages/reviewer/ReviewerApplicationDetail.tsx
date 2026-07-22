@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useMockData } from '../../services/mockService';
 import { 
   ArrowLeft, 
   History, 
   Check, 
   X, 
   AlertCircle, 
-  ChevronDown, 
   XCircle,
   CheckCircle,
   BookOpen,
@@ -15,9 +13,7 @@ import {
   Activity,
   ShieldCheck,
   MessageSquare,
-  MapPin,
   ChevronLeft,
-  ChevronRight,
   Fingerprint,
   Camera,
   ShieldAlert,
@@ -77,11 +73,15 @@ const MOCK_APP = {
   currentStreet: '12 Laurel Street, Area 1',
   currentZipCode: '1101',
   lrn: '101234567890',
+  schoolId: '301234',
   schoolName: 'Philippine Science High School - Main',
   schoolAddress: 'Agham Road, Diliman, Quezon City',
   academicTrack: 'STEM',
   gradeLevel: 'Grade 12',
+  enrollmentStatus: 'Enrolled',
+  schoolYear: '2026-2027',
   gwa: '96.5',
+  additionalHighPriorityFields: {},
   universities: ['University of the Philippines Diliman', 'De La Salle University'],
   courses: ['BS Computer Science', 'BS Mechanical Engineering'],
   examScheduleId: 'NCR-APP26-AM',
@@ -110,16 +110,20 @@ const EMPTY_BACKEND_APP = {
   email: '',
   mobile: '',
   lrn: '',
+  schoolId: '',
   schoolName: '',
   schoolAddress: '',
   academicTrack: '',
   gradeLevel: '',
+  enrollmentStatus: '',
+  schoolYear: '',
   gwa: '',
   universities: [],
   courses: [],
   center: '',
   photoUrl: '',
   history: [],
+  additionalHighPriorityFields: {},
 };
 
 const STATUS_BADGES = {
@@ -128,60 +132,16 @@ const STATUS_BADGES = {
   'REJECTED': 'bg-philsa-red/10 text-philsa-red border-philsa-red/20',
 };
 
-// School schedules database mapping each testing center to its schedules
-const SCHOOL_SCHEDULES: Record<string, Array<{ id: string, time: string, proctor: string, totalSeats: number, initialSeatsLeft: number }>> = {
-  'University of the Philippines Diliman': [
-    { id: 'up-1', time: 'July 20 8:00 AM', proctor: 'Juan Dela Cruz', totalSeats: 30, initialSeatsLeft: 18 },
-    { id: 'up-2', time: 'July 20 1:00 PM', proctor: 'Maria Santos', totalSeats: 30, initialSeatsLeft: 5 },
-    { id: 'up-3', time: 'July 21 8:00 AM', proctor: 'Pedro Reyes', totalSeats: 30, initialSeatsLeft: 26 },
-  ],
-  'De La Salle University - Manila': [
-    { id: 'dlsu-1', time: 'July 22 8:00 AM', proctor: 'Robert Gomez', totalSeats: 30, initialSeatsLeft: 12 },
-    { id: 'dlsu-2', time: 'July 22 1:00 PM', proctor: 'Alicia Torres', totalSeats: 30, initialSeatsLeft: 8 },
-    { id: 'dlsu-3', time: 'July 23 8:00 AM', proctor: 'Fernando Diaz', totalSeats: 30, initialSeatsLeft: 20 },
-  ],
-  'PUP Main Campus': [
-    { id: 'pup-1', time: 'July 24 8:00 AM', proctor: 'Jaime Sin', totalSeats: 30, initialSeatsLeft: 15 },
-    { id: 'pup-2', time: 'July 24 1:00 PM', proctor: 'Corazon Cojuangco', totalSeats: 30, initialSeatsLeft: 7 },
-    { id: 'pup-3', time: 'July 25 8:00 AM', proctor: 'Fidel Ramos', totalSeats: 30, initialSeatsLeft: 22 },
-  ],
-  'University of Santo Tomas': [
-    { id: 'ust-1', time: 'July 26 8:00 AM', proctor: 'Benigno Aquino', totalSeats: 30, initialSeatsLeft: 14 },
-    { id: 'ust-2', time: 'July 26 1:00 PM', proctor: 'Gloria Arroyo', totalSeats: 30, initialSeatsLeft: 3 },
-    { id: 'ust-3', time: 'July 27 8:00 AM', proctor: 'Joseph Estrada', totalSeats: 30, initialSeatsLeft: 25 },
-  ],
-};
-
 export default function ReviewerApplicationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user, addAuditLog } = usePhilSA();
-  const { studentDevices } = useMockData();
   const [application, setApplication] = useState<ReviewApplicationRecord | null>(null);
   const [isLoadingApplication, setIsLoadingApplication] = useState(false);
   const [applicationError, setApplicationError] = useState('');
 
-  // Dynamic testing center school and schedule selection states
-  const [selectedSchool, setSelectedSchool] = useState<string>('University of the Philippines Diliman');
-  const [tempSelectedSchool, setTempSelectedSchool] = useState<string>('University of the Philippines Diliman');
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string>('');
-
-  // Load and store seat assignment reactively for each specific school + schedule combination
-  const seatStorageKey = `philsa_applicant_seat_${id}_${selectedSchool.replace(/\s+/g, '_')}_${selectedScheduleId}`;
-  const [assignedSeat, setAssignedSeat] = useState<string>('');
-
-  React.useEffect(() => {
-    if (!selectedScheduleId) {
-      setAssignedSeat('');
-      return;
-    }
-    const saved = localStorage.getItem(seatStorageKey);
-    setAssignedSeat(saved || '');
-  }, [seatStorageKey, selectedScheduleId]);
-
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'BIOMETRICS'>('DETAILS');
   const [status, setStatus] = useState<string>(MOCK_APP.status);
-  const [isReassigning, setIsReassigning] = useState(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
   const [correctionReason, setCorrectionReason] = useState('');
   const [remarks, setRemarks] = useState('');
@@ -205,11 +165,6 @@ export default function ReviewerApplicationDetail() {
       const [mapped] = mapBackendApplicationsToReviewRows([result.data]);
       setApplication(mapped);
       setStatus(mapped.status);
-      const registeredCenter = mapped.center || mapped.universities[0];
-      if (registeredCenter && SCHOOL_SCHEDULES[registeredCenter]) {
-        setSelectedSchool(registeredCenter);
-        setTempSelectedSchool(registeredCenter);
-      }
     });
 
     return () => {
@@ -362,11 +317,21 @@ export default function ReviewerApplicationDetail() {
   const fullName = `${currentApp.firstName} ${currentApp.lastName}`.trim();
   const reviewerName = user ? `${user.firstName} ${user.lastName}`.trim() || user.email : '';
   const submittedDate = currentApp.history?.[0]?.date ?? ('submittedAt' in currentApp ? currentApp.submittedAt : undefined) ?? 'Pending timestamp';
-  const registeredCenter = currentApp.center || currentApp.universities?.[0] || 'Not Assigned';
-  const preferenceRows = (currentApp.universities?.length ? currentApp.universities : ['Not Specified']).map((university, index) => ({
-    university,
-    course: currentApp.courses?.[index] || 'Not Specified',
-  }));
+  const registrationFields: Record<string, string> = currentApp.additionalHighPriorityFields ?? {};
+  const additionalRegistrationFields: Array<[string, string]> = Object.entries(registrationFields)
+    .filter((field): field is [string, string] => {
+      const [key, value] = field;
+      return !['isPwd', 'pwdType', 'pwdCondition', 'pwdIdNumber', 'pwdIdFilename', 'pwdAccommodation'].includes(key) && Boolean(value);
+    });
+  const pwdRegistrationFieldCandidates: Array<[string, string | undefined]> = [
+    ['PWD', registrationFields.isPwd],
+    ['PWD Type', registrationFields.pwdType],
+    ['Condition', registrationFields.pwdCondition],
+    ['PWD ID Number', registrationFields.pwdIdNumber],
+    ['PWD ID Attachment', registrationFields.pwdIdFilename],
+    ['Accommodation Needed', registrationFields.pwdAccommodation],
+  ];
+  const pwdRegistrationFields: Array<[string, string]> = pwdRegistrationFieldCandidates.filter((field): field is [string, string] => Boolean(field[1]));
 
   const filteredLogs = React.useMemo(() => {
     return verificationLogs.filter(log => {
@@ -380,23 +345,7 @@ export default function ReviewerApplicationDetail() {
     });
   }, [verificationLogs, logFilterType, logSearch]);
 
-  const currentSchedule = React.useMemo(() => {
-    const schedules = SCHOOL_SCHEDULES[selectedSchool] || [];
-    return schedules.find(s => s.id === selectedScheduleId) || null;
-  }, [selectedSchool, selectedScheduleId]);
-
-  const handleSchoolChange = (school: string) => {
-    setSelectedSchool(school);
-    setSelectedScheduleId('');
-  };
-
   const handleAction = (action: string) => {
-    if (action === 'REASSIGN') {
-      setTempSelectedSchool(selectedSchool);
-      setIsReassigning(true);
-      return;
-    }
-    
     if (action === 'CORRECTION') {
       setIsCorrectionModalOpen(true);
       return;
@@ -406,15 +355,6 @@ export default function ReviewerApplicationDetail() {
     setStatus(newStatus);
     const statusLabel = action === 'APPROVE' ? 'Approved' : 'Rejected';
 
-    if (action === 'APPROVE' && !assignedSeat) {
-      const targetCenter = selectedSchool;
-      const centerCode = targetCenter.split(' ').map(w => w[0]).join('').toUpperCase().replace(/[^A-Z]/g, '');
-      const autoSeat = `Seat ${centerCode}-101`;
-      localStorage.setItem(seatStorageKey, autoSeat);
-      setAssignedSeat(autoSeat);
-      addAuditLog('ADMISSION_SEAT_ASSIGNED', `Assigned student candidate ${currentApp.firstName} ${currentApp.lastName} to seat ${autoSeat} automatically upon approval`);
-    }
-    
     addAuditLog('REVIEWER_APPLICATION_REVIEW', JSON.stringify({
       reviewer: reviewerName,
       reviewerId: user?.id,
@@ -446,80 +386,6 @@ export default function ReviewerApplicationDetail() {
     });
     setCorrectionReason('');
   };
-
-  const seatOptions = React.useMemo(() => {
-    const dummyProctors = [
-      'Dr. Emil Javier', 
-      'Prof. Maria Elena Escueta', 
-      'Engr. Reynaldo Velasco', 
-      'Ms. Isabel G. Soriano'
-    ];
-
-    const finalSeats: any[] = [];
-    const targetCenter = selectedSchool;
-    const centerCode = targetCenter.split(' ').map(w => w[0]).join('').toUpperCase().replace(/[^A-Z]/g, '');
-
-    const seatsLeft = currentSchedule?.initialSeatsLeft ?? 18;
-    const occupiedCount = 30 - seatsLeft;
-
-    // Generate deterministic occupied indices
-    const occupiedIndices = new Set<number>();
-    let scatter = 3;
-    let count = 0;
-    while (count < occupiedCount && count < 30) {
-      const seatIndex = (scatter % 30) + 1;
-      if (!occupiedIndices.has(seatIndex)) {
-        const seatNum = `Seat ${centerCode}-${100 + seatIndex}`;
-        if (assignedSeat !== seatNum) {
-          occupiedIndices.add(seatIndex);
-          count++;
-        }
-      }
-      scatter += 7;
-    }
-
-    for (let i = 1; i <= 30; i++) {
-      const seatNum = `Seat ${centerCode}-${100 + i}`;
-      const isThisCandidate = assignedSeat === seatNum;
-      const isOccupied = isThisCandidate || occupiedIndices.has(i);
-      
-      const firstNames = ['Manuel', 'Guillermo', 'Maria', 'Jose', 'Clara', 'Bernardo', 'Leticia', 'Rodolfo', 'Elena', 'Francisco', 'Arturo', 'Corazon'];
-      const lastNames = ['Santos', 'Dela Cruz', 'Rizal', 'Romulo', 'Aquino', 'Garcia', 'Villa', 'Arcilla', 'Reyes', 'Pascual', 'Laurel', 'Salvador'];
-      const mockName = `${firstNames[i % firstNames.length]} ${lastNames[(i * 3) % lastNames.length]}`;
-      const occupantName = isThisCandidate 
-        ? `${currentApp.firstName} ${currentApp.lastName}`
-        : isOccupied ? mockName : '';
-
-      const roomNum = Math.floor((i - 1) / 10) + 1; // 1-10 -> Room 1, 11-20 -> Room 2, 21-30 -> Room 3
-      const roomName = `Lab Room ${roomNum}`;
-      const proctorName = currentSchedule?.proctor || dummyProctors[(roomNum - 1) % dummyProctors.length];
-
-      finalSeats.push({
-        deviceId: `SDEV-MOCK-${centerCode}-${i}`,
-        pcName: `${centerCode}-LAB${roomNum}-PC${i.toString().padStart(2, '0')}`,
-        seatNumber: seatNum,
-        isOccupied,
-        occupantName,
-        isThisCandidate,
-        center: targetCenter,
-        specs: i % 2 === 0 ? 'Intel Core i5-11400, 16GB RAM, Windows 11' : 'AMD Ryzen 5, 16GB RAM, Windows 10',
-        ipAddress: `192.168.10.${100 + i}`,
-        roomName,
-        proctorName
-      });
-    }
-
-    return finalSeats.sort((a, b) => a.seatNumber.localeCompare(b.seatNumber));
-  }, [selectedSchool, selectedScheduleId, assignedSeat, currentSchedule]);
-
-  const [seatSearch, setSeatSearch] = useState('');
-  const filteredSeats = seatOptions.filter(seat => 
-    seat.seatNumber.toLowerCase().includes(seatSearch.toLowerCase()) ||
-    seat.pcName.toLowerCase().includes(seatSearch.toLowerCase()) ||
-    seat.occupantName.toLowerCase().includes(seatSearch.toLowerCase()) ||
-    seat.roomName.toLowerCase().includes(seatSearch.toLowerCase()) ||
-    seat.proctorName.toLowerCase().includes(seatSearch.toLowerCase())
-  );
 
   return (
     <div className="space-y-8">
@@ -640,25 +506,32 @@ export default function ReviewerApplicationDetail() {
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-xl border border-gray-100 font-sans">
                       <DataRow label="Learner Reference Number (LRN)" value={currentApp.lrn} />
+                      <DataRow label="School ID" value={currentApp.schoolId || 'Unspecified'} />
                       <DataRow label="High School Name" value={currentApp.schoolName} />
                       <DataRow label="High School Address" value={currentApp.schoolAddress} />
                       <DataRow label="Academic Track" value={currentApp.academicTrack} />
                       <DataRow label="Grade Level" value={currentApp.gradeLevel} />
+                      <DataRow label="Enrollment Status" value={currentApp.enrollmentStatus || 'Unspecified'} />
+                      <DataRow label="School Year" value={currentApp.schoolYear || 'Unspecified'} />
                       <DataRow label="GWA" value={String(currentApp.gwa || 'Unspecified')} />
-                      <div className="sm:col-span-2 md:col-span-3">
-                        <p className="text-[10px] font-black text-philsa-gray uppercase tracking-widest mb-2">Registered Course Preferences</p>
-                        <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-white">
-                          {preferenceRows.map((preference, index) => (
-                            <div key={`${preference.university}-${index}`} className="grid grid-cols-1 md:grid-cols-[80px_1fr_1fr] gap-3 px-4 py-3 text-sm font-bold text-philsa-navy">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-philsa-gray">Choice {index + 1}</span>
-                              <span>{preference.university}</span>
-                              <span className="text-philsa-gray">{preference.course}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      {additionalRegistrationFields.map(([field, value]) => (
+                        <DataRow key={field} label={field} value={value} />
+                      ))}
                     </div>
                   </div>
+
+                  {pwdRegistrationFields.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-xs font-bold text-[#8A1538] uppercase tracking-wider pb-1.5 border-b border-[#8A1538]/20 flex items-center gap-2">
+                        <ShieldAlert className="w-4 h-4 text-[#00563F]" /> PWD Information
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-xl border border-gray-100 font-sans">
+                        {pwdRegistrationFields.map(([field, value]) => (
+                          <DataRow key={field} label={field} value={value || 'Unspecified'} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Biometric logs moved to the top-level Biometric Logs tab. */}
                   <div className="hidden">
@@ -799,262 +672,6 @@ export default function ReviewerApplicationDetail() {
                       </div>
                     </div>
                   </div>
-
-                  {/* SECTION 3: Admission Information */}
-                  <div className="space-y-4">
-                    <h3 className="text-xs font-bold text-[#8A1538] uppercase tracking-wider pb-1.5 border-b border-[#8A1538]/20 flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-[#00563F]" /> Admission Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-xl border border-gray-100 font-sans">
-                      {/* Testing Center Selection */}
-                      <div className="md:col-span-1 space-y-2">
-                        <label className="text-[10px] font-black text-philsa-gray uppercase tracking-widest block">
-                          Testing Center
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={selectedSchool}
-                            onChange={(e) => handleSchoolChange(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-philsa-red appearance-none pr-10 cursor-pointer shadow-sm"
-                          >
-                            {Object.keys(SCHOOL_SCHEDULES).map((school) => (
-                              <option key={school} value={school}>
-                                {school}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
-                        <p className="text-[9px] text-slate-400 font-medium uppercase mt-1">Select a designated test center location</p>
-                        <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">Registered target center: {registeredCenter}</p>
-                      </div>
-
-                      {/* Exam Schedule (displays the schedule for selected school as a table) */}
-                      <div className="md:col-span-2 space-y-3">
-                        <label className="text-[10px] font-black text-philsa-gray uppercase tracking-widest block">
-                          Available Schedules
-                        </label>
-                        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white">
-                          <table className="w-full border-collapse text-left text-xs">
-                            <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                              <tr>
-                                <th className="px-4 py-3 bg-slate-50">Schedule Date & Time</th>
-                                <th className="px-4 py-3 bg-slate-50">Proctor</th>
-                                <th className="px-4 py-3 bg-slate-50">Available Seats</th>
-                                <th className="px-4 py-3 bg-slate-50">Status</th>
-                                <th className="px-4 py-3 text-right bg-slate-50">Selection</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 font-sans">
-                              {(SCHOOL_SCHEDULES[selectedSchool] || []).map((sched) => {
-                                const isSelected = selectedScheduleId === sched.id;
-                                return (
-                                  <tr 
-                                    key={sched.id}
-                                    className={`hover:bg-slate-50 transition-colors ${
-                                      isSelected ? 'bg-red-50/20 font-semibold' : ''
-                                    }`}
-                                  >
-                                    <td className="px-4 py-3 text-slate-800 font-extrabold text-[11px] uppercase tracking-wider">
-                                      <div className="flex items-center gap-2">
-                                        <span className={cn(
-                                          "inline-block w-2.5 h-2.5 rounded-full border-2 flex-shrink-0",
-                                          isSelected ? "bg-philsa-red border-philsa-red" : "bg-white border-slate-300"
-                                        )} />
-                                        {sched.time}
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-700 font-bold text-xs">
-                                      {sched.proctor}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <span className={cn(
-                                        "font-black font-mono px-2 py-0.5 rounded-md text-[10px]",
-                                        sched.initialSeatsLeft <= 5 
-                                          ? "bg-red-100 text-red-700" 
-                                          : "bg-emerald-100 text-emerald-700"
-                                      )}>
-                                        {sched.initialSeatsLeft} Left
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <span className={cn(
-                                        "inline-block text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md border",
-                                        isSelected 
-                                          ? "bg-red-50 text-philsa-red border-philsa-red/20"
-                                          : "bg-slate-50 text-slate-500 border-slate-200"
-                                      )}>
-                                        {isSelected ? "Active" : "Available"}
-                                      </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">
-                                      {isSelected ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => setSelectedScheduleId('')}
-                                          className="bg-red-50 text-philsa-red hover:bg-red-100 font-extrabold px-3 py-1.5 rounded-lg tracking-wider cursor-pointer text-[10px] transition-all"
-                                        >
-                                          Deselect
-                                        </button>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => setSelectedScheduleId(sched.id)}
-                                          className="bg-philsa-red text-white hover:bg-philsa-red/90 font-extrabold px-3 py-1.5 rounded-lg tracking-wider cursor-pointer text-[10px] transition-all shadow-sm shadow-philsa-red/10"
-                                        >
-                                          Select
-                                        </button>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                      
-                      {/* Active Workstation Seat Assignment Section */}
-                      <div className="sm:col-span-2 md:col-span-3 pt-4 border-t border-slate-100 space-y-4">
-                        <div>
-                          <label className="text-[10px] font-black text-philsa-gray uppercase tracking-widest block mb-1">
-                             Assign Seat
-                          </label>
-                          <p className="text-xs text-slate-500 font-medium mb-4">
-                             Map this student to an active, proctor-registered PC node at {selectedSchool}. This links their examination profile with the physical lab terminal. Supports quick filter for multiple laboratory rows.
-                          </p>
-
-                          {!selectedScheduleId ? (
-                            <div className="border border-slate-200 border-dashed rounded-2xl p-8 bg-slate-50/50 text-center text-slate-500 font-sans space-y-2">
-                              <AlertCircle className="w-8 h-8 text-slate-400 mx-auto animate-pulse" />
-                              <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest">No Schedule Selected</h4>
-                              <p className="text-[11px] text-slate-500 max-w-md mx-auto leading-relaxed">
-                                Please select one of the available examination schedules from the list above to view and assign workstation seats for this student.
-                              </p>
-                            </div>
-                          ) : (
-                            <>
-                              {/* Quick Filter Inner Input */}
-                              <div className="relative mb-3.5 max-w-sm">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
-                                <input
-                                  type="text"
-                                  placeholder="Search seat, PC hostname..."
-                                  value={seatSearch}
-                                  onChange={(e) => setSeatSearch(e.target.value)}
-                                  className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-philsa-blue text-slate-800"
-                                />
-                              </div>
-                              
-                              {/* Rich Interactive Table View with scrollbars */}
-                              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white">
-                                <div className="max-h-96 overflow-y-auto">
-                                  <table className="w-full border-collapse text-left text-xs">
-                                    <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 z-10">
-                                      <tr>
-                                        <th className="px-4 py-3 bg-slate-50">Seat Coordinate</th>
-                                        <th className="px-4 py-3 bg-slate-50">Room & Proctor</th>
-                                        <th className="px-4 py-3 bg-slate-50">PC Name</th>
-                                        <th className="px-4 py-3 bg-slate-50">Specifications & IP</th>
-                                        <th className="px-4 py-3 bg-slate-50">Status / Current Occupant</th>
-                                        <th className="px-4 py-3 text-right bg-slate-50">Actions</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 font-sans">
-                                      {filteredSeats.length === 0 ? (
-                                        <tr>
-                                          <td colSpan={6} className="px-4 py-8 text-center text-slate-400 italic">
-                                            No matched workstations found in this center.
-                                          </td>
-                                        </tr>
-                                      ) : (
-                                        filteredSeats.map((seat, idx) => (
-                                          <tr 
-                                            key={idx} 
-                                            className={`hover:bg-slate-50 transition-colors ${
-                                              seat.isThisCandidate ? 'bg-emerald-50/70 font-semibold' : ''
-                                            }`}
-                                          >
-                                            <td className="px-4 py-3 font-mono font-bold text-philsa-navy">
-                                              {seat.seatNumber}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                              <div className="font-bold text-slate-700 text-xs">{seat.roomName}</div>
-                                              <div className="text-[10px] text-slate-500 font-medium mt-0.5">
-                                                <span className="text-[#8A1538] font-bold">👤 Proctor:</span> {seat.proctorName}
-                                              </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-slate-800 font-medium">
-                                              {seat.pcName}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                              <div className="text-[10px] text-slate-500 font-mono">{seat.ipAddress}</div>
-                                              <div className="text-[9px] text-slate-400 truncate max-w-[200px]" title={seat.specs}>{seat.specs}</div>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                              <div className="flex items-center gap-1.5">
-                                                <span className={`inline-block w-2.5 h-2.5 rounded-full ${
-                                                  seat.isThisCandidate
-                                                    ? 'bg-emerald-500 animate-pulse'
-                                                    : seat.isOccupied
-                                                      ? 'bg-red-400'
-                                                      : 'bg-emerald-400'
-                                                }`} />
-                                                <span className="text-slate-700 font-medium">
-                                                  {seat.isThisCandidate
-                                                    ? `Assigned to ${currentApp.firstName}`
-                                                    : seat.isOccupied
-                                                      ? `Occupied: ${seat.occupantName}`
-                                                      : 'Available'}
-                                                </span>
-                                              </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                              {seat.isThisCandidate ? (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    localStorage.removeItem(seatStorageKey);
-                                                    setAssignedSeat('');
-                                                    addAuditLog('ADMISSION_SEAT_RELEASED', `Released candidate ${currentApp.firstName} ${currentApp.lastName} from seat ${seat.seatNumber}`);
-                                                  }}
-                                                  className="bg-red-50 text-philsa-red hover:bg-red-100 font-extrabold px-3 py-1 rounded-md tracking-wider cursor-pointer text-[10px] transition-all"
-                                                >
-                                                  Release
-                                                </button>
-                                              ) : seat.isOccupied ? (
-                                                <span className="text-[10px] font-medium text-slate-400 italic px-3 py-1">
-                                                  In Use
-                                                </span>
-                                              ) : (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    localStorage.setItem(seatStorageKey, seat.seatNumber);
-                                                    setAssignedSeat(seat.seatNumber);
-                                                    addAuditLog('ADMISSION_SEAT_ASSIGNED', `Assigned recruit candidate ${currentApp.firstName} ${currentApp.lastName} to seat ${seat.seatNumber}`);
-                                                  }}
-                                                  className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-extrabold px-3 py-1 rounded-md tracking-wider cursor-pointer text-[10px] transition-all"
-                                                >
-                                                  Assign
-                                                </button>
-                                              )}
-                                            </td>
-                                          </tr>
-                                        ))
-                                      )}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                          
-                        </div>
-                      </div>
-
-                    </div>
-                  </div>
                 </div>
 
                 <div className="pt-10 border-t border-philsa-border mt-10">
@@ -1072,12 +689,6 @@ export default function ReviewerApplicationDetail() {
                          <ShieldCheck className="w-4 h-4 text-emerald-600" /> All personal data cross-referenced with PhilSys registry.
                       </div>
                       <div className="flex flex-wrap gap-3">
-                        <button 
-                          onClick={() => handleAction('REASSIGN')}
-                          className="bg-white border border-philsa-border text-philsa-navy font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-bg active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
-                        >
-                          <MapPin className="w-3.5 h-3.5" /> Reassign Center
-                        </button>
                         <button 
                           onClick={() => handleAction('CORRECTION')}
                           className="bg-amber-50 border border-amber-200 text-amber-700 font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-amber-100 active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
@@ -1244,89 +855,6 @@ export default function ReviewerApplicationDetail() {
         </div>
       </div>
       
-      {/* Reassign Testing Center Modal */}
-      <AnimatePresence>
-        {isReassigning && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-philsa-navy/60 backdrop-blur-md">
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }}
-               animate={{ opacity: 1, scale: 1 }}
-               exit={{ opacity: 0, scale: 0.95 }}
-               className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl overflow-hidden"
-            >
-               <div className="p-8 border-b border-philsa-border bg-philsa-bg/30">
-                  <h3 className="text-xl font-black text-philsa-navy uppercase tracking-tight">Reassign <span className="text-philsa-red">Testing Center</span></h3>
-                  <p className="text-[10px] text-philsa-gray font-black mt-1 uppercase tracking-widest">Adjusting location for {currentApp.firstName} {currentApp.lastName}</p>
-               </div>
-               
-               <div className="p-8 space-y-6">
-                  <div className="p-6 bg-philsa-bg rounded-3xl border border-philsa-border border-dashed mb-6">
-                     <p className="text-[10px] font-black text-philsa-gray uppercase tracking-widest mb-1">Current Assignment</p>
-                     <p className="text-sm font-black text-philsa-navy uppercase tracking-widest">{selectedSchool}</p>
-                  </div>
-
-                  <div className="space-y-4">
-                     <label className="text-[10px] font-black text-philsa-gray uppercase tracking-widest px-1">Select New Location</label>
-                     <div className="grid grid-cols-1 gap-2">
-                        {['University of the Philippines Diliman', 'De La Salle University - Manila', 'PUP Main Campus', 'University of Santo Tomas'].map(center => {
-                          const isTempSelected = center === tempSelectedSchool;
-                          return (
-                            <button 
-                              key={center} 
-                              onClick={() => setTempSelectedSchool(center)}
-                              className={cn(
-                                "flex items-center justify-between p-5 rounded-2xl border transition-all text-left",
-                                isTempSelected 
-                                  ? "border-philsa-red bg-red-50/10 shadow-sm" 
-                                  : "border-philsa-border hover:border-slate-300 hover:bg-slate-50"
-                              )}
-                            >
-                               <div className="flex items-center gap-3">
-                                  <div className={cn(
-                                    "w-8 h-8 rounded-xl flex items-center justify-center shadow-xs",
-                                    isTempSelected ? "bg-philsa-red text-white" : "bg-white text-philsa-navy border border-slate-100"
-                                  )}>
-                                     <MapPin className="w-4 h-4" />
-                                  </div>
-                                  <div>
-                                     <p className={cn("text-[10px] font-black uppercase tracking-widest", isTempSelected ? "text-philsa-red" : "text-philsa-navy")}>{center}</p>
-                                     <p className="text-[8px] font-bold text-philsa-gray uppercase mt-0.5">85% Capacity Available</p>
-                                  </div>
-                               </div>
-                               {isTempSelected ? (
-                                 <Check className="w-4 h-4 text-philsa-red" />
-                               ) : (
-                                 <ChevronRight className="w-4 h-4 text-philsa-gray" />
-                               )}
-                            </button>
-                          );
-                        })}
-                     </div>
-                  </div>
-               </div>
-
-               <div className="p-8 bg-philsa-bg/30 border-t border-philsa-border flex gap-3">
-                  <button onClick={() => setIsReassigning(false)} className="flex-1 py-4 bg-white border border-philsa-border text-philsa-navy text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-philsa-bg transition-all">Cancel</button>
-                  <button 
-                    onClick={() => {
-                       handleSchoolChange(tempSelectedSchool);
-                       setIsReassigning(false);
-                       setSuccessConfig({
-                         isOpen: true,
-                         type: 'ACCEPTED',
-                         title: 'Center Reassigned',
-                         message: `The testing center assignment has been successfully updated to ${tempSelectedSchool}.`,
-                       });
-                    }} 
-                    className="flex-[2] py-4 bg-philsa-red text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-philsa-red/20 hover:bg-philsa-red/90 transition-all"
-                  >
-                    Confirm Reassignment
-                  </button>
-               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Return for Correction Modal */}
       <AnimatePresence>

@@ -283,8 +283,27 @@ export function createBackendApplicationDraftInput(
     universities: string[];
     courses: string[];
     customStep1Fields?: Record<string, string>;
+    isPwd?: boolean;
+    pwdType?: string;
+    pwdCondition?: string;
+    pwdIdNumber?: string;
+    pwdIdFilename?: string;
+    pwdIdPreviewUrl?: string;
+    pwdAccommodation?: string;
   },
 ): BackendApplicationDraftInput {
+  const additionalHighPriorityFields = {
+    ...(formData.customStep1Fields ?? {}),
+    ...(formData.isPwd ? {
+      isPwd: 'Yes',
+      pwdType: formData.pwdType ?? '',
+      pwdCondition: formData.pwdCondition ?? '',
+      pwdIdNumber: formData.pwdIdNumber ?? '',
+      pwdIdFilename: formData.pwdIdFilename ?? '',
+      pwdAccommodation: formData.pwdAccommodation ?? '',
+    } : {}),
+  };
+
   return {
     verificationToken,
     password: formData.password,
@@ -297,7 +316,7 @@ export function createBackendApplicationDraftInput(
       sex: formData.gender,
       email: formData.email,
       mobile: formData.mobile,
-      additionalHighPriorityFields: formData.customStep1Fields ?? {},
+      additionalHighPriorityFields,
     },
     address: {
       region: formData.region,
@@ -336,41 +355,75 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
   const school = application.school;
   const preferences = application.coursePreferences;
   const lrnProfile = application.lrnProfile ?? {};
+  const additionalHighPriorityFields = normalizeStringRecord(personal.additionalHighPriorityFields);
+  const firstNonEmpty = (...values: unknown[]) => {
+    for (const value of values) {
+      if (value === null || value === undefined) continue;
+      const stringValue = String(value).trim();
+      if (stringValue) return stringValue;
+    }
+    return '';
+  };
+  const normalizedPreferences = preferences
+    .map((preference, index) => ({
+      university: firstNonEmpty(preference.university, preference.universityName, preference.schoolName, preference.institution, Array.isArray(preference) ? preference[0] : ''),
+      course: firstNonEmpty(preference.course, preference.courseName, preference.program, preference.programName, Array.isArray(preference) ? preference[1] : ''),
+      rank: Number(preference.rank ?? index + 1),
+    }))
+    .filter((preference) => preference.university || preference.course)
+    .sort((a, b) => a.rank - b.rank);
+  const gwaValue = firstNonEmpty(school.gwa, school.generalWeightedAverage, school.average);
+  const parsedGwa = Number(gwaValue);
 
   return {
     id: application.id,
     userId,
     status: application.status === 'SUBMITTED' || application.status === 'RESUBMITTED' ? 'PENDING' : application.status === 'APPROVED' ? 'ACCEPTED' : application.status === 'FOR_CORRECTION' ? 'FOR_CORRECTION' : 'REJECTED',
     submittedAt: application.submittedAt ?? undefined,
-    firstName: String(lrnProfile.firstName ?? personal.firstName ?? ''),
-    middleName: String(lrnProfile.middleName ?? personal.middleName ?? ''),
-    noMiddleName: !(lrnProfile.middleName ?? personal.middleName),
-    lastName: String(lrnProfile.lastName ?? personal.lastName ?? ''),
-    suffix: String(lrnProfile.extensionName ?? personal.suffix ?? ''),
-    dob: String(lrnProfile.dateOfBirth ?? personal.dateOfBirth ?? ''),
-    photoUrl: String(personal.studentIdPhotoUrl ?? ''),
-    birthPlace: '',
-    nationality: 'Filipino',
-    gender: String(lrnProfile.sex ?? personal.sex ?? ''),
-    email: String(personal.email ?? ''),
-    mobile: String(personal.mobile ?? ''),
-    nationalId: '',
-    region: String(address.region ?? ''),
-    province: String(address.province ?? ''),
-    city: String(address.city ?? ''),
-    barangay: String(address.barangay ?? ''),
-    street: String(address.street ?? ''),
-    zipCode: String(address.postalCode ?? ''),
-    lrn: String(lrnProfile.lrn ?? school.lrn ?? ''),
-    schoolName: String(lrnProfile.schoolName ?? school.name ?? ''),
-    schoolAddress: String(school.address ?? ''),
-    academicTrack: String(school.academicTrack ?? ''),
-    gradeLevel: String(lrnProfile.gradeLevel ?? school.gradeLevel ?? ''),
-    gwa: Number(school.gwa ?? 0),
-    universities: preferences.map((preference) => String(preference.university ?? '')),
-    courses: preferences.map((preference) => String(preference.course ?? '')),
-    examScheduleId: '',
+    firstName: firstNonEmpty(lrnProfile.firstName, personal.firstName),
+    middleName: firstNonEmpty(lrnProfile.middleName, personal.middleName),
+    noMiddleName: !firstNonEmpty(lrnProfile.middleName, personal.middleName),
+    lastName: firstNonEmpty(lrnProfile.lastName, personal.lastName),
+    suffix: firstNonEmpty(lrnProfile.extensionName, personal.extensionName, personal.suffix),
+    dob: firstNonEmpty(lrnProfile.dateOfBirth, personal.dateOfBirth, personal.dob),
+    photoUrl: firstNonEmpty(personal.photoUrl, personal.selfiePhotoUrl, personal.studentIdPhotoUrl, application.reviewStep?.selfiePhotoUrl, application.reviewStep?.studentIdPhotoUrl),
+    birthPlace: firstNonEmpty(personal.birthPlace, personal.placeOfBirth),
+    nationality: firstNonEmpty(personal.nationality) || 'Filipino',
+    gender: firstNonEmpty(lrnProfile.sex, personal.sex, personal.gender),
+    email: firstNonEmpty(personal.email, personal.emailAddress),
+    mobile: firstNonEmpty(personal.mobile, personal.mobileNumber, personal.phoneNumber),
+    nationalId: firstNonEmpty(personal.nationalId, personal.philSysId),
+    region: firstNonEmpty(address.region),
+    province: firstNonEmpty(address.province),
+    city: firstNonEmpty(address.city),
+    barangay: firstNonEmpty(address.barangay),
+    street: firstNonEmpty(address.street),
+    zipCode: firstNonEmpty(address.postalCode, address.zipCode),
+    lrn: firstNonEmpty(lrnProfile.lrn, school.lrn),
+    schoolId: firstNonEmpty(lrnProfile.schoolId, school.schoolId),
+    schoolName: firstNonEmpty(lrnProfile.schoolName, school.name, school.schoolName, school.highSchoolName),
+    schoolAddress: firstNonEmpty(school.address, school.schoolAddress, school.highSchoolAddress),
+    academicTrack: firstNonEmpty(school.academicTrack, school.track),
+    gradeLevel: firstNonEmpty(lrnProfile.gradeLevel, school.gradeLevel),
+    enrollmentStatus: firstNonEmpty(lrnProfile.enrollmentStatus, school.enrollmentStatus),
+    schoolYear: firstNonEmpty(lrnProfile.schoolYear, school.schoolYear),
+    gwa: Number.isFinite(parsedGwa) ? parsedGwa : 0,
+    universities: normalizedPreferences.map((preference) => preference.university),
+    courses: normalizedPreferences.map((preference) => preference.course),
+    examScheduleId: firstNonEmpty(application.reviewStep?.examScheduleId, application.reviewStep?.scheduleId),
+    additionalHighPriorityFields,
   };
+}
+
+function normalizeStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return Object.entries(value).reduce<Record<string, string>>((record, [key, entry]) => {
+    if (entry === null || entry === undefined) return record;
+    const stringValue = String(entry).trim();
+    if (stringValue) record[key] = stringValue;
+    return record;
+  }, {});
 }
 
 export function mapBackendApplicationsToReviewRows(applications: BackendApplication[]): Array<Application & {

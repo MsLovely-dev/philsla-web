@@ -8,6 +8,51 @@ import {
   type StudentRegistrationFieldInput,
 } from '../../../services/backendApplicationService';
 
+const PWD_TYPES = [
+  'Psychosocial disability',
+  'Disability due to chronic illness',
+  'Learning disability',
+  'Intellectual disability',
+  'Mental disability',
+  'Visual disability',
+  'Physical/orthopedic disability',
+  'Speech impairment',
+  'Deaf / hard-of-hearing',
+  'Cancer and rare diseases',
+];
+
+const PWD_CONDITIONS = [
+  'Bipolar disorder',
+  'Depression',
+  'Schizophrenia',
+  'ADHD',
+  'Epilepsy',
+  'Other long-term mental/behavioral condition',
+  'Orthopedic disability from cancer',
+  'Blindness from diabetes',
+  'Dialysis',
+  'Heart disorder',
+  'Severe cancer',
+  'Other disability arising from a chronic disease',
+  'Dyslexia',
+  'Dysgraphia',
+  'Similar learning disability',
+  'Cognitive impairment affecting adaptive functioning',
+  'Broader mental impairment classification used in the NCDA list',
+  'Blindness',
+  'Low vision',
+  'Functional visual limitation certified by an ophthalmologist',
+  'Mobility impairment',
+  'Missing limb',
+  'Other physical/orthopedic disability',
+  'Communication disorder',
+  'Deaf',
+  'Hard-of-hearing',
+  'Other hearing impairment',
+  'Cancer',
+  'Rare disease',
+];
+
 const MOCK_DATA = [
   { id: 'hp-lrn', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'LRN', priority: 'High Priority', remarks: 'Primary identifier', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
   { id: 'hp-dob', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Birth Date', priority: 'High Priority', remarks: 'Verify against DepEd', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
@@ -21,7 +66,13 @@ const MOCK_DATA = [
   { id: 'hp-grade-level', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Grade Level', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
   { id: 'hp-enrollment-status', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Enrollment Status', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
   { id: 'hp-school-year', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'School Year', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  // Verification Methods
+  { id: 'pwd-toggle', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD', fieldSection: 'PWD Information', inputType: 'checkbox', priority: 'Low Priority', remarks: 'Shows the PWD declaration section before selfie capture', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 130 },
+  { id: 'pwd-type', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD Type', fieldSection: 'PWD Information', inputType: 'dropdown', optionValues: PWD_TYPES, priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 131 },
+  { id: 'pwd-condition', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Condition', fieldSection: 'PWD Information', inputType: 'dropdown', optionValues: PWD_CONDITIONS, priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 132 },
+  { id: 'pwd-id-number', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD ID Number', fieldSection: 'PWD Information', inputType: 'text', priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 133 },
+  { id: 'pwd-id-attachment', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD ID Attachment', fieldSection: 'PWD Information', inputType: 'file', priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 134 },
+  { id: 'pwd-accommodation', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Accommodation Needed', fieldSection: 'PWD Information', inputType: 'textarea', priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 135 },
+  // Registration Methods
   { id: 'v1', section: 'Step 1 Registration', type: 'Verification Method', value: 'Learner Reference Number (LRN)', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-05-01 08:00' },
   { id: 'v2', section: 'Step 1 Registration', type: 'Verification Method', value: 'PhilSys National ID', status: 'Inactive', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-05-01 08:00' },
   { id: 'v3', section: 'Step 1 Registration', type: 'Verification Method', value: 'Manual Entry', status: 'Inactive', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-05-01 08:00' },
@@ -29,6 +80,7 @@ const MOCK_DATA = [
 
 const REGISTRATION_SECTIONS = ['Step 1 Registration'];
 const DEFAULT_FIELD_SECTIONS: Record<string, string> = {
+  'LRN': 'Personal Information',
   'Birth Date': 'Personal Information',
   'First Name': 'Personal Information',
   'Middle Name': 'Personal Information',
@@ -40,6 +92,12 @@ const DEFAULT_FIELD_SECTIONS: Record<string, string> = {
   'Grade Level': 'School Information',
   'Enrollment Status': 'School Information',
   'School Year': 'School Information',
+  'PWD': 'PWD Information',
+  'PWD Type': 'PWD Information',
+  'Condition': 'PWD Information',
+  'PWD ID Number': 'PWD Information',
+  'PWD ID Attachment': 'PWD Information',
+  'Accommodation Needed': 'PWD Information',
 };
 const sanitizeRegistrationConfigRows = (rows: any[]) => rows
   .filter(row => REGISTRATION_SECTIONS.includes(row.section))
@@ -69,7 +127,7 @@ export default function StudentRegistrationMaintenance() {
   });
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [selectedSection, setSelectedSection] = useState<'All' | 'Step 1 Registration' | 'Verification Methods'>('All');
+  const [selectedSection, setSelectedSection] = useState<'All' | 'Step 1 Registration' | 'Registration Methods'>('All');
   const [isLoadingRegistrationFields, setIsLoadingRegistrationFields] = useState(false);
   const [registrationFieldMessage, setRegistrationFieldMessage] = useState('');
   const [registrationFieldError, setRegistrationFieldError] = useState('');
@@ -182,8 +240,8 @@ export default function StudentRegistrationMaintenance() {
         </span>
       ),
     },
-    { key: 'type', label: 'Category / Field Type' },
-    { key: 'value', label: 'Verification Method' },
+    { key: 'type', label: 'Category / Field Type', render: () => 'Registration Method' },
+    { key: 'value', label: 'Registration Method' },
     {
       key: 'status',
       label: 'Operational Status',
@@ -215,7 +273,7 @@ export default function StudentRegistrationMaintenance() {
       type: 'select', 
       required: true, 
       options: [
-        { value: 'Verification Method', label: 'Verification Method Enable Switch' },
+        { value: 'Verification Method', label: 'Registration Method Enable Switch' },
         { value: 'Student Registration Field', label: 'Student Registration Field' },
       ] 
     },
@@ -229,6 +287,7 @@ export default function StudentRegistrationMaintenance() {
         { value: 'Personal Information', label: 'Personal Information' },
         { value: 'School Information', label: 'School Information' },
         { value: 'Additional Information', label: 'Additional Information' },
+        { value: 'PWD Information', label: 'PWD Information' },
       ],
     },
     {
@@ -240,6 +299,9 @@ export default function StudentRegistrationMaintenance() {
         { value: 'text', label: 'Text Input' },
         { value: 'date', label: 'Date Picker' },
         { value: 'dropdown', label: 'Dropdown' },
+        { value: 'checkbox', label: 'Checkbox' },
+        { value: 'file', label: 'File Upload' },
+        { value: 'textarea', label: 'Long Text' },
       ],
     },
     {
@@ -286,7 +348,7 @@ export default function StudentRegistrationMaintenance() {
     }
     setRegistrationFieldMessage(
       updatedRow.type === 'Verification Method' && (updatedRow.status === true || updatedRow.status === 'Active')
-        ? 'Verification method enabled. Other Step 1 verification methods were disabled automatically.'
+        ? 'Registration method enabled. Other Step 1 registration methods were disabled automatically.'
         : 'Registration field updated.'
     );
     await loadRegistrationFields();
@@ -374,14 +436,14 @@ export default function StudentRegistrationMaintenance() {
         </button>
         <button
           type="button"
-          onClick={() => setSelectedSection('Verification Methods')}
+          onClick={() => setSelectedSection('Registration Methods')}
           className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-            selectedSection === 'Verification Methods'
+            selectedSection === 'Registration Methods'
               ? 'bg-white text-philsa-navy shadow-md'
               : 'text-slate-500 hover:text-philsa-navy'
           }`}
         >
-          Verification Methods ({data.filter(d => d.type === 'Verification Method').length})
+          Registration Methods ({data.filter(d => d.type === 'Verification Method').length})
         </button>
       </div>
       {registrationFieldError && (
@@ -390,16 +452,16 @@ export default function StudentRegistrationMaintenance() {
       {registrationFieldMessage && (
         <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{registrationFieldMessage}</p>
       )}
-      {selectedSection === 'Verification Methods' && (
+      {selectedSection === 'Registration Methods' && (
         <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-bold text-blue-700">
-          Verification methods are predefined. Enable LRN or Manual Entry from the action switch; enabling one disables the other automatically. PhilSys is locked for future feature development.
+          Registration methods are predefined. Enable LRN or Manual Entry from the action switch; enabling one disables the other automatically. PhilSys is locked for future feature development.
         </p>
       )}
     </div>
   );
 
   // Filter the actual data array being rendered by the table
-  const filteredDataBySection = selectedSection === 'Verification Methods'
+  const filteredDataBySection = selectedSection === 'Registration Methods'
       ? data.filter(item => item.type === 'Verification Method')
     : selectedSection === 'Step 1 Registration'
       ? data.filter(item => item.type === 'Student Registration Field')
@@ -410,18 +472,18 @@ export default function StudentRegistrationMaintenance() {
       title="Student Registration Maintenance"
       subtitle="Lookup tables and validation rules for the National standardized registration portal."
       breadcrumb={['Maintenance', 'Student Registration']}
-      columns={selectedSection === 'Verification Methods' ? verificationMethodColumns : columns}
+      columns={selectedSection === 'Registration Methods' ? verificationMethodColumns : columns}
       data={isLoadingRegistrationFields ? [] : filteredDataBySection}
       fields={fields}
-      onAdd={selectedSection === 'Verification Methods' ? undefined : handleAdd}
+      onAdd={selectedSection === 'Registration Methods' ? undefined : handleAdd}
       onEdit={handleEdit}
       onDelete={handleDelete}
-      showCreateAction={selectedSection !== 'Verification Methods'}
+      showCreateAction={selectedSection !== 'Registration Methods'}
       showRowActions
-      showApprovalColumn={selectedSection !== 'Verification Methods'}
-      renderRowActions={selectedSection === 'Verification Methods' ? renderVerificationMethodAction : undefined}
+      showApprovalColumn={selectedSection !== 'Registration Methods'}
+      renderRowActions={selectedSection === 'Registration Methods' ? renderVerificationMethodAction : undefined}
       aboveTableContent={aboveTableContent}
-      bulkUpload={selectedSection === 'Verification Methods' ? undefined : {
+      bulkUpload={selectedSection === 'Registration Methods' ? undefined : {
         templateUrl: '#',
         allowedTypes: ['.xlsx', '.csv']
       }}

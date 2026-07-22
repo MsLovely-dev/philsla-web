@@ -8,7 +8,7 @@ import {
   mapBackendApplicationToFrontend,
   type StudentRegistrationFieldConfig,
 } from '../services/backendApplicationService';
-import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera } from 'lucide-react';
+import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Pencil } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const SECTIONS = [
@@ -17,6 +17,49 @@ const SECTIONS = [
   'Review & Submit'
 ];
 const STEP_TRACKER_LABELS = ['Identity & Biometrics', 'Account Set Up', 'Review & Submit'];
+
+const PWD_CATEGORY_OPTIONS = [
+  {
+    type: 'Psychosocial disability',
+    conditions: ['Bipolar disorder', 'Depression', 'Schizophrenia', 'ADHD', 'Epilepsy', 'Other long-term mental/behavioral condition'],
+  },
+  {
+    type: 'Disability due to chronic illness',
+    conditions: ['Orthopedic disability from cancer', 'Blindness from diabetes', 'Dialysis', 'Heart disorder', 'Severe cancer', 'Other disability arising from a chronic disease'],
+  },
+  {
+    type: 'Learning disability',
+    conditions: ['Dyslexia', 'Dysgraphia', 'Similar learning disability'],
+  },
+  {
+    type: 'Intellectual disability',
+    conditions: ['Cognitive impairment affecting adaptive functioning'],
+  },
+  {
+    type: 'Mental disability',
+    conditions: ['Broader mental impairment classification used in the NCDA list'],
+  },
+  {
+    type: 'Visual disability',
+    conditions: ['Blindness', 'Low vision', 'Functional visual limitation certified by an ophthalmologist'],
+  },
+  {
+    type: 'Physical/orthopedic disability',
+    conditions: ['Mobility impairment', 'Missing limb', 'Other physical/orthopedic disability'],
+  },
+  {
+    type: 'Speech impairment',
+    conditions: ['Communication disorder'],
+  },
+  {
+    type: 'Deaf / hard-of-hearing',
+    conditions: ['Deaf', 'Hard-of-hearing', 'Other hearing impairment'],
+  },
+  {
+    type: 'Cancer and rare diseases',
+    conditions: ['Cancer', 'Rare disease'],
+  },
+];
 
 type LrnVerificationCategory = 'email' | 'birthday' | 'student_id' | 'mobile' | 'mother_name';
 type LrnVerificationReview = {
@@ -76,6 +119,48 @@ const LRN_VERIFICATION_CATEGORIES: Array<{
 
 const LRN_COOLDOWN_SECONDS = 900;
 const LRN_COOLDOWN_STORAGE_KEY = 'philsa_lrn_cooldown_expires_at';
+const REGISTRATION_DRAFT_STORAGE_KEY = 'philsa_student_registration_session_draft';
+const REGISTRATION_SESSION_DURATION_SECONDS = 1800;
+
+type RegistrationSessionDraft = {
+  expiresAt: number;
+  formData?: Record<string, unknown>;
+  currentSection?: number;
+  visitedSections?: number[];
+  verificationPath?: 'philsys' | 'lrn' | 'manual' | null;
+  isIdVerified?: boolean;
+  registryLockedFields?: string[];
+  lrnVerificationCategory?: LrnVerificationCategory;
+  lrnRegisteredValue?: string;
+  lrnVerificationReview?: LrnVerificationReview | null;
+  biometricSelfieFileName?: string;
+  biometricSelfieStatus?: 'idle' | 'reviewing' | 'uploading' | 'stored' | 'failed';
+  biometricSelfieMessage?: string;
+  capturedSelfiePreview?: string;
+  isEmailVerified?: boolean;
+  emailOtpSentTo?: string;
+  reviewCertified?: boolean;
+};
+
+function readRegistrationSessionDraft(): RegistrationSessionDraft | null {
+  const saved = sessionStorage.getItem(REGISTRATION_DRAFT_STORAGE_KEY);
+  if (!saved) return null;
+  try {
+    const parsed = JSON.parse(saved) as RegistrationSessionDraft;
+    if (!parsed.expiresAt || parsed.expiresAt <= Date.now()) {
+      sessionStorage.removeItem(REGISTRATION_DRAFT_STORAGE_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    sessionStorage.removeItem(REGISTRATION_DRAFT_STORAGE_KEY);
+    return null;
+  }
+}
+
+function clearRegistrationSessionDraft() {
+  sessionStorage.removeItem(REGISTRATION_DRAFT_STORAGE_KEY);
+}
 
 function getStoredLrnCooldownSecondsLeft() {
   const storedExpiry = Number(localStorage.getItem(LRN_COOLDOWN_STORAGE_KEY));
@@ -100,6 +185,8 @@ function clearStoredLrnCooldown() {
 export default function StudentApplication() {
   const isPwaMode = new URLSearchParams(window.location.search).get('pwa') === 'true';
   const { user, addAuditLog, inputModules, addTicket } = usePhilSA();
+  const restoredSessionDraftRef = useRef<RegistrationSessionDraft | null>(readRegistrationSessionDraft());
+  const restoredSessionDraft = restoredSessionDraftRef.current;
   const isRegActive = inputModules?.find(m => m.id === 'student_reg')?.isActive !== false;
   const isSuffixActive = inputModules?.find(m => m.id === 'student_reg_suffix')?.isActive !== false;
 
@@ -152,12 +239,15 @@ export default function StudentApplication() {
   const step1FieldConfigs = regConfigs.filter(c => c.section === 'Step 1 Registration' && c.type === 'Student Registration Field');
   const hasStep1FieldMaintenance = step1FieldConfigs.length > 0;
   const knownStep1FieldNames = new Set([
-    'LRN', 'Birth Date', 'First Name', 'Middle Name', 'Last Name', 'Extension Name',
+    'LRN', 'Email Address', 'Birth Date', 'First Name', 'Middle Name', 'Last Name', 'Extension Name',
     'Sex', 'School ID', 'School Name', 'Grade Level', 'Enrollment Status', 'School Year',
+    'PWD', 'PWD Type', 'Condition', 'PWD ID Number', 'PWD ID Attachment', 'Accommodation Needed',
   ]);
   const isStep1FieldEnabled = (fieldName: string) => !hasStep1FieldMaintenance || step1FieldConfigs.some(c => c.value === fieldName && isActiveConfig(c));
   const getStep1FieldConfig = (fieldName: string) => step1FieldConfigs.find(c => c.value === fieldName);
   const defaultStep1FieldSections: Record<string, string> = {
+    'LRN': 'Personal Information',
+    'Email Address': 'Personal Information',
     'Birth Date': 'Personal Information',
     'First Name': 'Personal Information',
     'Middle Name': 'Personal Information',
@@ -169,6 +259,12 @@ export default function StudentApplication() {
     'Grade Level': 'School Information',
     'Enrollment Status': 'School Information',
     'School Year': 'School Information',
+    'PWD': 'PWD Information',
+    'PWD Type': 'PWD Information',
+    'Condition': 'PWD Information',
+    'PWD ID Number': 'PWD Information',
+    'PWD ID Attachment': 'PWD Information',
+    'Accommodation Needed': 'PWD Information',
   };
   const getStep1FieldSection = (fieldName: string) => getStep1FieldConfig(fieldName)?.fieldSection || defaultStep1FieldSections[fieldName] || 'Additional Information';
   const getStep1FieldOptions = (fieldName: string, fallback: string[]) => {
@@ -181,25 +277,26 @@ export default function StudentApplication() {
     !knownStep1FieldNames.has(c.value)
   );
   const additionalHighPriorityFieldsBySection = (section: string) => additionalHighPriorityFields.filter(field => (field.fieldSection || 'Additional Information') === section);
-  const [registryLockedFields, setRegistryLockedFields] = useState<string[]>([]);
+  const [registryLockedFields, setRegistryLockedFields] = useState<string[]>(() => restoredSessionDraft?.registryLockedFields ?? []);
   const isRegistryLocked = (fieldName: string) => isIdVerified && registryLockedFields.includes(fieldName);
   const activeVerificationPath: 'lrn' | 'philsys' | 'manual' | null = lrnActive ? 'lrn' : philsysActive ? 'philsys' : manualActive ? 'manual' : null;
 
   const { applications, setApplications } = useMockData();
-  const [currentSection, setCurrentSection] = useState(0);
+  const [currentSection, setCurrentSection] = useState(() => restoredSessionDraft?.currentSection ?? 0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [isIdVerified, setIsIdVerified] = useState(false);
-  const [lrnVerificationCategory, setLrnVerificationCategory] = useState<LrnVerificationCategory>('email');
-  const [lrnRegisteredValue, setLrnRegisteredValue] = useState('');
-  const [lrnVerificationReview, setLrnVerificationReview] = useState<LrnVerificationReview | null>(null);
-  const [biometricSelfieFileName, setBiometricSelfieFileName] = useState('');
-  const [biometricSelfieStatus, setBiometricSelfieStatus] = useState<'idle' | 'reviewing' | 'uploading' | 'stored' | 'failed'>('idle');
-  const [biometricSelfieMessage, setBiometricSelfieMessage] = useState('');
-  const [capturedSelfiePreview, setCapturedSelfiePreview] = useState('');
+  const [isIdVerified, setIsIdVerified] = useState(() => restoredSessionDraft?.isIdVerified ?? false);
+  const [lrnVerificationCategory, setLrnVerificationCategory] = useState<LrnVerificationCategory>(() => restoredSessionDraft?.lrnVerificationCategory ?? 'email');
+  const [lrnRegisteredValue, setLrnRegisteredValue] = useState(() => restoredSessionDraft?.lrnRegisteredValue ?? '');
+  const [lrnVerificationReview, setLrnVerificationReview] = useState<LrnVerificationReview | null>(() => restoredSessionDraft?.lrnVerificationReview ?? null);
+  const [biometricSelfieFileName, setBiometricSelfieFileName] = useState(() => restoredSessionDraft?.biometricSelfieFileName ?? '');
+  const [biometricSelfieStatus, setBiometricSelfieStatus] = useState<'idle' | 'reviewing' | 'uploading' | 'stored' | 'failed'>(() => restoredSessionDraft?.biometricSelfieStatus ?? 'idle');
+  const [biometricSelfieMessage, setBiometricSelfieMessage] = useState(() => restoredSessionDraft?.biometricSelfieMessage ?? '');
+  const [capturedSelfiePreview, setCapturedSelfiePreview] = useState(() => restoredSessionDraft?.capturedSelfiePreview ?? '');
   const [pendingSelfieFile, setPendingSelfieFile] = useState<File | null>(null);
   const [isSelfieCameraActive, setIsSelfieCameraActive] = useState(false);
   const [selfieFaceStatus, setSelfieFaceStatus] = useState<'idle' | 'scanning' | 'detected' | 'counting' | 'captured'>('idle');
+  const [selfieFaceValidated, setSelfieFaceValidated] = useState(false);
   const [selfieCountdown, setSelfieCountdown] = useState<number | null>(null);
   const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
   const selfieStreamRef = useRef<MediaStream | null>(null);
@@ -207,29 +304,43 @@ export default function StudentApplication() {
   const selfieCountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const selfieAutoCaptureRef = useRef(false);
   const selfieDetectionRequestInFlightRef = useRef(false);
+  const pwdIdPreviewUrlRef = useRef('');
   const [candidateId, setCandidateId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [lrnVerificationToken, setLrnVerificationToken] = useState('');
-  const [visitedSections, setVisitedSections] = useState<number[]>([0]);
+  const [visitedSections, setVisitedSections] = useState<number[]>(() => restoredSessionDraft?.visitedSections ?? [0]);
   const [isEditingCorrection, setIsEditingCorrection] = useState(false);
 
   // Gap Features (Inactivity Timeout & Helpdesk Routing)
-  const [timeLeft, setTimeLeft] = useState(1800); // 30 minutes = 1800 seconds
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (!restoredSessionDraft?.expiresAt) return REGISTRATION_SESSION_DURATION_SECONDS;
+    return Math.max(1, Math.ceil((restoredSessionDraft.expiresAt - Date.now()) / 1000));
+  });
   const [isSessionExpired, setIsSessionExpired] = useState(false);
   const [showHelpdeskTicket, setShowHelpdeskTicket] = useState(false);
   const [supportReferenceNumber, setSupportReferenceNumber] = useState('');
-  const [showPrivacyConsent, setShowPrivacyConsent] = useState(true);
+  const [showPrivacyConsent, setShowPrivacyConsent] = useState(() => !restoredSessionDraft);
   const [privacyChecked, setPrivacyChecked] = useState(false);
-  const [reviewCertified, setReviewCertified] = useState(false);
+  const [reviewCertified, setReviewCertified] = useState(() => restoredSessionDraft?.reviewCertified ?? false);
 
   // New Verification Path States
-  const [verificationPath, setVerificationPath] = useState<'philsys' | 'lrn' | 'manual' | null>(null);
+  const [verificationPath, setVerificationPath] = useState<'philsys' | 'lrn' | 'manual' | null>(() => restoredSessionDraft?.verificationPath ?? null);
   const visibleVerificationPath = verificationPath ?? activeVerificationPath;
-  const step1ModeTitle = visibleVerificationPath === 'philsys' ? 'PhilSys ID Setup' : 'Identity & Biometrics';
-  const step1ModeSubtitle = visibleVerificationPath === 'philsys' ? 'PhilSys Identity Verification' : 'LRN Registry Verification';
+  const step1ModeTitle = visibleVerificationPath === 'philsys'
+    ? 'PhilSys ID Setup'
+    : visibleVerificationPath === 'manual'
+      ? 'Manual Registration'
+      : 'Identity & Biometrics';
+  const step1ModeSubtitle = visibleVerificationPath === 'philsys'
+    ? 'PhilSys Identity Verification'
+    : visibleVerificationPath === 'manual'
+      ? 'Step 1 Field Entry'
+      : 'LRN Registry Verification';
   const step1ModeDescription = visibleVerificationPath === 'philsys'
     ? 'Enter your PhilSys ID to retrieve verified identity records. Complete any remaining high-priority school information before account creation.'
-    : 'Verify your Learner Reference Number (LRN) against registered information, then capture your live biometric verification selfie.';
+    : visibleVerificationPath === 'manual'
+      ? 'Enter the active Step 1 registration fields configured in Student Registration Maintenance.'
+      : 'Verify your Learner Reference Number (LRN) against registered information, then capture your live biometric verification selfie.';
   const [initialLrnCooldownSecondsLeft] = useState(() => getStoredLrnCooldownSecondsLeft());
   const [lrnAttemptsLeft, setLrnAttemptsLeft] = useState(initialLrnCooldownSecondsLeft > 0 ? 0 : 5);
   const [showLrnCooldownModal, setShowLrnCooldownModal] = useState(initialLrnCooldownSecondsLeft > 0);
@@ -264,6 +375,9 @@ export default function StudentApplication() {
   // Maintenance controls which single registration mode is visible.
   useEffect(() => {
     if (!showPrivacyConsent) {
+      if (restoredSessionDraft?.verificationPath && verificationPath === restoredSessionDraft.verificationPath) {
+        return;
+      }
       setVerificationPath(activeVerificationPath);
       if (activeVerificationPath !== 'lrn') setLrnVerificationToken('');
       if (activeVerificationPath === 'manual') {
@@ -271,11 +385,11 @@ export default function StudentApplication() {
         setRegistryLockedFields([]);
       }
     }
-  }, [showPrivacyConsent, activeVerificationPath]);
+  }, [showPrivacyConsent, activeVerificationPath, restoredSessionDraft, verificationPath]);
   const [emailOtp, setEmailOtp] = useState('');
   const [generatedEmailOtp, setGeneratedEmailOtp] = useState('');
-  const [emailOtpSentTo, setEmailOtpSentTo] = useState('');
-  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [emailOtpSentTo, setEmailOtpSentTo] = useState(() => restoredSessionDraft?.emailOtpSentTo ?? '');
+  const [isEmailVerified, setIsEmailVerified] = useState(() => restoredSessionDraft?.isEmailVerified ?? false);
 
   // Helpdesk Ticket Form States
   const [ticketContactEmail, setTicketContactEmail] = useState('');
@@ -321,6 +435,7 @@ export default function StudentApplication() {
         if (prev <= 1) {
           clearInterval(interval);
           setIsSessionExpired(true);
+          clearRegistrationSessionDraft();
           addAuditLog('SESSION_TIMEOUT', `Student registration session expired due to 30-minute inactivity.`);
           return 0;
         }
@@ -365,6 +480,11 @@ export default function StudentApplication() {
   };
 
   const handleRestartSession = () => {
+    clearRegistrationSessionDraft();
+    if (pwdIdPreviewUrlRef.current) {
+      URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
+      pwdIdPreviewUrlRef.current = '';
+    }
     // Reset all form inputs and states
     setFormData({
       firstName: user?.firstName || '',
@@ -416,6 +536,13 @@ export default function StudentApplication() {
       enrollmentStatus: '',
       schoolYear: '2026-2027',
       customStep1Fields: {},
+      isPwd: false,
+      pwdType: '',
+      pwdCondition: '',
+      pwdIdNumber: '',
+      pwdIdFilename: '',
+      pwdIdPreviewUrl: '',
+      pwdAccommodation: '',
       gwa: '',
       birthCertificateFilename: '',
       goodMoralFilename: '',
@@ -460,8 +587,11 @@ export default function StudentApplication() {
 
   // Find user's existing application (if any)
   const myApp = applications.find(a => a.userId === user?.id);
+  const restoredFormData = { ...(restoredSessionDraft?.formData ?? {}) };
+  delete restoredFormData.password;
+  delete restoredFormData.confirmPassword;
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => ({
     firstName: user?.firstName || '',
     middleName: '',
     noMiddleName: false,
@@ -521,6 +651,13 @@ export default function StudentApplication() {
     enrollmentStatus: '',
     schoolYear: '2026-2027',
     customStep1Fields: {} as Record<string, string>,
+    isPwd: false,
+    pwdType: '',
+    pwdCondition: '',
+    pwdIdNumber: '',
+    pwdIdFilename: '',
+    pwdIdPreviewUrl: '',
+    pwdAccommodation: '',
     gwa: '',
 
     // Uploads
@@ -535,7 +672,264 @@ export default function StudentApplication() {
     universities: [] as string[],
     courses: [] as string[],
     examScheduleId: '',
-  });
+    ...restoredFormData,
+  }));
+
+  useEffect(() => {
+    if (showPrivacyConsent || isSubmitted || isSessionExpired || showHelpdeskTicket) return;
+
+    const {
+      password: _password,
+      confirmPassword: _confirmPassword,
+      pwdIdPreviewUrl: _pwdIdPreviewUrl,
+      ...persistableFormData
+    } = formData;
+    const draft: RegistrationSessionDraft = {
+      expiresAt: Date.now() + timeLeft * 1000,
+      formData: {
+        ...persistableFormData,
+        pwdIdPreviewUrl: '',
+      },
+      currentSection,
+      visitedSections,
+      verificationPath,
+      isIdVerified,
+      registryLockedFields,
+      lrnVerificationCategory,
+      lrnRegisteredValue,
+      lrnVerificationReview,
+      biometricSelfieFileName,
+      biometricSelfieStatus,
+      biometricSelfieMessage,
+      capturedSelfiePreview,
+      isEmailVerified,
+      emailOtpSentTo,
+      reviewCertified,
+    };
+
+    try {
+      sessionStorage.setItem(REGISTRATION_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch {
+      sessionStorage.setItem(REGISTRATION_DRAFT_STORAGE_KEY, JSON.stringify({
+        ...draft,
+        capturedSelfiePreview: '',
+      }));
+    }
+  }, [
+    biometricSelfieFileName,
+    biometricSelfieMessage,
+    biometricSelfieStatus,
+    capturedSelfiePreview,
+    currentSection,
+    emailOtpSentTo,
+    formData,
+    isEmailVerified,
+    isIdVerified,
+    isSessionExpired,
+    isSubmitted,
+    lrnRegisteredValue,
+    lrnVerificationCategory,
+    lrnVerificationReview,
+    registryLockedFields,
+    reviewCertified,
+    showHelpdeskTicket,
+    showPrivacyConsent,
+    timeLeft,
+    verificationPath,
+    visitedSections,
+  ]);
+
+  const step1FormFieldKeys: Record<string, keyof typeof formData> = {
+    'LRN': 'lrn',
+    'Email Address': 'email',
+    'Birth Date': 'dob',
+    'First Name': 'firstName',
+    'Middle Name': 'middleName',
+    'Last Name': 'lastName',
+    'Extension Name': 'suffix',
+    'Sex': 'gender',
+    'School ID': 'schoolId',
+    'School Name': 'schoolName',
+    'Grade Level': 'gradeLevel',
+    'Enrollment Status': 'enrollmentStatus',
+    'School Year': 'schoolYear',
+  };
+
+  const activeStep1ManualFields = step1FieldConfigs
+    .filter(isActiveConfig)
+    .sort((a, b) => (a.display_order ?? 100) - (b.display_order ?? 100));
+
+  const manualStep1Sections = ['Personal Information', 'School Information', 'Additional Information'];
+  const getPwdFieldConfig = (fieldName: string) => step1FieldConfigs.find(field => field.value === fieldName && getStep1FieldSection(field.value) === 'PWD Information');
+  const isPwdFieldActive = (fieldName: string) => {
+    const config = getPwdFieldConfig(fieldName);
+    return Boolean(config && isActiveConfig(config));
+  };
+  const isPwdFieldRequired = (fieldName: string) => getPwdFieldConfig(fieldName)?.priority === 'High Priority';
+  const getPwdFieldOptions = (fieldName: string, fallback: string[]) => {
+    const options = getPwdFieldConfig(fieldName)?.optionValues;
+    return Array.isArray(options) && options.length > 0 ? options : fallback;
+  };
+  const isPwdMaintenanceEnabled = isPwdFieldActive('PWD');
+
+  const getStep1FieldErrorKey = (field: StudentRegistrationFieldConfig) => {
+    const formKey = step1FormFieldKeys[field.value];
+    return typeof formKey === 'string' ? formKey : `customStep1:${field.value}`;
+  };
+
+  const getManualStep1FieldValue = (field: StudentRegistrationFieldConfig) => {
+    const formKey = step1FormFieldKeys[field.value];
+    return typeof formKey === 'string'
+      ? String(formData[formKey] ?? '')
+      : formData.customStep1Fields[field.value] || '';
+  };
+
+  const getManualReviewFields = (section: string) =>
+    activeStep1ManualFields.filter(field => getStep1FieldSection(field.value) === section);
+
+  const manualReviewFullName = [formData.firstName, formData.middleName, formData.lastName]
+    .filter(Boolean)
+    .join(' ') || 'Not entered';
+
+  const isCurrentUserApplication = (application: { id?: string; userId?: string }) =>
+    Boolean(myApp && (application.id === myApp.id || (application.userId && myApp.userId && application.userId === myApp.userId)));
+
+  const doesLrnAlreadyExist = (value: string) => {
+    const normalizedValue = value.trim();
+    if (!normalizedValue) return false;
+    return applications.some(application =>
+      !isCurrentUserApplication(application) && String(application.lrn || '').trim() === normalizedValue
+    );
+  };
+
+  const doesEmailAlreadyExist = (value: string) => {
+    const normalizedValue = value.trim().toLowerCase();
+    if (!normalizedValue) return false;
+    return applications.some(application =>
+      !isCurrentUserApplication(application) && String(application.email || '').trim().toLowerCase() === normalizedValue
+    );
+  };
+
+  const getExistingValueFieldMessage = (fieldName: string, value: string) => {
+    if (fieldName === 'LRN' && doesLrnAlreadyExist(value)) {
+      return 'LRN already exists in another registration.';
+    }
+    if (fieldName === 'Email Address' && doesEmailAlreadyExist(value)) {
+      return 'Email address already exists in another registration.';
+    }
+    return '';
+  };
+
+  const existingLrnMessage = getExistingValueFieldMessage('LRN', formData.lrn);
+  const existingEmailMessage = getExistingValueFieldMessage('Email Address', formData.email);
+
+  const clearPwdErrors = () => {
+    setErrors(prev => {
+      const next = { ...prev };
+      delete next.pwdType;
+      delete next.pwdCondition;
+      delete next.pwdIdNumber;
+      delete next.pwdIdFilename;
+      delete next.pwdIdPreviewUrl;
+      delete next.pwdAccommodation;
+      delete next.general;
+      return next;
+    });
+  };
+
+  const setPwdEnabled = (enabled: boolean) => {
+    if (enabled && !isPwdMaintenanceEnabled) return;
+    if (!enabled && pwdIdPreviewUrlRef.current) {
+      URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
+      pwdIdPreviewUrlRef.current = '';
+    }
+    setFormData(prev => ({
+      ...prev,
+      isPwd: enabled,
+      ...(enabled ? {} : {
+        pwdType: '',
+        pwdCondition: '',
+        pwdIdNumber: '',
+        pwdIdFilename: '',
+        pwdIdPreviewUrl: '',
+        pwdAccommodation: '',
+      }),
+    }));
+    clearPwdErrors();
+  };
+
+  const activePwdTypes = getPwdFieldOptions('PWD Type', PWD_CATEGORY_OPTIONS.map(option => option.type));
+  const configuredPwdConditions = getPwdFieldOptions('Condition', PWD_CATEGORY_OPTIONS.flatMap(option => option.conditions));
+  const selectedPwdCategoryConditions = PWD_CATEGORY_OPTIONS.find(option => option.type === formData.pwdType)?.conditions ?? [];
+  const filteredPwdConditions = selectedPwdCategoryConditions.filter(condition => configuredPwdConditions.includes(condition));
+  const activePwdConditions = selectedPwdCategoryConditions.length > 0
+    ? (filteredPwdConditions.length > 0 ? filteredPwdConditions : selectedPwdCategoryConditions)
+    : configuredPwdConditions;
+
+  const isStep1FieldRequired = (field: StudentRegistrationFieldConfig) => field.priority === 'High Priority';
+
+  const renderManualStep1Field = (field: StudentRegistrationFieldConfig) => {
+    const formKey = step1FormFieldKeys[field.value];
+    const errorKey = getStep1FieldErrorKey(field);
+    const value = getManualStep1FieldValue(field);
+    const required = isStep1FieldRequired(field);
+    const options = Array.isArray(field.optionValues) ? field.optionValues : [];
+    const existingValueMessage = getExistingValueFieldMessage(field.value, value);
+    const manualInputType = field.value === 'Email Address' ? 'email' : field.inputType === 'date' ? 'date' : 'text';
+
+    const updateValue = (nextValue: string) => {
+      if (typeof formKey === 'string') {
+        setFormData(prev => ({ ...prev, [formKey]: nextValue }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          customStep1Fields: {
+            ...prev.customStep1Fields,
+            [field.value]: nextValue,
+          },
+        }));
+      }
+      if (errors[errorKey] || errors.general) {
+        setErrors(prev => {
+          const next = { ...prev };
+          delete next[errorKey];
+          delete next.general;
+          return next;
+        });
+      }
+    };
+
+    return (
+      <div key={field.id || field.value} className="space-y-2">
+        <label className={cn("label-philsa", errors[errorKey] ? "text-philsa-red" : "text-philsa-gray")}>
+          {field.value}{required ? ' *' : ''}
+        </label>
+        {field.inputType === 'dropdown' && options.length > 0 ? (
+          <select
+            className={cn("input-philsa bg-white", (errors[errorKey] || existingValueMessage) && "border-philsa-red bg-philsa-red/5")}
+            value={value}
+            onChange={(e) => updateValue(e.target.value)}
+          >
+            <option value="">Select {field.value}</option>
+            {options.map(option => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type={manualInputType}
+            className={cn("input-philsa bg-white", (errors[errorKey] || existingValueMessage) && "border-philsa-red bg-philsa-red/5")}
+            value={value}
+            onChange={(e) => updateValue(e.target.value)}
+            placeholder={field.remarks || `Enter ${field.value}`}
+          />
+        )}
+        {(errors[errorKey] || existingValueMessage) && (
+          <p className="text-xs text-philsa-red font-bold pl-1">{errors[errorKey] || existingValueMessage}</p>
+        )}
+      </div>
+    );
+  };
 
   const renderAdditionalStep1Field = (field: StudentRegistrationFieldConfig) => {
     const errorKey = `customStep1:${field.value}`;
@@ -743,6 +1137,88 @@ export default function StudentApplication() {
     setSelfieCountdown(null);
   }
 
+  async function detectFaceInFrame(source: CanvasImageSource, width: number, height: number) {
+    const FaceDetectorConstructor = (window as any).FaceDetector;
+    if (width === 0 || height === 0) {
+      return false;
+    }
+
+    if (FaceDetectorConstructor) {
+      try {
+        const detector = new FaceDetectorConstructor({ fastMode: true, maxDetectedFaces: 1 });
+        const faces = await detector.detect(source);
+        return Array.isArray(faces) && faces.length > 0;
+      } catch {
+        // Fall through to the frame heuristic below.
+      }
+    }
+
+    const sampleSize = 96;
+    const canvas = document.createElement('canvas');
+    canvas.width = sampleSize;
+    canvas.height = sampleSize;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return false;
+
+    context.drawImage(
+      source,
+      width * 0.25,
+      height * 0.15,
+      width * 0.5,
+      height * 0.7,
+      0,
+      0,
+      sampleSize,
+      sampleSize,
+    );
+
+    const pixels = context.getImageData(0, 0, sampleSize, sampleSize).data;
+    let totalLuma = 0;
+    let totalLumaSquared = 0;
+    let skinLikePixels = 0;
+    let edgePixels = 0;
+
+    for (let y = 0; y < sampleSize; y += 2) {
+      for (let x = 0; x < sampleSize; x += 2) {
+        const index = (y * sampleSize + x) * 4;
+        const r = pixels[index];
+        const g = pixels[index + 1];
+        const b = pixels[index + 2];
+        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+        totalLuma += luma;
+        totalLumaSquared += luma * luma;
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        if (r > 45 && g > 30 && b > 18 && max - min > 12 && r >= g * 0.9 && r >= b * 1.05) {
+          skinLikePixels += 1;
+        }
+
+        if (x > 0 && y > 0) {
+          const previousIndex = ((y - 2) * sampleSize + (x - 2)) * 4;
+          const previousLuma = 0.299 * pixels[previousIndex] + 0.587 * pixels[previousIndex + 1] + 0.114 * pixels[previousIndex + 2];
+          if (Math.abs(luma - previousLuma) > 18) {
+            edgePixels += 1;
+          }
+        }
+      }
+    }
+
+    const sampledPixels = (sampleSize / 2) * (sampleSize / 2);
+    const averageLuma = totalLuma / sampledPixels;
+    const variance = totalLumaSquared / sampledPixels - averageLuma * averageLuma;
+    const skinRatio = skinLikePixels / sampledPixels;
+    const edgeRatio = edgePixels / sampledPixels;
+
+    return averageLuma > 35 && averageLuma < 235 && variance > 180 && edgeRatio > 0.025 && skinRatio > 0.015 && skinRatio < 0.5;
+  }
+
+  async function detectManualSelfieFace() {
+    const video = selfieVideoRef.current;
+    if (!video) return false;
+    return detectFaceInFrame(video, video.videoWidth, video.videoHeight);
+  }
+
   function stopSelfieCamera() {
     clearSelfieTimers();
     selfieStreamRef.current?.getTracks().forEach(track => track.stop());
@@ -788,6 +1264,9 @@ export default function StudentApplication() {
   async function captureSelfieFromCamera() {
     const file = await createSelfieFileFromCamera({ updatePreview: true });
     if (!file) return;
+    if (verificationPath === 'manual') {
+      setSelfieFaceValidated(true);
+    }
     stopSelfieCamera();
     setPendingSelfieFile(file);
     setBiometricSelfieFileName(file.name);
@@ -803,9 +1282,50 @@ export default function StudentApplication() {
       selfieDetectionIntervalRef.current = null;
     }
     setSelfieFaceStatus('counting');
-    setSelfieCountdown(3);
+    let countdownValue = 3;
+    setSelfieCountdown(countdownValue);
     setBiometricSelfieMessage('Face detected. Hold still for automatic capture.');
     selfieCountdownIntervalRef.current = setInterval(() => {
+      if (verificationPath === 'manual') {
+        if (selfieDetectionRequestInFlightRef.current) return;
+        selfieDetectionRequestInFlightRef.current = true;
+
+        void detectManualSelfieFace().then(faceDetected => {
+          if (!faceDetected) {
+            if (selfieCountdownIntervalRef.current) {
+              clearInterval(selfieCountdownIntervalRef.current);
+              selfieCountdownIntervalRef.current = null;
+            }
+            selfieAutoCaptureRef.current = false;
+            setSelfieFaceValidated(false);
+            setSelfieCountdown(null);
+            setSelfieFaceStatus('scanning');
+            setBiometricSelfieMessage('Face lost. Countdown reset. Keep your face centered to start capture again.');
+            startSelfieFaceDetection();
+            return;
+          }
+
+          if (countdownValue <= 1) {
+            if (selfieCountdownIntervalRef.current) {
+              clearInterval(selfieCountdownIntervalRef.current);
+              selfieCountdownIntervalRef.current = null;
+            }
+            selfieAutoCaptureRef.current = true;
+            setSelfieFaceValidated(true);
+            setSelfieFaceStatus('captured');
+            setSelfieCountdown(null);
+            void captureSelfieFromCamera();
+            return;
+          }
+
+          countdownValue -= 1;
+          setSelfieCountdown(countdownValue);
+        }).finally(() => {
+          selfieDetectionRequestInFlightRef.current = false;
+        });
+        return;
+      }
+
       setSelfieCountdown(prev => {
         if (prev === null || prev <= 1) {
           if (selfieCountdownIntervalRef.current) {
@@ -825,7 +1345,34 @@ export default function StudentApplication() {
   function startSelfieFaceDetection() {
     clearSelfieTimers();
     setSelfieFaceStatus('scanning');
-    setBiometricSelfieMessage('Scanning for your face with server-side validation. Keep your face centered in the frame.');
+    setBiometricSelfieMessage(
+      verificationPath === 'manual'
+        ? 'Keep your face centered in the frame. Capture will start once the camera is ready.'
+        : 'Scanning for your face with server-side validation. Keep your face centered in the frame.'
+    );
+
+    if (verificationPath === 'manual') {
+      selfieDetectionIntervalRef.current = setInterval(() => {
+        if (selfieDetectionRequestInFlightRef.current || selfieAutoCaptureRef.current) return;
+        selfieDetectionRequestInFlightRef.current = true;
+
+        void detectManualSelfieFace().then(faceDetected => {
+          if (faceDetected && !selfieAutoCaptureRef.current) {
+            setSelfieFaceValidated(true);
+            setSelfieFaceStatus('detected');
+            startSelfieCountdown();
+            return;
+          }
+          if (!selfieAutoCaptureRef.current && selfieCountdown === null) {
+            setSelfieFaceStatus('scanning');
+            setBiometricSelfieMessage('No face detected yet. Keep your face centered in the frame before capture can proceed.');
+          }
+        }).finally(() => {
+          selfieDetectionRequestInFlightRef.current = false;
+        });
+      }, 1200);
+      return;
+    }
 
     selfieDetectionIntervalRef.current = setInterval(() => {
       if (selfieDetectionRequestInFlightRef.current || selfieAutoCaptureRef.current) return;
@@ -857,7 +1404,7 @@ export default function StudentApplication() {
   }
 
   const startSelfieCamera = async () => {
-    if (!isIdVerified) {
+    if (!isIdVerified && verificationPath !== 'manual') {
       setBiometricSelfieStatus('failed');
       setBiometricSelfieMessage('Verify your LRN details before starting live camera capture.');
       return;
@@ -884,6 +1431,7 @@ export default function StudentApplication() {
       setBiometricSelfieFileName('');
       setCapturedSelfiePreview('');
       setPendingSelfieFile(null);
+      setSelfieFaceValidated(false);
       startSelfieFaceDetection();
     } catch {
       setBiometricSelfieStatus('failed');
@@ -903,12 +1451,38 @@ export default function StudentApplication() {
     setCapturedSelfiePreview('');
     setPendingSelfieFile(null);
     setSelfieFaceStatus('idle');
+    setSelfieFaceValidated(false);
     stopSelfieCamera();
   };
 
   const handleConfirmSelfie = async () => {
     const file = pendingSelfieFile;
     if (!file) return;
+    if (verificationPath === 'manual') {
+      if (!selfieFaceValidated) {
+        setBiometricSelfieStatus('failed');
+        setBiometricSelfieMessage('No face was detected in the captured selfie. Retake the photo with your face clearly visible.');
+        setPendingSelfieFile(null);
+        setCapturedSelfiePreview('');
+        setBiometricSelfieFileName('');
+        setSelfieFaceStatus('idle');
+        return;
+      }
+      setBiometricSelfieStatus('stored');
+      setBiometricSelfieFileName(file.name);
+      setBiometricSelfieMessage('Selfie captured and stored for manual registration review.');
+      setSelfieFaceStatus('captured');
+      setPendingSelfieFile(null);
+      stopSelfieCamera();
+      addAuditLog('BIOMETRIC_SELFIE_CAPTURED', 'Student captured selfie during manual registration.');
+      setErrors(prev => {
+        const next = { ...prev };
+        delete next.selfie;
+        delete next.general;
+        return next;
+      });
+      return;
+    }
     if (!lrnVerificationToken) {
       setBiometricSelfieStatus('failed');
       setBiometricSelfieMessage('Verify your LRN details before capturing your biometric selfie.');
@@ -958,6 +1532,7 @@ export default function StudentApplication() {
     setCapturedSelfiePreview('');
     setPendingSelfieFile(null);
     setSelfieFaceStatus('idle');
+    setSelfieFaceValidated(false);
     setErrors(prev => {
       const next = { ...prev };
       delete next.selfie;
@@ -971,6 +1546,10 @@ export default function StudentApplication() {
       clearSelfieTimers();
       selfieStreamRef.current?.getTracks().forEach(track => track.stop());
       selfieStreamRef.current = null;
+      if (pwdIdPreviewUrlRef.current) {
+        URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
+        pwdIdPreviewUrlRef.current = '';
+      }
     };
   }, []);
 
@@ -982,6 +1561,10 @@ export default function StudentApplication() {
     }
     if (!/\S+@\S+\.\S+/.test(email)) {
       setErrors(prev => ({ ...prev, email: 'Invalid email address format' }));
+      return;
+    }
+    if (doesEmailAlreadyExist(email)) {
+      setErrors(prev => ({ ...prev, email: 'Email address already exists in another registration.' }));
       return;
     }
 
@@ -1020,6 +1603,10 @@ export default function StudentApplication() {
     forcedLrn?: string,
     forcedVerification?: { category: LrnVerificationCategory; value: string },
   ) => {
+    if (verificationPath !== 'lrn') {
+      return;
+    }
+
     if (lrnAttemptsLeft <= 0) {
       setShowLrnCooldownModal(true);
       return;
@@ -1137,8 +1724,42 @@ export default function StudentApplication() {
     const newErrors: Record<string, string> = {};
     
     if (currentSection === 0) {
-      if (formData.lrn && !/^\d{12}$/.test(formData.lrn)) {
+      if (verificationPath === 'lrn' && formData.lrn && !/^\d{12}$/.test(formData.lrn)) {
         newErrors.lrn = 'LRN must be exactly 12 numeric digits.';
+      }
+      if (formData.lrn && doesLrnAlreadyExist(formData.lrn)) {
+        newErrors.lrn = 'LRN already exists in another registration.';
+      }
+      if (verificationPath === 'manual') {
+        activeStep1ManualFields.forEach(field => {
+          const value = getManualStep1FieldValue(field);
+          const existingValueMessage = getExistingValueFieldMessage(field.value, value);
+          if (existingValueMessage) {
+            newErrors[getStep1FieldErrorKey(field)] = existingValueMessage;
+          } else if (isStep1FieldRequired(field) && !value.trim()) {
+            newErrors[getStep1FieldErrorKey(field)] = `${field.value} is required.`;
+          }
+        });
+        if (biometricSelfieStatus !== 'stored') {
+          newErrors.selfie = 'Capture and store your biometric selfie before continuing.';
+        }
+      }
+      if (isPwdMaintenanceEnabled && formData.isPwd) {
+        if (isPwdFieldActive('PWD Type') && isPwdFieldRequired('PWD Type') && !formData.pwdType.trim()) {
+          newErrors.pwdType = 'PWD type is required.';
+        }
+        if (isPwdFieldActive('Condition') && isPwdFieldRequired('Condition') && !formData.pwdCondition.trim()) {
+          newErrors.pwdCondition = 'PWD condition is required.';
+        }
+        if (isPwdFieldActive('PWD ID Number') && isPwdFieldRequired('PWD ID Number') && !formData.pwdIdNumber.trim()) {
+          newErrors.pwdIdNumber = 'PWD ID number is required.';
+        }
+        if (isPwdFieldActive('PWD ID Attachment') && isPwdFieldRequired('PWD ID Attachment') && !formData.pwdIdFilename.trim()) {
+          newErrors.pwdIdFilename = 'Upload your PWD ID before continuing.';
+        }
+        if (isPwdFieldActive('Accommodation Needed') && isPwdFieldRequired('Accommodation Needed') && !formData.pwdAccommodation.trim()) {
+          newErrors.pwdAccommodation = 'Describe the accommodation you need.';
+        }
       }
       if (verificationPath === 'lrn' && !lrnRegisteredValue.trim()) {
         newErrors.lrnRegisteredValue = `${selectedLrnVerificationCategory.inputLabel} is required.`;
@@ -1159,6 +1780,8 @@ export default function StudentApplication() {
         newErrors.email = 'Email address is required';
       } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
         newErrors.email = 'Invalid email address format';
+      } else if (doesEmailAlreadyExist(formData.email)) {
+        newErrors.email = 'Email address already exists in another registration.';
       } else if (!isEmailVerified || emailOtpSentTo !== formData.email.trim()) {
         newErrors.emailOtp = 'Please verify your email address using the OTP before continuing.';
       }
@@ -1209,6 +1832,8 @@ export default function StudentApplication() {
       setErrors({ general: 'Certify that the reviewed registration details are accurate before submitting.' });
       return;
     }
+
+    clearRegistrationSessionDraft();
 
     if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
       setIsSubmitting(true);
@@ -1956,6 +2581,7 @@ export default function StudentApplication() {
                 e.stopPropagation();
                 setTimeLeft(0);
                 setIsSessionExpired(true);
+                clearRegistrationSessionDraft();
                 addAuditLog('SESSION_TIMEOUT', `Student registration session expired due to simulated inactivity.`);
               }} 
               title="Test/Simulate 30-Minute Timeout"
@@ -2099,7 +2725,7 @@ export default function StudentApplication() {
                                 type="text" 
                                 inputMode="numeric"
                                 placeholder="e.g. 101234567890" 
-                                className="input-philsa font-mono tracking-wider bg-white w-full"
+                                className={cn("input-philsa font-mono tracking-wider bg-white w-full", (errors.lrn || existingLrnMessage) && "border-philsa-red bg-philsa-red/5")}
                                 value={formData.lrn} 
                                 onChange={(e) => {
                                   setFormData({...formData, lrn: e.target.value});
@@ -2114,7 +2740,9 @@ export default function StudentApplication() {
                                   }
                                 }} 
                               />
-                              {errors.lrn && <p className="text-xs text-philsa-red font-bold pl-1">{errors.lrn}</p>}
+                              {(errors.lrn || existingLrnMessage) && (
+                                <p className="text-xs text-philsa-red font-bold pl-1">{errors.lrn || existingLrnMessage}</p>
+                              )}
                             </div>
 
                             <div className="space-y-2">
@@ -2301,42 +2929,329 @@ export default function StudentApplication() {
                         </div>
                       )}
 
+                      {verificationPath === 'manual' && (
+                        <div className="space-y-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
+                          <div className="flex items-center gap-3">
+                            <User className="w-4 h-4 text-philsa-red" />
+                            <div>
+                              <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Manual Registration Fields</p>
+                              <p className="text-[10px] text-slate-500 font-bold">These inputs follow the active Step 1 Fields maintenance table.</p>
+                            </div>
+                          </div>
+
+                          {activeStep1ManualFields.length === 0 ? (
+                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-800">
+                              No active Step 1 fields are configured. Please contact an administrator.
+                            </div>
+                          ) : (
+                            manualStep1Sections.map(section => {
+                              const fieldsInSection = activeStep1ManualFields.filter(field => getStep1FieldSection(field.value) === section);
+                              if (fieldsInSection.length === 0) return null;
+
+                              return (
+                                <div key={section} className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                                  <div>
+                                    <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">{section}</p>
+                                    <p className="text-[10px] text-slate-500 font-bold">Fields marked with * are high-priority required entries.</p>
+                                  </div>
+                                  <div className="grid gap-4 md:grid-cols-2">
+                                    {fieldsInSection.map(renderManualStep1Field)}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+
+                          {isPwdMaintenanceEnabled && (
+                          <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                            <label className={cn(
+                              "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors",
+                              formData.isPwd ? "border-philsa-red/30 bg-philsa-red/5" : "border-slate-200 bg-slate-50 hover:border-philsa-red/30"
+                            )}>
+                              <input
+                                type="checkbox"
+                                checked={formData.isPwd}
+                                onChange={(e) => setPwdEnabled(e.target.checked)}
+                                className="mt-1 h-5 w-5 shrink-0 rounded border-slate-300 text-philsa-red focus:ring-philsa-red"
+                              />
+                              <span>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-philsa-navy">
+                                  I am a person with disability (PWD)
+                                </span>
+                                <span className="mt-1 block text-[10px] font-bold text-slate-500">
+                                  Check this if you need disability-related testing accommodations.
+                                </span>
+                              </span>
+                            </label>
+
+                            {formData.isPwd && (
+                              <div className="grid gap-4 md:grid-cols-2">
+                                {isPwdFieldActive('PWD Type') && (
+                                <div className="space-y-2">
+                                  <label className={cn("label-philsa", errors.pwdType ? "text-philsa-red" : "text-philsa-gray")}>PWD Type{isPwdFieldRequired('PWD Type') ? ' *' : ''}</label>
+                                  <select
+                                    className={cn("input-philsa bg-white", errors.pwdType && "border-philsa-red bg-philsa-red/5")}
+                                    value={formData.pwdType}
+                                    onChange={(e) => {
+                                      setFormData(prev => ({
+                                        ...prev,
+                                        pwdType: e.target.value,
+                                        pwdCondition: '',
+                                      }));
+                                      if (errors.pwdType || errors.pwdCondition) {
+                                        setErrors(prev => {
+                                          const next = { ...prev };
+                                          delete next.pwdType;
+                                          delete next.pwdCondition;
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <option value="">Select PWD type</option>
+                                    {activePwdTypes.map(option => (
+                                      <option key={option} value={option}>{option}</option>
+                                    ))}
+                                  </select>
+                                  {errors.pwdType && <p className="text-xs text-philsa-red font-bold pl-1">{errors.pwdType}</p>}
+                                </div>
+                                )}
+
+                                {isPwdFieldActive('Condition') && (
+                                <div className="space-y-2">
+                                  <label className={cn("label-philsa", errors.pwdCondition ? "text-philsa-red" : "text-philsa-gray")}>Condition{isPwdFieldRequired('Condition') ? ' *' : ''}</label>
+                                  <select
+                                    className={cn("input-philsa bg-white", errors.pwdCondition && "border-philsa-red bg-philsa-red/5")}
+                                    value={formData.pwdCondition}
+                                    disabled={!formData.pwdType}
+                                    onChange={(e) => {
+                                      setFormData(prev => ({ ...prev, pwdCondition: e.target.value }));
+                                      if (errors.pwdCondition) {
+                                        setErrors(prev => {
+                                          const next = { ...prev };
+                                          delete next.pwdCondition;
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <option value="">{formData.pwdType ? 'Select condition' : 'Select PWD type first'}</option>
+                                    {activePwdConditions.map(condition => (
+                                      <option key={condition} value={condition}>{condition}</option>
+                                    ))}
+                                  </select>
+                                  {errors.pwdCondition && <p className="text-xs text-philsa-red font-bold pl-1">{errors.pwdCondition}</p>}
+                                </div>
+                                )}
+
+                                {isPwdFieldActive('PWD ID Number') && (
+                                <div className="space-y-2">
+                                  <label className={cn("label-philsa", errors.pwdIdNumber ? "text-philsa-red" : "text-philsa-gray")}>PWD ID Number{isPwdFieldRequired('PWD ID Number') ? ' *' : ''}</label>
+                                  <input
+                                    type="text"
+                                    className={cn("input-philsa bg-white", errors.pwdIdNumber && "border-philsa-red bg-philsa-red/5")}
+                                    value={formData.pwdIdNumber}
+                                    onChange={(e) => {
+                                      setFormData(prev => ({ ...prev, pwdIdNumber: e.target.value }));
+                                      if (errors.pwdIdNumber) {
+                                        setErrors(prev => {
+                                          const next = { ...prev };
+                                          delete next.pwdIdNumber;
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                    placeholder="Enter PWD ID number"
+                                  />
+                                  {errors.pwdIdNumber && <p className="text-xs text-philsa-red font-bold pl-1">{errors.pwdIdNumber}</p>}
+                                </div>
+                                )}
+
+                                {isPwdFieldActive('PWD ID Attachment') && (
+                                <div className="space-y-2">
+                                  <label className={cn("label-philsa", errors.pwdIdFilename ? "text-philsa-red" : "text-philsa-gray")}>Upload PWD ID{isPwdFieldRequired('PWD ID Attachment') ? ' *' : ''}</label>
+                                  <label className={cn(
+                                    "flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3 text-sm font-bold text-philsa-navy shadow-sm transition-colors hover:border-philsa-red/40",
+                                    errors.pwdIdFilename && "border-philsa-red bg-philsa-red/5"
+                                  )}>
+                                    <span className="min-w-0 truncate">{formData.pwdIdFilename || 'Choose file'}</span>
+                                    <Upload className="h-4 w-4 shrink-0 text-philsa-red" />
+                                    <input
+                                      type="file"
+                                      accept=".jpg,.jpeg,.png,.pdf"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (pwdIdPreviewUrlRef.current) {
+                                          URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
+                                          pwdIdPreviewUrlRef.current = '';
+                                        }
+                                        const previewUrl = file ? URL.createObjectURL(file) : '';
+                                        pwdIdPreviewUrlRef.current = previewUrl;
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          pwdIdFilename: file?.name || '',
+                                          pwdIdPreviewUrl: previewUrl,
+                                        }));
+                                        if (errors.pwdIdFilename) {
+                                          setErrors(prev => {
+                                            const next = { ...prev };
+                                            delete next.pwdIdFilename;
+                                            return next;
+                                          });
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                  {errors.pwdIdFilename && <p className="text-xs text-philsa-red font-bold pl-1">{errors.pwdIdFilename}</p>}
+                                </div>
+                                )}
+
+                                {isPwdFieldActive('Accommodation Needed') && (
+                                <div className="space-y-2 md:col-span-2">
+                                  <label className={cn("label-philsa", errors.pwdAccommodation ? "text-philsa-red" : "text-philsa-gray")}>What accommodation do you need? Please describe{isPwdFieldRequired('Accommodation Needed') ? ' *' : ''}</label>
+                                  <textarea
+                                    className={cn("input-philsa min-h-[92px] resize-y bg-white", errors.pwdAccommodation && "border-philsa-red bg-philsa-red/5")}
+                                    value={formData.pwdAccommodation}
+                                    onChange={(e) => {
+                                      setFormData(prev => ({ ...prev, pwdAccommodation: e.target.value }));
+                                      if (errors.pwdAccommodation) {
+                                        setErrors(prev => {
+                                          const next = { ...prev };
+                                          delete next.pwdAccommodation;
+                                          return next;
+                                        });
+                                      }
+                                    }}
+                                    placeholder="Describe the assistance, equipment, or testing accommodation needed."
+                                  />
+                                  {errors.pwdAccommodation && <p className="text-xs text-philsa-red font-bold pl-1">{errors.pwdAccommodation}</p>}
+                                </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          )}
+
+                          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-philsa-navy text-white flex items-center justify-center">
+                                  <Camera className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">Biometric Selfie Capture *</p>
+                                  <p className="text-[10px] text-slate-500 font-bold">This selfie becomes your manual registration identity reference.</p>
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                                {biometricSelfieStatus === 'reviewing' && pendingSelfieFile ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={handleConfirmSelfie}
+                                      className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                      <CheckCircle className="w-4 h-4" />
+                                      Use This Photo
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleRetakeSelfie}
+                                      className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-philsa-navy bg-white text-philsa-navy hover:bg-philsa-bg transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                      <RefreshCw className="w-4 h-4" />
+                                      Retake Photo
+                                    </button>
+                                  </>
+                                ) : biometricSelfieStatus === 'stored' || (biometricSelfieStatus === 'failed' && Boolean(capturedSelfiePreview)) ? (
+                                  <button
+                                    type="button"
+                                    onClick={handleRetakeSelfie}
+                                    className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-philsa-navy bg-white text-philsa-navy hover:bg-philsa-bg transition-all duration-200 flex items-center justify-center gap-2"
+                                  >
+                                    <RefreshCw className="w-4 h-4" />
+                                    Retake Photo
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={startSelfieCamera}
+                                    disabled={biometricSelfieStatus === 'uploading' || isSelfieCameraActive}
+                                    className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200 flex items-center justify-center gap-2 bg-philsa-navy text-white border-philsa-navy hover:bg-philsa-navy/90 cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 disabled:border-slate-200 disabled:cursor-not-allowed"
+                                  >
+                                    <Camera className="w-4 h-4" />
+                                    {isSelfieCameraActive ? 'Detecting Face' : 'Start Camera'}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 aspect-video">
+                              <video
+                                ref={selfieVideoRef}
+                                className={cn("h-full w-full object-cover", !isSelfieCameraActive && "hidden")}
+                                playsInline
+                                muted
+                              />
+                              {!isSelfieCameraActive && capturedSelfiePreview && (
+                                <>
+                                  <img
+                                    src={capturedSelfiePreview}
+                                    alt="Captured biometric selfie preview"
+                                    className="h-full w-full object-cover"
+                                  />
+                                  <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-white">Captured selfie preview</p>
+                                  </div>
+                                </>
+                              )}
+                              {!isSelfieCameraActive && !capturedSelfiePreview && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
+                                  <Camera className="w-10 h-10 text-slate-400 mb-3" />
+                                  <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Live camera preview</p>
+                                  <p className="text-[10px] text-slate-500 font-bold mt-1">Start the camera to capture your manual registration selfie.</p>
+                                </div>
+                              )}
+                              {isSelfieCameraActive && (
+                                <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-white">
+                                    {selfieCountdown !== null
+                                      ? `Auto capture in ${selfieCountdown}`
+                                      : selfieFaceStatus === 'scanning'
+                                        ? 'Detecting face'
+                                        : selfieFaceStatus === 'detected'
+                                          ? 'Face detected'
+                                          : 'Hold still'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {(biometricSelfieFileName || biometricSelfieMessage || errors.selfie) && (
+                              <div className={cn(
+                                "rounded-xl px-4 py-3 text-xs font-bold border",
+                                biometricSelfieStatus === 'stored' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                                biometricSelfieStatus === 'failed' || errors.selfie ? "bg-philsa-red/5 text-philsa-red border-philsa-red/20" :
+                                biometricSelfieStatus === 'reviewing' ? "bg-amber-50 text-amber-700 border-amber-100" :
+                                "bg-slate-50 text-slate-600 border-slate-200"
+                              )}>
+                                {biometricSelfieStatus === 'uploading'
+                                  ? 'Storing captured selfie...'
+                                  : biometricSelfieMessage || biometricSelfieFileName || errors.selfie}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {errors.general && (
                          <p className="text-xs text-philsa-red font-bold pl-1 border-l-2 border-philsa-red py-0.5 mt-1">{errors.general}</p>
                       )}
 
                    </div>
 
-                   {/* Simulation Controls for ease of testing */}
-                   <div className="pt-4 border-t border-slate-100">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 text-center">Simulation Controls</p>
-                      <div className="flex flex-col gap-2">
-                         <button 
-                            type="button" 
-                            onClick={() => {
-                               setLrnVerificationCategory('email');
-                               setLrnRegisteredValue('lovely@yopmail.com');
-                               setFormData(prev => ({ ...prev, lrn: '123456789012' }));
-                               void handleVerifyLrnPath('123456789012', { category: 'email', value: 'lovely@yopmail.com' });
-                            }}
-                            className="w-full text-[9px] font-black text-emerald-700 hover:bg-emerald-50 border border-emerald-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
-                         >
-                            Use Mock Valid LRN
-                         </button>
-                         <button 
-                            type="button" 
-                            onClick={() => {
-                               setLrnVerificationCategory('email');
-                               setLrnRegisteredValue('wrong@example.test');
-                               setFormData(prev => ({ ...prev, lrn: '901234567899' }));
-                               void handleVerifyLrnPath('901234567899', { category: 'email', value: 'wrong@example.test' });
-                            }}
-                            className="w-full text-[9px] font-black text-red-600 hover:bg-red-50 border border-red-200 rounded-xl py-2 uppercase tracking-widest cursor-pointer text-center"
-                         >
-                            Use Mock Ineligible LRN
-                         </button>
-                      </div>
-                   </div>
                 </div>
              </motion.div>
           )}
@@ -2365,7 +3280,7 @@ export default function StudentApplication() {
                                  <input
                                     type="email"
                                     placeholder="student@email.ph"
-                                    className={cn("input-philsa pl-11", errors.email && "border-philsa-red bg-philsa-red/5", isEmailVerified && "border-green-500 bg-green-50/60")}
+                                    className={cn("input-philsa pl-11", (errors.email || existingEmailMessage) && "border-philsa-red bg-philsa-red/5", isEmailVerified && !existingEmailMessage && "border-green-500 bg-green-50/60")}
                                     value={formData.email}
                                     onChange={(e) => {
                                        setFormData({...formData, email: e.target.value});
@@ -2384,18 +3299,22 @@ export default function StudentApplication() {
                               <button
                                  type="button"
                                  onClick={handleSendEmailOtp}
-                                 disabled={isEmailVerified}
+                                 disabled={isEmailVerified || Boolean(existingEmailMessage)}
                                  className={cn(
                                     "px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200",
                                     isEmailVerified
                                       ? "bg-green-50 text-green-700 border-green-200 cursor-not-allowed"
+                                      : existingEmailMessage
+                                        ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                                       : "bg-philsa-navy text-white border-philsa-navy hover:bg-philsa-navy/90"
                                  )}
                               >
                                  {generatedEmailOtp ? 'Resend OTP' : 'Send OTP'}
                               </button>
                            </div>
-                           {errors.email && <p className="text-xs text-philsa-red font-bold pl-1">{errors.email}</p>}
+                           {(errors.email || existingEmailMessage) && (
+                              <p className="text-xs text-philsa-red font-bold pl-1">{errors.email || existingEmailMessage}</p>
+                           )}
                            {isEmailVerified && (
                               <p className="text-xs text-green-700 font-black uppercase tracking-wider flex items-center gap-1.5 pl-1">
                                  <CheckCircle className="w-3.5 h-3.5" /> Email verified
@@ -2550,15 +3469,24 @@ export default function StudentApplication() {
 
 
 
-          {currentSection === 2 && (
+                  {currentSection === 2 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
                <div className="card-philsa !p-6 sm:!p-8 bg-white border border-slate-200 shadow-xl rounded-2xl space-y-8">
                   <div className="space-y-2 border-b border-slate-200 pb-5">
-                     <p className="text-[9px] font-black text-philsa-red uppercase tracking-[0.35em]">Step 03</p>
-                     <h4 className="text-xl sm:text-2xl font-black text-philsa-navy tracking-tight">Review Your Registration Dossier</h4>
-                     <p className="text-xs text-slate-600 font-medium">Please inspect and verify your profile summary before executing your final admission registry submission.</p>
+                     {verificationPath !== 'manual' && (
+                        <p className="text-[9px] font-black text-philsa-red uppercase tracking-[0.35em]">Step 03</p>
+                     )}
+                     <h4 className="text-xl sm:text-2xl font-black text-philsa-navy tracking-tight">
+                        {verificationPath === 'manual' ? 'Review your registration' : 'Review Your Registration Dossier'}
+                     </h4>
+                     <p className="text-xs text-slate-600 font-medium">
+                        {verificationPath === 'manual'
+                           ? 'Check each section before you submit. You can edit any section from here.'
+                           : 'Please inspect and verify your profile summary before executing your final admission registry submission.'}
+                     </p>
                   </div>
 
+                  {verificationPath !== 'manual' && (
                   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50">
                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 bg-slate-50 px-5 py-5">
                         <div>
@@ -2601,6 +3529,169 @@ export default function StudentApplication() {
                         </div>
                      </div>
                   </div>
+                  )}
+
+                  {verificationPath === 'manual' && (
+                     <div className="space-y-4">
+                        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                           <div className="mb-4 flex items-center justify-between gap-3">
+                              <h5 className="flex items-center gap-2 text-sm font-black text-philsa-navy">
+                                 <User className="h-4 w-4" />
+                                 Personal information
+                              </h5>
+                              <button
+                                 type="button"
+                                 onClick={() => jumpToSection(0)}
+                                 className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-philsa-navy hover:border-philsa-red hover:text-philsa-red"
+                              >
+                                 <Pencil className="h-3.5 w-3.5" />
+                                 Edit
+                              </button>
+                           </div>
+
+                           <div className="flex items-center gap-4 pb-4">
+                              <div className="h-14 w-14 shrink-0 overflow-hidden rounded border border-slate-200 bg-slate-100">
+                                 {capturedSelfiePreview ? (
+                                    <img src={capturedSelfiePreview} alt="Biometric face record" className="h-full w-full object-cover" />
+                                 ) : (
+                                    <div className="flex h-full w-full items-center justify-center">
+                                       <User className="h-6 w-6 text-slate-400" />
+                                    </div>
+                                 )}
+                              </div>
+                              <div className="min-w-0">
+                                 <p className="truncate text-sm font-black text-philsa-navy">{manualReviewFullName}</p>
+                                 <p className="text-xs font-medium text-slate-500">Biometric face record on file</p>
+                              </div>
+                           </div>
+
+                           <div className="grid gap-x-8 gap-y-3 border-t border-slate-200 pt-4 sm:grid-cols-2">
+                              {getManualReviewFields('Personal Information').map(field => (
+                                 <div key={field.id || field.value} className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-500">{field.value}</p>
+                                    <p className="break-words text-xs font-black text-philsa-navy">{getManualStep1FieldValue(field) || 'Not entered'}</p>
+                                 </div>
+                              ))}
+                           </div>
+                        </section>
+
+                        {getManualReviewFields('School Information').length > 0 && (
+                           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                              <div className="mb-4 flex items-center justify-between gap-3">
+                                 <h5 className="flex items-center gap-2 text-sm font-black text-philsa-navy">
+                                    <School className="h-4 w-4" />
+                                    School information
+                                 </h5>
+                                 <button
+                                    type="button"
+                                    onClick={() => jumpToSection(0)}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-philsa-navy hover:border-philsa-red hover:text-philsa-red"
+                                 >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Edit
+                                 </button>
+                              </div>
+                              <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                                 {getManualReviewFields('School Information').map(field => (
+                                    <div key={field.id || field.value} className="min-w-0">
+                                       <p className="text-[11px] font-bold text-slate-500">{field.value}</p>
+                                       <p className="break-words text-xs font-black text-philsa-navy">{getManualStep1FieldValue(field) || 'Not entered'}</p>
+                                    </div>
+                                 ))}
+                              </div>
+                           </section>
+                        )}
+
+                        {getManualReviewFields('Additional Information').length > 0 && (
+                           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                              <div className="mb-4 flex items-center justify-between gap-3">
+                                 <h5 className="flex items-center gap-2 text-sm font-black text-philsa-navy">
+                                    <Shield className="h-4 w-4" />
+                                    Additional information
+                                 </h5>
+                                 <button
+                                    type="button"
+                                    onClick={() => jumpToSection(0)}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-philsa-navy hover:border-philsa-red hover:text-philsa-red"
+                                 >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Edit
+                                 </button>
+                              </div>
+                              <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                                 {getManualReviewFields('Additional Information').map(field => (
+                                    <div key={field.id || field.value} className="min-w-0">
+                                       <p className="text-[11px] font-bold text-slate-500">{field.value}</p>
+                                       <p className="break-words text-xs font-black text-philsa-navy">{getManualStep1FieldValue(field) || 'Not entered'}</p>
+                                    </div>
+                                 ))}
+                              </div>
+                           </section>
+                        )}
+
+                        {isPwdMaintenanceEnabled && formData.isPwd && (
+                           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                              <div className="mb-4 flex items-center justify-between gap-3">
+                                 <h5 className="flex items-center gap-2 text-sm font-black text-philsa-navy">
+                                    <ShieldCheck className="h-4 w-4" />
+                                    PWD information
+                                 </h5>
+                                 <button
+                                    type="button"
+                                    onClick={() => jumpToSection(0)}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-philsa-navy hover:border-philsa-red hover:text-philsa-red"
+                                 >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Edit
+                                 </button>
+                              </div>
+                              <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                                 {isPwdFieldActive('PWD Type') && (
+                                 <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-500">PWD Type</p>
+                                    <p className="break-words text-xs font-black text-philsa-navy">{formData.pwdType || 'Not entered'}</p>
+                                 </div>
+                                 )}
+                                 {isPwdFieldActive('Condition') && (
+                                 <div className="min-w-0 sm:col-span-2">
+                                    <p className="text-[11px] font-bold text-slate-500">Condition</p>
+                                    <p className="break-words text-xs font-black text-philsa-navy">{formData.pwdCondition || 'Not entered'}</p>
+                                 </div>
+                                 )}
+                                 {isPwdFieldActive('PWD ID Number') && (
+                                 <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-500">PWD ID Number</p>
+                                    <p className="break-words text-xs font-black text-philsa-navy">{formData.pwdIdNumber || 'Not entered'}</p>
+                                 </div>
+                                 )}
+                                 {isPwdFieldActive('PWD ID Attachment') && (
+                                 <div className="min-w-0">
+                                    <p className="text-[11px] font-bold text-slate-500">PWD ID Attachment</p>
+                                    {formData.pwdIdPreviewUrl ? (
+                                       <a
+                                          href={formData.pwdIdPreviewUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="break-words text-xs font-black text-philsa-red underline underline-offset-2 hover:text-philsa-red/80"
+                                       >
+                                          {formData.pwdIdFilename || 'View PWD ID attachment'}
+                                       </a>
+                                    ) : (
+                                       <p className="break-words text-xs font-black text-philsa-navy">{formData.pwdIdFilename || 'Not entered'}</p>
+                                    )}
+                                 </div>
+                                 )}
+                                 {isPwdFieldActive('Accommodation Needed') && (
+                                 <div className="min-w-0 sm:col-span-2">
+                                    <p className="text-[11px] font-bold text-slate-500">Accommodation Needed</p>
+                                    <p className="break-words text-xs font-black text-philsa-navy">{formData.pwdAccommodation || 'Not entered'}</p>
+                                 </div>
+                                 )}
+                              </div>
+                           </section>
+                        )}
+                     </div>
+                  )}
 
                   <label className={cn(
                      "flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-left transition-colors",

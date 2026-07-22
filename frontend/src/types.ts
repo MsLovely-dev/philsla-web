@@ -102,12 +102,16 @@ export interface Application {
 
   // Education
   lrn: string;
+  schoolId?: string;
   schoolName: string;
   schoolAddress: string;
   academicTrack: string;
   gradeLevel: string;
+  enrollmentStatus?: string;
+  schoolYear?: string;
   gwa: number;
   gradeRecordsUrl?: string;
+  additionalHighPriorityFields?: Record<string, string>;
 
   // Preferences
   universities: string[];
