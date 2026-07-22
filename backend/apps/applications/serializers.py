@@ -4,6 +4,7 @@ from rest_framework import serializers
 from apps.accounts.serializers import validate_password_policy
 
 from .models import (
+    ApplicationAuditLog,
     IdentityMediaType,
     Step2VerificationConfiguration,
     StudentApplication,
@@ -19,14 +20,15 @@ class ApplicationSerializer(serializers.ModelSerializer):
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
     examCycleId = serializers.CharField(source="exam_cycle_id", read_only=True)
+    candidateId = serializers.CharField(source="candidate_id", read_only=True)
 
     class Meta:
         model = StudentApplication
         fields = (
-            "id", "status", "personal", "address", "school", "coursePreferences",
+            "id", "candidateId", "status", "personal", "address", "school", "coursePreferences",
             "reviewStep", "lrnProfile", "photoUrl", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
         )
-        read_only_fields = ("id", "status", "lrnProfile", "photoUrl", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
+        read_only_fields = ("id", "candidateId", "status", "lrnProfile", "photoUrl", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
 
     def get_lrnProfile(self, obj):
         verification = getattr(obj, "step2_verification", None)
@@ -88,6 +90,35 @@ class ApplicationUpdateSerializer(ApplicationSerializer):
 
 class ApplicationSubmitSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
+
+
+class ApplicationAuditLogSerializer(serializers.ModelSerializer):
+    applicationId = serializers.SerializerMethodField()
+    candidateId = serializers.SerializerMethodField()
+    timestamp = serializers.DateTimeField(source="created_at", read_only=True)
+    sessionId = serializers.CharField(source="session_id", read_only=True)
+    ipAddress = serializers.CharField(source="ip_address", read_only=True)
+    deviceBrowser = serializers.CharField(source="user_agent", read_only=True)
+    registrationId = serializers.CharField(source="registration_id", read_only=True)
+    applicantId = serializers.CharField(source="applicant_id", read_only=True)
+    accountId = serializers.CharField(source="account_id", read_only=True)
+    actor = serializers.CharField(source="actor_user_id", read_only=True)
+
+    class Meta:
+        model = ApplicationAuditLog
+        fields = (
+            "id", "action", "event", "outcome", "timestamp", "sessionId",
+            "ipAddress", "deviceBrowser", "registrationId", "applicantId",
+            "applicationId", "candidateId", "accountId", "actor", "correlation_id",
+        )
+        read_only_fields = fields
+
+    def get_applicationId(self, obj):
+        return str(obj.application_id) if obj.application_id else ""
+
+    def get_candidateId(self, obj):
+        application = getattr(obj, "application", None)
+        return getattr(application, "candidate_id", "") or obj.registration_id
 
 
 class ReviewerDecisionSerializer(serializers.Serializer):

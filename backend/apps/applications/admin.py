@@ -5,12 +5,13 @@ from .models import StudentApplication
 
 @admin.register(StudentApplication)
 class StudentApplicationAdmin(admin.ModelAdmin):
-    list_display = ("id", "owner", "lrn", "exam_cycle_id", "status", "version", "submitted_at", "created_at")
+    list_display = ("id", "candidate_id", "owner", "lrn", "exam_cycle_id", "status", "version", "submitted_at", "created_at")
     list_filter = ("status", "exam_cycle_id", "created_at")
     list_select_related = ("owner",)
     ordering = ("-created_at",)
     readonly_fields = (
         "id",
+        "candidate_id",
         "owner",
         "lrn",
         "exam_cycle_id",
@@ -25,10 +26,10 @@ class StudentApplicationAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
     )
-    search_fields = ("=id", "owner__username", "owner__email", "lrn")
+    search_fields = ("=id", "candidate_id", "owner__username", "owner__email", "lrn")
 
     fieldsets = (
-        (None, {"fields": ("id", "owner", "lrn", "exam_cycle_id", "status", "version")}),
+        (None, {"fields": ("id", "candidate_id", "owner", "lrn", "exam_cycle_id", "status", "version")}),
         (
             "Application data",
             {"fields": ("personal", "address", "school", "course_preferences", "review_step")},

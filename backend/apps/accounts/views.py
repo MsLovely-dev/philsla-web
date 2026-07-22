@@ -2,12 +2,14 @@ from datetime import datetime
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth import get_user_model, login as django_login, logout as django_logout
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .authentication import ApiSessionAuthentication, PendingAwareBearerAuthentication
 from .audit import record_auth_event
 from .permissions import RoleRequiredPermission, require_roles
-from .roles import PortalRole, get_security_tier, get_user_role
+from .roles import PortalRole
 from .serializers import (
     IdentifierLoginSerializer,
     OtpLoginSerializer,
@@ -29,6 +31,7 @@ from .services import (
     revoke_current_session,
     revoke_tokens,
     rotate_refresh_token,
+    resolve_authenticated_account,
     start_identifier_login,
     verify_login_otp,
     verify_login_password,
@@ -74,19 +77,21 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
 class CurrentSessionView(APIView):
     """Return server-derived identity, role, permission, and scope claims."""
 
+    authentication_classes = [PendingAwareBearerAuthentication, ApiSessionAuthentication]
+
     def get(self, request) -> Response:
-        user = request.user
-        role = get_user_role(user)
+        account = resolve_authenticated_account(request.user)
+        role = account["role"] if account else None
 
         return Response(
             {
                 "user": {
-                    "id": str(getattr(user, "id", "")),
-                    "email": str(getattr(user, "email", "")),
+                    "id": str(account["id"]) if account else "",
+                    "email": str(account["email"]) if account else "",
                     "role": role,
-                    "securityTier": get_security_tier(role),
-                    "permissions": _string_list(getattr(user, "api_permissions", None)),
-                    "scopes": _scope_claims(getattr(user, "scopes", None)),
+                    "securityTier": account["security_tier"] if account else None,
+                    "permissions": _string_list(account["permissions"] if account else None),
+                    "scopes": _scope_claims(account["scopes"] if account else None),
                 },
                 "session": {
                     "authenticated": True,
@@ -156,6 +161,8 @@ class OtpLoginView(APIView):
             record_auth_event(event="auth.otp_submitted", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.otp_submitted", outcome="accepted", request=request)
+        user = get_user_model().objects.get(id=issue.user_id)
+        django_login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         response = Response(
             {
                 "accessToken": issue.access_token,
@@ -170,10 +177,14 @@ class OtpLoginView(APIView):
 
 
 class LogoutView(APIView):
+    authentication_classes = [PendingAwareBearerAuthentication, ApiSessionAuthentication]
+
     def post(self, request) -> Response:
         revoke_current_session(user=request.user, auth=request.auth)
+        django_logout(request)
         response = Response(status=204)
         response.delete_cookie("refreshToken", samesite="Strict")
+        response.delete_cookie(settings.SESSION_COOKIE_NAME, samesite=settings.SESSION_COOKIE_SAMESITE)
         return response
 
 

@@ -41,7 +41,7 @@ class CorsAllowlistMiddleware:
     """Apply CORS headers only for explicitly configured origins."""
 
     allowed_methods = "DELETE, GET, OPTIONS, PATCH, POST, PUT"
-    allowed_headers = "Authorization, Content-Type, X-CSRFToken, X-Registration-Token"
+    allowed_headers = "Authorization, Content-Type, X-CSRFToken, X-Registration-Token, X-Registration-Session-Id"
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response

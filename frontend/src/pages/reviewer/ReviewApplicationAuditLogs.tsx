@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { usePhilSA } from '../../PhilSAContext';
 import { cn } from '../../lib/utils';
-import { useMockData } from '../../services/mockService';
+import { backendApplicationService, type BackendRegistrationSubmittedAuditLog } from '../../services/backendApplicationService';
 
 type RegistrationSubmittedAuditDetails = {
   auditEvent?: string;
@@ -17,9 +17,25 @@ type RegistrationSubmittedAuditDetails = {
   timestamp?: string;
   ipAddress?: string;
   deviceBrowser?: string;
+  applicationId?: string;
   registrationId?: string;
   applicantId?: string;
+  candidateId?: string;
   accountId?: string;
+};
+
+type RegistrationAuditRow = {
+  id: string;
+  timestamp: string;
+  sessionId: string;
+  actor: string;
+  applicationId: string;
+  registrationId: string;
+  applicantId: string;
+  candidateId: string;
+  accountId: string;
+  ipAddress: string;
+  deviceBrowser: string;
 };
 
 function parseRegistrationAuditDetails(details: string): RegistrationSubmittedAuditDetails {
@@ -33,11 +49,38 @@ function parseRegistrationAuditDetails(details: string): RegistrationSubmittedAu
 
 export default function ReviewApplicationAuditLogs() {
   const { auditLogs } = usePhilSA();
-  const { applications } = useMockData();
   const [searchTerm, setSearchTerm] = useState('');
+  const [backendAuditRows, setBackendAuditRows] = useState<RegistrationAuditRow[]>([]);
+  const [isLoadingBackendAudit, setIsLoadingBackendAudit] = useState(import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend');
+
+  useEffect(() => {
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') return undefined;
+
+    let isMounted = true;
+    void backendApplicationService.listRegistrationSubmittedAuditLogs()
+      .then((result) => {
+        if (!isMounted) return;
+        if (result.ok === false) {
+          setBackendAuditRows([]);
+          return;
+        }
+        setBackendAuditRows(result.data.map(mapBackendAuditLogToRow));
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingBackendAudit(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const rows = useMemo(() => {
-    const registrationAuditRows = auditLogs
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
+      return backendAuditRows;
+    }
+
+    return auditLogs
       .filter((log) => log.action === 'REGISTRATION_SUBMITTED')
       .map((log) => {
         const details = parseRegistrationAuditDetails(log.details);
@@ -46,39 +89,24 @@ export default function ReviewApplicationAuditLogs() {
           timestamp: details.timestamp || log.timestamp,
           sessionId: details.sessionId || 'UNAVAILABLE',
           actor: log.userId,
+          applicationId: details.applicationId || 'UNAVAILABLE',
           registrationId: details.registrationId || 'UNAVAILABLE',
           applicantId: details.applicantId || 'UNAVAILABLE',
+          candidateId: details.candidateId || details.applicantId || details.registrationId || 'UNAVAILABLE',
           accountId: details.accountId || 'UNAVAILABLE',
           ipAddress: details.ipAddress || 'TBD_BACKEND_CAPTURE',
           deviceBrowser: details.deviceBrowser || 'UNAVAILABLE',
-          source: 'audit-log',
         };
-      });
-
-    const auditedRegistrationIds = new Set(registrationAuditRows.map(row => row.registrationId));
-    const applicationFallbackRows = applications
-      .filter((application) => application.submittedAt && !auditedRegistrationIds.has(application.id))
-      .map((application) => ({
-        id: `registration-submitted-${application.id}`,
-        timestamp: application.submittedAt || '',
-        sessionId: `LEGACY-${application.id}`,
-        actor: application.userId || 'ANONYMOUS',
-        registrationId: application.id,
-        applicantId: application.id,
-        accountId: application.userId || `PENDING-${application.id}`,
-        ipAddress: 'TBD_BACKEND_CAPTURE',
-        deviceBrowser: 'Historical registration record',
-        source: 'application-record',
-      }));
-
-    return [...registrationAuditRows, ...applicationFallbackRows]
+      })
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [auditLogs, applications]);
+  }, [auditLogs, backendAuditRows]);
 
   const filteredRows = rows.filter((row) => {
     const query = searchTerm.toLowerCase();
     return (
       !query ||
+      row.candidateId.toLowerCase().includes(query) ||
+      row.applicationId.toLowerCase().includes(query) ||
       row.registrationId.toLowerCase().includes(query) ||
       row.applicantId.toLowerCase().includes(query) ||
       row.accountId.toLowerCase().includes(query) ||
@@ -122,7 +150,7 @@ export default function ReviewApplicationAuditLogs() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray" />
             <input
               type="text"
-              placeholder="Search registration ID, applicant ID, account ID, session, or actor..."
+              placeholder="Search candidate ID, registration ID, account ID, session, or actor..."
               className="w-full bg-philsa-bg border-none rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-philsa-red/10 transition-all font-medium"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
@@ -146,7 +174,9 @@ export default function ReviewApplicationAuditLogs() {
               {filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
-                    No successful registration audit logs have been captured.
+                    {isLoadingBackendAudit
+                      ? 'Loading successful registration audit logs...'
+                      : 'No successful registration audit logs have been captured.'}
                   </td>
                 </tr>
               ) : (
@@ -160,7 +190,8 @@ export default function ReviewApplicationAuditLogs() {
                       <p className="text-[9px] text-philsa-gray font-bold mt-1 tracking-widest uppercase">IP: {row.ipAddress}</p>
                     </td>
                     <td className="px-8 py-6">
-                      <p className="text-xs font-black text-philsa-navy">{row.registrationId}</p>
+                      <p className="text-xs font-black text-philsa-navy">{row.candidateId}</p>
+                      <p className="text-[10px] text-philsa-gray font-bold mt-1">Application: {row.applicationId}</p>
                       <p className="text-[10px] text-philsa-gray font-bold mt-1">Applicant: {row.applicantId}</p>
                     </td>
                     <td className="px-8 py-6">
@@ -176,11 +207,6 @@ export default function ReviewApplicationAuditLogs() {
                         <ShieldCheck className="w-3 h-3" />
                         Submitted
                       </span>
-                      {row.source === 'application-record' && (
-                        <p className="mt-2 text-[9px] font-bold uppercase tracking-widest text-philsa-gray">
-                          From submitted application
-                        </p>
-                      )}
                     </td>
                   </tr>
                 ))
@@ -191,4 +217,20 @@ export default function ReviewApplicationAuditLogs() {
       </div>
     </div>
   );
+}
+
+function mapBackendAuditLogToRow(log: BackendRegistrationSubmittedAuditLog): RegistrationAuditRow {
+  return {
+    id: String(log.id),
+    timestamp: log.timestamp,
+    sessionId: log.sessionId || log.correlation_id || 'UNAVAILABLE',
+    actor: log.actor || 'ANONYMOUS',
+    applicationId: log.applicationId || 'UNAVAILABLE',
+    registrationId: log.registrationId || 'UNAVAILABLE',
+    applicantId: log.applicantId || 'UNAVAILABLE',
+    candidateId: log.candidateId || log.applicantId || log.registrationId || 'UNAVAILABLE',
+    accountId: log.accountId || 'UNAVAILABLE',
+    ipAddress: log.ipAddress || 'UNAVAILABLE',
+    deviceBrowser: log.deviceBrowser || 'UNAVAILABLE',
+  };
 }

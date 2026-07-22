@@ -1,4 +1,5 @@
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
 from .services import validate_access_token
@@ -30,3 +31,10 @@ class PendingAwareBearerAuthentication(BaseAuthentication):
 
     def authenticate_header(self, request) -> str:
         return f'Bearer realm="{self.www_authenticate_realm}"'
+
+
+class ApiSessionAuthentication(SessionAuthentication):
+    """Django session-cookie authentication for API session bridge endpoints."""
+
+    def enforce_csrf(self, request) -> None:
+        return None

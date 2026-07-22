@@ -33,3 +33,27 @@ class AccountProfile(models.Model):
     def __str__(self) -> str:
         identifier = self.user.email or self.user.username
         return f"{identifier} ({self.role})"
+
+
+class AuthRefreshSession(models.Model):
+    """Persistent refresh-token session boundary for backend auth."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="auth_refresh_sessions")
+    token_hash = models.CharField(max_length=64, unique=True)
+    account = models.JSONField(default=dict)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    rotated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["token_hash"]),
+            models.Index(fields=["user", "revoked_at", "expires_at"]),
+        ]
+
+    @property
+    def is_active(self) -> bool:
+        from django.utils import timezone
+
+        return self.revoked_at is None and self.expires_at > timezone.now()

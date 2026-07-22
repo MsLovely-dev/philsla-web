@@ -3,12 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Check, 
   X, 
-  AlertCircle, 
   XCircle,
   CheckCircle,
   BookOpen,
   User,
-  ShieldCheck,
   MessageSquare,
   ChevronLeft,
   Fingerprint,
@@ -27,6 +25,7 @@ type ReviewApplicationRecord = Application & {
   risk: string;
   duplicateScore: number;
   duplicateStatus: string;
+  reviewerReason?: string;
   history: Array<{ status: string; date: string; actor: string; notes?: string }>;
 };
 
@@ -69,6 +68,7 @@ const EMPTY_REVIEW_APPLICATION: ReviewApplicationRecord = {
   risk: '',
   duplicateScore: 0,
   duplicateStatus: '',
+  reviewerReason: '',
   photoUrl: '',
   history: [],
   additionalHighPriorityFields: {},
@@ -111,7 +111,13 @@ export default function ReviewerApplicationDetail() {
       }
 
       const [mapped] = mapBackendApplicationsToReviewRows([result.data]);
-      setApplication(mapped);
+      const reviewerReason = String(
+        result.data.reviewStep?.reviewerReason ??
+        result.data.reviewStep?.reason ??
+        result.data.reviewStep?.reviewNotes ??
+        ''
+      ).trim();
+      setApplication({ ...mapped, reviewerReason });
       setStatus(mapped.status);
     });
 
@@ -164,6 +170,10 @@ export default function ReviewerApplicationDetail() {
   const fullName = `${currentApp.firstName} ${currentApp.lastName}`.trim();
   const photoUrl = currentApp.photoUrl?.trim() ?? '';
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
+  const isDecisionFinal = ['ACCEPTED', 'APPROVED', 'REJECTED'].includes(status);
+  const rejectionReason = status === 'REJECTED'
+    ? (currentApp.reviewerReason || remarks.trim() || 'No rejection reason recorded.')
+    : '';
   const reviewerName = user ? `${user.firstName} ${user.lastName}`.trim() || user.email : '';
   const submittedDate = currentApp.history?.[0]?.date ?? ('submittedAt' in currentApp ? currentApp.submittedAt : undefined) ?? 'Pending timestamp';
   const registrationFields: Record<string, string> = currentApp.additionalHighPriorityFields ?? {};
@@ -199,13 +209,21 @@ export default function ReviewerApplicationDetail() {
   }, [verificationLogs, logFilterType, logSearch]);
 
   const handleAction = (action: string) => {
+    if (isDecisionFinal) return;
+
     if (action === 'CORRECTION') {
       setIsCorrectionModalOpen(true);
       return;
     }
 
     const newStatus = action === 'APPROVE' ? 'ACCEPTED' : 'REJECTED';
+    const decisionRemarks = remarks.trim();
     setStatus(newStatus);
+    setApplication(prev => prev ? {
+      ...prev,
+      status: newStatus,
+      reviewerReason: action === 'REJECT' ? decisionRemarks : prev.reviewerReason,
+    } : prev);
     const statusLabel = action === 'APPROVE' ? 'Approved' : 'Rejected';
 
     addAuditLog('REVIEWER_APPLICATION_REVIEW', JSON.stringify({
@@ -214,7 +232,7 @@ export default function ReviewerApplicationDetail() {
       applicationId: id,
       status: newStatus,
       statusLabel: statusLabel,
-      remarks: remarks,
+      remarks: decisionRemarks,
       timestamp: new Date().toISOString(),
       action: `Reviewer Account Application ${id} marked as ${statusLabel}`
     }));
@@ -540,35 +558,39 @@ export default function ReviewerApplicationDetail() {
                     <MessageSquare className="w-5 h-5 text-philsa-red" /> Official Reviewer Directives
                   </h3>
                   <textarea 
-                    className="w-full bg-philsa-bg border-none rounded-2xl p-6 text-sm font-medium focus:ring-2 focus:ring-philsa-red/10 outline-none min-h-[160px] resize-none shadow-inner"
-                    placeholder="Provide detailed compliance notes or remediation instructions..."
+                    className={cn(
+                      "w-full bg-philsa-bg border-none rounded-2xl p-6 text-sm font-medium focus:ring-2 focus:ring-philsa-red/10 outline-none min-h-[160px] resize-none shadow-inner",
+                      isDecisionFinal && "cursor-not-allowed text-philsa-gray"
+                    )}
+                    placeholder={isDecisionFinal ? "Application decision is final. Reviewer directives are read-only." : "Provide detailed compliance notes or remediation instructions..."}
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
+                    readOnly={isDecisionFinal}
+                    aria-readonly={isDecisionFinal}
                   />
                   <div className="mt-10 flex flex-col md:flex-row justify-end gap-4 p-8 bg-philsa-bg/30 rounded-3xl border border-philsa-border border-dashed">
-                      <div className="flex-1 text-xs font-bold text-philsa-gray italic flex items-center gap-2">
-                         <ShieldCheck className="w-4 h-4 text-emerald-600" /> All personal data cross-referenced with PhilSys registry.
-                      </div>
-                      <div className="flex flex-wrap gap-3">
-                        <button 
-                          onClick={() => handleAction('CORRECTION')}
-                          className="bg-amber-50 border border-amber-200 text-amber-700 font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-amber-100 active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
-                        >
-                          <AlertCircle className="w-3.5 h-3.5" /> Correction
-                        </button>
-                        <button 
-                          onClick={() => handleAction('REJECT')}
-                          className="bg-white border border-philsa-red/20 text-philsa-red font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-red hover:text-white active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
-                        >
-                          <X className="w-3.5 h-3.5" /> Reject
-                        </button>
-                        <button 
-                          onClick={() => handleAction('APPROVE')}
-                          className="bg-philsa-red text-white font-black py-3 px-7 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-red/90 active:scale-[0.98] shadow-lg shadow-philsa-red/20 transition-all flex items-center gap-2"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> Approve
-                        </button>
-                      </div>
+                      {status === 'REJECTED' && (
+                        <div className="w-full rounded-2xl border border-philsa-red/20 bg-philsa-red/5 px-5 py-4 text-left">
+                          <p className="text-[9px] font-black uppercase tracking-widest text-philsa-red mb-1">Rejection Reason</p>
+                          <p className="text-xs font-bold text-philsa-navy leading-relaxed">{rejectionReason}</p>
+                        </div>
+                      )}
+                      {!isDecisionFinal && (
+                        <div className="flex flex-wrap gap-3">
+                          <button 
+                            onClick={() => handleAction('REJECT')}
+                            className="bg-white border border-philsa-red/20 text-philsa-red font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-red hover:text-white active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
+                          >
+                            <X className="w-3.5 h-3.5" /> Reject
+                          </button>
+                          <button 
+                            onClick={() => handleAction('APPROVE')}
+                            className="bg-philsa-red text-white font-black py-3 px-7 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-red/90 active:scale-[0.98] shadow-lg shadow-philsa-red/20 transition-all flex items-center gap-2"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" /> Approve
+                          </button>
+                        </div>
+                      )}
                   </div>
                 </div>
               </motion.div>

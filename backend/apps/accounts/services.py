@@ -15,8 +15,8 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from rest_framework.exceptions import APIException
 
-from .models import AccountProfile
-from .roles import PortalRole, get_security_tier
+from .models import AccountProfile, AuthRefreshSession
+from .roles import PortalRole, get_security_tier, get_user_role
 
 
 class LoginFlowRejected(APIException):
@@ -35,12 +35,16 @@ class AuthIssue:
     refresh_token: str
     expires_at: str
     expires_in_seconds: int
+    user_id: object
 
 
 PENDING_IDENTIFIER_PREFIX = "auth:pending:identifier:"
 PENDING_OTP_PREFIX = "auth:pending:otp:"
 ACCESS_TOKEN_PREFIX = "auth:access:"
-REFRESH_TOKEN_PREFIX = "auth:refresh:"
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def _unique_username(UserModel, *, base: str, fallback: str) -> str:
@@ -61,7 +65,10 @@ def _account_from_user(user: object, profile: AccountProfile | None = None) -> d
         return None
 
     if profile is None:
-        profile = getattr(user, "account_profile", None)
+        try:
+            profile = getattr(user, "account_profile", None)
+        except AccountProfile.DoesNotExist:
+            profile = None
 
     if profile is None and getattr(user, "is_superuser", False):
         role = PortalRole.SYSTEM_ADMIN.value
@@ -133,19 +140,28 @@ def _issue_tokens(account: dict[str, Any]) -> AuthIssue:
     expires_in_seconds = _ttl_seconds(settings.AUTH_ACCESS_TOKEN_LIFETIME_MINUTES)
     refresh_ttl = settings.AUTH_REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60
     expires_at = timezone.now() + timedelta(seconds=expires_in_seconds)
+    refresh_expires_at = timezone.now() + timedelta(seconds=refresh_ttl)
+    session_account = _session_account(account)
+    refresh_session = AuthRefreshSession.objects.create(
+        user_id=session_account["user_id"],
+        token_hash=_hash_token(refresh_token),
+        account=session_account,
+        expires_at=refresh_expires_at,
+    )
 
     token_payload = {
-        "account": _session_account(account),
+        "account": session_account,
         "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
+        "refresh_session_id": refresh_session.id,
     }
     cache.set(f"{ACCESS_TOKEN_PREFIX}{access_token}", token_payload, expires_in_seconds)
-    cache.set(f"{REFRESH_TOKEN_PREFIX}{refresh_token}", {"account": _session_account(account)}, refresh_ttl)
 
     return AuthIssue(
         access_token=access_token,
         refresh_token=refresh_token,
         expires_at=token_payload["expires_at"],
         expires_in_seconds=expires_in_seconds,
+        user_id=session_account["user_id"],
     )
 
 
@@ -158,6 +174,28 @@ def _session_account(account: dict[str, Any]) -> dict[str, Any]:
         "security_tier": get_security_tier(account["role"]),
         "permissions": list(account.get("permissions", [])),
         "scopes": dict(account.get("scopes", {})),
+    }
+
+
+def resolve_authenticated_account(user: object) -> dict[str, Any] | None:
+    """Resolve server-side identity claims for bearer or Django-session users."""
+
+    account = _account_from_user(user)
+    if account is not None:
+        return _session_account(account)
+
+    role = get_user_role(user)
+    if role is None or not getattr(user, "is_authenticated", False) or not getattr(user, "is_active", False):
+        return None
+
+    return {
+        "id": str(getattr(user, "id", "")),
+        "user_id": getattr(user, "id", ""),
+        "email": getattr(user, "email", "") or "",
+        "role": role,
+        "security_tier": get_security_tier(role),
+        "permissions": list(getattr(user, "api_permissions", []) or []),
+        "scopes": dict(getattr(user, "scopes", {}) or {}),
     }
 
 
@@ -257,23 +295,33 @@ def validate_access_token(*, access_token: str) -> tuple[object, object] | None:
         is_authenticated=True,
         is_active=True,
     )
-    auth = SimpleNamespace(token_id=access_token, expires_at=token_payload["expires_at"])
+    auth = SimpleNamespace(
+        token_id=access_token,
+        expires_at=token_payload["expires_at"],
+        refresh_session_id=token_payload.get("refresh_session_id"),
+    )
     return user, auth
 
 
+@transaction.atomic
 def rotate_refresh_token(*, refresh_token: str | None) -> AuthIssue:
     """Rotate the refresh token and issue a new access token."""
 
     if not refresh_token:
         raise LoginFlowRejected("Your session has expired. Please log in again.")
 
-    refresh_key = f"{REFRESH_TOKEN_PREFIX}{refresh_token}"
-    refresh_payload = cache.get(refresh_key)
-    if refresh_payload is None:
+    refresh_session = (
+        AuthRefreshSession.objects.select_for_update()
+        .filter(token_hash=_hash_token(refresh_token), revoked_at__isnull=True, expires_at__gt=timezone.now())
+        .first()
+    )
+    if refresh_session is None:
         raise LoginFlowRejected("Your session has expired. Please log in again.")
 
-    cache.delete(refresh_key)
-    return _issue_tokens(refresh_payload["account"])
+    refresh_session.revoked_at = timezone.now()
+    refresh_session.rotated_at = refresh_session.revoked_at
+    refresh_session.save(update_fields=["revoked_at", "rotated_at"])
+    return _issue_tokens(refresh_session.account)
 
 
 def revoke_current_session(*, user: object, auth: object) -> None:
@@ -282,6 +330,9 @@ def revoke_current_session(*, user: object, auth: object) -> None:
     token_id = getattr(auth, "token_id", None)
     if token_id:
         cache.delete(f"{ACCESS_TOKEN_PREFIX}{token_id}")
+    refresh_session_id = getattr(auth, "refresh_session_id", None)
+    if refresh_session_id:
+        AuthRefreshSession.objects.filter(id=refresh_session_id, revoked_at__isnull=True).update(revoked_at=timezone.now())
     return None
 
 

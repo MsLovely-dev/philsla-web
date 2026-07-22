@@ -13,7 +13,7 @@ import blurrySelfieImg from '../assets/images/blurry-selfie.png';
 import passSelfieImg from '../assets/images/pass-selfie.png';
 import poorLightingSelfieImg from '../assets/images/poorligthing-selfie.png';
 import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Pencil } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn, formatCandidateId } from '../lib/utils';
 
 const SECTIONS = [
   'Identity & Biometrics',
@@ -2092,86 +2092,35 @@ export default function StudentApplication() {
 
     clearRegistrationSessionDraft();
 
-    if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
-      setIsSubmitting(true);
-      const result = await backendApplicationService.createAndSubmit(
-        createBackendApplicationDraftInput(lrnVerificationToken, {
-          ...formData,
-          selfiePhotoUrl: capturedSelfiePreview,
-        }),
-      );
-      setIsSubmitting(false);
+    setIsSubmitting(true);
+    const result = await backendApplicationService.createAndSubmit(
+      createBackendApplicationDraftInput(lrnVerificationToken, {
+        ...formData,
+        selfiePhotoUrl: capturedSelfiePreview,
+      }),
+      { registrationSessionId: registrationSessionIdRef.current },
+    );
+    setIsSubmitting(false);
 
-      if (result.ok === false) {
-        setErrors({ general: result.error.message });
-        addAuditLog('APPLICATION_SUBMISSION_FAILED', `Backend application submission failed. Code: ${result.error.code ?? 'UNKNOWN'}.`);
-        return;
-      }
-
-      const submittedApplication = mapBackendApplicationToFrontend(result.data, user?.id ?? result.data.id);
-      setApplications(prev => {
-        const withoutDuplicate = prev.filter(app => app.id !== submittedApplication.id);
-        return [...withoutDuplicate, submittedApplication];
-      });
-      addRegistrationAuditLog('SUBMITTED', {
-        registrationId: String(result.data.id ?? submittedApplication.id),
-        applicantId: submittedApplication.id,
-        accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
-      });
-      setCandidateId(submittedApplication.id);
-      resetRegistrationFormAfterSubmit();
-      setIsSubmitted(true);
+    if (result.ok === false) {
+      setErrors({ general: result.error.message });
+      addAuditLog('APPLICATION_SUBMISSION_FAILED', `Backend application submission failed. Code: ${result.error.code ?? 'UNKNOWN'}.`);
       return;
     }
 
-    setIsSubmitting(true);
-    setTimeout(() => {
-      if (isEditingCorrection && myApp) {
-        const updatedApp: any = {
-          ...myApp,
-          ...formData,
-          photoUrl: capturedSelfiePreview,
-          status: 'PENDING',
-          submittedAt: new Date().toISOString(),
-          gwa: parseFloat(formData.gwa) || 0
-        };
-        
-        setApplications(prev => prev.map(a => a.id === myApp.id ? updatedApp : a));
-        addRegistrationAuditLog('SUBMITTED', {
-          registrationId: myApp.id,
-          applicantId: myApp.id,
-          accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
-        });
-        setCandidateId(myApp.id);
-        setIsSubmitting(false);
-        resetRegistrationFormAfterSubmit();
-        setIsSubmitted(true);
-        return;
-      }
-
-      const newId = 'CAND-2026-' + Math.floor(1000 + Math.random() * 9000);
-      setCandidateId(newId);
-      
-      const newApp: any = {
-        ...formData,
-        id: newId,
-        userId: user?.id || '',
-        photoUrl: capturedSelfiePreview,
-        status: 'PENDING',
-        submittedAt: new Date().toISOString(),
-        gwa: parseFloat(formData.gwa) || 0
-      };
-      
-      setApplications(prev => [...prev, newApp]);
-      addRegistrationAuditLog('SUBMITTED', {
-        registrationId: newId,
-        applicantId: newId,
-        accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
-      });
-      setIsSubmitting(false);
-      resetRegistrationFormAfterSubmit();
-      setIsSubmitted(true);
-    }, 2000);
+    const submittedApplication = mapBackendApplicationToFrontend(result.data, user?.id ?? result.data.id);
+    setApplications(prev => {
+      const withoutDuplicate = prev.filter(app => app.id !== submittedApplication.id);
+      return [...withoutDuplicate, submittedApplication];
+    });
+    addRegistrationAuditLog('SUBMITTED', {
+      registrationId: String(result.data.id ?? submittedApplication.id),
+      applicantId: submittedApplication.id,
+      accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
+    });
+    setCandidateId(result.data.candidateId || formatCandidateId(submittedApplication.id, result.data.submittedAt ?? result.data.createdAt));
+    resetRegistrationFormAfterSubmit();
+    setIsSubmitted(true);
   };
 
   if (isSubmitted) {

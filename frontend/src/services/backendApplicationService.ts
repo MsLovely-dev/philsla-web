@@ -88,6 +88,7 @@ export interface RegistrationSelfieFaceValidationResult {
 
 export interface BackendApplication {
   id: string;
+  candidateId?: string;
   status: 'DRAFT' | 'SUBMITTED' | 'FOR_CORRECTION' | 'RESUBMITTED' | 'APPROVED' | 'REJECTED';
   personal: Record<string, unknown>;
   address: Record<string, unknown>;
@@ -114,6 +115,28 @@ export interface BackendApplicationDraftInput {
   reviewStep: Record<string, unknown>;
 }
 
+export interface BackendRegistrationSubmittedAuditLog {
+  id: number | string;
+  action: 'REGISTRATION_SUBMITTED';
+  event: string;
+  outcome: 'success' | string;
+  timestamp: string;
+  sessionId: string;
+  ipAddress: string;
+  deviceBrowser: string;
+  applicationId?: string;
+  registrationId: string;
+  applicantId: string;
+  candidateId?: string;
+  accountId: string;
+  actor: string;
+  correlation_id: string;
+}
+
+interface ApplicationRequestOptions {
+  registrationSessionId?: string;
+}
+
 export type BackendReviewerDecision = 'APPROVE' | 'REQUEST_CORRECTION' | 'REJECT';
 
 export class BackendApplicationService {
@@ -135,9 +158,12 @@ export class BackendApplicationService {
     });
   }
 
-  async createDraft(input: BackendApplicationDraftInput): Promise<ServiceResult<BackendApplication>> {
+  async createDraft(input: BackendApplicationDraftInput, options: ApplicationRequestOptions = {}): Promise<ServiceResult<BackendApplication>> {
     return this.apiClient.request<BackendApplication>('/api/v1/applications/', {
       method: 'POST',
+      headers: {
+        ...(options.registrationSessionId ? { 'X-Registration-Session-Id': options.registrationSessionId } : {}),
+      },
       body: JSON.stringify(input),
     });
   }
@@ -239,12 +265,16 @@ export class BackendApplicationService {
     });
   }
 
-  async createAndSubmit(input: BackendApplicationDraftInput): Promise<ServiceResult<BackendApplication>> {
-    return this.createDraft({ ...input, submitOnCreate: true });
+  async createAndSubmit(input: BackendApplicationDraftInput, options: ApplicationRequestOptions = {}): Promise<ServiceResult<BackendApplication>> {
+    return this.createDraft({ ...input, submitOnCreate: true }, options);
   }
 
   async listReviewQueue(): Promise<ServiceResult<BackendApplication[]>> {
     return this.apiClient.request<BackendApplication[]>('/api/v1/applications/review-queue/');
+  }
+
+  async listRegistrationSubmittedAuditLogs(): Promise<ServiceResult<BackendRegistrationSubmittedAuditLog[]>> {
+    return this.apiClient.request<BackendRegistrationSubmittedAuditLog[]>('/api/v1/applications/audit/registration-submitted/');
   }
 
   async getApplication(applicationId: string): Promise<ServiceResult<BackendApplication>> {

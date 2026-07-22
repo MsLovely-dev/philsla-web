@@ -11,7 +11,9 @@ from apps.accounts.roles import PortalRole, get_user_role
 
 from .audit import record_application_event
 from .models import StudentApplication
+from .models import ApplicationAuditLog
 from .serializers import (
+    ApplicationAuditLogSerializer,
     ApplicationCreateSerializer,
     ApplicationSerializer,
     ApplicationSubmitSerializer,
@@ -175,8 +177,20 @@ class ApplicationCreateView(APIView):
             submit_on_create=submit_on_create,
         )
         event = "application_submitted" if submit_on_create else "application_draft_created"
-        record_application_event(event=event, outcome="success", request=request, user=owner)
+        record_application_event(event=event, outcome="success", request=request, user=owner, application=application)
         return Response(ApplicationSerializer(application, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+
+class ApplicationSubmittedAuditLogView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request) -> Response:
+        logs = ApplicationAuditLog.objects.filter(
+            action="REGISTRATION_SUBMITTED",
+            outcome="success",
+        ).order_by("-created_at")[:500]
+        return Response(ApplicationAuditLogSerializer(logs, many=True).data)
 
 
 class ApplicationReviewQueueView(APIView):
@@ -263,5 +277,5 @@ class ApplicationSubmitView(APIView):
         serializer = ApplicationSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         submitted = submit_application(application_id=application.id, owner=request.user, expected_version=serializer.validated_data["version"])
-        record_application_event(event="application_submitted", outcome="success", request=request, user=request.user)
+        record_application_event(event="application_submitted", outcome="success", request=request, user=request.user, application=submitted)
         return Response(ApplicationSerializer(submitted, context={"request": request}).data)

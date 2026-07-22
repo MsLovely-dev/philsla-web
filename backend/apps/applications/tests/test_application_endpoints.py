@@ -11,6 +11,7 @@ from rest_framework.test import APIClient
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 from apps.applications.models import (
+    ApplicationAuditLog,
     ApplicationIdentityMedia,
     ApplicationStatus,
     IdentityMediaType,
@@ -128,14 +129,89 @@ class ApplicationEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], ApplicationStatus.SUBMITTED)
+        self.assertRegex(response.data["candidateId"], r"^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
         self.assertIsNotNone(response.data["submittedAt"])
         application = StudentApplication.objects.get(id=response.data["id"])
+        self.assertEqual(application.candidate_id, response.data["candidateId"])
         self.assertIsNone(application.owner_id)
         self.assertTrue(application.password_hash)
         self.assertFalse(get_user_model().objects.filter(email="new.student@example.test").exists())
         self.assertEqual(application.personal["identityVerificationStatus"], "VERIFIED")
         self.assertEqual(application.personal["sex"], "Female")
         self.assertEqual(application.school["schoolId"], "301234")
+
+    def test_public_registration_submission_creates_audit_log(self):
+        client = APIClient()
+        verification = client.post(
+            reverse("applications:verify-lrn"),
+            {"lrn": "123456789012"},
+            format="json",
+        )
+        payload = complete_payload()
+        payload["personal"]["email"] = "audited.student@example.test"
+        payload["verificationToken"] = verification.data["verificationToken"]
+        payload["submitOnCreate"] = True
+
+        response = client.post(
+            reverse("applications:create"),
+            payload,
+            format="json",
+            HTTP_X_REGISTRATION_SESSION_ID="REG-SESSION-TEST",
+            HTTP_USER_AGENT="AuditBrowser/1.0",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertRegex(response.data["candidateId"], r"^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+        audit_log = ApplicationAuditLog.objects.get(application_id=response.data["id"])
+        self.assertEqual(audit_log.action, "REGISTRATION_SUBMITTED")
+        self.assertEqual(audit_log.outcome, "success")
+        self.assertEqual(audit_log.registration_id, response.data["candidateId"])
+        self.assertEqual(audit_log.applicant_id, response.data["candidateId"])
+        self.assertEqual(audit_log.account_id, f"PENDING-{response.data['candidateId']}")
+        self.assertEqual(audit_log.actor_user_id, "ANONYMOUS")
+        self.assertEqual(audit_log.session_id, "REG-SESSION-TEST")
+        self.assertEqual(audit_log.user_agent, "AuditBrowser/1.0")
+
+    def test_admissions_reviewer_can_list_registration_submission_audit_logs(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+            submitted_at=timezone.now(),
+        )
+        ApplicationAuditLog.objects.create(
+            application=submitted,
+            action="REGISTRATION_SUBMITTED",
+            event="application_submitted",
+            outcome="success",
+            registration_id=str(submitted.id),
+            applicant_id=str(submitted.id),
+            account_id=f"PENDING-{submitted.id}",
+            actor_user_id="ANONYMOUS",
+            session_id="REG-SESSION-LIST",
+            ip_address="127.0.0.1",
+            user_agent="AuditBrowser/1.0",
+            correlation_id="corr-test",
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:registration-submitted-audit"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["action"], "REGISTRATION_SUBMITTED")
+        self.assertEqual(response.data[0]["applicationId"], str(submitted.id))
+        self.assertEqual(response.data[0]["candidateId"], submitted.candidate_id)
+        self.assertEqual(response.data[0]["registrationId"], str(submitted.id))
+        self.assertEqual(response.data[0]["sessionId"], "REG-SESSION-LIST")
 
     def test_public_manual_high_priority_registration_can_create_account_without_lrn(self):
         client = APIClient()
@@ -287,6 +363,34 @@ class ApplicationEndpointTests(TestCase):
         self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
 
         response = self.client.get(reverse("applications:review-queue"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["id"] for item in response.data], [str(submitted.id)])
+
+    def test_admissions_reviewer_django_session_can_list_submitted_registration_queue(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        reviewer = get_user_model().objects.create_user(
+            username="reviewer",
+            email="reviewer@example.test",
+            password="Password1!",
+        )
+        AccountProfile.objects.create(user=reviewer, role=PortalRole.ADMISSIONS_REVIEWER.value)
+        session_client = APIClient()
+        session_client.force_login(reviewer)
+
+        response = session_client.get(reverse("applications:review-queue"))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["id"] for item in response.data], [str(submitted.id)])

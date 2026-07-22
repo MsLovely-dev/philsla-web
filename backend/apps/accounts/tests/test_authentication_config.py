@@ -21,7 +21,10 @@ class AuthenticationConfigurationTests(TestCase):
     def test_drf_uses_bearer_authentication_hook(self) -> None:
         self.assertEqual(
             settings.REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"],
-            ["apps.accounts.authentication.PendingAwareBearerAuthentication"],
+            [
+                "apps.accounts.authentication.PendingAwareBearerAuthentication",
+                "apps.accounts.authentication.ApiSessionAuthentication",
+            ],
         )
 
     def test_auth_flow_settings_match_adr_011_defaults(self) -> None:

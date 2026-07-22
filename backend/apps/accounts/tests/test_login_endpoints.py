@@ -1,4 +1,5 @@
 from django.test import TestCase, override_settings
+from django.conf import settings
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
 
@@ -143,6 +144,7 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(otp_payload["tokenType"], "Bearer")
         self.assertIn("accessToken", otp_payload)
         self.assertIn("refreshToken", otp_response.cookies)
+        self.assertIn(settings.SESSION_COOKIE_NAME, self.client.cookies)
 
         session_response = self.client.get(
             "/api/v1/auth/session/",
@@ -151,3 +153,8 @@ class LoginEndpointTests(TestCase):
 
         self.assertEqual(session_response.status_code, 200)
         self.assertEqual(session_response.json()["user"]["role"], "STUDENT")
+
+        bearerless_session_response = self.client.get("/api/v1/auth/session/")
+
+        self.assertEqual(bearerless_session_response.status_code, 200)
+        self.assertEqual(bearerless_session_response.json()["user"]["role"], "STUDENT")

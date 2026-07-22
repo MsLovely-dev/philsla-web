@@ -1,7 +1,11 @@
 from types import SimpleNamespace
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
+
+from apps.accounts.models import AccountProfile
+from apps.accounts.roles import PortalRole
 
 
 @override_settings(ROOT_URLCONF="config.urls")
@@ -58,3 +62,43 @@ class CurrentSessionEndpointTests(TestCase):
                 },
             },
         )
+
+    def test_django_admin_session_returns_system_admin_claims_for_superuser(self) -> None:
+        user = get_user_model().objects.create_superuser(
+            username="admin",
+            email="admin@example.test",
+            password="Password1!",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/v1/auth/session/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["user"]["id"], str(user.id))
+        self.assertEqual(payload["user"]["email"], "admin@example.test")
+        self.assertEqual(payload["user"]["role"], "SYSTEM_ADMIN")
+        self.assertEqual(payload["user"]["securityTier"], 3)
+        self.assertTrue(payload["session"]["authenticated"])
+
+    def test_django_session_returns_account_profile_role_claims(self) -> None:
+        user = get_user_model().objects.create_user(
+            username="reviewer",
+            email="reviewer@example.test",
+            password="Password1!",
+        )
+        AccountProfile.objects.create(
+            user=user,
+            role=PortalRole.ADMISSIONS_REVIEWER.value,
+            api_permissions=["applications:review"],
+            scopes={"office": "admissions"},
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/v1/auth/session/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["user"]["role"], "ADMISSIONS_REVIEWER")
+        self.assertEqual(payload["user"]["permissions"], ["applications:review"])
+        self.assertEqual(payload["user"]["scopes"], {"office": "admissions"})

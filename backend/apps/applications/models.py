@@ -1,7 +1,18 @@
 import uuid
+from secrets import choice
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+
+CANDIDATE_CODE_ALPHABET = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+
+def generate_candidate_id(year: int | None = None) -> str:
+    registration_year = year or timezone.now().year
+    code = "".join(choice(CANDIDATE_CODE_ALPHABET) for _ in range(8))
+    return f"PS-{registration_year}-{code[:4]}-{code[4:]}"
 
 
 class ApplicationStatus(models.TextChoices):
@@ -15,6 +26,7 @@ class ApplicationStatus(models.TextChoices):
 
 class StudentApplication(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    candidate_id = models.CharField(max_length=17, unique=True, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -55,6 +67,45 @@ class StudentApplication(models.Model):
         if self.owner_id is None:
             return False
         return str(self.owner_id) == str(getattr(user, "user_id", getattr(user, "id", "")))
+
+    def save(self, *args, **kwargs):
+        if not self.candidate_id:
+            while True:
+                candidate_id = generate_candidate_id()
+                if not StudentApplication.objects.filter(candidate_id=candidate_id).exists():
+                    self.candidate_id = candidate_id
+                    break
+        super().save(*args, **kwargs)
+
+
+class ApplicationAuditLog(models.Model):
+    application = models.ForeignKey(
+        StudentApplication,
+        on_delete=models.CASCADE,
+        related_name="audit_logs",
+        null=True,
+        blank=True,
+    )
+    action = models.CharField(max_length=80, db_index=True)
+    event = models.CharField(max_length=120)
+    outcome = models.CharField(max_length=20, db_index=True)
+    registration_id = models.CharField(max_length=80, blank=True, default="")
+    applicant_id = models.CharField(max_length=80, blank=True, default="")
+    account_id = models.CharField(max_length=80, blank=True, default="")
+    actor_user_id = models.CharField(max_length=80, blank=True, default="")
+    actor_role = models.CharField(max_length=80, blank=True, default="")
+    session_id = models.CharField(max_length=120, blank=True, default="")
+    ip_address = models.CharField(max_length=45, blank=True, default="")
+    user_agent = models.CharField(max_length=512, blank=True, default="")
+    correlation_id = models.CharField(max_length=80, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["action", "outcome", "-created_at"]),
+            models.Index(fields=["registration_id"]),
+        ]
 
 
 class Step2VerificationConfiguration(models.Model):

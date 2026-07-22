@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { 
   Search, Filter, Eye, CheckCircle,
-  AlertTriangle, RefreshCw, Edit3, MoreVertical,
-  User, MapPin, 
-  ExternalLink, ShieldAlert,
+  AlertTriangle, RefreshCw,
+  User,
+  ExternalLink,
   Check, X, AlertCircle, ChevronDown, 
   Download, Clock,
-  ChevronRight,
   FileText, CheckCircle2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -224,7 +223,10 @@ export default function ReviewApplications() {
                 const matchesSearch = `${app.firstName} ${app.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || app.id.toLowerCase().includes(searchTerm.toLowerCase());
                 const matchesStatus = statusFilter === 'ALL' || app.status === statusFilter;
                 return matchesSearch && matchesStatus;
-              }).map((app) => (
+              }).map((app) => {
+                const isDecisionFinal = ['ACCEPTED', 'APPROVED', 'REJECTED'].includes(app.status);
+
+                return (
                 <tr key={app.id} className="hover:bg-philsa-bg/40 transition-colors group">
                   <td className="px-8 py-5">
                     <div className="flex items-center gap-4">
@@ -269,24 +271,30 @@ export default function ReviewApplications() {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button 
-                         onClick={() => handleOpenAction(app, 'APPROVE')}
-                         className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-100 shadow-sm cursor-pointer"
-                         title="Approve Application"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => setSelectedApp(app)}
-                        className="p-2 text-philsa-gray hover:bg-philsa-bg rounded-lg transition-colors border border-philsa-border shadow-sm cursor-pointer"
-                        title="More Actions"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
+                      {!isDecisionFinal && (
+                        <>
+                          <button 
+                             onClick={() => handleOpenAction(app, 'APPROVE')}
+                             className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-100 shadow-sm cursor-pointer"
+                             title="Approve Application"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleOpenAction(app, 'FRAUD')}
+                            className="p-2 text-philsa-red hover:bg-red-50 rounded-lg transition-colors border border-red-100 shadow-sm cursor-pointer"
+                            title="Reject Application"
+                            aria-label="Reject Application"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -493,26 +501,6 @@ export default function ReviewApplications() {
         )}
 
       </AnimatePresence>
-
-      {/* Row Actions Menu */}
-      {selectedApp && !activeModal && (
-        <div className="fixed inset-0 z-40 bg-black/5" onClick={() => setSelectedApp(null)}>
-           <motion.div 
-             initial={{ opacity: 0, scale: 0.95 }}
-             animate={{ opacity: 1, scale: 1 }}
-             className="absolute bg-white border border-philsa-border rounded-3xl shadow-[0_32px_64px_-16px_rgba(30,41,59,0.25)] p-3 w-72 space-y-1.5 z-50"
-             style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
-             onClick={e => e.stopPropagation()}
-           >
-              <ActionItem icon={Eye} label="View Full Application" onClick={() => handleOpenView(selectedApp)} />
-              <div className="h-px bg-philsa-bg mx-2" />
-              <ActionItem icon={CheckCircle} label="Approve Application" onClick={() => handleOpenAction(selectedApp, 'APPROVE')} color="text-emerald-600" />
-              <ActionItem icon={MapPin} label="Reassign Center" onClick={() => handleOpenAction(selectedApp, 'REASSIGN')} color="text-purple-600" />
-              <ActionItem icon={Edit3} label="For Correction Request" onClick={() => handleOpenAction(selectedApp, 'CORRECTION')} color="text-amber-600" />
-              <ActionItem icon={ShieldAlert} label="For Rejection" onClick={() => handleOpenAction(selectedApp, 'FRAUD')} color="text-philsa-red" />
-           </motion.div>
-        </div>
-      )}
     </div>
   );
 }
@@ -597,19 +585,4 @@ function ModalWrapper({ title, children, onClose }: { title: string; children: R
   );
 }
 
-function ActionItem({ icon: Icon, label, onClick, color }: { icon: any; label: string; onClick: () => void; color?: string }) {
-  return (
-    <button 
-      onClick={onClick}
-      className={cn(
-        "w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-philsa-bg text-philsa-navy transition-all active:scale-95",
-        color
-      )}
-    >
-      <Icon className="w-4 h-4 shrink-0" />
-      <span className="text-[11px] font-black uppercase tracking-widest">{label}</span>
-      <ChevronRight className="w-3.5 h-3.5 ml-auto opacity-20" />
-    </button>
-  );
-}
 

@@ -45,7 +45,23 @@ def normalize_role(role: object) -> str | None:
 
 
 def get_user_role(user: object) -> str | None:
-    return normalize_role(getattr(user, "role", None))
+    role = normalize_role(getattr(user, "role", None))
+    if role is not None:
+        return role
+
+    try:
+        profile = getattr(user, "account_profile", None)
+    except Exception:
+        profile = None
+
+    profile_role = normalize_role(getattr(profile, "role", None))
+    if profile_role is not None:
+        return profile_role
+
+    if getattr(user, "is_superuser", False):
+        return PortalRole.SYSTEM_ADMIN.value
+
+    return None
 
 
 def get_security_tier(role: object) -> int | None:
