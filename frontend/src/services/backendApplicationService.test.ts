@@ -127,6 +127,34 @@ describe('BackendApplicationService', () => {
     );
   });
 
+  it('validates a manual selfie frame through the public face validation endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          faceDetected: true,
+          faceCount: 1,
+          confidence: 92,
+          boundingBox: { x: 10, y: 12, width: 100, height: 100 },
+          faceCovered: false,
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const frame = new File(['frame'], 'manual-frame.jpg', { type: 'image/jpeg' });
+
+    const result = await service.validateManualRegistrationSelfieFace(frame);
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/registration/identity/manual-selfie-face/',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+      }),
+    );
+  });
+
   it('surfaces selfie frame field validation errors', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(

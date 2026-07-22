@@ -228,6 +228,21 @@ class Step2ConfigurationEndpointTests(TestCase):
         self.assertEqual(response.data["checks"]["imageResolution"]["status"], "pass")
         self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
 
+    def test_manual_selfie_face_validation_endpoint_detects_face_without_token_or_storage(self):
+        registration = APIClient()
+        image = SimpleUploadedFile("manual-frame.jpg", b"\xff\xd8\xff\xe0manual-frame-image", content_type="image/jpeg")
+
+        response = registration.post(
+            reverse("applications:registration-manual-identity-selfie-face"),
+            {"file": image},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["faceDetected"])
+        self.assertEqual(response.data["faceCount"], 1)
+        self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
+
     @override_settings(STEP1_SELFIE_FACE_PROVIDER="unavailable")
     def test_selfie_is_rejected_when_server_face_validation_is_unavailable(self):
         registration = APIClient()
@@ -337,7 +352,7 @@ class Step2ConfigurationEndpointTests(TestCase):
             format="json",
         )
         self.assertEqual(verified.status_code, 200)
-        _, encoded = cv2.imencode(".jpg", np.full((640, 640, 3), 120, dtype=np.uint8))
+        _, encoded = cv2.imencode(".jpg", np.full((240, 320, 3), 120, dtype=np.uint8))
         image = SimpleUploadedFile("small-selfie.jpg", encoded.tobytes(), content_type="image/jpeg")
 
         with patch("cv2.CascadeClassifier", return_value=FakeDetector()):
@@ -350,4 +365,94 @@ class Step2ConfigurationEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
-        self.assertIn("at least 720 x 720", response.data["error"]["fields"]["file"][0])
+        self.assertIn("at least 480 x 360", response.data["error"]["fields"]["file"][0])
+
+    @override_settings(STEP1_SELFIE_FACE_PROVIDER="opencv")
+    def test_opencv_selfie_validation_accepts_standard_webcam_resolution(self):
+        import cv2
+        import numpy as np
+
+        class FakeDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return np.array([[220, 120, 150, 150]])
+
+        registration = APIClient()
+        verified = registration.post(
+            reverse("applications:verify-lrn"),
+            {
+                "lrn": "123456789012",
+                "verificationCategory": "email",
+                "verificationValue": "lovely@yopmail.com",
+            },
+            format="json",
+        )
+        self.assertEqual(verified.status_code, 200)
+        rng = np.random.default_rng(123)
+        image_data = np.clip(
+            np.full((480, 640, 3), 120, dtype=np.int16) + rng.normal(0, 18, (480, 640, 3)),
+            0,
+            255,
+        ).astype(np.uint8)
+        cv2.rectangle(image_data, (255, 175), (335, 255), (45, 45, 45), 3)
+        _, encoded = cv2.imencode(".jpg", image_data)
+        image = SimpleUploadedFile("webcam-selfie.jpg", encoded.tobytes(), content_type="image/jpeg")
+
+        with patch("cv2.CascadeClassifier", return_value=FakeDetector()):
+            response = registration.post(
+                reverse("applications:registration-identity-selfie-face"),
+                {"file": image},
+                format="multipart",
+                HTTP_X_REGISTRATION_TOKEN=verified.data["verificationToken"],
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["faceCount"], 1)
+        self.assertEqual(response.data["checks"]["imageResolution"]["status"], "pass")
+
+    @override_settings(STEP1_SELFIE_FACE_PROVIDER="opencv")
+    def test_opencv_selfie_validation_accepts_portrait_webcam_resolution(self):
+        import cv2
+        import numpy as np
+
+        class FakeDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return np.array([[105, 155, 150, 150]])
+
+        registration = APIClient()
+        verified = registration.post(
+            reverse("applications:verify-lrn"),
+            {
+                "lrn": "123456789012",
+                "verificationCategory": "email",
+                "verificationValue": "lovely@yopmail.com",
+            },
+            format="json",
+        )
+        self.assertEqual(verified.status_code, 200)
+        rng = np.random.default_rng(456)
+        image_data = np.clip(
+            np.full((640, 480, 3), 120, dtype=np.int16) + rng.normal(0, 18, (640, 480, 3)),
+            0,
+            255,
+        ).astype(np.uint8)
+        cv2.rectangle(image_data, (140, 190), (220, 270), (45, 45, 45), 3)
+        _, encoded = cv2.imencode(".jpg", image_data)
+        image = SimpleUploadedFile("portrait-webcam-selfie.jpg", encoded.tobytes(), content_type="image/jpeg")
+
+        with patch("cv2.CascadeClassifier", return_value=FakeDetector()):
+            response = registration.post(
+                reverse("applications:registration-identity-selfie-face"),
+                {"file": image},
+                format="multipart",
+                HTTP_X_REGISTRATION_TOKEN=verified.data["verificationToken"],
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["faceCount"], 1)
+        self.assertEqual(response.data["checks"]["imageResolution"]["status"], "pass")

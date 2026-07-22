@@ -20,4 +20,5 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {  # noqa: F405
     "auth_sensitive": "1000/min",
     "auth_recovery": "1000/hour",
     "registration_lrn_verify": "1000/min",
+    "registration_selfie_face": "1000/min",
 }

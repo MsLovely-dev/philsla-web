@@ -26,7 +26,8 @@ from .serializers import (
 )
 from .services import (active_step2_configuration, create_draft, decide_application,
                        decide_step2_manual_review, get_step2_verification, serialize_step2, submit_application,
-                       update_draft, upload_step2_media, validate_registration_selfie_face, verify_lrn)
+                       update_draft, upload_step2_media, validate_manual_registration_selfie_face,
+                       validate_registration_selfie_face, verify_lrn)
 from .models import IdentityMediaType, Step2VerificationConfiguration
 from .throttling import DeviceScopedRateThrottle
 
@@ -105,6 +106,8 @@ class RegistrationIdentitySelfieFaceValidationView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
     parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [DeviceScopedRateThrottle]
+    throttle_scope = "registration_selfie_face"
 
     @staticmethod
     def token(request) -> str:
@@ -114,6 +117,19 @@ class RegistrationIdentitySelfieFaceValidationView(APIView):
         serializer = RegistrationIdentitySelfieFaceValidationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(validate_registration_selfie_face(token=self.token(request), uploaded_file=serializer.validated_data["file"]))
+
+
+class RegistrationManualIdentitySelfieFaceValidationView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [DeviceScopedRateThrottle]
+    throttle_scope = "registration_selfie_face"
+
+    def post(self, request) -> Response:
+        serializer = RegistrationIdentitySelfieFaceValidationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(validate_manual_registration_selfie_face(uploaded_file=serializer.validated_data["file"]))
 
 
 class Step2ConfigurationAdminView(APIView):

@@ -111,8 +111,20 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
 
         x, y, width, height = [int(value) for value in faces[0]]
         image_height, image_width = gray.shape[:2]
+        short_side = min(image_width, image_height)
+        long_side = max(image_width, image_height)
+        min_short_side = min(settings.STEP1_SELFIE_MIN_IMAGE_WIDTH, settings.STEP1_SELFIE_MIN_IMAGE_HEIGHT)
+        min_long_side = max(settings.STEP1_SELFIE_MIN_IMAGE_WIDTH, settings.STEP1_SELFIE_MIN_IMAGE_HEIGHT)
         face_size_ratio = max(width / float(image_width), height / float(image_height))
-        blur_score = float(cv2.Laplacian(original_gray, cv2.CV_64F).var())
+        padding_x = int(width * 0.2)
+        padding_y = int(height * 0.2)
+        crop_x1 = max(0, x - padding_x)
+        crop_y1 = max(0, y - padding_y)
+        crop_x2 = min(image_width, x + width + padding_x)
+        crop_y2 = min(image_height, y + height + padding_y)
+        face_gray = original_gray[crop_y1:crop_y2, crop_x1:crop_x2]
+        blur_source = face_gray if face_gray.size else original_gray
+        blur_score = float(cv2.Laplacian(blur_source, cv2.CV_64F).var())
         brightness_score = float(original_gray.mean())
         center_x = x + (width / 2)
         center_y = y + (height / 2)
@@ -141,13 +153,15 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
             "imageResolution": {
                 "status": "pass",
                 "value": {"width": image_width, "height": image_height},
-                "threshold": f">= {settings.STEP1_SELFIE_MIN_IMAGE_WIDTH} x {settings.STEP1_SELFIE_MIN_IMAGE_HEIGHT}",
+                "threshold": f">= {min_long_side} x {min_short_side} in either orientation",
             },
         }
 
-        if image_width < settings.STEP1_SELFIE_MIN_IMAGE_WIDTH or image_height < settings.STEP1_SELFIE_MIN_IMAGE_HEIGHT:
+        if short_side < min_short_side or long_side < min_long_side:
             checks["imageResolution"]["status"] = "fail"
-            raise SelfieFaceValidationFailed("Selfie image resolution must be at least 720 x 720 pixels.")
+            raise SelfieFaceValidationFailed(
+                f"Selfie image resolution must be at least {min_long_side} x {min_short_side} pixels in either orientation."
+            )
 
         if face_size_ratio < settings.STEP1_SELFIE_MIN_FACE_RATIO:
             checks["faceSize"]["status"] = "fail"

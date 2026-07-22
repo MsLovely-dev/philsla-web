@@ -183,6 +183,17 @@ export class BackendApplicationService {
     });
   }
 
+  async validateManualRegistrationSelfieFace(
+    file: File,
+  ): Promise<ServiceResult<RegistrationSelfieFaceValidationResult>> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.apiClient.request<RegistrationSelfieFaceValidationResult>('/api/v1/applications/registration/identity/manual-selfie-face/', {
+      method: 'POST',
+      body,
+    });
+  }
+
   async listStep2Configurations(): Promise<ServiceResult<Array<Step2Configuration & { id: number; status: boolean }>>> {
     return this.apiClient.request<Array<Step2Configuration & { id: number; status: boolean }>>('/api/v1/applications/configuration/step-2/');
   }

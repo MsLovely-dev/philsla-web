@@ -212,8 +212,7 @@ def _validated_image_content_type(uploaded_file) -> str:
     return content_type
 
 
-def validate_registration_selfie_face(*, token: str, uploaded_file) -> dict:
-    get_step2_verification(token)
+def _validate_selfie_face_image(*, uploaded_file) -> dict:
     content_type = _validated_image_content_type(uploaded_file)
     try:
         result = get_selfie_face_validator().validate(image_file=uploaded_file, content_type=content_type)
@@ -229,6 +228,15 @@ def validate_registration_selfie_face(*, token: str, uploaded_file) -> dict:
         "faceCovered": result.face_covered,
         "checks": result.checks,
     }
+
+
+def validate_registration_selfie_face(*, token: str, uploaded_file) -> dict:
+    get_step2_verification(token)
+    return _validate_selfie_face_image(uploaded_file=uploaded_file)
+
+
+def validate_manual_registration_selfie_face(*, uploaded_file) -> dict:
+    return _validate_selfie_face_image(uploaded_file=uploaded_file)
 
 
 def _normalized_identity_text(value: str) -> str:

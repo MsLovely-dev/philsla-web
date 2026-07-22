@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
+import { FaceDetector as MediaPipeFaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
 import { usePhilSA } from '../PhilSAContext';
 import { useMockData } from '../services/mockService';
 import {
@@ -65,12 +66,19 @@ const PWD_ID_MAX_BYTES = 5 * 1024 * 1024;
 const PWD_ID_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
 const SELFIE_CAPTURE_COUNTDOWN_SECONDS = 5;
 const SELFIE_FRAME_CHECK_INTERVAL_MS = 1000;
-const CAPTURED_SELFIE_SAMPLE_SIZE = 128;
+const CAPTURED_SELFIE_RETAKE_MESSAGE = 'Retake photo. Photo must be clear.';
+const MEDIAPIPE_TASKS_VERSION = '0.10.35';
+const MEDIAPIPE_WASM_BASE_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_TASKS_VERSION}/wasm`;
+const MEDIAPIPE_FACE_DETECTOR_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite';
 
 type LrnVerificationCategory = 'email' | 'birthday' | 'student_id' | 'mobile' | 'mother_name';
 type SelfieFrameAnalysis = {
   faceDetected: boolean;
   faceCount: number;
+  faceCentered: boolean;
+  faceTooSmall: boolean;
+  facePartlyOutside: boolean;
+  usedMediaPipe: boolean;
 };
 type CapturedSelfieValidationStatus = 'idle' | 'checking' | 'passed' | 'failed';
 type CapturedSelfieValidationResult = {
@@ -395,6 +403,9 @@ export default function StudentApplication() {
   const selfieCountdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const selfieAutoCaptureRef = useRef(false);
   const selfieDetectionRequestInFlightRef = useRef(false);
+  const mediaPipeFaceDetectorRef = useRef<MediaPipeFaceDetector | null>(null);
+  const mediaPipeFaceDetectorPromiseRef = useRef<Promise<MediaPipeFaceDetector | null> | null>(null);
+  const mediaPipeFaceDetectorUnavailableRef = useRef(false);
   const pwdIdPreviewUrlRef = useRef('');
   const [candidateId, setCandidateId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -1164,18 +1175,110 @@ export default function StudentApplication() {
     setSelfieCountdown(null);
   }
 
+  function emptySelfieFrameAnalysis(): SelfieFrameAnalysis {
+    return {
+      faceDetected: false,
+      faceCount: 0,
+      faceCentered: false,
+      faceTooSmall: false,
+      facePartlyOutside: false,
+      usedMediaPipe: false,
+    };
+  }
+
+  async function getMediaPipeFaceDetector() {
+    if (mediaPipeFaceDetectorRef.current) {
+      return mediaPipeFaceDetectorRef.current;
+    }
+    if (mediaPipeFaceDetectorUnavailableRef.current) {
+      return null;
+    }
+    if (!mediaPipeFaceDetectorPromiseRef.current) {
+      mediaPipeFaceDetectorPromiseRef.current = FilesetResolver
+        .forVisionTasks(MEDIAPIPE_WASM_BASE_URL)
+        .then(wasmFileset => MediaPipeFaceDetector.createFromOptions(wasmFileset, {
+          baseOptions: {
+            modelAssetPath: MEDIAPIPE_FACE_DETECTOR_MODEL_URL,
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          minDetectionConfidence: 0.55,
+          minSuppressionThreshold: 0.3,
+        }))
+        .then(detector => {
+          mediaPipeFaceDetectorRef.current = detector;
+          return detector;
+        })
+        .catch(() => {
+          mediaPipeFaceDetectorUnavailableRef.current = true;
+          return null;
+        });
+    }
+    return mediaPipeFaceDetectorPromiseRef.current;
+  }
+
+  function analyzeFaceBox(box: { originX: number; originY: number; width: number; height: number }, width: number, height: number, usedMediaPipe: boolean): SelfieFrameAnalysis {
+    const faceCenterX = box.originX + box.width / 2;
+    const faceCenterY = box.originY + box.height / 2;
+    const horizontalOffset = Math.abs(faceCenterX - width / 2) / width;
+    const verticalOffset = Math.abs(faceCenterY - height / 2) / height;
+    const faceWidthRatio = box.width / width;
+    const faceHeightRatio = box.height / height;
+    const marginX = width * 0.04;
+    const marginY = height * 0.04;
+
+    return {
+      faceDetected: true,
+      faceCount: 1,
+      faceCentered: horizontalOffset <= 0.18 && verticalOffset <= 0.2,
+      faceTooSmall: Math.max(faceWidthRatio, faceHeightRatio) < 0.2,
+      facePartlyOutside: box.originX < marginX || box.originY < marginY || box.originX + box.width > width - marginX || box.originY + box.height > height - marginY,
+      usedMediaPipe,
+    };
+  }
+
   async function analyzeSelfieFrame(source: CanvasImageSource, width: number, height: number): Promise<SelfieFrameAnalysis> {
-    const FaceDetectorConstructor = (window as any).FaceDetector;
     if (width === 0 || height === 0) {
-      return { faceDetected: false, faceCount: 0 };
+      return emptySelfieFrameAnalysis();
+    }
+
+    const mediaPipeDetector = await getMediaPipeFaceDetector();
+    if (mediaPipeDetector) {
+      const result = mediaPipeDetector.detectForVideo(source, performance.now());
+      const faces = result.detections ?? [];
+      if (faces.length === 0) {
+        return { ...emptySelfieFrameAnalysis(), usedMediaPipe: true };
+      }
+      if (faces.length > 1) {
+        return {
+          ...emptySelfieFrameAnalysis(),
+          faceDetected: true,
+          faceCount: faces.length,
+          usedMediaPipe: true,
+        };
+      }
+      const boundingBox = faces[0]?.boundingBox;
+      if (boundingBox) {
+        return analyzeFaceBox(boundingBox, width, height, true);
+      }
     }
 
     let detectedFaceCount: number | null = null;
+    const FaceDetectorConstructor = (window as any).FaceDetector;
     if (FaceDetectorConstructor) {
       try {
         const detector = new FaceDetectorConstructor({ fastMode: true, maxDetectedFaces: 2 });
         const faces = await detector.detect(source);
         detectedFaceCount = Array.isArray(faces) ? faces.length : 0;
+        if (detectedFaceCount === 1 && faces[0]?.boundingBox) {
+          const box = faces[0].boundingBox;
+          return analyzeFaceBox(
+            { originX: box.x, originY: box.y, width: box.width, height: box.height },
+            width,
+            height,
+            false,
+          );
+        }
       } catch {
         // Fall through to the frame heuristic below.
       }
@@ -1246,176 +1349,37 @@ export default function StudentApplication() {
     const faceDetected = detectedFaceCount === null ? heuristicFaceDetected : detectedFaceCount > 0 && heuristicFaceDetected;
     const faceCount = detectedFaceCount ?? (heuristicFaceDetected ? 1 : 0);
 
-    return { faceDetected, faceCount };
-  }
-
-  async function loadCapturedSelfieImage(file: File): Promise<CanvasImageSource & { width: number; height: number; close?: () => void }> {
-    if ('createImageBitmap' in window) {
-      return createImageBitmap(file);
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    try {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = objectUrl;
-      await image.decode();
-      return image;
-    } finally {
-      URL.revokeObjectURL(objectUrl);
-    }
+    return {
+      ...emptySelfieFrameAnalysis(),
+      faceDetected,
+      faceCount,
+      faceCentered: faceDetected && faceCount === 1,
+    };
   }
 
   async function validateCapturedSelfieFile(file: File): Promise<CapturedSelfieValidationResult> {
-    const image = await loadCapturedSelfieImage(file);
-    try {
-      const FaceDetectorConstructor = (window as any).FaceDetector;
-      let detectedFaceCount: number | null = null;
-      let faceBox: { x: number; y: number; width: number; height: number } | null = null;
+    const result = verificationPath === 'lrn' && lrnVerificationToken
+      ? await backendApplicationService.validateRegistrationSelfieFace(lrnVerificationToken, file)
+      : await backendApplicationService.validateManualRegistrationSelfieFace(file);
 
-      if (FaceDetectorConstructor) {
-        try {
-          const detector = new FaceDetectorConstructor({ fastMode: false, maxDetectedFaces: 3 });
-          const faces = await detector.detect(image);
-          detectedFaceCount = Array.isArray(faces) ? faces.length : 0;
-          if (detectedFaceCount === 1 && faces[0]?.boundingBox) {
-            const box = faces[0].boundingBox;
-            faceBox = { x: box.x, y: box.y, width: box.width, height: box.height };
-          }
-        } catch {
-          detectedFaceCount = null;
-        }
-      }
-
-      if (detectedFaceCount === 0) {
-        return { passed: false, message: 'Retake photo. No face was detected in the captured selfie.' };
-      }
-      if (detectedFaceCount !== null && detectedFaceCount > 1) {
-        return { passed: false, message: 'Retake photo. Multiple faces were detected. Keep only your face inside the frame.' };
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = CAPTURED_SELFIE_SAMPLE_SIZE;
-      canvas.height = CAPTURED_SELFIE_SAMPLE_SIZE;
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      if (!context) {
-        return { passed: false, message: 'Retake photo. The captured selfie could not be validated.' };
-      }
-
-      const fallbackBox = {
-        x: image.width * 0.25,
-        y: image.height * 0.14,
-        width: image.width * 0.5,
-        height: image.height * 0.72,
+    if (result.ok === false) {
+      return {
+        passed: false,
+        message: result.error.message ? `Retake photo. ${result.error.message}` : CAPTURED_SELFIE_RETAKE_MESSAGE,
       };
-      const crop = faceBox ?? fallbackBox;
-      const paddingX = crop.width * 0.08;
-      const paddingY = crop.height * 0.08;
-      const sourceX = Math.max(0, crop.x - paddingX);
-      const sourceY = Math.max(0, crop.y - paddingY);
-      const sourceWidth = Math.min(image.width - sourceX, crop.width + paddingX * 2);
-      const sourceHeight = Math.min(image.height - sourceY, crop.height + paddingY * 2);
-
-      context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
-
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      const lumaValues: number[] = [];
-      let totalLuma = 0;
-      let totalLumaSquared = 0;
-      let skinLikePixels = 0;
-      let edgePixels = 0;
-      let leftEyeDarkPixels = 0;
-      let leftEyePixels = 0;
-      let rightEyeDarkPixels = 0;
-      let rightEyePixels = 0;
-      let noseDetailPixels = 0;
-      let nosePixels = 0;
-      let mouthDarkPixels = 0;
-      let mouthPixels = 0;
-
-      for (let y = 0; y < canvas.height; y += 1) {
-        for (let x = 0; x < canvas.width; x += 1) {
-          const index = (y * canvas.width + x) * 4;
-          const r = pixels[index];
-          const g = pixels[index + 1];
-          const b = pixels[index + 2];
-          const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-          const max = Math.max(r, g, b);
-          const min = Math.min(r, g, b);
-          const chroma = max - min;
-          const isSkinLike = r > 45 && g > 30 && b > 18 && chroma > 10 && r >= g * 0.88 && r >= b * 1.04;
-          const isDarkDetail = luma < 100 && chroma > 7;
-
-          lumaValues.push(luma);
-          totalLuma += luma;
-          totalLumaSquared += luma * luma;
-          if (isSkinLike) skinLikePixels += 1;
-
-          if (x > 0 && y > 0) {
-            const previousLuma = lumaValues[(y - 1) * canvas.width + (x - 1)];
-            if (Math.abs(luma - previousLuma) > 18) edgePixels += 1;
-          }
-
-          const inLeftEye = x >= 26 && x <= 55 && y >= 28 && y <= 50;
-          const inRightEye = x >= 73 && x <= 102 && y >= 28 && y <= 50;
-          const inNose = x >= 48 && x <= 80 && y >= 48 && y <= 78;
-          const inMouth = x >= 42 && x <= 86 && y >= 78 && y <= 104;
-
-          if (inLeftEye) {
-            leftEyePixels += 1;
-            if (isDarkDetail) leftEyeDarkPixels += 1;
-          }
-          if (inRightEye) {
-            rightEyePixels += 1;
-            if (isDarkDetail) rightEyeDarkPixels += 1;
-          }
-          if (inNose) {
-            nosePixels += 1;
-            if (isDarkDetail || chroma > 18) noseDetailPixels += 1;
-          }
-          if (inMouth) {
-            mouthPixels += 1;
-            if (isDarkDetail || (r > g * 1.06 && r > b * 1.12 && luma < 145)) mouthDarkPixels += 1;
-          }
-        }
-      }
-
-      const sampledPixels = canvas.width * canvas.height;
-      const averageLuma = totalLuma / sampledPixels;
-      const variance = totalLumaSquared / sampledPixels - averageLuma * averageLuma;
-      const skinRatio = skinLikePixels / sampledPixels;
-      const edgeRatio = edgePixels / sampledPixels;
-      const leftEyeDarkRatio = leftEyePixels > 0 ? leftEyeDarkPixels / leftEyePixels : 0;
-      const rightEyeDarkRatio = rightEyePixels > 0 ? rightEyeDarkPixels / rightEyePixels : 0;
-      const noseDetailRatio = nosePixels > 0 ? noseDetailPixels / nosePixels : 0;
-      const mouthDarkRatio = mouthPixels > 0 ? mouthDarkPixels / mouthPixels : 0;
-      const heuristicFaceDetected = averageLuma > 35 && averageLuma < 235 && variance > 120 && edgeRatio > 0.02 && skinRatio > 0.02 && skinRatio < 0.72;
-
-      if (!heuristicFaceDetected) {
-        return { passed: false, message: 'Retake photo. No clear whole face was detected in the captured selfie.' };
-      }
-      if (variance < 180 || edgeRatio < 0.026) {
-        return { passed: false, message: 'Retake photo. The captured selfie is blurry. Keep the camera steady and try again.' };
-      }
-      if (leftEyeDarkRatio < 0.012 || rightEyeDarkRatio < 0.012) {
-        return { passed: false, message: 'Retake photo. Both eyes must be visible and not covered.' };
-      }
-      if (noseDetailRatio < 0.12) {
-        return { passed: false, message: 'Retake photo. Your nose must be visible and not covered.' };
-      }
-      if (mouthDarkRatio < 0.01) {
-        return { passed: false, message: 'Retake photo. Your lips must be visible and not covered.' };
-      }
-
-      return { passed: true, message: 'Captured selfie passed. You can use this photo.' };
-    } finally {
-      image.close?.();
     }
+
+    return {
+      passed: result.data.faceDetected && result.data.faceCount === 1 && !result.data.faceCovered,
+      message: result.data.faceDetected && result.data.faceCount === 1 && !result.data.faceCovered
+        ? 'Captured selfie passed. You can use this photo.'
+        : CAPTURED_SELFIE_RETAKE_MESSAGE,
+    };
   }
 
   async function detectFaceInFrame(source: CanvasImageSource, width: number, height: number) {
     const analysis = await analyzeSelfieFrame(source, width, height);
-    return analysis.faceDetected && analysis.faceCount === 1;
+    return analysis.faceDetected && analysis.faceCount === 1 && analysis.faceCentered && !analysis.faceTooSmall && !analysis.facePartlyOutside;
   }
 
   async function detectManualSelfieFace() {
@@ -1426,11 +1390,17 @@ export default function StudentApplication() {
 
   async function validateSelfieFrameForAutoCapture() {
     const video = selfieVideoRef.current;
-    const analysis = video ? await analyzeSelfieFrame(video, video.videoWidth, video.videoHeight) : { faceDetected: false, faceCount: 0 };
+    const analysis = video ? await analyzeSelfieFrame(video, video.videoWidth, video.videoHeight) : emptySelfieFrameAnalysis();
     return {
-      isSingleFaceStable: analysis.faceDetected && analysis.faceCount === 1,
+      isSingleFaceStable: analysis.faceDetected && analysis.faceCount === 1 && analysis.faceCentered && !analysis.faceTooSmall && !analysis.facePartlyOutside,
       message: analysis.faceCount > 1
         ? 'Multiple faces detected. Keep only your face inside the capture frame.'
+        : analysis.faceTooSmall
+          ? 'Move closer to the camera so your face is clear.'
+          : analysis.facePartlyOutside
+            ? 'Keep your whole face inside the capture frame.'
+            : analysis.faceDetected && !analysis.faceCentered
+              ? 'Center your face in the camera frame.'
         : analysis.faceDetected
           ? ''
           : 'Face lost. Countdown reset. Keep your face centered to start capture again.',
@@ -1499,7 +1469,7 @@ export default function StudentApplication() {
     } catch {
       setSelfieFaceValidated(false);
       setCapturedSelfieValidationStatus('failed');
-      setBiometricSelfieMessage('Retake photo. The captured selfie could not be validated.');
+      setBiometricSelfieMessage(CAPTURED_SELFIE_RETAKE_MESSAGE);
     }
   }
 
@@ -1683,7 +1653,7 @@ export default function StudentApplication() {
     if (!selfieFaceValidated || capturedSelfieValidationStatus !== 'passed') {
       setBiometricSelfieStatus('reviewing');
       setCapturedSelfieValidationStatus('failed');
-      setBiometricSelfieMessage('Retake photo. The full face must be clear, sharp, and not covered before this photo can be used.');
+      setBiometricSelfieMessage(CAPTURED_SELFIE_RETAKE_MESSAGE);
       return;
     }
     if (verificationPath === 'manual') {
@@ -1770,6 +1740,8 @@ export default function StudentApplication() {
         URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
         pwdIdPreviewUrlRef.current = '';
       }
+      mediaPipeFaceDetectorRef.current?.close();
+      mediaPipeFaceDetectorRef.current = null;
     };
   }, []);
 
