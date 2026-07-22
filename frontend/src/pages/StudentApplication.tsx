@@ -146,6 +146,7 @@ const LRN_VERIFICATION_CATEGORIES: Array<{
 const LRN_COOLDOWN_SECONDS = 900;
 const LRN_COOLDOWN_STORAGE_KEY = 'philsa_lrn_cooldown_expires_at';
 const REGISTRATION_DRAFT_STORAGE_KEY = 'philsa_student_registration_session_draft';
+const REGISTRATION_SESSION_ID_STORAGE_KEY = 'philsa_student_registration_session_id';
 const REGISTRATION_SESSION_DURATION_SECONDS = 1800;
 
 type RegistrationSessionDraft = {
@@ -186,6 +187,19 @@ function readRegistrationSessionDraft(): RegistrationSessionDraft | null {
 
 function clearRegistrationSessionDraft() {
   sessionStorage.removeItem(REGISTRATION_DRAFT_STORAGE_KEY);
+}
+
+function getOrCreateRegistrationSessionId() {
+  const existing = sessionStorage.getItem(REGISTRATION_SESSION_ID_STORAGE_KEY);
+  if (existing) return existing;
+  const generated = `REG-SESSION-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  sessionStorage.setItem(REGISTRATION_SESSION_ID_STORAGE_KEY, generated);
+  return generated;
+}
+
+function createNewRegistrationSessionId() {
+  sessionStorage.removeItem(REGISTRATION_SESSION_ID_STORAGE_KEY);
+  return getOrCreateRegistrationSessionId();
 }
 
 function getStoredLrnCooldownSecondsLeft() {
@@ -283,6 +297,7 @@ function getEmptyRegistrationFormData() {
 export default function StudentApplication() {
   const isPwaMode = new URLSearchParams(window.location.search).get('pwa') === 'true';
   const { user, addAuditLog, inputModules, addTicket } = usePhilSA();
+  const registrationSessionIdRef = useRef(getOrCreateRegistrationSessionId());
   const restoredSessionDraftRef = useRef<RegistrationSessionDraft | null>(readRegistrationSessionDraft());
   const restoredSessionDraft = restoredSessionDraftRef.current;
   const isRegActive = inputModules?.find(m => m.id === 'student_reg')?.isActive !== false;
@@ -451,6 +466,21 @@ export default function StudentApplication() {
   const [showLrnCooldownModal, setShowLrnCooldownModal] = useState(initialLrnCooldownSecondsLeft > 0);
   const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(initialLrnCooldownSecondsLeft || LRN_COOLDOWN_SECONDS);
 
+  const getRegistrationAuditBase = () => ({
+    sessionId: registrationSessionIdRef.current,
+    timestamp: new Date().toISOString(),
+    ipAddress: 'TBD_BACKEND_CAPTURE',
+    deviceBrowser: navigator.userAgent,
+  });
+
+  const addRegistrationAuditLog = (auditEvent: string, data: Record<string, unknown> = {}) => {
+    addAuditLog(`REGISTRATION_${auditEvent}`, JSON.stringify({
+      auditEvent,
+      ...getRegistrationAuditBase(),
+      ...data,
+    }));
+  };
+
   useEffect(() => {
     if (!showLrnCooldownModal) return undefined;
 
@@ -541,7 +571,6 @@ export default function StudentApplication() {
           clearInterval(interval);
           setIsSessionExpired(true);
           clearRegistrationSessionDraft();
-          addAuditLog('SESSION_TIMEOUT', `Student registration session expired due to 30-minute inactivity.`);
           return 0;
         }
         return prev - 1;
@@ -689,7 +718,8 @@ export default function StudentApplication() {
     setTicketAttachment('');
     setTicketFormErrors({});
     setIsTicketSubmitted(false);
-    addAuditLog('SESSION_RESTARTED', `Student registration session manually restarted.`);
+    registrationSessionIdRef.current = createNewRegistrationSessionId();
+    addAuditLog('SESSION_RESTARTED', 'Student registration session manually restarted.');
   };
 
   // Find user's existing application (if any)
@@ -1666,7 +1696,6 @@ export default function StudentApplication() {
       setSelfieFaceStatus('captured');
       setPendingSelfieFile(null);
       stopSelfieCamera();
-      addAuditLog('BIOMETRIC_SELFIE_CAPTURED', 'Student captured selfie during manual registration.');
       setErrors(prev => {
         const next = { ...prev };
         delete next.selfie;
@@ -1701,7 +1730,6 @@ export default function StudentApplication() {
       setSelfieFaceStatus('captured');
       setPendingSelfieFile(null);
       stopSelfieCamera();
-      addAuditLog('BIOMETRIC_SELFIE_CAPTURED', 'Student captured selfie after successful LRN identity verification.');
       setErrors(prev => {
         const next = { ...prev };
         delete next.selfie;
@@ -2023,6 +2051,7 @@ export default function StudentApplication() {
 
   const resetRegistrationFormAfterSubmit = () => {
     clearRegistrationSessionDraft();
+    registrationSessionIdRef.current = createNewRegistrationSessionId();
     if (pwdIdPreviewUrlRef.current) {
       URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
       pwdIdPreviewUrlRef.current = '';
@@ -2084,7 +2113,11 @@ export default function StudentApplication() {
         const withoutDuplicate = prev.filter(app => app.id !== submittedApplication.id);
         return [...withoutDuplicate, submittedApplication];
       });
-      addAuditLog('APPLICATION_SUBMITTED', `Candidate ${submittedApplication.id} submitted their application through the backend API.`);
+      addRegistrationAuditLog('SUBMITTED', {
+        registrationId: String(result.data.id ?? submittedApplication.id),
+        applicantId: submittedApplication.id,
+        accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
+      });
       setCandidateId(submittedApplication.id);
       resetRegistrationFormAfterSubmit();
       setIsSubmitted(true);
@@ -2104,7 +2137,11 @@ export default function StudentApplication() {
         };
         
         setApplications(prev => prev.map(a => a.id === myApp.id ? updatedApp : a));
-        addAuditLog('APPLICATION_RESUBMITTED', `Candidate ${myApp.id} resubmitted their application after correction.`);
+        addRegistrationAuditLog('SUBMITTED', {
+          registrationId: myApp.id,
+          applicantId: myApp.id,
+          accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
+        });
         setCandidateId(myApp.id);
         setIsSubmitting(false);
         resetRegistrationFormAfterSubmit();
@@ -2126,7 +2163,11 @@ export default function StudentApplication() {
       };
       
       setApplications(prev => [...prev, newApp]);
-      addAuditLog('APPLICATION_SUBMITTED', `Candidate ${newId} submitted their application.`);
+      addRegistrationAuditLog('SUBMITTED', {
+        registrationId: newId,
+        applicantId: newId,
+        accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
+      });
       setIsSubmitting(false);
       resetRegistrationFormAfterSubmit();
       setIsSubmitted(true);
@@ -2748,7 +2789,6 @@ export default function StudentApplication() {
               disabled={!privacyChecked}
               onClick={() => {
                 setShowPrivacyConsent(false);
-                addAuditLog('PRIVACY_POLICY_ACCEPTED', 'Student accepted the Data Privacy Consent Notice at entry.');
                 setVerificationPath(activeVerificationPath);
               }}
               className="flex-1 px-5 py-3 bg-[#00563F] hover:bg-[#00402E] disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all cursor-pointer text-center"
@@ -2817,7 +2857,6 @@ export default function StudentApplication() {
                 setTimeLeft(0);
                 setIsSessionExpired(true);
                 clearRegistrationSessionDraft();
-                addAuditLog('SESSION_TIMEOUT', `Student registration session expired due to simulated inactivity.`);
               }} 
               title="Test/Simulate 30-Minute Timeout"
               className="ml-2 text-[9px] bg-red-50 text-philsa-red hover:bg-philsa-red/10 px-1.5 py-0.5 rounded font-black uppercase transition-all border border-philsa-red/20 cursor-pointer"

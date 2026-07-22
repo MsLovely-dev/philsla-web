@@ -102,6 +102,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth_identifier": "20/min",
         "auth_sensitive": "10/min",
+        "auth_refresh": "120/min",
         "auth_recovery": "5/hour",
         "registration_lrn_verify": "20/min",
         "registration_selfie_face": "30/min",

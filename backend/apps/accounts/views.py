@@ -181,7 +181,7 @@ class RefreshTokenView(APIView):
     authentication_classes: list[type] = []
     permission_classes: list[type] = []
     throttle_classes = [AuthScopedRateThrottle]
-    throttle_scope = "auth_sensitive"
+    throttle_scope = "auth_refresh"
 
     def post(self, request) -> Response:
         issue = rotate_refresh_token(refresh_token=request.COOKIES.get("refreshToken"))

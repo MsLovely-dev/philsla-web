@@ -47,6 +47,7 @@ import ResultsPage from '../pages/ResultsPage';
 import ScoreManagement from '../pages/results/ScoreManagement';
 import ReportingMatrix from '../pages/results/ReportingMatrix';
 import ReviewerApplicationDetail from '../pages/reviewer/ReviewerApplicationDetail';
+import ReviewApplicationAuditLogs from '../pages/reviewer/ReviewApplicationAuditLogs';
 import ReviewApplications from '../pages/reviewer/ReviewApplications';
 import TestingCenterAvailability from '../pages/reviewer/TestingCenterAvailability';
 import StudentApplication from '../pages/StudentApplication';
@@ -104,6 +105,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/exam/live', element: <ExamDelivery />, access: 'exam' },
 
   { path: '/admin/reviewer/applications', element: <ReviewApplications />, access: 'protected', allowedRoles: REVIEWER },
+  { path: '/admin/reviewer/applications/audit', element: <ReviewApplicationAuditLogs />, access: 'protected', allowedRoles: REVIEWER },
   { path: '/admin/reviewer/applications/:id', element: <ReviewerApplicationDetail />, access: 'protected', allowedRoles: REVIEWER },
   { path: '/admin/reviewer/availability', element: <TestingCenterAvailability />, access: 'protected', allowedRoles: withSystemAdmin('ADMISSIONS_REVIEWER', 'UNIVERSITY_ADMIN') },
 

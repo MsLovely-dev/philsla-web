@@ -12,6 +12,18 @@ function LoadingScreen() {
   return <LoadingState title="Initializing PhilSA Environment" message="Preparing your secure prototype session." fullPage />;
 }
 
+function routeForRole(role: UserRole): string {
+  if (role === 'PROCTOR' || role === 'PROCTOR_ADMIN') return '/proctor/schedule';
+  if (role === 'TESTING_CENTER_ADMIN') return '/admin/center-control';
+  if (role === 'ADMISSIONS_REVIEWER') return '/admin/reviewer/applications';
+  if (role === 'UNIVERSITY_ADMIN') return '/admin/university/applications';
+  if (role === 'EXAM_ADMINISTRATOR') return '/admin/hub/overview';
+  if (role === 'SYSTEM_ADMIN') return '/admin/users';
+  if (role === 'GOVERNMENT' || role === 'EXECUTIVE') return '/admin/government';
+  if (role === 'TECH_SUPPORT') return '/support/dashboard';
+  return '/dashboard';
+}
+
 function MaintenanceGuard({ children }: { children: ReactNode }) {
   const { maintenanceModules } = usePhilSA();
   const { pathname } = useLocation();
@@ -59,6 +71,14 @@ function MaintenanceGuard({ children }: { children: ReactNode }) {
 }
 
 export function PublicRoute({ children }: { children: ReactNode }) {
+  const { user, isLoading } = usePhilSA();
+  const { pathname } = useLocation();
+
+  if (pathname === '/login') {
+    if (isLoading) return <LoadingScreen />;
+    if (user) return <Navigate to={routeForRole(user.role)} replace />;
+  }
+
   return <PublicLayout><MaintenanceGuard>{children}</MaintenanceGuard></PublicLayout>;
 }
 

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePhilSA } from '../PhilSAContext';
 import { useMockData } from '../services/mockService';
 import { User } from '../types';
-import { ExamRoute, ProtectedRoute } from './RouteGuards';
+import { ExamRoute, ProtectedRoute, PublicRoute } from './RouteGuards';
 
 vi.mock('../PhilSAContext', () => ({ usePhilSA: vi.fn() }));
 vi.mock('../services/mockService', () => ({ useMockData: vi.fn() }));
@@ -93,6 +93,40 @@ describe('ProtectedRoute', () => {
 
     expect(screen.getByRole('heading', { name: 'Unauthorized page' })).toBeInTheDocument();
     expect(screen.getByText('Location: /unauthorized')).toBeInTheDocument();
+  });
+});
+
+describe('PublicRoute', () => {
+  it('continues an authenticated backend session away from the login route', () => {
+    mockUsePhilSA.mockReturnValue({
+      user: admin,
+      isLoading: false,
+      maintenanceModules: [],
+    } as ReturnType<typeof usePhilSA>);
+
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <Routes>
+          <Route path="/login" element={<PublicRoute><h1>Login page</h1></PublicRoute>} />
+          <Route path="/admin/users" element={<><h1>User Management</h1><LocationProbe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument();
+    expect(screen.getByText('Location: /admin/users')).toBeInTheDocument();
+  });
+
+  it('keeps public non-login routes available to authenticated users', () => {
+    render(
+      <MemoryRouter initialEntries={['/register']}>
+        <Routes>
+          <Route path="/register" element={<PublicRoute><h1>Register page</h1></PublicRoute>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Register page' })).toBeInTheDocument();
   });
 });
 

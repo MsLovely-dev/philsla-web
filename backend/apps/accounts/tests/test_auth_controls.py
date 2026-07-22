@@ -43,6 +43,28 @@ class AuthThrottleTests(TestCase):
         self.assertEqual(second_response.status_code, 429)
         self.assertEqual(second_response.json()["error"]["code"], "THROTTLED")
 
+    def test_sensitive_login_throttle_does_not_block_session_refresh(self) -> None:
+        with override_settings(
+            CACHES=THROTTLE_TEST_CACHES,
+            REST_FRAMEWORK=throttled_rest_framework("auth_sensitive", "1/min"),
+        ):
+            first_response = self.client.post(
+                "/api/v1/auth/login/password/",
+                data={"pendingAuthToken": "expired", "password": "Password1!"},
+                content_type="application/json",
+            )
+            second_response = self.client.post(
+                "/api/v1/auth/login/password/",
+                data={"pendingAuthToken": "expired", "password": "Password1!"},
+                content_type="application/json",
+            )
+            refresh_response = self.client.post("/api/v1/auth/token/refresh/")
+
+        self.assertEqual(first_response.status_code, 401)
+        self.assertEqual(second_response.status_code, 429)
+        self.assertEqual(refresh_response.status_code, 401)
+        self.assertEqual(refresh_response.json()["error"]["code"], "AUTHENTICATION_FAILED")
+
 
 @override_settings(ROOT_URLCONF="config.urls")
 class AuthAuditBoundaryTests(TestCase):

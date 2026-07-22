@@ -81,7 +81,15 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard', roles: ['UNIVERSITY_ADMIN', 'SYSTEM_ADMIN', 'ADMISSIONS_REVIEWER'] },
       { icon: ShieldCheck, label: 'Device Requests', href: '/admin/maintenance/proctor-device', roles: ['SYSTEM_ADMIN'] },
-      { icon: ClipboardList, label: 'Review Applications', href: '/admin/reviewer/applications', roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN'] },
+      {
+        icon: ClipboardList,
+        label: 'Review Applications',
+        href: '/admin/reviewer/applications',
+        roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN'],
+        subItems: [
+          { label: 'Audit Logs', href: '/admin/reviewer/applications/audit', roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN'] },
+        ],
+      },
       { icon: Users, label: 'University Applications', href: '/admin/university/applications', roles: ['UNIVERSITY_ADMIN', 'SYSTEM_ADMIN'] },
       { icon: Users, label: 'Proctors', href: '/admin/proctors', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
       { icon: MapPin, label: 'Center Availability', href: '/admin/reviewer/availability', roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },

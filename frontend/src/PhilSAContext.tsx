@@ -89,6 +89,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
       // System Administration
       { id: '8', name: 'Device Requests', path: '/admin/maintenance/proctor-device', category: 'System Administration', status: 'ACTIVE' },
       { id: '9', name: 'Review Applications', path: '/admin/reviewer/applications', category: 'System Administration', status: 'ACTIVE' },
+      { id: '48', name: 'Review Application Audit Logs', path: '/admin/reviewer/applications/audit', category: 'System Administration', status: 'ACTIVE' },
       { id: '10', name: 'University Applications', path: '/admin/university/applications', category: 'System Administration', status: 'ACTIVE' },
       { id: '11', name: 'Proctors', path: '/admin/proctors', category: 'System Administration', status: 'ACTIVE' },
       { id: '12', name: 'Center Availability', path: '/admin/reviewer/availability', category: 'System Administration', status: 'ACTIVE' },
@@ -330,9 +331,11 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
       timestamp: new Date().toISOString(),
       role: user?.role || 'STUDENT',
     };
-    const updated = [newLog, ...auditLogs].slice(0, 500);
-    setAuditLogs(updated);
-    localStorage.setItem('philsa_logs', JSON.stringify(updated));
+    setAuditLogs(prev => {
+      const updated = [newLog, ...prev].slice(0, 500);
+      localStorage.setItem('philsa_logs', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const addTicket = (ticket: Omit<SupportTicket, 'id' | 'createdAt'>) => {
