@@ -8,7 +8,7 @@ import {
   mapBackendApplicationToFrontend,
   type StudentRegistrationFieldConfig,
 } from '../services/backendApplicationService';
-import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Pencil } from 'lucide-react';
+import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Pencil, Eye, Smile } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const SECTIONS = [
@@ -384,6 +384,8 @@ export default function StudentApplication() {
   const [pendingSelfieFile, setPendingSelfieFile] = useState<File | null>(null);
   const [capturedSelfieValidationStatus, setCapturedSelfieValidationStatus] = useState<CapturedSelfieValidationStatus>('idle');
   const [isSelfieCameraActive, setIsSelfieCameraActive] = useState(false);
+  const [showSelfieTutorial, setShowSelfieTutorial] = useState(false);
+  const [hasSeenSelfieTutorial, setHasSeenSelfieTutorial] = useState(false);
   const [selfieFaceStatus, setSelfieFaceStatus] = useState<'idle' | 'scanning' | 'detected' | 'counting' | 'captured'>('idle');
   const [selfieFaceValidated, setSelfieFaceValidated] = useState(false);
   const [selfieCountdown, setSelfieCountdown] = useState<number | null>(null);
@@ -1617,7 +1619,7 @@ export default function StudentApplication() {
     }, SELFIE_FRAME_CHECK_INTERVAL_MS);
   }
 
-  const startSelfieCamera = async () => {
+  const startSelfieCamera = async (options: { skipTutorial?: boolean } = {}) => {
     if (!isIdVerified && verificationPath !== 'manual') {
       setBiometricSelfieStatus('failed');
       setBiometricSelfieMessage('Verify your LRN details before starting live camera capture.');
@@ -1626,6 +1628,10 @@ export default function StudentApplication() {
     if (!navigator.mediaDevices?.getUserMedia) {
       setBiometricSelfieStatus('failed');
       setBiometricSelfieMessage('Live camera capture is not supported by this browser.');
+      return;
+    }
+    if (!options.skipTutorial && !hasSeenSelfieTutorial) {
+      setShowSelfieTutorial(true);
       return;
     }
 
@@ -4126,6 +4132,84 @@ export default function StudentApplication() {
          </div>
         )}
        </div>
+
+      {showSelfieTutorial && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 transition-all">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="max-w-2xl w-full bg-white rounded-[2rem] border border-slate-200 p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+          >
+            <div className="absolute top-0 left-0 w-full h-2 bg-emerald-600" />
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-philsa-navy text-white flex items-center justify-center shadow-md">
+                  <Camera className="w-7 h-7" />
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-philsa-navy tracking-tight">Selfie Capture Guide</h2>
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">
+                    Prepare before opening the camera
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 mb-6">
+              {[
+                { icon: Eye, title: 'Show both eyes', body: 'Remove anything covering your eyes. Look straight at the camera.' },
+                { icon: Smile, title: 'Show nose and lips', body: 'Keep your hand, mask, hair, and objects away from your face.' },
+                { icon: ShieldCheck, title: 'Use your whole face', body: 'Center your face in the frame with forehead, cheeks, nose, and mouth visible.' },
+                { icon: AlertCircle, title: 'Avoid blur', body: 'Hold still, use good lighting, and keep the camera lens clean.' },
+              ].map(item => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-white text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-philsa-navy">{item.title}</p>
+                        <p className="text-xs font-semibold text-slate-600 leading-relaxed mt-1">{item.body}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 mb-6">
+              <p className="text-xs font-bold text-amber-800 leading-relaxed">
+                After capture, the system will validate the photo. If your face is blurry, missing, or covered around the eyes, nose, or lips, you must retake it before Use This Photo becomes available.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSelfieTutorial(false)}
+                className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setHasSeenSelfieTutorial(true);
+                  setShowSelfieTutorial(false);
+                  void startSelfieCamera({ skipTutorial: true });
+                }}
+                className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <Camera className="w-4 h-4" />
+                Proceed to Camera
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {showLrnCooldownModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 transition-all">
