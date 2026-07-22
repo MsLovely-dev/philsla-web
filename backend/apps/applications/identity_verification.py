@@ -104,17 +104,29 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
             minNeighbors=6,
             minSize=(80, 80),
         )
-        if len(faces) == 0:
-            raise SelfieFaceValidationFailed("No frontal face was detected in the selfie.")
-        if len(faces) > 1:
-            raise SelfieFaceValidationFailed("Only one face is allowed in the selfie.")
-
-        x, y, width, height = [int(value) for value in faces[0]]
         image_height, image_width = gray.shape[:2]
         short_side = min(image_width, image_height)
         long_side = max(image_width, image_height)
         min_short_side = min(settings.STEP1_SELFIE_MIN_IMAGE_WIDTH, settings.STEP1_SELFIE_MIN_IMAGE_HEIGHT)
         min_long_side = max(settings.STEP1_SELFIE_MIN_IMAGE_WIDTH, settings.STEP1_SELFIE_MIN_IMAGE_HEIGHT)
+        min_face_ratio = settings.STEP1_SELFIE_MIN_FACE_RATIO
+        detected_faces = [[int(value) for value in face] for face in faces]
+
+        if len(detected_faces) == 0:
+            raise SelfieFaceValidationFailed("No frontal face was detected in the selfie.")
+
+        plausible_faces = [
+            face
+            for face in detected_faces
+            if max(face[2] / float(image_width), face[3] / float(image_height)) >= min_face_ratio * 0.75
+        ]
+        if not plausible_faces:
+            plausible_faces = [max(detected_faces, key=lambda face: face[2] * face[3])]
+
+        if len(plausible_faces) > 1:
+            raise SelfieFaceValidationFailed("Only one face is allowed in the selfie.")
+
+        x, y, width, height = plausible_faces[0]
         face_size_ratio = max(width / float(image_width), height / float(image_height))
         padding_x = int(width * 0.2)
         padding_y = int(height * 0.2)
@@ -126,6 +138,17 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
         blur_source = face_gray if face_gray.size else original_gray
         blur_score = float(cv2.Laplacian(blur_source, cv2.CV_64F).var())
         brightness_score = float(original_gray.mean())
+        eye_detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
+        detected_eye_count: int | None = None
+        if not eye_detector.empty():
+            upper_face_gray = original_gray[y : y + max(1, int(height * 0.6)), x : x + width]
+            eyes = eye_detector.detectMultiScale(
+                upper_face_gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(max(12, int(width * 0.08)), max(12, int(height * 0.08))),
+            )
+            detected_eye_count = len(eyes)
         center_x = x + (width / 2)
         center_y = y + (height / 2)
         horizontal_offset = abs(center_x - (image_width / 2)) / image_width
@@ -142,8 +165,16 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
                 "value": round(blur_score, 2),
                 "threshold": f"> {settings.STEP1_SELFIE_MIN_LAPLACIAN_VARIANCE:g}",
             },
-            "faceVisibility": {"status": "not_evaluated", "value": None, "threshold": ">= 90% landmarks visible"},
-            "eyesOpen": {"status": "not_evaluated", "value": None, "threshold": "both eyes detected"},
+            "faceVisibility": {
+                "status": "pass" if detected_eye_count is None or detected_eye_count >= 2 else "fail",
+                "value": None if detected_eye_count is None else detected_eye_count,
+                "threshold": "both eyes visible in upper face region",
+            },
+            "eyesOpen": {
+                "status": "pass" if detected_eye_count is None or detected_eye_count >= 2 else "fail",
+                "value": None if detected_eye_count is None else detected_eye_count >= 2,
+                "threshold": "both eyes detected",
+            },
             "faceOrientation": {"status": "not_evaluated", "value": None, "threshold": "+/-20 degrees yaw/pitch/roll"},
             "brightness": {
                 "status": "pass",
@@ -171,6 +202,8 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
             raise SelfieFaceValidationFailed("Move slightly back so your full face is visible.")
         if horizontal_offset > 0.22 or vertical_offset > 0.24:
             raise SelfieFaceValidationFailed("Center your face in the camera frame.")
+        if detected_eye_count is not None and detected_eye_count < 2:
+            raise SelfieFaceValidationFailed("Keep your full face visible and unobstructed.")
         if blur_score <= settings.STEP1_SELFIE_MIN_LAPLACIAN_VARIANCE:
             checks["blur"]["status"] = "fail"
             raise SelfieFaceValidationFailed("Selfie image is too blurry. Capture a sharper photo.")

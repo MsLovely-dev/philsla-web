@@ -413,6 +413,151 @@ class Step2ConfigurationEndpointTests(TestCase):
         self.assertEqual(response.data["checks"]["imageResolution"]["status"], "pass")
 
     @override_settings(STEP1_SELFIE_FACE_PROVIDER="opencv")
+    def test_opencv_selfie_validation_ignores_tiny_false_positive_face(self):
+        import sys
+        import types
+
+        class FakeImage:
+            def __init__(self, shape):
+                self.shape = shape
+                self.size = shape[0] * shape[1]
+
+            def __getitem__(self, key):
+                return self
+
+            def mean(self):
+                return 120.0
+
+        class FakeLaplacian:
+            def var(self):
+                return 100.0
+
+        class FakeDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return [[220, 120, 150, 150], [60, 40, 32, 32]]
+
+        fake_np = types.SimpleNamespace(
+            uint8="uint8",
+            frombuffer=lambda raw_bytes, dtype=None: raw_bytes,
+        )
+        fake_cv2 = types.SimpleNamespace(
+            IMREAD_COLOR=1,
+            COLOR_BGR2GRAY=6,
+            CV_64F=6,
+            data=types.SimpleNamespace(haarcascades=""),
+            imdecode=lambda *args, **kwargs: FakeImage((480, 640, 3)),
+            cvtColor=lambda image, *args, **kwargs: FakeImage(image.shape[:2]),
+            equalizeHist=lambda image: image,
+            CascadeClassifier=lambda *args, **kwargs: FakeDetector(),
+            Laplacian=lambda *args, **kwargs: FakeLaplacian(),
+        )
+
+        registration = APIClient()
+        verified = registration.post(
+            reverse("applications:verify-lrn"),
+            {
+                "lrn": "123456789012",
+                "verificationCategory": "email",
+                "verificationValue": "lovely@yopmail.com",
+            },
+            format="json",
+        )
+        self.assertEqual(verified.status_code, 200)
+        image = SimpleUploadedFile("webcam-selfie.jpg", b"\xff\xd8\xff\xe0fake-jpeg", content_type="image/jpeg")
+
+        with patch.dict(sys.modules, {"cv2": fake_cv2, "numpy": fake_np}):
+            response = registration.post(
+                reverse("applications:registration-identity-selfie-face"),
+                {"file": image},
+                format="multipart",
+                HTTP_X_REGISTRATION_TOKEN=verified.data["verificationToken"],
+            )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["faceCount"], 1)
+        self.assertEqual(response.data["boundingBox"]["width"], 150)
+
+    @override_settings(STEP1_SELFIE_FACE_PROVIDER="opencv")
+    def test_opencv_selfie_validation_rejects_covered_face(self):
+        import sys
+        import types
+
+        class FakeImage:
+            def __init__(self, shape):
+                self.shape = shape
+                self.size = shape[0] * shape[1]
+
+            def __getitem__(self, key):
+                return self
+
+            def mean(self):
+                return 120.0
+
+        class FakeLaplacian:
+            def var(self):
+                return 100.0
+
+        class FakeFaceDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return [[220, 120, 150, 150]]
+
+        class FakeEyeDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return [[20, 20, 24, 24]]
+
+        def cascade_classifier(path):
+            return FakeEyeDetector() if "eye" in path else FakeFaceDetector()
+
+        fake_np = types.SimpleNamespace(
+            uint8="uint8",
+            frombuffer=lambda raw_bytes, dtype=None: raw_bytes,
+        )
+        fake_cv2 = types.SimpleNamespace(
+            IMREAD_COLOR=1,
+            COLOR_BGR2GRAY=6,
+            CV_64F=6,
+            data=types.SimpleNamespace(haarcascades=""),
+            imdecode=lambda *args, **kwargs: FakeImage((480, 640, 3)),
+            cvtColor=lambda image, *args, **kwargs: FakeImage(image.shape[:2]),
+            equalizeHist=lambda image: image,
+            CascadeClassifier=cascade_classifier,
+            Laplacian=lambda *args, **kwargs: FakeLaplacian(),
+        )
+
+        registration = APIClient()
+        verified = registration.post(
+            reverse("applications:verify-lrn"),
+            {
+                "lrn": "123456789012",
+                "verificationCategory": "email",
+                "verificationValue": "lovely@yopmail.com",
+            },
+            format="json",
+        )
+        self.assertEqual(verified.status_code, 200)
+        image = SimpleUploadedFile("covered-selfie.jpg", b"\xff\xd8\xff\xe0fake-jpeg", content_type="image/jpeg")
+
+        with patch.dict(sys.modules, {"cv2": fake_cv2, "numpy": fake_np}):
+            response = registration.post(
+                reverse("applications:registration-identity-selfie-face"),
+                {"file": image},
+                format="multipart",
+                HTTP_X_REGISTRATION_TOKEN=verified.data["verificationToken"],
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("full face visible", response.data["error"]["fields"]["file"][0])
+
+    @override_settings(STEP1_SELFIE_FACE_PROVIDER="opencv")
     def test_opencv_selfie_validation_accepts_portrait_webcam_resolution(self):
         import cv2
         import numpy as np
