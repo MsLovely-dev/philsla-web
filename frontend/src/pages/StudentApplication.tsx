@@ -3116,6 +3116,21 @@ export default function StudentApplication() {
                                 playsInline
                                 muted
                               />
+                              {isSelfieCameraActive && (
+                                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                                  <div className={cn(
+                                    "relative h-[72%] max-h-[78%] min-h-[52%] aspect-[3/4] rounded-[50%] border-2 shadow-[0_0_0_999px_rgba(15,23,42,0.18)]",
+                                    selfieFaceStatus === 'detected' || selfieFaceStatus === 'counting'
+                                      ? "border-emerald-300/95"
+                                      : "border-white/90"
+                                  )}>
+                                    <div className="absolute left-[20%] right-[20%] top-[38%] border-t border-dashed border-white/70" />
+                                    <div className="absolute left-1/2 top-[38%] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80" />
+                                    <div className="absolute bottom-[16%] left-1/2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-white/70" />
+                                    <div className="absolute -inset-1 rounded-[50%] border border-white/35" />
+                                  </div>
+                                </div>
+                              )}
                               {!isSelfieCameraActive && capturedSelfiePreview && (
                                 <>
                                   <img
@@ -3136,7 +3151,7 @@ export default function StudentApplication() {
                                 </div>
                               )}
                               {isSelfieCameraActive && (
-                                <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
+                                <div className="absolute inset-x-0 bottom-0 z-20 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
                                   <p className="text-[10px] font-black uppercase tracking-widest text-white">
                                     {selfieCountdown !== null
                                       ? `Hold still. Auto capture in ${selfieCountdown} seconds`
@@ -3517,6 +3532,21 @@ export default function StudentApplication() {
                                 playsInline
                                 muted
                               />
+                              {isSelfieCameraActive && (
+                                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                                  <div className={cn(
+                                    "relative h-[72%] max-h-[78%] min-h-[52%] aspect-[3/4] rounded-[50%] border-2 shadow-[0_0_0_999px_rgba(15,23,42,0.18)]",
+                                    selfieFaceStatus === 'detected' || selfieFaceStatus === 'counting'
+                                      ? "border-emerald-300/95"
+                                      : "border-white/90"
+                                  )}>
+                                    <div className="absolute left-[20%] right-[20%] top-[38%] border-t border-dashed border-white/70" />
+                                    <div className="absolute left-1/2 top-[38%] h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/80" />
+                                    <div className="absolute bottom-[16%] left-1/2 h-1.5 w-12 -translate-x-1/2 rounded-full bg-white/70" />
+                                    <div className="absolute -inset-1 rounded-[50%] border border-white/35" />
+                                  </div>
+                                </div>
+                              )}
                               {!isSelfieCameraActive && capturedSelfiePreview && (
                                 <>
                                   <img
@@ -3537,7 +3567,7 @@ export default function StudentApplication() {
                                 </div>
                               )}
                               {isSelfieCameraActive && (
-                                <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
+                                <div className="absolute inset-x-0 bottom-0 z-20 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
                                   <p className="text-[10px] font-black uppercase tracking-widest text-white">
                                     {selfieCountdown !== null
                                       ? `Hold still. Auto capture in ${selfieCountdown} seconds`
