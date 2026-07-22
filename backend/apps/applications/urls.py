@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     ApplicationCreateView,
     ApplicationDetailView,
+    ApplicationIdentityMediaView,
     ApplicationReviewerDecisionView,
     ApplicationReviewQueueView,
     ApplicationSubmitView,
@@ -26,6 +27,7 @@ urlpatterns = [
     path("review-queue/", ApplicationReviewQueueView.as_view(), name="review-queue"),
     path("", ApplicationCreateView.as_view(), name="create"),
     path("<uuid:application_id>/review-decision/", ApplicationReviewerDecisionView.as_view(), name="review-decision"),
+    path("<uuid:application_id>/identity-media/<str:media_type>/", ApplicationIdentityMediaView.as_view(), name="identity-media"),
     path("<uuid:application_id>/", ApplicationDetailView.as_view(), name="detail"),
     path("<uuid:application_id>/submit/", ApplicationSubmitView.as_view(), name="submit"),
 ]

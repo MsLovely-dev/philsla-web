@@ -1,3 +1,4 @@
+from django.urls import reverse
 from rest_framework import serializers
 
 from apps.accounts.serializers import validate_password_policy
@@ -13,6 +14,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     coursePreferences = serializers.JSONField(source="course_preferences", required=False)
     reviewStep = serializers.JSONField(source="review_step", required=False)
     lrnProfile = serializers.SerializerMethodField()
+    photoUrl = serializers.SerializerMethodField()
     submittedAt = serializers.DateTimeField(source="submitted_at", read_only=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
@@ -22,15 +24,32 @@ class ApplicationSerializer(serializers.ModelSerializer):
         model = StudentApplication
         fields = (
             "id", "status", "personal", "address", "school", "coursePreferences",
-            "reviewStep", "lrnProfile", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
+            "reviewStep", "lrnProfile", "photoUrl", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
         )
-        read_only_fields = ("id", "status", "lrnProfile", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
+        read_only_fields = ("id", "status", "lrnProfile", "photoUrl", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
 
     def get_lrnProfile(self, obj):
         verification = getattr(obj, "step2_verification", None)
         if verification is None:
             return {}
         return verification.lrn_profile or {}
+
+    def get_photoUrl(self, obj):
+        verification = getattr(obj, "step2_verification", None)
+        if verification is None:
+            return ""
+        media = verification.media.filter(media_type=IdentityMediaType.SELFIE).first()
+        if media is None:
+            media = verification.media.filter(media_type=IdentityMediaType.STUDENT_ID_FRONT).first()
+        if media is None:
+            return ""
+
+        url = reverse(
+            "applications:identity-media",
+            kwargs={"application_id": obj.id, "media_type": media.media_type},
+        )
+        request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
 
     def validate_personal(self, value):
         if not isinstance(value, dict):

@@ -5,11 +5,18 @@ from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
-from apps.applications.models import ApplicationStatus, StudentApplication
+from apps.applications.models import (
+    ApplicationIdentityMedia,
+    ApplicationStatus,
+    IdentityMediaType,
+    Step2Verification,
+    StudentApplication,
+)
 
 
 def principal(user, role=PortalRole.STUDENT.value):
@@ -304,6 +311,44 @@ class ApplicationEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["id"], str(submitted.id))
+
+    def test_submitted_application_detail_includes_authorized_selfie_url(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        verification = Step2Verification.objects.create(
+            application=submitted,
+            token_digest="selfie-token-digest",
+            lrn="123456789012",
+            lrn_profile={},
+            configuration_snapshot={},
+            expires_at=timezone.now(),
+        )
+        ApplicationIdentityMedia.objects.create(
+            verification=verification,
+            media_type=IdentityMediaType.SELFIE,
+            file="private/registration-identity/selfie.jpg",
+            content_type="image/jpeg",
+            size=12,
+            sha256="abc123",
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:detail", args=[submitted.id]))
+
+        self.assertEqual(response.status_code, 200)
+        expected_path = reverse("applications:identity-media", args=[submitted.id, IdentityMediaType.SELFIE])
+        self.assertEqual(response.data["photoUrl"], f"http://testserver{expected_path}")
 
     def test_admissions_reviewer_cannot_read_draft_application_detail(self):
         draft = StudentApplication.objects.create(owner=self.user, status=ApplicationStatus.DRAFT)

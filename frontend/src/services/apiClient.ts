@@ -96,8 +96,8 @@ export class ApiClient {
 
   private mapError(response: Response, payload: ApiErrorEnvelope): ServiceFailure {
     const code = payload.error?.code ?? 'API_ERROR';
-    const message = payload.error?.message ?? 'The request could not be processed.';
     const fields = this.normalizeFieldErrors(payload.error?.fields);
+    const message = this.normalizeErrorMessage(payload.error?.message, fields);
     const meta = payload.error?.meta ?? {};
 
     const failure =
@@ -117,6 +117,17 @@ export class ApiClient {
     return Object.fromEntries(
       Object.entries(fields).map(([key, value]) => [key, Array.isArray(value) ? value.map(String) : [String(value)]]),
     );
+  }
+
+  private normalizeErrorMessage(message: string | undefined, fields: Record<string, string[]>): string {
+    const fallback = 'The request could not be processed.';
+    const genericValidationMessages = new Set(['Invalid input.', 'Invalid input']);
+    if (message && !genericValidationMessages.has(message)) {
+      return message;
+    }
+
+    const firstFieldError = Object.values(fields).flat().find(Boolean);
+    return firstFieldError ?? message ?? fallback;
   }
 }
 

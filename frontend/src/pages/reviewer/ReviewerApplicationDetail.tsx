@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  ArrowLeft, 
-  History, 
   Check, 
   X, 
   AlertCircle, 
@@ -10,14 +8,12 @@ import {
   CheckCircle,
   BookOpen,
   User,
-  Activity,
   ShieldCheck,
   MessageSquare,
   ChevronLeft,
   Fingerprint,
   Camera,
-  ShieldAlert,
-  AlertTriangle
+  ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { usePhilSA } from '../../PhilSAContext';
@@ -34,81 +30,29 @@ type ReviewApplicationRecord = Application & {
   history: Array<{ status: string; date: string; actor: string; notes?: string }>;
 };
 
-// Mock data based on ReviewApplications.tsx
-const MOCK_APP = {
-  id: 'REG-2026-8421',
-  firstName: 'MARCUS',
-  lastName: 'VALERIUS',
-  middleName: 'ANTONIUS',
-  suffix: 'JR',
-  dob: '2008-04-12',
-  birthPlace: 'Quezon City, Metro Manila',
-  nationality: 'Filipino',
-  gender: 'MALE',
-  email: 'm.valerius@cloud.edu.ph',
-  mobile: '+63 917 842 1002',
-  nationalId: '1004-9842-4128',
-  fatherName: 'AURELIUS VALERIUS',
-  fatherOccupation: 'PhilSA Engineer',
-  fatherMobile: '+63 917 121 2111',
-  fatherMonthlyIncome: '₱85,000',
-  motherName: 'SERENA ANTONIA-VALERIUS',
-  motherOccupation: 'Public School Teacher',
-  motherMobile: '+63 918 242 4323',
-  motherMonthlyIncome: '₱45,000',
-  guardianName: 'AURELIUS VALERIUS',
-  guardianOccupation: 'PhilSA Engineer',
-  guardianMobile: '+63 917 121 2111',
-  siblingsCount: 2,
-  region: 'National Capital Region (NCR)',
-  province: 'Metro Manila',
-  city: 'Quezon City',
-  barangay: 'Diliman',
-  street: '12 Laurel Street, Area 1',
-  zipCode: '1101',
-  currentRegion: 'National Capital Region (NCR)',
-  currentProvince: 'Metro Manila',
-  currentCity: 'Quezon City',
-  currentBarangay: 'Diliman',
-  currentStreet: '12 Laurel Street, Area 1',
-  currentZipCode: '1101',
-  lrn: '101234567890',
-  schoolId: '301234',
-  schoolName: 'Philippine Science High School - Main',
-  schoolAddress: 'Agham Road, Diliman, Quezon City',
-  academicTrack: 'STEM',
-  gradeLevel: 'Grade 12',
-  enrollmentStatus: 'Enrolled',
-  schoolYear: '2026-2027',
-  gwa: '96.5',
-  additionalHighPriorityFields: {},
-  universities: ['University of the Philippines Diliman', 'De La Salle University'],
-  courses: ['BS Computer Science', 'BS Mechanical Engineering'],
-  examScheduleId: 'NCR-APP26-AM',
-  center: 'National Capital Region Hub - Quezon City',
-  risk: 'LOW',
-  status: 'PENDING',
-  photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=facearea&facepad=2&w=256&h=256&q=80',
-  history: [
-    { date: '2026-05-01 14:32', status: 'SUBMITTED', actor: 'Marcus Valerius (Applicant)', notes: 'Initial registration payload received.' },
-    { date: '2026-05-02 09:15', status: 'VERIFIED', actor: 'System Core Audit', notes: 'PhilID confirmed against registry.' }
-  ],
-  duplicateScore: 12,
-  duplicateStatus: 'NO_RECORDS_FOUND'
-};
-
-const EMPTY_BACKEND_APP = {
-  ...MOCK_APP,
+const EMPTY_REVIEW_APPLICATION: ReviewApplicationRecord = {
   id: '',
+  userId: '',
+  status: 'PENDING',
+  submittedAt: undefined,
   firstName: '',
   middleName: '',
+  noMiddleName: false,
   lastName: '',
   suffix: '',
   dob: '',
   birthPlace: '',
+  nationality: '',
   gender: '',
   email: '',
   mobile: '',
+  nationalId: '',
+  region: '',
+  province: '',
+  city: '',
+  barangay: '',
+  street: '',
+  zipCode: '',
   lrn: '',
   schoolId: '',
   schoolName: '',
@@ -117,10 +61,14 @@ const EMPTY_BACKEND_APP = {
   gradeLevel: '',
   enrollmentStatus: '',
   schoolYear: '',
-  gwa: '',
+  gwa: 0,
   universities: [],
   courses: [],
+  examScheduleId: '',
   center: '',
+  risk: '',
+  duplicateScore: 0,
+  duplicateStatus: '',
   photoUrl: '',
   history: [],
   additionalHighPriorityFields: {},
@@ -141,7 +89,7 @@ export default function ReviewerApplicationDetail() {
   const [applicationError, setApplicationError] = useState('');
 
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'BIOMETRICS'>('DETAILS');
-  const [status, setStatus] = useState<string>(MOCK_APP.status);
+  const [status, setStatus] = useState<string>(EMPTY_REVIEW_APPLICATION.status);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
   const [correctionReason, setCorrectionReason] = useState('');
   const [remarks, setRemarks] = useState('');
@@ -173,7 +121,7 @@ export default function ReviewerApplicationDetail() {
   }, [id]);
 
   // Failed biometric/identity verification logs
-  const [verificationLogs, setVerificationLogs] = useState<Array<{
+  const [verificationLogs] = useState<Array<{
     id: string;
     type: 'LRN_VERIFICATION' | 'FACIAL_RECOGNITION' | 'SELFIE_VERIFICATION';
     status: 'FAILED';
@@ -184,7 +132,7 @@ export default function ReviewerApplicationDetail() {
     device: string;
     attemptsLeft: number;
   }>>(() => {
-    const saved = localStorage.getItem(`philsa_failed_verification_logs_${id || MOCK_APP.id}`);
+    const saved = localStorage.getItem(`philsa_failed_verification_logs_${id || 'unassigned'}`);
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -192,112 +140,12 @@ export default function ReviewerApplicationDetail() {
         console.error(e);
       }
     }
-    return [
-      {
-        id: 'LOG-V1',
-        type: 'LRN_VERIFICATION',
-        status: 'FAILED',
-        timestamp: '2026-05-01 10:14 AM',
-        code: 'DEPED_NAME_MISMATCH',
-        details: "LRN '901234567899' verification request rejected by DepEd registry API. Reason: Middle name mismatch. Expected: 'ANTONIUS', Received: 'ANTONIA'.",
-        ip: '192.168.1.102',
-        device: 'MacBook Air - Chrome v124',
-        attemptsLeft: 4
-      },
-      {
-        id: 'LOG-V2',
-        type: 'LRN_VERIFICATION',
-        status: 'FAILED',
-        timestamp: '2026-05-01 10:20 AM',
-        code: 'DEPED_RECORD_NOT_FOUND',
-        details: "LRN '123456789012' verification request rejected. Reason: Database response 404 - Record Not Found. LRN is unassigned or inactive in DepEd Learner Information System.",
-        ip: '192.168.1.102',
-        device: 'MacBook Air - Chrome v124',
-        attemptsLeft: 3
-      },
-      {
-        id: 'LOG-V3',
-        type: 'FACIAL_RECOGNITION',
-        status: 'FAILED',
-        timestamp: '2026-05-01 11:05 AM',
-        code: 'BIOMETRIC_LOW_LIGHT',
-        details: "Automated biometric multi-angle mapping failed. Low-light condition detected (Confidence score: 24%). Biometric landmarks did not align with LRN photo record.",
-        ip: '192.168.1.102',
-        device: 'FaceCam Ultra HD, SafeExamBrowser Hub',
-        attemptsLeft: 4
-      },
-      {
-        id: 'LOG-V4',
-        type: 'FACIAL_RECOGNITION',
-        status: 'FAILED',
-        timestamp: '2026-05-01 11:08 AM',
-        code: 'BIOMETRIC_LOW_CONFIDENCE',
-        details: "Biometric validation match rejected (Confidence score: 41%). Match threshold requires >= 85%. Possible occlusion detected (Glasses/Cap).",
-        ip: '192.168.1.102',
-        device: 'FaceCam Ultra HD, SafeExamBrowser Hub',
-        attemptsLeft: 3
-      },
-      {
-        id: 'LOG-V5',
-        type: 'SELFIE_VERIFICATION',
-        status: 'FAILED',
-        timestamp: '2026-05-01 11:32 AM',
-        code: 'SELFIE_UNRECOGNIZED',
-        details: "Manual Selfie verification match rejected by system logic. Face detected does not correspond to student profile picture or registered DepEd metadata image.",
-        ip: '192.168.1.102',
-        device: 'Integrated Webcam, Chrome Mobile v124',
-        attemptsLeft: 4
-      },
-      {
-        id: 'LOG-V6',
-        type: 'SELFIE_VERIFICATION',
-        status: 'FAILED',
-        timestamp: '2026-05-01 11:34 AM',
-        code: 'SELFIE_QUALITY_REJECT',
-        details: "Manual Selfie submission failed quality scan. High motion blur or camera shake detected. Unable to perform facial land-marking.",
-        ip: '192.168.1.102',
-        device: 'Integrated Webcam, Chrome Mobile v124',
-        attemptsLeft: 3
-      }
-    ];
+    return [];
   });
 
   const [logSearch, setLogSearch] = useState('');
   const [logFilterType, setLogFilterType] = useState<'ALL' | 'LRN_VERIFICATION' | 'FACIAL_RECOGNITION' | 'SELFIE_VERIFICATION'>('ALL');
 
-  const saveLogs = (newLogs: typeof verificationLogs) => {
-    setVerificationLogs(newLogs);
-    localStorage.setItem(`philsa_failed_verification_logs_${id || MOCK_APP.id}`, JSON.stringify(newLogs));
-  };
-
-  const simulateNewFailure = (type: 'LRN_VERIFICATION' | 'FACIAL_RECOGNITION' | 'SELFIE_VERIFICATION') => {
-    const codes = {
-      LRN_VERIFICATION: ['DEPED_TIMEOUT_ERR', 'DEPED_SERVICE_UNAVAILABLE', 'DEPED_AUTH_FAIL'],
-      FACIAL_RECOGNITION: ['BIOMETRIC_SPOOFING_DETECTED', 'BIOMETRIC_MULTIPLE_FACES_DETECTED', 'BIOMETRIC_NO_FACE'],
-      SELFIE_VERIFICATION: ['SELFIE_EXPIRED_SESSION', 'SELFIE_COOLDOWN_ACTIVE', 'SELFIE_TAMPER_DETECTED']
-    };
-    const details = {
-      LRN_VERIFICATION: "Registry sync timed out after 15 seconds. DepEd learner gateway did not respond within safety limits.",
-      FACIAL_RECOGNITION: "Anti-spoofing algorithm flagged attempt. Biometric liveness check failed (Static picture pattern detected).",
-      SELFIE_VERIFICATION: "Manual Selfie registration cancelled by timeout. Secure biometric integrity check was not finalized."
-    };
-    const selectedCode = codes[type][Math.floor(Math.random() * codes[type].length)];
-    const selectedDetails = details[type];
-    const newLog = {
-      id: `LOG-V${Date.now()}`,
-      type,
-      status: 'FAILED' as const,
-      timestamp: new Date().toLocaleString(),
-      code: selectedCode,
-      details: selectedDetails,
-      ip: '192.168.1.102',
-      device: 'Web Client Diagnostic Engine',
-      attemptsLeft: Math.max(1, Math.floor(Math.random() * 5))
-    };
-    const updated = [newLog, ...verificationLogs];
-    saveLogs(updated);
-    addAuditLog('SECURITY_LOG_SIMULATED', `Simulated new ${type} failure log: ${selectedCode}`);
-  };
   const [successConfig, setSuccessConfig] = useState<{
     isOpen: boolean;
     type: 'ACCEPTED' | 'REJECTED' | 'FOR_CORRECTION';
@@ -311,10 +159,11 @@ export default function ReviewerApplicationDetail() {
     message: ''
   });
 
-  const isBackendMode = import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend';
-  const currentApp = application ?? (isBackendMode ? EMPTY_BACKEND_APP : MOCK_APP);
+  const currentApp = application ?? EMPTY_REVIEW_APPLICATION;
   const displayId = id || currentApp.id;
   const fullName = `${currentApp.firstName} ${currentApp.lastName}`.trim();
+  const photoUrl = currentApp.photoUrl?.trim() ?? '';
+  const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
   const reviewerName = user ? `${user.firstName} ${user.lastName}`.trim() || user.email : '';
   const submittedDate = currentApp.history?.[0]?.date ?? ('submittedAt' in currentApp ? currentApp.submittedAt : undefined) ?? 'Pending timestamp';
   const registrationFields: Record<string, string> = currentApp.additionalHighPriorityFields ?? {};
@@ -332,6 +181,10 @@ export default function ReviewerApplicationDetail() {
     ['Accommodation Needed', registrationFields.pwdAccommodation],
   ];
   const pwdRegistrationFields: Array<[string, string]> = pwdRegistrationFieldCandidates.filter((field): field is [string, string] => Boolean(field[1]));
+
+  React.useEffect(() => {
+    setPhotoLoadFailed(false);
+  }, [photoUrl]);
 
   const filteredLogs = React.useMemo(() => {
     return verificationLogs.filter(log => {
@@ -417,12 +270,20 @@ export default function ReviewerApplicationDetail() {
         <div className="lg:col-span-1 space-y-6">
           <div className="card-philsa p-8 bg-white border-2 border-philsa-red/10">
             <div className="w-full aspect-square rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white mb-6 shadow-xl relative group ring-1 ring-philsa-border">
-               <img 
-                 referrerPolicy="no-referrer" 
-                 src={currentApp.photoUrl || '/logo.svg'} 
-                 alt="Student" 
-                 className="w-full h-full object-cover"
-               />
+               {photoUrl && !photoLoadFailed ? (
+                 <img
+                   referrerPolicy="no-referrer"
+                   src={photoUrl}
+                   alt={fullName ? `${fullName} applicant photo` : 'Student applicant photo'}
+                   className="w-full h-full object-cover"
+                   onError={() => setPhotoLoadFailed(true)}
+                 />
+               ) : (
+                 <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
+                   <User className="w-16 h-16" />
+                   <span className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">No Photo</span>
+                 </div>
+               )}
                {/* Removed Bio-ID and Biometric tags as requested */}
             </div>
             <h2 className="text-xl font-black text-philsa-navy tracking-tight leading-tight">{fullName || 'Student Applicant'}</h2>
@@ -924,4 +785,5 @@ function DataRow({ label, value }: { label: string, value: string }) {
     </div>
   );
 }
+
 

@@ -16,6 +16,8 @@ export interface LrnVerificationProfile {
   enrollmentStatus: string;
   schoolYear: string;
   identityVerified: boolean;
+  currentGrade12EnrollmentConfirmed?: boolean;
+  requiresAdmissionsReviewerAttention?: boolean;
 }
 
 export interface LrnVerificationResult {
@@ -81,6 +83,7 @@ export interface RegistrationSelfieFaceValidationResult {
   faceCount: number;
   confidence: number;
   boundingBox: { x: number; y: number; width: number; height: number };
+  faceCovered: boolean;
 }
 
 export interface BackendApplication {
@@ -92,6 +95,7 @@ export interface BackendApplication {
   coursePreferences: Record<string, unknown>[];
   reviewStep: Record<string, unknown>;
   lrnProfile?: Record<string, unknown>;
+  photoUrl?: string;
   examCycleId: string;
   version: number;
   submittedAt: string | null;
@@ -286,10 +290,12 @@ export function createBackendApplicationDraftInput(
     isPwd?: boolean;
     pwdType?: string;
     pwdCondition?: string;
+    pwdMultipleCategories?: Record<string, string>;
     pwdIdNumber?: string;
     pwdIdFilename?: string;
     pwdIdPreviewUrl?: string;
     pwdAccommodation?: string;
+    selfiePhotoUrl?: string;
   },
 ): BackendApplicationDraftInput {
   const additionalHighPriorityFields = {
@@ -298,6 +304,7 @@ export function createBackendApplicationDraftInput(
       isPwd: 'Yes',
       pwdType: formData.pwdType ?? '',
       pwdCondition: formData.pwdCondition ?? '',
+      pwdMultipleCategories: formData.pwdMultipleCategories ?? {},
       pwdIdNumber: formData.pwdIdNumber ?? '',
       pwdIdFilename: formData.pwdIdFilename ?? '',
       pwdAccommodation: formData.pwdAccommodation ?? '',
@@ -316,6 +323,7 @@ export function createBackendApplicationDraftInput(
       sex: formData.gender,
       email: formData.email,
       mobile: formData.mobile,
+      selfiePhotoUrl: formData.selfiePhotoUrl ?? '',
       additionalHighPriorityFields,
     },
     address: {
@@ -386,7 +394,7 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
     lastName: firstNonEmpty(lrnProfile.lastName, personal.lastName),
     suffix: firstNonEmpty(lrnProfile.extensionName, personal.extensionName, personal.suffix),
     dob: firstNonEmpty(lrnProfile.dateOfBirth, personal.dateOfBirth, personal.dob),
-    photoUrl: firstNonEmpty(personal.photoUrl, personal.selfiePhotoUrl, personal.studentIdPhotoUrl, application.reviewStep?.selfiePhotoUrl, application.reviewStep?.studentIdPhotoUrl),
+    photoUrl: firstNonEmpty(application.photoUrl, personal.photoUrl, personal.selfiePhotoUrl, personal.studentIdPhotoUrl, application.reviewStep?.selfiePhotoUrl, application.reviewStep?.studentIdPhotoUrl),
     birthPlace: firstNonEmpty(personal.birthPlace, personal.placeOfBirth),
     nationality: firstNonEmpty(personal.nationality) || 'Filipino',
     gender: firstNonEmpty(lrnProfile.sex, personal.sex, personal.gender),

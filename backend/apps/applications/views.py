@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.http import FileResponse, Http404
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -159,7 +160,7 @@ class ApplicationCreateView(APIView):
         )
         event = "application_submitted" if submit_on_create else "application_draft_created"
         record_application_event(event=event, outcome="success", request=request, user=owner)
-        return Response(ApplicationSerializer(application).data, status=status.HTTP_201_CREATED)
+        return Response(ApplicationSerializer(application, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class ApplicationReviewQueueView(APIView):
@@ -171,7 +172,7 @@ class ApplicationReviewQueueView(APIView):
             StudentApplication.objects.exclude(status__in=["DRAFT"])
             .order_by("-submitted_at", "-created_at")
         )
-        return Response(ApplicationSerializer(applications, many=True).data)
+        return Response(ApplicationSerializer(applications, many=True, context={"request": request}).data)
 
 
 class ApplicationReviewerDecisionView(APIView):
@@ -195,7 +196,7 @@ class ApplicationReviewerDecisionView(APIView):
             request=request,
             user=request.user,
         )
-        return Response(ApplicationSerializer(decided).data)
+        return Response(ApplicationSerializer(decided, context={"request": request}).data)
 
 
 class ApplicationDetailView(APIView):
@@ -214,7 +215,7 @@ class ApplicationDetailView(APIView):
         return application
 
     def get(self, request, application_id) -> Response:
-        return Response(ApplicationSerializer(self.get_object(request, application_id)).data)
+        return Response(ApplicationSerializer(self.get_object(request, application_id), context={"request": request}).data)
 
     def patch(self, request, application_id) -> Response:
         application = self.get_object(request, application_id)
@@ -223,7 +224,17 @@ class ApplicationDetailView(APIView):
         expected_version = serializer.validated_data.pop("version")
         updated = update_draft(application_id=application.id, owner=request.user, expected_version=expected_version, data=serializer.validated_data)
         record_application_event(event="application_draft_updated", outcome="success", request=request, user=request.user)
-        return Response(ApplicationSerializer(updated).data)
+        return Response(ApplicationSerializer(updated, context={"request": request}).data)
+
+
+class ApplicationIdentityMediaView(ApplicationDetailView):
+    def get(self, request, application_id, media_type) -> FileResponse:
+        application = self.get_object(request, application_id)
+        verification = getattr(application, "step2_verification", None)
+        media = None if verification is None else verification.media.filter(media_type=media_type).first()
+        if media is None or not media.file.storage.exists(media.file.name):
+            raise Http404("Application identity media not found.")
+        return FileResponse(media.file.open("rb"), content_type=media.content_type)
 
 
 class ApplicationSubmitView(APIView):
@@ -237,4 +248,4 @@ class ApplicationSubmitView(APIView):
         serializer.is_valid(raise_exception=True)
         submitted = submit_application(application_id=application.id, owner=request.user, expected_version=serializer.validated_data["version"])
         record_application_event(event="application_submitted", outcome="success", request=request, user=request.user)
-        return Response(ApplicationSerializer(submitted).data)
+        return Response(ApplicationSerializer(submitted, context={"request": request}).data)

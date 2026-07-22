@@ -125,6 +125,7 @@ class Step2ConfigurationEndpointTests(TestCase):
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.data["status"], "PASSED")
         self.assertEqual(first.data["results"]["serverFaceValidation"]["faceCount"], 1)
+        self.assertFalse(first.data["results"]["serverFaceValidation"]["faceCovered"])
 
         second = upload("selfie-second.jpg", b"\xff\xd8\xff\xe0second-image")
         self.assertEqual(second.status_code, 200)
@@ -221,6 +222,7 @@ class Step2ConfigurationEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["faceDetected"])
+        self.assertFalse(response.data["faceCovered"])
         self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
 
     @override_settings(STEP1_SELFIE_FACE_PROVIDER="unavailable")

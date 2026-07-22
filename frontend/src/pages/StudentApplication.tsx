@@ -60,8 +60,18 @@ const PWD_CATEGORY_OPTIONS = [
     conditions: ['Cancer', 'Rare disease'],
   },
 ];
+const PWD_MULTIPLE_CATEGORY = 'Multiple Disability';
+const PWD_ID_MAX_BYTES = 5 * 1024 * 1024;
+const PWD_ID_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
+const SELFIE_CAPTURE_COUNTDOWN_SECONDS = 5;
+const SELFIE_FRAME_CHECK_INTERVAL_MS = 1000;
 
 type LrnVerificationCategory = 'email' | 'birthday' | 'student_id' | 'mobile' | 'mother_name';
+type SelfieFrameAnalysis = {
+  faceDetected: boolean;
+  faceCount: number;
+  faceCovered: boolean;
+};
 type LrnVerificationReview = {
   lrn: string;
   categoryLabel: string;
@@ -182,6 +192,78 @@ function clearStoredLrnCooldown() {
   localStorage.removeItem(LRN_COOLDOWN_STORAGE_KEY);
 }
 
+function getEmptyRegistrationFormData() {
+  return {
+    firstName: '',
+    middleName: '',
+    noMiddleName: false,
+    lastName: '',
+    suffix: '',
+    dob: '',
+    birthPlace: '',
+    nationality: '',
+    gender: '',
+    email: '',
+    confirmEmail: '',
+    mobile: '',
+    nationalId: '',
+    password: '',
+    confirmPassword: '',
+    fatherName: '',
+    fatherOccupation: '',
+    fatherMobile: '',
+    motherName: '',
+    motherOccupation: '',
+    motherMobile: '',
+    guardianName: '',
+    guardianOccupation: '',
+    guardianMobile: '',
+    siblingsCount: 0,
+    fatherMonthlyIncome: '',
+    motherMonthlyIncome: '',
+    region: '',
+    province: '',
+    city: '',
+    barangay: '',
+    street: '',
+    zipCode: '',
+    currentRegion: '',
+    currentProvince: '',
+    currentCity: '',
+    currentBarangay: '',
+    currentStreet: '',
+    currentZipCode: '',
+    sameAsPermanent: false,
+    lrn: '',
+    schoolId: '',
+    schoolName: '',
+    schoolAddress: '',
+    academicTrack: '',
+    gradeLevel: '',
+    enrollmentStatus: '',
+    schoolYear: '',
+    customStep1Fields: {} as Record<string, string>,
+    isPwd: false,
+    pwdType: '',
+    pwdCondition: '',
+    pwdMultipleCategories: {} as Record<string, string>,
+    pwdIdNumber: '',
+    pwdIdFilename: '',
+    pwdIdPreviewUrl: '',
+    pwdAccommodation: '',
+    gwa: '',
+    birthCertificateFilename: '',
+    goodMoralFilename: '',
+    form137Filename: '',
+    form138Filename: '',
+    enrollmentCertFilename: '',
+    nationalIdFilename: '',
+    universities: [] as string[],
+    courses: [] as string[],
+    examScheduleId: '',
+  };
+}
+
 export default function StudentApplication() {
   const isPwaMode = new URLSearchParams(window.location.search).get('pwa') === 'true';
   const { user, addAuditLog, inputModules, addTicket } = usePhilSA();
@@ -267,6 +349,7 @@ export default function StudentApplication() {
     'Accommodation Needed': 'PWD Information',
   };
   const getStep1FieldSection = (fieldName: string) => getStep1FieldConfig(fieldName)?.fieldSection || defaultStep1FieldSections[fieldName] || 'Additional Information';
+  const isPwdStep1Field = (field: StudentRegistrationFieldConfig) => getStep1FieldSection(field.value) === 'PWD Information';
   const getStep1FieldOptions = (fieldName: string, fallback: string[]) => {
     const configured = getStep1FieldConfig(fieldName)?.optionValues;
     return Array.isArray(configured) && configured.length > 0 ? configured : fallback;
@@ -539,6 +622,7 @@ export default function StudentApplication() {
       isPwd: false,
       pwdType: '',
       pwdCondition: '',
+      pwdMultipleCategories: {},
       pwdIdNumber: '',
       pwdIdFilename: '',
       pwdIdPreviewUrl: '',
@@ -592,86 +676,13 @@ export default function StudentApplication() {
   delete restoredFormData.confirmPassword;
 
   const [formData, setFormData] = useState(() => ({
+    ...getEmptyRegistrationFormData(),
     firstName: user?.firstName || '',
-    middleName: '',
-    noMiddleName: false,
     lastName: user?.lastName || '',
-    suffix: '',
-    dob: '',
-    birthPlace: '',
     nationality: 'Filipino',
-    gender: '',
     email: user?.email || '',
-    confirmEmail: '',
-    mobile: '',
-    nationalId: '',
-    
-    // Security
-    password: '',
-    confirmPassword: '',
-    
-    // Socio-Economic
-    fatherName: '',
-    fatherOccupation: '',
-    fatherMobile: '',
-    motherName: '',
-    motherOccupation: '',
-    motherMobile: '',
-    guardianName: '',
-    guardianOccupation: '',
-    guardianMobile: '',
-    siblingsCount: 0,
-    fatherMonthlyIncome: '',
-    motherMonthlyIncome: '',
-
-    // Address - Permanent
-    region: '',
-    province: '',
-    city: '',
-    barangay: '',
-    street: '',
-    zipCode: '',
-
-    // Address - Current
-    currentRegion: '',
-    currentProvince: '',
-    currentCity: '',
-    currentBarangay: '',
-    currentStreet: '',
-    currentZipCode: '',
-    sameAsPermanent: false,
-
-    // Education
-    lrn: '',
-    schoolId: '',
-    schoolName: '',
-    schoolAddress: '',
-    academicTrack: '',
     gradeLevel: 'Grade 12',
-    enrollmentStatus: '',
     schoolYear: '2026-2027',
-    customStep1Fields: {} as Record<string, string>,
-    isPwd: false,
-    pwdType: '',
-    pwdCondition: '',
-    pwdIdNumber: '',
-    pwdIdFilename: '',
-    pwdIdPreviewUrl: '',
-    pwdAccommodation: '',
-    gwa: '',
-
-    // Uploads
-    birthCertificateFilename: '',
-    goodMoralFilename: '',
-    form137Filename: '',
-    form138Filename: '',
-    enrollmentCertFilename: '',
-    nationalIdFilename: '',
-
-    // Preferences
-    universities: [] as string[],
-    courses: [] as string[],
-    examScheduleId: '',
     ...restoredFormData,
   }));
 
@@ -757,6 +768,7 @@ export default function StudentApplication() {
 
   const activeStep1ManualFields = step1FieldConfigs
     .filter(isActiveConfig)
+    .filter(field => !isPwdStep1Field(field))
     .sort((a, b) => (a.display_order ?? 100) - (b.display_order ?? 100));
 
   const manualStep1Sections = ['Personal Information', 'School Information', 'Additional Information'];
@@ -828,6 +840,7 @@ export default function StudentApplication() {
       const next = { ...prev };
       delete next.pwdType;
       delete next.pwdCondition;
+      delete next.pwdMultipleCategories;
       delete next.pwdIdNumber;
       delete next.pwdIdFilename;
       delete next.pwdIdPreviewUrl;
@@ -849,6 +862,7 @@ export default function StudentApplication() {
       ...(enabled ? {} : {
         pwdType: '',
         pwdCondition: '',
+        pwdMultipleCategories: {},
         pwdIdNumber: '',
         pwdIdFilename: '',
         pwdIdPreviewUrl: '',
@@ -859,6 +873,9 @@ export default function StudentApplication() {
   };
 
   const activePwdTypes = getPwdFieldOptions('PWD Type', PWD_CATEGORY_OPTIONS.map(option => option.type));
+  const normalizedActivePwdTypes = activePwdTypes.includes(PWD_MULTIPLE_CATEGORY)
+    ? activePwdTypes
+    : [...activePwdTypes, PWD_MULTIPLE_CATEGORY];
   const configuredPwdConditions = getPwdFieldOptions('Condition', PWD_CATEGORY_OPTIONS.flatMap(option => option.conditions));
   const selectedPwdCategoryConditions = PWD_CATEGORY_OPTIONS.find(option => option.type === formData.pwdType)?.conditions ?? [];
   const filteredPwdConditions = selectedPwdCategoryConditions.filter(condition => configuredPwdConditions.includes(condition));
@@ -867,6 +884,7 @@ export default function StudentApplication() {
     : configuredPwdConditions;
 
   const isStep1FieldRequired = (field: StudentRegistrationFieldConfig) => field.priority === 'High Priority';
+  const selectedMultiplePwdEntries = Object.entries(formData.pwdMultipleCategories).filter(([, condition]) => condition.trim());
 
   const renderManualStep1Field = (field: StudentRegistrationFieldConfig) => {
     const formKey = step1FormFieldKeys[field.value];
@@ -1137,17 +1155,18 @@ export default function StudentApplication() {
     setSelfieCountdown(null);
   }
 
-  async function detectFaceInFrame(source: CanvasImageSource, width: number, height: number) {
+  async function analyzeSelfieFrame(source: CanvasImageSource, width: number, height: number): Promise<SelfieFrameAnalysis> {
     const FaceDetectorConstructor = (window as any).FaceDetector;
     if (width === 0 || height === 0) {
-      return false;
+      return { faceDetected: false, faceCount: 0, faceCovered: false };
     }
 
+    let detectedFaceCount: number | null = null;
     if (FaceDetectorConstructor) {
       try {
-        const detector = new FaceDetectorConstructor({ fastMode: true, maxDetectedFaces: 1 });
+        const detector = new FaceDetectorConstructor({ fastMode: true, maxDetectedFaces: 2 });
         const faces = await detector.detect(source);
-        return Array.isArray(faces) && faces.length > 0;
+        detectedFaceCount = Array.isArray(faces) ? faces.length : 0;
       } catch {
         // Fall through to the frame heuristic below.
       }
@@ -1158,7 +1177,9 @@ export default function StudentApplication() {
     canvas.width = sampleSize;
     canvas.height = sampleSize;
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return false;
+    if (!context) {
+      return { faceDetected: false, faceCount: 0, faceCovered: false };
+    }
 
     context.drawImage(
       source,
@@ -1177,6 +1198,19 @@ export default function StudentApplication() {
     let totalLumaSquared = 0;
     let skinLikePixels = 0;
     let edgePixels = 0;
+    let corePixels = 0;
+    let coreSkinLikePixels = 0;
+    let coreEdgePixels = 0;
+    let upperPixels = 0;
+    let upperSkinLikePixels = 0;
+    let upperDarkPixels = 0;
+    let lowerPixels = 0;
+    let lowerSkinLikePixels = 0;
+    let lowerDarkPixels = 0;
+    let lowerEdgePixels = 0;
+    let centerStripPixels = 0;
+    let centerStripSkinLikePixels = 0;
+    let centerStripDarkPixels = 0;
 
     for (let y = 0; y < sampleSize; y += 2) {
       for (let x = 0; x < sampleSize; x += 2) {
@@ -1190,7 +1224,15 @@ export default function StudentApplication() {
 
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
-        if (r > 45 && g > 30 && b > 18 && max - min > 12 && r >= g * 0.9 && r >= b * 1.05) {
+        const isSkinLike = r > 45 && g > 30 && b > 18 && max - min > 12 && r >= g * 0.9 && r >= b * 1.05;
+        const isDarkFeature = luma < 78 && max - min > 8;
+        const isCorePixel = x >= 28 && x <= 68 && y >= 20 && y <= 78;
+        const isUpperFacePixel = x >= 30 && x <= 66 && y >= 24 && y <= 46;
+        const isLowerFacePixel = x >= 24 && x <= 72 && y >= 46 && y <= 76;
+        const isCenterStripPixel = x >= 38 && x <= 58 && y >= 22 && y <= 74;
+        let hasEdge = false;
+
+        if (isSkinLike) {
           skinLikePixels += 1;
         }
 
@@ -1199,7 +1241,30 @@ export default function StudentApplication() {
           const previousLuma = 0.299 * pixels[previousIndex] + 0.587 * pixels[previousIndex + 1] + 0.114 * pixels[previousIndex + 2];
           if (Math.abs(luma - previousLuma) > 18) {
             edgePixels += 1;
+            hasEdge = true;
           }
+        }
+
+        if (isCorePixel) {
+          corePixels += 1;
+          if (isSkinLike) coreSkinLikePixels += 1;
+          if (hasEdge) coreEdgePixels += 1;
+        }
+        if (isUpperFacePixel) {
+          upperPixels += 1;
+          if (isSkinLike) upperSkinLikePixels += 1;
+          if (isDarkFeature) upperDarkPixels += 1;
+        }
+        if (isLowerFacePixel) {
+          lowerPixels += 1;
+          if (isSkinLike) lowerSkinLikePixels += 1;
+          if (isDarkFeature) lowerDarkPixels += 1;
+          if (hasEdge) lowerEdgePixels += 1;
+        }
+        if (isCenterStripPixel) {
+          centerStripPixels += 1;
+          if (isSkinLike) centerStripSkinLikePixels += 1;
+          if (isDarkFeature) centerStripDarkPixels += 1;
         }
       }
     }
@@ -1209,14 +1274,55 @@ export default function StudentApplication() {
     const variance = totalLumaSquared / sampledPixels - averageLuma * averageLuma;
     const skinRatio = skinLikePixels / sampledPixels;
     const edgeRatio = edgePixels / sampledPixels;
+    const coreSkinRatio = corePixels > 0 ? coreSkinLikePixels / corePixels : 0;
+    const coreEdgeRatio = corePixels > 0 ? coreEdgePixels / corePixels : 0;
+    const upperSkinRatio = upperPixels > 0 ? upperSkinLikePixels / upperPixels : 0;
+    const upperDarkRatio = upperPixels > 0 ? upperDarkPixels / upperPixels : 0;
+    const lowerSkinRatio = lowerPixels > 0 ? lowerSkinLikePixels / lowerPixels : 0;
+    const lowerDarkRatio = lowerPixels > 0 ? lowerDarkPixels / lowerPixels : 0;
+    const lowerEdgeRatio = lowerPixels > 0 ? lowerEdgePixels / lowerPixels : 0;
+    const centerStripSkinRatio = centerStripPixels > 0 ? centerStripSkinLikePixels / centerStripPixels : 0;
+    const centerStripDarkRatio = centerStripPixels > 0 ? centerStripDarkPixels / centerStripPixels : 0;
 
-    return averageLuma > 35 && averageLuma < 235 && variance > 180 && edgeRatio > 0.025 && skinRatio > 0.015 && skinRatio < 0.5;
+    const heuristicFaceDetected = averageLuma > 35 && averageLuma < 235 && variance > 180 && edgeRatio > 0.025 && skinRatio > 0.015 && skinRatio < 0.5;
+    const faceDetected = detectedFaceCount === null ? heuristicFaceDetected : detectedFaceCount > 0 && heuristicFaceDetected;
+    const faceCount = detectedFaceCount ?? (heuristicFaceDetected ? 1 : 0);
+    const faceCovered =
+      faceDetected &&
+      (
+        (coreSkinRatio > 0.58 && coreEdgeRatio < 0.04 && upperDarkRatio < 0.02) ||
+        (centerStripSkinRatio > 0.62 && centerStripDarkRatio < 0.012) ||
+        (lowerSkinRatio > 0.62 && lowerDarkRatio < 0.012 && lowerEdgeRatio < 0.055) ||
+        (upperSkinRatio > 0.65 && upperDarkRatio < 0.018)
+      );
+
+    return { faceDetected, faceCount, faceCovered };
+  }
+
+  async function detectFaceInFrame(source: CanvasImageSource, width: number, height: number) {
+    const analysis = await analyzeSelfieFrame(source, width, height);
+    return analysis.faceDetected && analysis.faceCount === 1 && !analysis.faceCovered;
   }
 
   async function detectManualSelfieFace() {
     const video = selfieVideoRef.current;
     if (!video) return false;
     return detectFaceInFrame(video, video.videoWidth, video.videoHeight);
+  }
+
+  async function validateSelfieFrameForAutoCapture() {
+    const video = selfieVideoRef.current;
+    const analysis = video ? await analyzeSelfieFrame(video, video.videoWidth, video.videoHeight) : { faceDetected: false, faceCount: 0, faceCovered: false };
+    return {
+      isSingleFaceStable: analysis.faceDetected && analysis.faceCount === 1 && !analysis.faceCovered,
+      message: analysis.faceCovered
+        ? 'Face is covered. Countdown reset. Keep your full face visible before capture can proceed.'
+        : analysis.faceCount > 1
+          ? 'Multiple faces detected. Keep only your face inside the capture frame.'
+          : analysis.faceDetected
+            ? ''
+            : 'Face lost. Countdown reset. Keep your face centered to start capture again.',
+    };
   }
 
   function stopSelfieCamera() {
@@ -1282,64 +1388,57 @@ export default function StudentApplication() {
       selfieDetectionIntervalRef.current = null;
     }
     setSelfieFaceStatus('counting');
-    let countdownValue = 3;
+    let countdownValue = SELFIE_CAPTURE_COUNTDOWN_SECONDS;
     setSelfieCountdown(countdownValue);
-    setBiometricSelfieMessage('Face detected. Hold still for automatic capture.');
+    setBiometricSelfieMessage('Single face detected. Hold still for automatic capture.');
     selfieCountdownIntervalRef.current = setInterval(() => {
-      if (verificationPath === 'manual') {
-        if (selfieDetectionRequestInFlightRef.current) return;
-        selfieDetectionRequestInFlightRef.current = true;
+      if (selfieDetectionRequestInFlightRef.current) return;
+      selfieDetectionRequestInFlightRef.current = true;
 
-        void detectManualSelfieFace().then(faceDetected => {
-          if (!faceDetected) {
-            if (selfieCountdownIntervalRef.current) {
-              clearInterval(selfieCountdownIntervalRef.current);
-              selfieCountdownIntervalRef.current = null;
-            }
-            selfieAutoCaptureRef.current = false;
-            setSelfieFaceValidated(false);
-            setSelfieCountdown(null);
-            setSelfieFaceStatus('scanning');
-            setBiometricSelfieMessage('Face lost. Countdown reset. Keep your face centered to start capture again.');
-            startSelfieFaceDetection();
-            return;
+      void validateSelfieFrameForAutoCapture().then(validation => {
+        if (!validation.isSingleFaceStable) {
+          if (selfieCountdownIntervalRef.current) {
+            clearInterval(selfieCountdownIntervalRef.current);
+            selfieCountdownIntervalRef.current = null;
           }
+          selfieAutoCaptureRef.current = false;
+          setSelfieFaceValidated(false);
+          setSelfieCountdown(null);
+          setSelfieFaceStatus('scanning');
+          setBiometricSelfieMessage(validation.message);
+          startSelfieFaceDetection();
+          return;
+        }
 
-          if (countdownValue <= 1) {
-            if (selfieCountdownIntervalRef.current) {
-              clearInterval(selfieCountdownIntervalRef.current);
-              selfieCountdownIntervalRef.current = null;
-            }
-            selfieAutoCaptureRef.current = true;
-            setSelfieFaceValidated(true);
-            setSelfieFaceStatus('captured');
-            setSelfieCountdown(null);
-            void captureSelfieFromCamera();
-            return;
-          }
-
-          countdownValue -= 1;
-          setSelfieCountdown(countdownValue);
-        }).finally(() => {
-          selfieDetectionRequestInFlightRef.current = false;
-        });
-        return;
-      }
-
-      setSelfieCountdown(prev => {
-        if (prev === null || prev <= 1) {
+        if (countdownValue <= 1) {
           if (selfieCountdownIntervalRef.current) {
             clearInterval(selfieCountdownIntervalRef.current);
             selfieCountdownIntervalRef.current = null;
           }
           selfieAutoCaptureRef.current = true;
+          setSelfieFaceValidated(true);
           setSelfieFaceStatus('captured');
+          setSelfieCountdown(null);
           void captureSelfieFromCamera();
-          return null;
+          return;
         }
-        return prev - 1;
+
+        countdownValue -= 1;
+        setSelfieCountdown(countdownValue);
+      }).catch(() => {
+        if (selfieCountdownIntervalRef.current) {
+          clearInterval(selfieCountdownIntervalRef.current);
+          selfieCountdownIntervalRef.current = null;
+        }
+        setSelfieFaceStatus('idle');
+        setBiometricSelfieStatus('failed');
+        setSelfieCountdown(null);
+        setBiometricSelfieMessage('Face detection failed. Please restart the camera and try again.');
+        stopSelfieCamera();
+      }).finally(() => {
+        selfieDetectionRequestInFlightRef.current = false;
       });
-    }, 1000);
+    }, SELFIE_FRAME_CHECK_INTERVAL_MS);
   }
 
   function startSelfieFaceDetection() {
@@ -1356,21 +1455,20 @@ export default function StudentApplication() {
         if (selfieDetectionRequestInFlightRef.current || selfieAutoCaptureRef.current) return;
         selfieDetectionRequestInFlightRef.current = true;
 
-        void detectManualSelfieFace().then(faceDetected => {
-          if (faceDetected && !selfieAutoCaptureRef.current) {
-            setSelfieFaceValidated(true);
+        void validateSelfieFrameForAutoCapture().then(validation => {
+          if (validation.isSingleFaceStable && !selfieAutoCaptureRef.current) {
             setSelfieFaceStatus('detected');
             startSelfieCountdown();
             return;
           }
-          if (!selfieAutoCaptureRef.current && selfieCountdown === null) {
+          if (!selfieAutoCaptureRef.current) {
             setSelfieFaceStatus('scanning');
-            setBiometricSelfieMessage('No face detected yet. Keep your face centered in the frame before capture can proceed.');
+            setBiometricSelfieMessage(validation.message);
           }
         }).finally(() => {
           selfieDetectionRequestInFlightRef.current = false;
         });
-      }, 1200);
+      }, SELFIE_FRAME_CHECK_INTERVAL_MS);
       return;
     }
 
@@ -1378,19 +1476,15 @@ export default function StudentApplication() {
       if (selfieDetectionRequestInFlightRef.current || selfieAutoCaptureRef.current) return;
       selfieDetectionRequestInFlightRef.current = true;
 
-      void createSelfieFileFromCamera({ updatePreview: false }).then(async file => {
-        if (!file) return;
-        const result = await backendApplicationService.validateRegistrationSelfieFace(lrnVerificationToken, file);
-        if (result.ok !== false && result.data.faceDetected && !selfieAutoCaptureRef.current) {
+      void validateSelfieFrameForAutoCapture().then(validation => {
+        if (validation.isSingleFaceStable && !selfieAutoCaptureRef.current) {
           setSelfieFaceStatus('detected');
           startSelfieCountdown();
           return;
         }
-        if (!selfieAutoCaptureRef.current && selfieCountdown === null) {
+        if (!selfieAutoCaptureRef.current) {
           setSelfieFaceStatus('scanning');
-          setBiometricSelfieMessage(result.ok === false
-            ? result.error.message
-            : 'No face detected yet. Keep your face centered in the frame.');
+          setBiometricSelfieMessage(validation.message);
         }
       }).catch(() => {
         setSelfieFaceStatus('idle');
@@ -1400,7 +1494,7 @@ export default function StudentApplication() {
       }).finally(() => {
         selfieDetectionRequestInFlightRef.current = false;
       });
-    }, 1200);
+    }, SELFIE_FRAME_CHECK_INTERVAL_MS);
   }
 
   const startSelfieCamera = async () => {
@@ -1748,7 +1842,9 @@ export default function StudentApplication() {
         if (isPwdFieldActive('PWD Type') && isPwdFieldRequired('PWD Type') && !formData.pwdType.trim()) {
           newErrors.pwdType = 'PWD type is required.';
         }
-        if (isPwdFieldActive('Condition') && isPwdFieldRequired('Condition') && !formData.pwdCondition.trim()) {
+        if (formData.pwdType === PWD_MULTIPLE_CATEGORY && selectedMultiplePwdEntries.length < 2) {
+          newErrors.pwdMultipleCategories = 'Select at least 2 disability categories and a specific type for each.';
+        } else if (isPwdFieldActive('Condition') && isPwdFieldRequired('Condition') && !formData.pwdCondition.trim()) {
           newErrors.pwdCondition = 'PWD condition is required.';
         }
         if (isPwdFieldActive('PWD ID Number') && isPwdFieldRequired('PWD ID Number') && !formData.pwdIdNumber.trim()) {
@@ -1756,9 +1852,6 @@ export default function StudentApplication() {
         }
         if (isPwdFieldActive('PWD ID Attachment') && isPwdFieldRequired('PWD ID Attachment') && !formData.pwdIdFilename.trim()) {
           newErrors.pwdIdFilename = 'Upload your PWD ID before continuing.';
-        }
-        if (isPwdFieldActive('Accommodation Needed') && isPwdFieldRequired('Accommodation Needed') && !formData.pwdAccommodation.trim()) {
-          newErrors.pwdAccommodation = 'Describe the accommodation you need.';
         }
       }
       if (verificationPath === 'lrn' && !lrnRegisteredValue.trim()) {
@@ -1827,6 +1920,39 @@ export default function StudentApplication() {
     }
   };
 
+  const resetRegistrationFormAfterSubmit = () => {
+    clearRegistrationSessionDraft();
+    if (pwdIdPreviewUrlRef.current) {
+      URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
+      pwdIdPreviewUrlRef.current = '';
+    }
+    stopSelfieCamera();
+    setFormData(getEmptyRegistrationFormData());
+    setIsIdVerified(false);
+    setRegistryLockedFields([]);
+    setLrnVerificationCategory('email');
+    setLrnRegisteredValue('');
+    setLrnVerificationReview(null);
+    setBiometricSelfieFileName('');
+    setBiometricSelfieStatus('idle');
+    setBiometricSelfieMessage('');
+    setCapturedSelfiePreview('');
+    setPendingSelfieFile(null);
+    setSelfieFaceStatus('idle');
+    setSelfieFaceValidated(false);
+    setSelfieCountdown(null);
+    setVerificationPath(activeVerificationPath);
+    setLrnVerificationToken('');
+    setEmailOtp('');
+    setGeneratedEmailOtp('');
+    setEmailOtpSentTo('');
+    setIsEmailVerified(false);
+    setCurrentSection(0);
+    setVisitedSections([0]);
+    setReviewCertified(false);
+    setErrors({});
+  };
+
   const handleSubmit = async () => {
     if (!reviewCertified) {
       setErrors({ general: 'Certify that the reviewed registration details are accurate before submitting.' });
@@ -1838,7 +1964,10 @@ export default function StudentApplication() {
     if (import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend') {
       setIsSubmitting(true);
       const result = await backendApplicationService.createAndSubmit(
-        createBackendApplicationDraftInput(lrnVerificationToken, formData),
+        createBackendApplicationDraftInput(lrnVerificationToken, {
+          ...formData,
+          selfiePhotoUrl: capturedSelfiePreview,
+        }),
       );
       setIsSubmitting(false);
 
@@ -1855,7 +1984,7 @@ export default function StudentApplication() {
       });
       addAuditLog('APPLICATION_SUBMITTED', `Candidate ${submittedApplication.id} submitted their application through the backend API.`);
       setCandidateId(submittedApplication.id);
-      setLrnVerificationToken('');
+      resetRegistrationFormAfterSubmit();
       setIsSubmitted(true);
       return;
     }
@@ -1866,6 +1995,7 @@ export default function StudentApplication() {
         const updatedApp: any = {
           ...myApp,
           ...formData,
+          photoUrl: capturedSelfiePreview,
           status: 'PENDING',
           submittedAt: new Date().toISOString(),
           gwa: parseFloat(formData.gwa) || 0
@@ -1875,6 +2005,7 @@ export default function StudentApplication() {
         addAuditLog('APPLICATION_RESUBMITTED', `Candidate ${myApp.id} resubmitted their application after correction.`);
         setCandidateId(myApp.id);
         setIsSubmitting(false);
+        resetRegistrationFormAfterSubmit();
         setIsSubmitted(true);
         return;
       }
@@ -1886,6 +2017,7 @@ export default function StudentApplication() {
         ...formData,
         id: newId,
         userId: user?.id || '',
+        photoUrl: capturedSelfiePreview,
         status: 'PENDING',
         submittedAt: new Date().toISOString(),
         gwa: parseFloat(formData.gwa) || 0
@@ -1894,6 +2026,7 @@ export default function StudentApplication() {
       setApplications(prev => [...prev, newApp]);
       addAuditLog('APPLICATION_SUBMITTED', `Candidate ${newId} submitted their application.`);
       setIsSubmitting(false);
+      resetRegistrationFormAfterSubmit();
       setIsSubmitted(true);
     }, 2000);
   };
@@ -2901,11 +3034,11 @@ export default function StudentApplication() {
                                 <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
                                   <p className="text-[10px] font-black uppercase tracking-widest text-white">
                                     {selfieCountdown !== null
-                                      ? `Auto capture in ${selfieCountdown}`
+                                      ? `Hold still. Auto capture in ${selfieCountdown} seconds`
                                       : selfieFaceStatus === 'scanning'
-                                        ? 'Server validating face'
+                                        ? 'Server validating single face'
                                         : selfieFaceStatus === 'detected'
-                                          ? 'Face detected'
+                                          ? 'Single face detected'
                                           : 'Hold still'}
                                   </p>
                                 </div>
@@ -2997,19 +3130,21 @@ export default function StudentApplication() {
                                         ...prev,
                                         pwdType: e.target.value,
                                         pwdCondition: '',
+                                        pwdMultipleCategories: {},
                                       }));
-                                      if (errors.pwdType || errors.pwdCondition) {
+                                      if (errors.pwdType || errors.pwdCondition || errors.pwdMultipleCategories) {
                                         setErrors(prev => {
                                           const next = { ...prev };
                                           delete next.pwdType;
                                           delete next.pwdCondition;
+                                          delete next.pwdMultipleCategories;
                                           return next;
                                         });
                                       }
                                     }}
                                   >
                                     <option value="">Select PWD type</option>
-                                    {activePwdTypes.map(option => (
+                                    {normalizedActivePwdTypes.map(option => (
                                       <option key={option} value={option}>{option}</option>
                                     ))}
                                   </select>
@@ -3017,7 +3152,7 @@ export default function StudentApplication() {
                                 </div>
                                 )}
 
-                                {isPwdFieldActive('Condition') && (
+                                {isPwdFieldActive('Condition') && formData.pwdType !== PWD_MULTIPLE_CATEGORY && (
                                 <div className="space-y-2">
                                   <label className={cn("label-philsa", errors.pwdCondition ? "text-philsa-red" : "text-philsa-gray")}>Condition{isPwdFieldRequired('Condition') ? ' *' : ''}</label>
                                   <select
@@ -3041,6 +3176,70 @@ export default function StudentApplication() {
                                     ))}
                                   </select>
                                   {errors.pwdCondition && <p className="text-xs text-philsa-red font-bold pl-1">{errors.pwdCondition}</p>}
+                                </div>
+                                )}
+
+                                {isPwdFieldActive('Condition') && formData.pwdType === PWD_MULTIPLE_CATEGORY && (
+                                <div className="space-y-3 md:col-span-2">
+                                  <label className={cn("label-philsa", errors.pwdMultipleCategories ? "text-philsa-red" : "text-philsa-gray")}>Disability categories and specific types *</label>
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    {PWD_CATEGORY_OPTIONS.map(category => {
+                                      const selectedCondition = formData.pwdMultipleCategories[category.type] || '';
+                                      const categoryConditions = category.conditions.filter(condition => configuredPwdConditions.includes(condition));
+                                      const conditionOptions = categoryConditions.length > 0 ? categoryConditions : category.conditions;
+                                      return (
+                                        <label key={category.type} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                                          <span className="flex items-start gap-2 text-[11px] font-black text-philsa-navy">
+                                            <input
+                                              type="checkbox"
+                                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-philsa-red focus:ring-philsa-red"
+                                              checked={Boolean(selectedCondition)}
+                                              onChange={(e) => {
+                                                setFormData(prev => {
+                                                  const nextCategories = { ...prev.pwdMultipleCategories };
+                                                  if (e.target.checked) {
+                                                    nextCategories[category.type] = conditionOptions[0] || '';
+                                                  } else {
+                                                    delete nextCategories[category.type];
+                                                  }
+                                                  return { ...prev, pwdMultipleCategories: nextCategories };
+                                                });
+                                                if (errors.pwdMultipleCategories) {
+                                                  setErrors(prev => {
+                                                    const next = { ...prev };
+                                                    delete next.pwdMultipleCategories;
+                                                    return next;
+                                                  });
+                                                }
+                                              }}
+                                            />
+                                            {category.type}
+                                          </span>
+                                          {selectedCondition && (
+                                            <select
+                                              aria-label={`${category.type} specific type`}
+                                              className="mt-2 input-philsa bg-white"
+                                              value={selectedCondition}
+                                              onChange={(e) => {
+                                                setFormData(prev => ({
+                                                  ...prev,
+                                                  pwdMultipleCategories: {
+                                                    ...prev.pwdMultipleCategories,
+                                                    [category.type]: e.target.value,
+                                                  },
+                                                }));
+                                              }}
+                                            >
+                                              {conditionOptions.map(condition => (
+                                                <option key={condition} value={condition}>{condition}</option>
+                                              ))}
+                                            </select>
+                                          )}
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                  {errors.pwdMultipleCategories && <p className="text-xs text-philsa-red font-bold pl-1">{errors.pwdMultipleCategories}</p>}
                                 </div>
                                 )}
 
@@ -3085,6 +3284,18 @@ export default function StudentApplication() {
                                         if (pwdIdPreviewUrlRef.current) {
                                           URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
                                           pwdIdPreviewUrlRef.current = '';
+                                        }
+                                        if (file && !PWD_ID_ALLOWED_TYPES.has(file.type)) {
+                                          e.target.value = '';
+                                          setFormData(prev => ({ ...prev, pwdIdFilename: '', pwdIdPreviewUrl: '' }));
+                                          setErrors(prev => ({ ...prev, pwdIdFilename: 'PWD ID upload must be a JPEG, PNG, or PDF file.' }));
+                                          return;
+                                        }
+                                        if (file && file.size > PWD_ID_MAX_BYTES) {
+                                          e.target.value = '';
+                                          setFormData(prev => ({ ...prev, pwdIdFilename: '', pwdIdPreviewUrl: '' }));
+                                          setErrors(prev => ({ ...prev, pwdIdFilename: 'PWD ID upload must not exceed 5 MB.' }));
+                                          return;
                                         }
                                         const previewUrl = file ? URL.createObjectURL(file) : '';
                                         pwdIdPreviewUrlRef.current = previewUrl;
@@ -3218,11 +3429,11 @@ export default function StudentApplication() {
                                 <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-4 py-3 text-center backdrop-blur-sm">
                                   <p className="text-[10px] font-black uppercase tracking-widest text-white">
                                     {selfieCountdown !== null
-                                      ? `Auto capture in ${selfieCountdown}`
+                                      ? `Hold still. Auto capture in ${selfieCountdown} seconds`
                                       : selfieFaceStatus === 'scanning'
-                                        ? 'Detecting face'
+                                        ? 'Detecting single face'
                                         : selfieFaceStatus === 'detected'
-                                          ? 'Face detected'
+                                          ? 'Single face detected'
                                           : 'Hold still'}
                                   </p>
                                 </div>
@@ -3654,8 +3865,12 @@ export default function StudentApplication() {
                                  )}
                                  {isPwdFieldActive('Condition') && (
                                  <div className="min-w-0 sm:col-span-2">
-                                    <p className="text-[11px] font-bold text-slate-500">Condition</p>
-                                    <p className="break-words text-xs font-black text-philsa-navy">{formData.pwdCondition || 'Not entered'}</p>
+                                    <p className="text-[11px] font-bold text-slate-500">{formData.pwdType === PWD_MULTIPLE_CATEGORY ? 'Categories and Specific Types' : 'Condition'}</p>
+                                    <p className="break-words text-xs font-black text-philsa-navy">
+                                      {formData.pwdType === PWD_MULTIPLE_CATEGORY
+                                        ? selectedMultiplePwdEntries.map(([category, condition]) => `${category}: ${condition}`).join('; ') || 'Not entered'
+                                        : formData.pwdCondition || 'Not entered'}
+                                    </p>
                                  </div>
                                  )}
                                  {isPwdFieldActive('PWD ID Number') && (

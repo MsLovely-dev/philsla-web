@@ -106,6 +106,7 @@ describe('BackendApplicationService', () => {
           faceCount: 1,
           confidence: 92,
           boundingBox: { x: 10, y: 12, width: 100, height: 100 },
+          faceCovered: false,
         },
         { status: 200 },
       ),
@@ -124,6 +125,33 @@ describe('BackendApplicationService', () => {
         body: expect.any(FormData),
       }),
     );
+  });
+
+  it('surfaces selfie frame field validation errors', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Invalid input.',
+            fields: {
+              file: ['No frontal face was detected in the selfie.'],
+            },
+          },
+        },
+        { status: 400 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const frame = new File(['frame'], 'frame.jpg', { type: 'image/jpeg' });
+
+    const result = await service.validateRegistrationSelfieFace('verification-token', frame);
+
+    expect(result.ok).toBe(false);
+    if (result.ok === false) {
+      expect(result.error.message).toBe('No frontal face was detected in the selfie.');
+      expect(result.error.fieldErrors?.file).toEqual(['No frontal face was detected in the selfie.']);
+    }
   });
 
   it('uploads the enrolled selfie through the Step 1 identity endpoint', async () => {
@@ -256,6 +284,7 @@ describe('BackendApplicationService', () => {
       gwa: '94',
       universities: ['UP Diliman'],
       courses: ['BS Computer Science'],
+      selfiePhotoUrl: 'data:image/jpeg;base64,captured-selfie',
     });
 
     expect(payload).toMatchObject({
@@ -264,6 +293,7 @@ describe('BackendApplicationService', () => {
       personal: {
         firstName: 'Sample',
         dateOfBirth: '2008-05-15',
+        selfiePhotoUrl: 'data:image/jpeg;base64,captured-selfie',
       },
       address: {
         postalCode: '1101',
@@ -293,7 +323,6 @@ describe('BackendApplicationService', () => {
         email: 'student@example.test',
         mobile: '09123456789',
         birthPlace: 'Cavite',
-        photoUrl: 'selfie-url',
         additionalHighPriorityFields: {
           isPwd: 'Yes',
           pwdType: 'Visual Disability',
@@ -321,6 +350,7 @@ describe('BackendApplicationService', () => {
         { rank: 1, university: 'First University', course: 'BS Astronomy' },
       ],
       reviewStep: {},
+      photoUrl: 'selfie-url',
       examCycleId: 'cycle-id',
       version: 1,
       submittedAt: '2026-07-14T00:01:00Z',

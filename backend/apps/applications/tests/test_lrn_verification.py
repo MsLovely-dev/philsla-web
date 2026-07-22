@@ -60,13 +60,14 @@ class LrnVerificationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["verificationToken"])
 
-    def test_non_grade_12_student_is_ineligible(self):
+    def test_non_grade_12_student_is_flagged_for_reviewer_attention(self):
         response = self.verify(
             lrn="901234567899",
             verification_value="ineligible.learner@example.test",
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("not currently enrolled in Grade 12", response.data["error"]["message"])
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["profile"]["currentGrade12EnrollmentConfirmed"])
+        self.assertTrue(response.data["profile"]["requiresAdmissionsReviewerAttention"])
 
     def test_fifth_failed_attempt_starts_lrn_cooldown(self):
         for _ in range(4):
@@ -77,9 +78,20 @@ class LrnVerificationTests(TestCase):
         self.assertGreater(fifth.data["error"]["meta"]["retryAfterSeconds"], 0)
         self.assertLessEqual(fifth.data["error"]["meta"]["retryAfterSeconds"], 900)
         self.assertEqual(self.verify(lrn="111111111111").status_code, 429)
-        different_lrn = self.verify(lrn="123456789012")
-        self.assertEqual(different_lrn.status_code, 429)
-        self.assertEqual(different_lrn.data["error"]["code"], "LRN_COOLDOWN")
+
+    def test_failed_attempt_limit_is_scoped_to_verification_category(self):
+        for _ in range(5):
+            self.verify(verification_value="wrong@example.test")
+
+        response = self.verify(verification_value="wrong@example.test")
+        self.assertEqual(response.status_code, 429)
+
+        birthday_response = self.verify(
+            verification_category="birthday",
+            verification_value="2008-05-15",
+        )
+        self.assertEqual(birthday_response.status_code, 200)
+        self.assertTrue(birthday_response.data["verificationToken"])
 
     @override_settings(LRN_REGISTRY_PROVIDER="unavailable")
     def test_registry_unavailable_has_specific_retryable_error(self):

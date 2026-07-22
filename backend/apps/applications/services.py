@@ -63,8 +63,9 @@ class LrnCooldown(APIException):
 
 
 def verify_lrn(*, lrn: str, verification_category: str = "", verification_value: str = "", client_identifier: str = "") -> dict:
-    attempt_key = _lrn_attempt_key(lrn)
-    client_attempt_key = _lrn_client_attempt_key(client_identifier) if client_identifier else ""
+    category_key = verification_category or "unspecified"
+    attempt_key = _lrn_attempt_key(lrn, category_key)
+    client_attempt_key = _lrn_client_attempt_key(client_identifier, category_key) if client_identifier else ""
     attempt_state = _get_lrn_attempt_state(attempt_key)
     client_attempt_state = _get_lrn_attempt_state(client_attempt_key) if client_attempt_key else {"attempts": 0, "cooldown_expires_at": None}
     attempts = attempt_state["attempts"]
@@ -90,10 +91,7 @@ def verify_lrn(*, lrn: str, verification_category: str = "", verification_value:
             raise LrnCooldown(_lrn_cooldown_seconds_left(_max_lrn_cooldown_state(attempt_state, client_attempt_state)))
         raise LrnVerificationRejected("We couldn't verify this LRN. Please check and try again.")
 
-    if record.grade_level != "Grade 12" or not record.is_recognized_school:
-        raise LrnVerificationRejected(
-            "Our records show you are not currently enrolled in Grade 12. You are not eligible to register at this time."
-        )
+    current_grade12_enrollment_confirmed = record.grade_level == "Grade 12" and record.is_recognized_school
 
     if verification_category or verification_value:
         if not verification_category or not verification_value:
@@ -142,6 +140,8 @@ def verify_lrn(*, lrn: str, verification_category: str = "", verification_value:
         "enrollmentStatus": record.enrollment_status,
         "schoolYear": record.school_year,
         "identityVerified": True,
+        "currentGrade12EnrollmentConfirmed": current_grade12_enrollment_confirmed,
+        "requiresAdmissionsReviewerAttention": not current_grade12_enrollment_confirmed,
     }
     cache.set(f"{LRN_PROOF_PREFIX}{token}", profile, settings.LRN_VERIFICATION_TTL_MINUTES * 60)
     configuration = active_step2_configuration()
@@ -226,6 +226,7 @@ def validate_registration_selfie_face(*, token: str, uploaded_file) -> dict:
         "faceCount": result.face_count,
         "confidence": result.confidence,
         "boundingBox": result.bounding_box,
+        "faceCovered": result.face_covered,
     }
 
 
@@ -341,6 +342,7 @@ def upload_step2_media(*, token: str, media_type: str, uploaded_file, step1_iden
                 "faceCount": selfie_face_result.face_count if selfie_face_result else 0,
                 "confidence": selfie_face_result.confidence if selfie_face_result else 0,
                 "boundingBox": selfie_face_result.bounding_box if selfie_face_result else {},
+                "faceCovered": selfie_face_result.face_covered if selfie_face_result else False,
             },
         }
     elif configuration.get("requireStudentIdVerification") and required_id_media <= present:
@@ -366,13 +368,13 @@ def decide_step2_manual_review(*, verification_id, decision: str, reason: str, a
     return verification
 
 
-def _lrn_attempt_key(lrn: str) -> str:
-    digest = hashlib.sha256(f"{settings.SECRET_KEY}:{lrn}".encode()).hexdigest()
+def _lrn_attempt_key(lrn: str, verification_category: str) -> str:
+    digest = hashlib.sha256(f"{settings.SECRET_KEY}:{lrn}:{verification_category}".encode()).hexdigest()
     return f"{LRN_ATTEMPT_PREFIX}{digest}"
 
 
-def _lrn_client_attempt_key(client_identifier: str) -> str:
-    digest = hashlib.sha256(f"{settings.SECRET_KEY}:{client_identifier}".encode()).hexdigest()
+def _lrn_client_attempt_key(client_identifier: str, verification_category: str) -> str:
+    digest = hashlib.sha256(f"{settings.SECRET_KEY}:{client_identifier}:{verification_category}".encode()).hexdigest()
     return f"{LRN_CLIENT_ATTEMPT_PREFIX}{digest}"
 
 
@@ -459,6 +461,15 @@ def create_draft(*, owner=None, verification_token: str = "", data: dict, submit
                 "schoolYear": verified.get("schoolYear", ""),
             }
         )
+        review_step = dict(data.get("review_step", {}))
+        if verified.get("requiresAdmissionsReviewerAttention"):
+            review_step.update(
+                {
+                    "requiresAdmissionsReviewerAttention": True,
+                    "attentionReason": "Identity-source enrollment information does not confirm current Grade 12 enrollment.",
+                }
+            )
+            data["review_step"] = review_step
     else:
         personal.setdefault("identityVerificationStatus", "MANUAL_PENDING")
 
