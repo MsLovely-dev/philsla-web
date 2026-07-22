@@ -1,5 +1,6 @@
 from datetime import timedelta
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -126,6 +127,7 @@ class Step2ConfigurationEndpointTests(TestCase):
         self.assertEqual(first.data["status"], "PASSED")
         self.assertEqual(first.data["results"]["serverFaceValidation"]["faceCount"], 1)
         self.assertFalse(first.data["results"]["serverFaceValidation"]["faceCovered"])
+        self.assertEqual(first.data["results"]["serverFaceValidation"]["checks"]["faceDetected"]["status"], "pass")
 
         second = upload("selfie-second.jpg", b"\xff\xd8\xff\xe0second-image")
         self.assertEqual(second.status_code, 200)
@@ -223,6 +225,7 @@ class Step2ConfigurationEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["faceDetected"])
         self.assertFalse(response.data["faceCovered"])
+        self.assertEqual(response.data["checks"]["imageResolution"]["status"], "pass")
         self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
 
     @override_settings(STEP1_SELFIE_FACE_PROVIDER="unavailable")
@@ -310,3 +313,41 @@ class Step2ConfigurationEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
         self.assertIn("No frontal face", response.data["error"]["fields"]["file"][0])
+
+    @override_settings(STEP1_SELFIE_FACE_PROVIDER="opencv")
+    def test_opencv_selfie_validation_rejects_image_below_minimum_resolution(self):
+        import cv2
+        import numpy as np
+
+        class FakeDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return np.array([[80, 80, 120, 120]])
+
+        registration = APIClient()
+        verified = registration.post(
+            reverse("applications:verify-lrn"),
+            {
+                "lrn": "123456789012",
+                "verificationCategory": "email",
+                "verificationValue": "lovely@yopmail.com",
+            },
+            format="json",
+        )
+        self.assertEqual(verified.status_code, 200)
+        _, encoded = cv2.imencode(".jpg", np.full((640, 640, 3), 120, dtype=np.uint8))
+        image = SimpleUploadedFile("small-selfie.jpg", encoded.tobytes(), content_type="image/jpeg")
+
+        with patch("cv2.CascadeClassifier", return_value=FakeDetector()):
+            response = registration.post(
+                reverse("applications:registration-identity-selfie"),
+                {"file": image},
+                format="multipart",
+                HTTP_X_REGISTRATION_TOKEN=verified.data["verificationToken"],
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
+        self.assertIn("at least 720 x 720", response.data["error"]["fields"]["file"][0])

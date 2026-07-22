@@ -227,6 +227,7 @@ def validate_registration_selfie_face(*, token: str, uploaded_file) -> dict:
         "confidence": result.confidence,
         "boundingBox": result.bounding_box,
         "faceCovered": result.face_covered,
+        "checks": result.checks,
     }
 
 
@@ -343,6 +344,7 @@ def upload_step2_media(*, token: str, media_type: str, uploaded_file, step1_iden
                 "confidence": selfie_face_result.confidence if selfie_face_result else 0,
                 "boundingBox": selfie_face_result.bounding_box if selfie_face_result else {},
                 "faceCovered": selfie_face_result.face_covered if selfie_face_result else False,
+                "checks": selfie_face_result.checks if selfie_face_result else {},
             },
         }
     elif configuration.get("requireStudentIdVerification") and required_id_media <= present:

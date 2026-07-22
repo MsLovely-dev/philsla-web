@@ -65,12 +65,17 @@ const PWD_ID_MAX_BYTES = 5 * 1024 * 1024;
 const PWD_ID_ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'application/pdf']);
 const SELFIE_CAPTURE_COUNTDOWN_SECONDS = 5;
 const SELFIE_FRAME_CHECK_INTERVAL_MS = 1000;
+const CAPTURED_SELFIE_SAMPLE_SIZE = 128;
 
 type LrnVerificationCategory = 'email' | 'birthday' | 'student_id' | 'mobile' | 'mother_name';
 type SelfieFrameAnalysis = {
   faceDetected: boolean;
   faceCount: number;
-  faceCovered: boolean;
+};
+type CapturedSelfieValidationStatus = 'idle' | 'checking' | 'passed' | 'failed';
+type CapturedSelfieValidationResult = {
+  passed: boolean;
+  message: string;
 };
 type LrnVerificationReview = {
   lrn: string;
@@ -377,6 +382,7 @@ export default function StudentApplication() {
   const [biometricSelfieMessage, setBiometricSelfieMessage] = useState(() => restoredSessionDraft?.biometricSelfieMessage ?? '');
   const [capturedSelfiePreview, setCapturedSelfiePreview] = useState(() => restoredSessionDraft?.capturedSelfiePreview ?? '');
   const [pendingSelfieFile, setPendingSelfieFile] = useState<File | null>(null);
+  const [capturedSelfieValidationStatus, setCapturedSelfieValidationStatus] = useState<CapturedSelfieValidationStatus>('idle');
   const [isSelfieCameraActive, setIsSelfieCameraActive] = useState(false);
   const [selfieFaceStatus, setSelfieFaceStatus] = useState<'idle' | 'scanning' | 'detected' | 'counting' | 'captured'>('idle');
   const [selfieFaceValidated, setSelfieFaceValidated] = useState(false);
@@ -647,6 +653,7 @@ export default function StudentApplication() {
     setBiometricSelfieStatus('idle');
     setBiometricSelfieMessage('');
     setCapturedSelfiePreview('');
+    setCapturedSelfieValidationStatus('idle');
     stopSelfieCamera();
     setVerificationPath(activeVerificationPath);
     setLrnVerificationToken('');
@@ -1158,7 +1165,7 @@ export default function StudentApplication() {
   async function analyzeSelfieFrame(source: CanvasImageSource, width: number, height: number): Promise<SelfieFrameAnalysis> {
     const FaceDetectorConstructor = (window as any).FaceDetector;
     if (width === 0 || height === 0) {
-      return { faceDetected: false, faceCount: 0, faceCovered: false };
+      return { faceDetected: false, faceCount: 0 };
     }
 
     let detectedFaceCount: number | null = null;
@@ -1178,7 +1185,7 @@ export default function StudentApplication() {
     canvas.height = sampleSize;
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) {
-      return { faceDetected: false, faceCount: 0, faceCovered: false };
+      return { faceDetected: false, faceCount: 0 };
     }
 
     context.drawImage(
@@ -1198,19 +1205,6 @@ export default function StudentApplication() {
     let totalLumaSquared = 0;
     let skinLikePixels = 0;
     let edgePixels = 0;
-    let corePixels = 0;
-    let coreSkinLikePixels = 0;
-    let coreEdgePixels = 0;
-    let upperPixels = 0;
-    let upperSkinLikePixels = 0;
-    let upperDarkPixels = 0;
-    let lowerPixels = 0;
-    let lowerSkinLikePixels = 0;
-    let lowerDarkPixels = 0;
-    let lowerEdgePixels = 0;
-    let centerStripPixels = 0;
-    let centerStripSkinLikePixels = 0;
-    let centerStripDarkPixels = 0;
 
     for (let y = 0; y < sampleSize; y += 2) {
       for (let x = 0; x < sampleSize; x += 2) {
@@ -1225,12 +1219,6 @@ export default function StudentApplication() {
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const isSkinLike = r > 45 && g > 30 && b > 18 && max - min > 12 && r >= g * 0.9 && r >= b * 1.05;
-        const isDarkFeature = luma < 78 && max - min > 8;
-        const isCorePixel = x >= 28 && x <= 68 && y >= 20 && y <= 78;
-        const isUpperFacePixel = x >= 30 && x <= 66 && y >= 24 && y <= 46;
-        const isLowerFacePixel = x >= 24 && x <= 72 && y >= 46 && y <= 76;
-        const isCenterStripPixel = x >= 38 && x <= 58 && y >= 22 && y <= 74;
-        let hasEdge = false;
 
         if (isSkinLike) {
           skinLikePixels += 1;
@@ -1241,30 +1229,7 @@ export default function StudentApplication() {
           const previousLuma = 0.299 * pixels[previousIndex] + 0.587 * pixels[previousIndex + 1] + 0.114 * pixels[previousIndex + 2];
           if (Math.abs(luma - previousLuma) > 18) {
             edgePixels += 1;
-            hasEdge = true;
           }
-        }
-
-        if (isCorePixel) {
-          corePixels += 1;
-          if (isSkinLike) coreSkinLikePixels += 1;
-          if (hasEdge) coreEdgePixels += 1;
-        }
-        if (isUpperFacePixel) {
-          upperPixels += 1;
-          if (isSkinLike) upperSkinLikePixels += 1;
-          if (isDarkFeature) upperDarkPixels += 1;
-        }
-        if (isLowerFacePixel) {
-          lowerPixels += 1;
-          if (isSkinLike) lowerSkinLikePixels += 1;
-          if (isDarkFeature) lowerDarkPixels += 1;
-          if (hasEdge) lowerEdgePixels += 1;
-        }
-        if (isCenterStripPixel) {
-          centerStripPixels += 1;
-          if (isSkinLike) centerStripSkinLikePixels += 1;
-          if (isDarkFeature) centerStripDarkPixels += 1;
         }
       }
     }
@@ -1274,34 +1239,181 @@ export default function StudentApplication() {
     const variance = totalLumaSquared / sampledPixels - averageLuma * averageLuma;
     const skinRatio = skinLikePixels / sampledPixels;
     const edgeRatio = edgePixels / sampledPixels;
-    const coreSkinRatio = corePixels > 0 ? coreSkinLikePixels / corePixels : 0;
-    const coreEdgeRatio = corePixels > 0 ? coreEdgePixels / corePixels : 0;
-    const upperSkinRatio = upperPixels > 0 ? upperSkinLikePixels / upperPixels : 0;
-    const upperDarkRatio = upperPixels > 0 ? upperDarkPixels / upperPixels : 0;
-    const lowerSkinRatio = lowerPixels > 0 ? lowerSkinLikePixels / lowerPixels : 0;
-    const lowerDarkRatio = lowerPixels > 0 ? lowerDarkPixels / lowerPixels : 0;
-    const lowerEdgeRatio = lowerPixels > 0 ? lowerEdgePixels / lowerPixels : 0;
-    const centerStripSkinRatio = centerStripPixels > 0 ? centerStripSkinLikePixels / centerStripPixels : 0;
-    const centerStripDarkRatio = centerStripPixels > 0 ? centerStripDarkPixels / centerStripPixels : 0;
 
     const heuristicFaceDetected = averageLuma > 35 && averageLuma < 235 && variance > 180 && edgeRatio > 0.025 && skinRatio > 0.015 && skinRatio < 0.5;
     const faceDetected = detectedFaceCount === null ? heuristicFaceDetected : detectedFaceCount > 0 && heuristicFaceDetected;
     const faceCount = detectedFaceCount ?? (heuristicFaceDetected ? 1 : 0);
-    const faceCovered =
-      faceDetected &&
-      (
-        (coreSkinRatio > 0.58 && coreEdgeRatio < 0.04 && upperDarkRatio < 0.02) ||
-        (centerStripSkinRatio > 0.62 && centerStripDarkRatio < 0.012) ||
-        (lowerSkinRatio > 0.62 && lowerDarkRatio < 0.012 && lowerEdgeRatio < 0.055) ||
-        (upperSkinRatio > 0.65 && upperDarkRatio < 0.018)
-      );
 
-    return { faceDetected, faceCount, faceCovered };
+    return { faceDetected, faceCount };
+  }
+
+  async function loadCapturedSelfieImage(file: File): Promise<CanvasImageSource & { width: number; height: number; close?: () => void }> {
+    if ('createImageBitmap' in window) {
+      return createImageBitmap(file);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      image.decoding = 'async';
+      image.src = objectUrl;
+      await image.decode();
+      return image;
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+
+  async function validateCapturedSelfieFile(file: File): Promise<CapturedSelfieValidationResult> {
+    const image = await loadCapturedSelfieImage(file);
+    try {
+      const FaceDetectorConstructor = (window as any).FaceDetector;
+      let detectedFaceCount: number | null = null;
+      let faceBox: { x: number; y: number; width: number; height: number } | null = null;
+
+      if (FaceDetectorConstructor) {
+        try {
+          const detector = new FaceDetectorConstructor({ fastMode: false, maxDetectedFaces: 3 });
+          const faces = await detector.detect(image);
+          detectedFaceCount = Array.isArray(faces) ? faces.length : 0;
+          if (detectedFaceCount === 1 && faces[0]?.boundingBox) {
+            const box = faces[0].boundingBox;
+            faceBox = { x: box.x, y: box.y, width: box.width, height: box.height };
+          }
+        } catch {
+          detectedFaceCount = null;
+        }
+      }
+
+      if (detectedFaceCount === 0) {
+        return { passed: false, message: 'Retake photo. No face was detected in the captured selfie.' };
+      }
+      if (detectedFaceCount !== null && detectedFaceCount > 1) {
+        return { passed: false, message: 'Retake photo. Multiple faces were detected. Keep only your face inside the frame.' };
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = CAPTURED_SELFIE_SAMPLE_SIZE;
+      canvas.height = CAPTURED_SELFIE_SAMPLE_SIZE;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) {
+        return { passed: false, message: 'Retake photo. The captured selfie could not be validated.' };
+      }
+
+      const fallbackBox = {
+        x: image.width * 0.25,
+        y: image.height * 0.14,
+        width: image.width * 0.5,
+        height: image.height * 0.72,
+      };
+      const crop = faceBox ?? fallbackBox;
+      const paddingX = crop.width * 0.08;
+      const paddingY = crop.height * 0.08;
+      const sourceX = Math.max(0, crop.x - paddingX);
+      const sourceY = Math.max(0, crop.y - paddingY);
+      const sourceWidth = Math.min(image.width - sourceX, crop.width + paddingX * 2);
+      const sourceHeight = Math.min(image.height - sourceY, crop.height + paddingY * 2);
+
+      context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const lumaValues: number[] = [];
+      let totalLuma = 0;
+      let totalLumaSquared = 0;
+      let skinLikePixels = 0;
+      let edgePixels = 0;
+      let leftEyeDarkPixels = 0;
+      let leftEyePixels = 0;
+      let rightEyeDarkPixels = 0;
+      let rightEyePixels = 0;
+      let noseDetailPixels = 0;
+      let nosePixels = 0;
+      let mouthDarkPixels = 0;
+      let mouthPixels = 0;
+
+      for (let y = 0; y < canvas.height; y += 1) {
+        for (let x = 0; x < canvas.width; x += 1) {
+          const index = (y * canvas.width + x) * 4;
+          const r = pixels[index];
+          const g = pixels[index + 1];
+          const b = pixels[index + 2];
+          const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const chroma = max - min;
+          const isSkinLike = r > 45 && g > 30 && b > 18 && chroma > 10 && r >= g * 0.88 && r >= b * 1.04;
+          const isDarkDetail = luma < 100 && chroma > 7;
+
+          lumaValues.push(luma);
+          totalLuma += luma;
+          totalLumaSquared += luma * luma;
+          if (isSkinLike) skinLikePixels += 1;
+
+          if (x > 0 && y > 0) {
+            const previousLuma = lumaValues[(y - 1) * canvas.width + (x - 1)];
+            if (Math.abs(luma - previousLuma) > 18) edgePixels += 1;
+          }
+
+          const inLeftEye = x >= 26 && x <= 55 && y >= 28 && y <= 50;
+          const inRightEye = x >= 73 && x <= 102 && y >= 28 && y <= 50;
+          const inNose = x >= 48 && x <= 80 && y >= 48 && y <= 78;
+          const inMouth = x >= 42 && x <= 86 && y >= 78 && y <= 104;
+
+          if (inLeftEye) {
+            leftEyePixels += 1;
+            if (isDarkDetail) leftEyeDarkPixels += 1;
+          }
+          if (inRightEye) {
+            rightEyePixels += 1;
+            if (isDarkDetail) rightEyeDarkPixels += 1;
+          }
+          if (inNose) {
+            nosePixels += 1;
+            if (isDarkDetail || chroma > 18) noseDetailPixels += 1;
+          }
+          if (inMouth) {
+            mouthPixels += 1;
+            if (isDarkDetail || (r > g * 1.06 && r > b * 1.12 && luma < 145)) mouthDarkPixels += 1;
+          }
+        }
+      }
+
+      const sampledPixels = canvas.width * canvas.height;
+      const averageLuma = totalLuma / sampledPixels;
+      const variance = totalLumaSquared / sampledPixels - averageLuma * averageLuma;
+      const skinRatio = skinLikePixels / sampledPixels;
+      const edgeRatio = edgePixels / sampledPixels;
+      const leftEyeDarkRatio = leftEyePixels > 0 ? leftEyeDarkPixels / leftEyePixels : 0;
+      const rightEyeDarkRatio = rightEyePixels > 0 ? rightEyeDarkPixels / rightEyePixels : 0;
+      const noseDetailRatio = nosePixels > 0 ? noseDetailPixels / nosePixels : 0;
+      const mouthDarkRatio = mouthPixels > 0 ? mouthDarkPixels / mouthPixels : 0;
+      const heuristicFaceDetected = averageLuma > 35 && averageLuma < 235 && variance > 120 && edgeRatio > 0.02 && skinRatio > 0.02 && skinRatio < 0.72;
+
+      if (!heuristicFaceDetected) {
+        return { passed: false, message: 'Retake photo. No clear whole face was detected in the captured selfie.' };
+      }
+      if (variance < 180 || edgeRatio < 0.026) {
+        return { passed: false, message: 'Retake photo. The captured selfie is blurry. Keep the camera steady and try again.' };
+      }
+      if (leftEyeDarkRatio < 0.012 || rightEyeDarkRatio < 0.012) {
+        return { passed: false, message: 'Retake photo. Both eyes must be visible and not covered.' };
+      }
+      if (noseDetailRatio < 0.12) {
+        return { passed: false, message: 'Retake photo. Your nose must be visible and not covered.' };
+      }
+      if (mouthDarkRatio < 0.01) {
+        return { passed: false, message: 'Retake photo. Your lips must be visible and not covered.' };
+      }
+
+      return { passed: true, message: 'Captured selfie passed. You can use this photo.' };
+    } finally {
+      image.close?.();
+    }
   }
 
   async function detectFaceInFrame(source: CanvasImageSource, width: number, height: number) {
     const analysis = await analyzeSelfieFrame(source, width, height);
-    return analysis.faceDetected && analysis.faceCount === 1 && !analysis.faceCovered;
+    return analysis.faceDetected && analysis.faceCount === 1;
   }
 
   async function detectManualSelfieFace() {
@@ -1312,16 +1424,14 @@ export default function StudentApplication() {
 
   async function validateSelfieFrameForAutoCapture() {
     const video = selfieVideoRef.current;
-    const analysis = video ? await analyzeSelfieFrame(video, video.videoWidth, video.videoHeight) : { faceDetected: false, faceCount: 0, faceCovered: false };
+    const analysis = video ? await analyzeSelfieFrame(video, video.videoWidth, video.videoHeight) : { faceDetected: false, faceCount: 0 };
     return {
-      isSingleFaceStable: analysis.faceDetected && analysis.faceCount === 1 && !analysis.faceCovered,
-      message: analysis.faceCovered
-        ? 'Face is covered. Countdown reset. Keep your full face visible before capture can proceed.'
-        : analysis.faceCount > 1
-          ? 'Multiple faces detected. Keep only your face inside the capture frame.'
-          : analysis.faceDetected
-            ? ''
-            : 'Face lost. Countdown reset. Keep your face centered to start capture again.',
+      isSingleFaceStable: analysis.faceDetected && analysis.faceCount === 1,
+      message: analysis.faceCount > 1
+        ? 'Multiple faces detected. Keep only your face inside the capture frame.'
+        : analysis.faceDetected
+          ? ''
+          : 'Face lost. Countdown reset. Keep your face centered to start capture again.',
     };
   }
 
@@ -1370,15 +1480,25 @@ export default function StudentApplication() {
   async function captureSelfieFromCamera() {
     const file = await createSelfieFileFromCamera({ updatePreview: true });
     if (!file) return;
-    if (verificationPath === 'manual') {
-      setSelfieFaceValidated(true);
-    }
     stopSelfieCamera();
     setPendingSelfieFile(file);
     setBiometricSelfieFileName(file.name);
     setBiometricSelfieStatus('reviewing');
     setSelfieFaceStatus('captured');
-    setBiometricSelfieMessage('Review your captured selfie. Save it only if the photo is clear and acceptable.');
+    setSelfieFaceValidated(false);
+    setCapturedSelfieValidationStatus('checking');
+    setBiometricSelfieMessage('Checking captured selfie quality...');
+
+    try {
+      const validation = await validateCapturedSelfieFile(file);
+      setSelfieFaceValidated(validation.passed);
+      setCapturedSelfieValidationStatus(validation.passed ? 'passed' : 'failed');
+      setBiometricSelfieMessage(validation.message);
+    } catch {
+      setSelfieFaceValidated(false);
+      setCapturedSelfieValidationStatus('failed');
+      setBiometricSelfieMessage('Retake photo. The captured selfie could not be validated.');
+    }
   }
 
   function startSelfieCountdown() {
@@ -1526,6 +1646,7 @@ export default function StudentApplication() {
       setCapturedSelfiePreview('');
       setPendingSelfieFile(null);
       setSelfieFaceValidated(false);
+      setCapturedSelfieValidationStatus('idle');
       startSelfieFaceDetection();
     } catch {
       setBiometricSelfieStatus('failed');
@@ -1546,22 +1667,20 @@ export default function StudentApplication() {
     setPendingSelfieFile(null);
     setSelfieFaceStatus('idle');
     setSelfieFaceValidated(false);
+    setCapturedSelfieValidationStatus('idle');
     stopSelfieCamera();
   };
 
   const handleConfirmSelfie = async () => {
     const file = pendingSelfieFile;
     if (!file) return;
+    if (!selfieFaceValidated || capturedSelfieValidationStatus !== 'passed') {
+      setBiometricSelfieStatus('reviewing');
+      setCapturedSelfieValidationStatus('failed');
+      setBiometricSelfieMessage('Retake photo. The full face must be clear, sharp, and not covered before this photo can be used.');
+      return;
+    }
     if (verificationPath === 'manual') {
-      if (!selfieFaceValidated) {
-        setBiometricSelfieStatus('failed');
-        setBiometricSelfieMessage('No face was detected in the captured selfie. Retake the photo with your face clearly visible.');
-        setPendingSelfieFile(null);
-        setCapturedSelfiePreview('');
-        setBiometricSelfieFileName('');
-        setSelfieFaceStatus('idle');
-        return;
-      }
       setBiometricSelfieStatus('stored');
       setBiometricSelfieFileName(file.name);
       setBiometricSelfieMessage('Selfie captured and stored for manual registration review.');
@@ -1627,6 +1746,7 @@ export default function StudentApplication() {
     setPendingSelfieFile(null);
     setSelfieFaceStatus('idle');
     setSelfieFaceValidated(false);
+    setCapturedSelfieValidationStatus('idle');
     setErrors(prev => {
       const next = { ...prev };
       delete next.selfie;
@@ -1940,6 +2060,7 @@ export default function StudentApplication() {
     setPendingSelfieFile(null);
     setSelfieFaceStatus('idle');
     setSelfieFaceValidated(false);
+    setCapturedSelfieValidationStatus('idle');
     setSelfieCountdown(null);
     setVerificationPath(activeVerificationPath);
     setLrnVerificationToken('');
@@ -2964,10 +3085,16 @@ export default function StudentApplication() {
                                     <button
                                       type="button"
                                       onClick={handleConfirmSelfie}
-                                      className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                      disabled={capturedSelfieValidationStatus !== 'passed'}
+                                      className={cn(
+                                        "px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200 flex items-center justify-center gap-2",
+                                        capturedSelfieValidationStatus === 'passed'
+                                          ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+                                          : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+                                      )}
                                     >
                                       <CheckCircle className="w-4 h-4" />
-                                      Use This Photo
+                                      {capturedSelfieValidationStatus === 'checking' ? 'Checking Photo' : 'Use This Photo'}
                                     </button>
                                     <button
                                       type="button"
@@ -3049,7 +3176,7 @@ export default function StudentApplication() {
                               <div className={cn(
                                 "rounded-xl px-4 py-3 text-xs font-bold border",
                                 biometricSelfieStatus === 'stored' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                                biometricSelfieStatus === 'failed' || errors.selfie ? "bg-philsa-red/5 text-philsa-red border-philsa-red/20" :
+                                biometricSelfieStatus === 'failed' || capturedSelfieValidationStatus === 'failed' || errors.selfie ? "bg-philsa-red/5 text-philsa-red border-philsa-red/20" :
                                 biometricSelfieStatus === 'reviewing' ? "bg-amber-50 text-amber-700 border-amber-100" :
                                 "bg-slate-50 text-slate-600 border-slate-200"
                               )}>
@@ -3362,10 +3489,16 @@ export default function StudentApplication() {
                                     <button
                                       type="button"
                                       onClick={handleConfirmSelfie}
-                                      className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center gap-2"
+                                      disabled={capturedSelfieValidationStatus !== 'passed'}
+                                      className={cn(
+                                        "px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200 flex items-center justify-center gap-2",
+                                        capturedSelfieValidationStatus === 'passed'
+                                          ? "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"
+                                          : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+                                      )}
                                     >
                                       <CheckCircle className="w-4 h-4" />
-                                      Use This Photo
+                                      {capturedSelfieValidationStatus === 'checking' ? 'Checking Photo' : 'Use This Photo'}
                                     </button>
                                     <button
                                       type="button"
@@ -3444,7 +3577,7 @@ export default function StudentApplication() {
                               <div className={cn(
                                 "rounded-xl px-4 py-3 text-xs font-bold border",
                                 biometricSelfieStatus === 'stored' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
-                                biometricSelfieStatus === 'failed' || errors.selfie ? "bg-philsa-red/5 text-philsa-red border-philsa-red/20" :
+                                biometricSelfieStatus === 'failed' || capturedSelfieValidationStatus === 'failed' || errors.selfie ? "bg-philsa-red/5 text-philsa-red border-philsa-red/20" :
                                 biometricSelfieStatus === 'reviewing' ? "bg-amber-50 text-amber-700 border-amber-100" :
                                 "bg-slate-50 text-slate-600 border-slate-200"
                               )}>
