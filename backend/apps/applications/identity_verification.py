@@ -149,10 +149,25 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
                 minSize=(max(12, int(width * 0.08)), max(12, int(height * 0.08))),
             )
             detected_eye_count = len(eyes)
+        mouth_detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_smile.xml")
+        detected_mouth_count: int | None = None
+        if not mouth_detector.empty():
+            lower_face_gray = original_gray[y + int(height * 0.45) : y + height, x : x + width]
+            mouths = mouth_detector.detectMultiScale(
+                lower_face_gray,
+                scaleFactor=1.2,
+                minNeighbors=8,
+                minSize=(max(24, int(width * 0.18)), max(12, int(height * 0.08))),
+            )
+            detected_mouth_count = len(mouths)
         center_x = x + (width / 2)
         center_y = y + (height / 2)
         horizontal_offset = abs(center_x - (image_width / 2)) / image_width
         vertical_offset = abs(center_y - (image_height / 2)) / image_height
+        face_visibility_passed = (
+            (detected_eye_count is None or detected_eye_count >= 2)
+            and (detected_mouth_count is None or detected_mouth_count >= 1)
+        )
         checks = {
             "faceDetected": {"status": "pass", "value": True, "threshold": "exactly 1 face"},
             "faceSize": {
@@ -166,14 +181,22 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
                 "threshold": f"> {settings.STEP1_SELFIE_MIN_LAPLACIAN_VARIANCE:g}",
             },
             "faceVisibility": {
-                "status": "pass" if detected_eye_count is None or detected_eye_count >= 2 else "fail",
-                "value": None if detected_eye_count is None else detected_eye_count,
-                "threshold": "both eyes visible in upper face region",
+                "status": "pass" if face_visibility_passed else "fail",
+                "value": {
+                    "eyes": detected_eye_count,
+                    "lowerFaceFeatures": detected_mouth_count,
+                },
+                "threshold": "both eyes and lower face visible",
             },
             "eyesOpen": {
                 "status": "pass" if detected_eye_count is None or detected_eye_count >= 2 else "fail",
                 "value": None if detected_eye_count is None else detected_eye_count >= 2,
                 "threshold": "both eyes detected",
+            },
+            "lowerFaceVisibility": {
+                "status": "pass" if detected_mouth_count is None or detected_mouth_count >= 1 else "fail",
+                "value": detected_mouth_count,
+                "threshold": "mouth or lower face feature detected",
             },
             "faceOrientation": {"status": "not_evaluated", "value": None, "threshold": "+/-20 degrees yaw/pitch/roll"},
             "brightness": {
@@ -204,6 +227,8 @@ class OpenCvSelfieFaceValidator(SelfieFaceValidator):
             raise SelfieFaceValidationFailed("Center your face in the camera frame.")
         if detected_eye_count is not None and detected_eye_count < 2:
             raise SelfieFaceValidationFailed("Keep your full face visible and unobstructed.")
+        if detected_mouth_count is not None and detected_mouth_count < 1:
+            raise SelfieFaceValidationFailed("Keep your mouth and lower face visible and unobstructed.")
         if blur_score <= settings.STEP1_SELFIE_MIN_LAPLACIAN_VARIANCE:
             checks["blur"]["status"] = "fail"
             raise SelfieFaceValidationFailed("Selfie image is too blurry. Capture a sharper photo.")

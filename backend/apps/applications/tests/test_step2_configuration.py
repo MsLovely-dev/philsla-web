@@ -432,12 +432,33 @@ class Step2ConfigurationEndpointTests(TestCase):
             def var(self):
                 return 100.0
 
-        class FakeDetector:
+        class FakeFaceDetector:
             def empty(self):
                 return False
 
             def detectMultiScale(self, *args, **kwargs):
                 return [[220, 120, 150, 150], [60, 40, 32, 32]]
+
+        class FakeEyeDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return [[30, 25, 24, 24], [92, 25, 24, 24]]
+
+        class FakeMouthDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return [[48, 54, 42, 18]]
+
+        def cascade_classifier(path):
+            if "eye" in path:
+                return FakeEyeDetector()
+            if "smile" in path:
+                return FakeMouthDetector()
+            return FakeFaceDetector()
 
         fake_np = types.SimpleNamespace(
             uint8="uint8",
@@ -451,7 +472,7 @@ class Step2ConfigurationEndpointTests(TestCase):
             imdecode=lambda *args, **kwargs: FakeImage((480, 640, 3)),
             cvtColor=lambda image, *args, **kwargs: FakeImage(image.shape[:2]),
             equalizeHist=lambda image: image,
-            CascadeClassifier=lambda *args, **kwargs: FakeDetector(),
+            CascadeClassifier=cascade_classifier,
             Laplacian=lambda *args, **kwargs: FakeLaplacian(),
         )
 
@@ -512,10 +533,21 @@ class Step2ConfigurationEndpointTests(TestCase):
                 return False
 
             def detectMultiScale(self, *args, **kwargs):
-                return [[20, 20, 24, 24]]
+                return [[30, 25, 24, 24], [92, 25, 24, 24]]
+
+        class FakeMouthDetector:
+            def empty(self):
+                return False
+
+            def detectMultiScale(self, *args, **kwargs):
+                return []
 
         def cascade_classifier(path):
-            return FakeEyeDetector() if "eye" in path else FakeFaceDetector()
+            if "eye" in path:
+                return FakeEyeDetector()
+            if "smile" in path:
+                return FakeMouthDetector()
+            return FakeFaceDetector()
 
         fake_np = types.SimpleNamespace(
             uint8="uint8",
@@ -555,7 +587,7 @@ class Step2ConfigurationEndpointTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 400)
-        self.assertIn("full face visible", response.data["error"]["fields"]["file"][0])
+        self.assertIn("mouth and lower face visible", response.data["error"]["fields"]["file"][0])
 
     @override_settings(STEP1_SELFIE_FACE_PROVIDER="opencv")
     def test_opencv_selfie_validation_accepts_portrait_webcam_resolution(self):
