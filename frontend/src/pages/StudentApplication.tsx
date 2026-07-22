@@ -9,7 +9,10 @@ import {
   mapBackendApplicationToFrontend,
   type StudentRegistrationFieldConfig,
 } from '../services/backendApplicationService';
-import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Pencil, Eye, Smile } from 'lucide-react';
+import blurrySelfieImg from '../assets/images/blurry-selfie.png';
+import passSelfieImg from '../assets/images/pass-selfie.png';
+import poorLightingSelfieImg from '../assets/images/poorligthing-selfie.png';
+import { CheckCircle, AlertCircle, Save, ChevronRight, ChevronLeft, Shield, User, School, ShieldCheck, Power, Clock, LifeBuoy, RefreshCw, Lock, AlertTriangle, Mail, Phone, Upload, Smartphone, Camera, Pencil } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const SECTIONS = [
@@ -4136,63 +4139,108 @@ export default function StudentApplication() {
        </div>
 
       {showSelfieTutorial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60 transition-all">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-md bg-slate-900/60 transition-all">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="max-w-2xl w-full bg-white rounded-[2rem] border border-slate-200 p-6 sm:p-8 shadow-2xl relative overflow-hidden"
+            className="max-w-5xl w-full max-h-[94vh] overflow-y-auto bg-white rounded-2xl border border-slate-200 p-5 sm:p-7 shadow-2xl relative"
           >
-            <div className="absolute top-0 left-0 w-full h-2 bg-emerald-600" />
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
-              <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-philsa-navy text-white flex items-center justify-center shadow-md">
-                  <Camera className="w-7 h-7" />
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-100 bg-white text-emerald-700">
+                  <Camera className="h-4 w-4 text-philsa-red" />
                 </div>
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-philsa-navy tracking-tight">Selfie Capture Guide</h2>
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mt-1">
-                    Prepare before opening the camera
-                  </p>
+                  <p className="text-xs font-black uppercase tracking-widest text-philsa-navy">Selfie Tutorial</p>
+                  <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-500">Follow these 4 protocol steps before starting your camera capture:</p>
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 mb-6">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { icon: Eye, title: 'Show both eyes', body: 'Remove anything covering your eyes. Look straight at the camera.' },
-                { icon: Smile, title: 'Show nose and lips', body: 'Keep your hand, mask, hair, and objects away from your face.' },
-                { icon: ShieldCheck, title: 'Use your whole face', body: 'Center your face in the frame with forehead, cheeks, nose, and mouth visible.' },
-                { icon: AlertCircle, title: 'Avoid blur', body: 'Hold still, use good lighting, and keep the camera lens clean.' },
-              ].map(item => {
-                const Icon = item.icon;
+                { number: '1', title: 'Proper Lighting', body: 'Ensure bright, even front lighting with no dark shadows or background glare.' },
+                { number: '2', title: 'Face Alignment', body: 'Center your face inside the oval guide and keep camera at eye level.' },
+                { number: '3', title: 'Clear Face', body: 'Remove hats, caps, dark sunglasses, or face coverings.' },
+                { number: '4', title: 'Neutral Pose', body: 'Look straight forward into camera with a natural, calm expression.' },
+              ].map((item, index) => {
                 return (
-                  <div key={item.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-white text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black uppercase tracking-widest text-philsa-navy">{item.title}</p>
-                        <p className="text-xs font-semibold text-slate-600 leading-relaxed mt-1">{item.body}</p>
-                      </div>
+                  <div key={item.title} className="rounded-xl border border-slate-200 bg-white px-5 py-6 text-center shadow-sm">
+                    <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-white">
+                      <span className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-full text-xs font-black",
+                        index === 0 ? "bg-amber-50 text-amber-700" :
+                        index === 1 ? "bg-blue-50 text-blue-700" :
+                        index === 2 ? "bg-rose-50 text-rose-700" :
+                        "bg-emerald-50 text-emerald-700"
+                      )}>
+                        {item.number}
+                      </span>
                     </div>
+                    <p className="text-xs font-black uppercase tracking-widest text-philsa-navy">{item.title}</p>
+                    <p className="mt-3 text-[10px] font-semibold leading-relaxed text-slate-500">{item.body}</p>
                   </div>
                 );
               })}
             </div>
 
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 mb-6">
-              <p className="text-xs font-bold text-amber-800 leading-relaxed">
-                After capture, the system will validate the photo. If your face is blurry, missing, or covered around the eyes, nose, or lips, you must retake it before Use This Photo becomes available.
-              </p>
+            <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  <p className="text-xs font-black uppercase tracking-widest text-philsa-navy">Sample Compliant Selfie Visual Reference</p>
+                </div>
+                <span className="rounded-full bg-emerald-50 px-3 py-1 text-[8px] font-black uppercase tracking-widest text-emerald-700">Required Standard</span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                {[
+                  {
+                    status: 'pass',
+                    title: 'Proper Selfie Sample',
+                    body: 'Frontal face centered inside frame, bright even lighting, eyes and expression visible with no caps or dark glasses.',
+                    image: passSelfieImg,
+                    alt: 'Proper selfie sample',
+                  },
+                  {
+                    status: 'fail',
+                    title: 'Poor Lighting / Shadows',
+                    body: 'Dark backgrounds, harsh shadows, or backlit environments will cause biometric verification failure.',
+                    image: poorLightingSelfieImg,
+                    alt: 'Poor lighting selfie sample',
+                  },
+                  {
+                    status: 'fail',
+                    title: 'Obstructed / Blurry Face',
+                    body: 'Face coverings, sunglasses, caps, or extreme side profile angles will be automatically rejected.',
+                    image: blurrySelfieImg,
+                    alt: 'Blurry or obstructed selfie sample',
+                  },
+                ].map(item => (
+                  <div
+                    key={item.title}
+                    className={cn(
+                      "rounded-xl border p-4 text-center",
+                      item.status === 'pass' ? "border-emerald-300 bg-white" : "border-rose-200 bg-white"
+                    )}
+                  >
+                    <img src={item.image} alt={item.alt} className="mx-auto h-36 w-36 sm:h-40 sm:w-40 object-contain" />
+                    <p className={cn(
+                      "mx-auto mt-4 inline-flex rounded px-3 py-1 text-[9px] font-black uppercase tracking-widest",
+                      item.status === 'pass' ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                    )}>
+                      {item.status === 'pass' ? 'PASS ' : 'X '}{item.title}
+                    </p>
+                    <p className="mt-2 text-[10px] font-semibold leading-relaxed text-slate-500">{item.body}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <button
                 type="button"
                 onClick={() => setShowSelfieTutorial(false)}
-                className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-all duration-200"
+                className="px-6 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-slate-100 bg-slate-100 text-slate-500 hover:bg-slate-200 transition-all duration-200 flex items-center justify-center gap-2"
               >
                 Cancel
               </button>
@@ -4203,10 +4251,10 @@ export default function StudentApplication() {
                   setShowSelfieTutorial(false);
                   void startSelfieCamera({ skipTutorial: true });
                 }}
-                className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 transition-all duration-200 flex items-center justify-center gap-2"
+                className="px-7 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-black bg-black text-white hover:bg-slate-900 transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-slate-900/20"
               >
-                <Camera className="w-4 h-4" />
-                Proceed to Camera
+                <Camera className="w-4 h-4 text-amber-400" />
+                Start Camera Selfie
               </button>
             </div>
           </motion.div>
