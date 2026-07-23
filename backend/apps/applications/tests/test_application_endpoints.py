@@ -1,8 +1,10 @@
+import re
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
+from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -64,6 +66,24 @@ def complete_payload():
     }
 
 
+def verify_registration_email(client, email: str) -> str:
+    request_response = client.post(
+        reverse("applications:registration-email-otp-request"),
+        {"email": email},
+        format="json",
+    )
+    assert request_response.status_code == 200
+    code_match = re.search(r"\b(\d{6})\b", mail.outbox[-1].body)
+    assert code_match is not None
+    verify_response = client.post(
+        reverse("applications:registration-email-otp-verify"),
+        {"email": email, "code": code_match.group(1)},
+        format="json",
+    )
+    assert verify_response.status_code == 200
+    return verify_response.data["emailVerificationToken"]
+
+
 class ApplicationEndpointTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -123,6 +143,7 @@ class ApplicationEndpointTests(TestCase):
         payload = complete_payload()
         payload["personal"]["email"] = "new.student@example.test"
         payload["verificationToken"] = verification.data["verificationToken"]
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
         payload["submitOnCreate"] = True
 
         response = client.post(reverse("applications:create"), payload, format="json")
@@ -150,6 +171,7 @@ class ApplicationEndpointTests(TestCase):
         payload = complete_payload()
         payload["personal"]["email"] = "audited.student@example.test"
         payload["verificationToken"] = verification.data["verificationToken"]
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
         payload["submitOnCreate"] = True
 
         response = client.post(
@@ -201,17 +223,41 @@ class ApplicationEndpointTests(TestCase):
             user_agent="AuditBrowser/1.0",
             correlation_id="corr-test",
         )
+        ApplicationAuditLog.objects.create(
+            application=submitted,
+            action="REGISTRATION_STUDENT_ACCOUNT_ACTIVATED",
+            event="student_account_activated",
+            outcome="success",
+            registration_id=submitted.candidate_id,
+            applicant_id=submitted.candidate_id,
+            account_id="student-account-1",
+            actor_user_id="student-account-1",
+            actor_role="Student",
+            session_id="REG-SESSION-ACTIVATED",
+            ip_address="127.0.0.1",
+            user_agent="ActivationBrowser/1.0",
+            correlation_id="corr-activation-test",
+        )
         self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
 
         response = self.client.get(reverse("applications:registration-submitted-audit"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["action"], "REGISTRATION_SUBMITTED")
-        self.assertEqual(response.data[0]["applicationId"], str(submitted.id))
-        self.assertEqual(response.data[0]["candidateId"], submitted.candidate_id)
-        self.assertEqual(response.data[0]["registrationId"], str(submitted.id))
-        self.assertEqual(response.data[0]["sessionId"], "REG-SESSION-LIST")
+        self.assertEqual(len(response.data), 2)
+        actions = [row["action"] for row in response.data]
+        self.assertEqual(actions, [
+            "REGISTRATION_STUDENT_ACCOUNT_ACTIVATED",
+            "REGISTRATION_SUBMITTED",
+        ])
+        self.assertEqual(response.data[0]["actorRole"], "Student")
+        self.assertEqual(response.data[0]["actorDisplay"], "Test Student")
+        self.assertEqual(response.data[0]["accountId"], "student-account-1")
+        self.assertEqual(response.data[0]["sessionId"], "REG-SESSION-ACTIVATED")
+        self.assertEqual(response.data[1]["actorDisplay"], "Test Student")
+        self.assertEqual(response.data[1]["applicationId"], str(submitted.id))
+        self.assertEqual(response.data[1]["candidateId"], submitted.candidate_id)
+        self.assertEqual(response.data[1]["registrationId"], str(submitted.id))
+        self.assertEqual(response.data[1]["sessionId"], "REG-SESSION-LIST")
 
     def test_public_manual_high_priority_registration_can_create_account_without_lrn(self):
         client = APIClient()
@@ -219,10 +265,12 @@ class ApplicationEndpointTests(TestCase):
         payload["personal"]["email"] = "manual.student.one@example.test"
         payload["school"]["lrn"] = ""
         payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
         second_payload = complete_payload()
         second_payload["personal"]["email"] = "manual.student.two@example.test"
         second_payload["school"]["lrn"] = ""
         second_payload["submitOnCreate"] = True
+        second_payload["emailVerificationToken"] = verify_registration_email(client, second_payload["personal"]["email"])
 
         first = client.post(reverse("applications:create"), payload, format="json")
         second = client.post(reverse("applications:create"), second_payload, format="json")
@@ -244,10 +292,12 @@ class ApplicationEndpointTests(TestCase):
         payload["personal"]["email"] = "manual.duplicate.one@example.test"
         payload["school"]["lrn"] = "123456789012"
         payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
         second_payload = complete_payload()
         second_payload["personal"]["email"] = "manual.duplicate.two@example.test"
         second_payload["school"]["lrn"] = "123456789012"
         second_payload["submitOnCreate"] = True
+        second_payload["emailVerificationToken"] = verify_registration_email(client, second_payload["personal"]["email"])
 
         first = client.post(reverse("applications:create"), payload, format="json")
         second = client.post(reverse("applications:create"), second_payload, format="json")
@@ -487,6 +537,8 @@ class ApplicationEndpointTests(TestCase):
             reverse("applications:review-decision", args=[application.id]),
             {"decision": "APPROVE", "reason": "Verified."},
             format="json",
+            HTTP_X_REGISTRATION_SESSION_ID="REG-SESSION-ACTIVATE",
+            HTTP_USER_AGENT="ReviewerBrowser/1.0",
         )
 
         self.assertEqual(response.status_code, 200)
@@ -506,6 +558,17 @@ class ApplicationEndpointTests(TestCase):
                 lrn="123456789012",
             ).exists()
         )
+        audit_log = ApplicationAuditLog.objects.get(action="REGISTRATION_STUDENT_ACCOUNT_ACTIVATED")
+        self.assertEqual(audit_log.event, "student_account_activated")
+        self.assertEqual(audit_log.outcome, "success")
+        self.assertEqual(audit_log.application_id, application.id)
+        self.assertEqual(audit_log.registration_id, application.candidate_id)
+        self.assertEqual(audit_log.applicant_id, application.candidate_id)
+        self.assertEqual(audit_log.account_id, str(application.owner_id))
+        self.assertEqual(audit_log.actor_user_id, str(application.owner_id))
+        self.assertEqual(audit_log.actor_role, "Student")
+        self.assertEqual(audit_log.session_id, "REG-SESSION-ACTIVATE")
+        self.assertEqual(audit_log.user_agent, "ReviewerBrowser/1.0")
 
     def test_reviewer_reject_clears_pending_password_hash(self):
         payload = complete_payload()

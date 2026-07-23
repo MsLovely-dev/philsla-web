@@ -29,6 +29,8 @@ The baseline health and authentication boundaries plus the first student-applica
 | `GET` | `/api/v1/applications/review-queue/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | List submitted registration applications for admissions review | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
+| `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
+| `POST` | `/api/v1/applications/registration/email-otp/verify/` | Public; device/network throttled | `AllowAny` | Verify a registration email OTP and issue a short-lived email verification token | Implemented |
 | `GET` | `/api/v1/configuration/fields/?module=student_registration` | Public | `AllowAny` | Return enabled configurable field rows used by Step 1 | Implemented |
 | `GET` | `/api/v1/applications/registration/step-2/configuration/` | Public | `AllowAny` | Return the currently effective Step 2 requirements | Implemented |
 | `GET`, `POST` | `/api/v1/applications/registration/step-2/` | Public with registration token | `AllowAny` | Read progress or upload one private JPEG/PNG identity image | Implemented |
@@ -90,6 +92,27 @@ Final public registration submission is performed by adding `submitOnCreate: tru
 
 When `submitOnCreate` is true for initial registration, the backend validates Step 1 high-priority information plus account credentials, stores the pending password hash, and returns a `SUBMITTED` registration record without creating an active Student account. The Student account becomes usable only after admissions approval. If validation fails, no draft is left behind. This is the expected path for applicants who do not yet have Student Portal accounts.
 
+Before enabling mobile number and password entry, call `POST /api/v1/applications/registration/email-otp/request/`:
+
+```json
+{
+  "email": "student@example.test"
+}
+```
+
+The backend generates a six-digit OTP, stores only a keyed hash in the cache, and sends the raw OTP through Django email. Local development uses the console email backend, so the OTP appears in the Django terminal. Production must set `AUTH_EMAIL_PROVIDER=azure_communication_services_smtp` and Azure Communication Services SMTP credentials. The request response contains only the normalized email, expiration, and resend cooldown; it never contains the OTP.
+
+Then call `POST /api/v1/applications/registration/email-otp/verify/`:
+
+```json
+{
+  "email": "student@example.test",
+  "code": "123456"
+}
+```
+
+A successful verification returns `emailVerificationToken`. OTP verification attempts are not persisted in the application audit log. Initial registration submission with `submitOnCreate` must include that token as `emailVerificationToken`, and the backend verifies that the token matches the submitted `personal.email` before storing account credentials. Invalid or expired OTPs return `400 REGISTRATION_EMAIL_OTP_FAILED`; resend cooldown returns `429 REGISTRATION_EMAIL_OTP_COOLDOWN`.
+
 Read and update require ownership. Publicly submitted registrations are not linked to a Student account until approval. Updates are allowed only in `DRAFT` or `FOR_CORRECTION`. Every `PATCH` must include the last observed integer `version`; a stale value returns `409 CONFLICT` without overwriting newer data. A successful update increments `version`.
 
 Submission request:
@@ -110,13 +133,21 @@ Admissions reviewers can load the review ledger with `GET /api/v1/applications/r
 
 The applicant registration audit log displays:
 
-| Date & Time | Activity | Details |
-| --- | --- | --- |
-| Backend-generated timestamp | OTP Verification Successful | Email verified successfully. |
-| Backend-generated timestamp | Account Credentials Created | Student Portal credentials created. |
-| Backend-generated timestamp | Registration Submitted | Registration submitted for admission review. |
+| Date & Time | Candidate ID | Session ID | IP Address | Activity | User | Details |
+| --- | --- | --- | --- | --- | --- | --- |
+| Backend-generated timestamp | Candidate ID when available | Request session ID | Student IP address | Account Credentials Created | Student | Student Portal credentials created. |
+| Backend-generated timestamp | Candidate ID | Request session ID | Request IP address | Student Account Activated | Submitted applicant name | Student account activated after application approval. |
+| Backend-generated timestamp | Candidate ID | Request session ID | Student IP address | Registration Submitted | Submitted applicant name | Registration submitted for admission review. |
 
-Successful registration audit responses include `candidateId` for reviewer-facing display and `applicationId` for the internal UUID reference. New submitted-registration audit rows use the same candidate ID in `registrationId` and `applicantId` to match the permanent candidate identifier shown to the applicant. The current backend persistence slice captures `Registration Submitted`; OTP verification and account credential audit persistence remain `TBD` until the registration OTP and account-token stores are implemented.
+Registration audit responses include `candidateId` for reviewer-facing display and `applicationId` for the internal UUID reference when an application exists. New submitted-registration and account-activation audit rows use the same candidate ID in `registrationId` and `applicantId` to match the permanent candidate identifier shown to the applicant. The current backend persistence slice captures `Student Account Activated` and `Registration Submitted`; account credential audit persistence remains `TBD`.
+
+### `POST /api/v1/applications/registration/email-otp/request/`
+
+Implemented in `backend/apps/applications/tests/test_registration_email_otp.py`.
+
+### `POST /api/v1/applications/registration/email-otp/verify/`
+
+Implemented in `backend/apps/applications/tests/test_registration_email_otp.py`.
 
 Reviewer decisions are persisted through `POST /api/v1/applications/{applicationId}/review-decision/`:
 

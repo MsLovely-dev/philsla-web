@@ -166,6 +166,7 @@ type RegistrationSessionDraft = {
   capturedSelfiePreview?: string;
   isEmailVerified?: boolean;
   emailOtpSentTo?: string;
+  emailVerificationToken?: string;
   reviewCertified?: boolean;
 };
 
@@ -507,9 +508,11 @@ export default function StudentApplication() {
     }
   }, [showPrivacyConsent, activeVerificationPath, restoredSessionDraft, verificationPath]);
   const [emailOtp, setEmailOtp] = useState('');
-  const [generatedEmailOtp, setGeneratedEmailOtp] = useState('');
   const [emailOtpSentTo, setEmailOtpSentTo] = useState(() => restoredSessionDraft?.emailOtpSentTo ?? '');
   const [isEmailVerified, setIsEmailVerified] = useState(() => restoredSessionDraft?.isEmailVerified ?? false);
+  const [emailVerificationToken, setEmailVerificationToken] = useState(() => restoredSessionDraft?.emailVerificationToken ?? '');
+  const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
+  const [isVerifyingEmailOtp, setIsVerifyingEmailOtp] = useState(false);
 
   // Helpdesk Ticket Form States
   const [ticketContactEmail, setTicketContactEmail] = useState('');
@@ -753,6 +756,7 @@ export default function StudentApplication() {
       capturedSelfiePreview,
       isEmailVerified,
       emailOtpSentTo,
+      emailVerificationToken,
       reviewCertified,
     };
 
@@ -771,6 +775,7 @@ export default function StudentApplication() {
     capturedSelfiePreview,
     currentSection,
     emailOtpSentTo,
+    emailVerificationToken,
     formData,
     isEmailVerified,
     isIdVerified,
@@ -1172,9 +1177,9 @@ export default function StudentApplication() {
 
   const resetEmailVerification = () => {
     setEmailOtp('');
-    setGeneratedEmailOtp('');
     setEmailOtpSentTo('');
     setIsEmailVerified(false);
+    setEmailVerificationToken('');
   };
 
   const selectedLrnVerificationCategory = LRN_VERIFICATION_CATEGORIES.find(category => category.value === lrnVerificationCategory) ?? LRN_VERIFICATION_CATEGORIES[0];
@@ -1761,7 +1766,7 @@ export default function StudentApplication() {
     };
   }, []);
 
-  const handleSendEmailOtp = () => {
+  const handleSendEmailOtp = async () => {
     const email = formData.email.trim();
     if (!email) {
       setErrors(prev => ({ ...prev, email: 'Email address is required before sending OTP' }));
@@ -1776,11 +1781,20 @@ export default function StudentApplication() {
       return;
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedEmailOtp(otp);
+    setIsSendingEmailOtp(true);
+    const result = await backendApplicationService.requestRegistrationEmailOtp(email, {
+      registrationSessionId: registrationSessionIdRef.current,
+    });
+    setIsSendingEmailOtp(false);
+    if (result.ok === false) {
+      setErrors(prev => ({ ...prev, emailOtp: result.error.message }));
+      return;
+    }
+
     setEmailOtpSentTo(email);
     setEmailOtp('');
     setIsEmailVerified(false);
+    setEmailVerificationToken('');
     setErrors(prev => {
       const next = { ...prev };
       delete next.email;
@@ -1789,16 +1803,29 @@ export default function StudentApplication() {
     });
   };
 
-  const handleVerifyEmailOtp = () => {
-    if (!generatedEmailOtp || emailOtpSentTo !== formData.email.trim()) {
+  const handleVerifyEmailOtp = async () => {
+    const email = formData.email.trim();
+    if (!emailOtpSentTo || emailOtpSentTo !== email) {
       setErrors(prev => ({ ...prev, emailOtp: 'Please send an OTP to this email address first.' }));
       return;
     }
-    if (emailOtp.trim() !== generatedEmailOtp) {
-      setErrors(prev => ({ ...prev, emailOtp: 'Invalid OTP. Please check the temporary code shown above.' }));
+    if (!/^\d{6}$/.test(emailOtp.trim())) {
+      setErrors(prev => ({ ...prev, emailOtp: 'Enter the 6-digit OTP sent to your email address.' }));
       return;
     }
+
+    setIsVerifyingEmailOtp(true);
+    const result = await backendApplicationService.verifyRegistrationEmailOtp(email, emailOtp.trim(), {
+      registrationSessionId: registrationSessionIdRef.current,
+    });
+    setIsVerifyingEmailOtp(false);
+    if (result.ok === false) {
+      setErrors(prev => ({ ...prev, emailOtp: result.error.message }));
+      return;
+    }
+
     setIsEmailVerified(true);
+    setEmailVerificationToken(result.data.emailVerificationToken);
     setErrors(prev => {
       const next = { ...prev };
       delete next.email;
@@ -2060,9 +2087,9 @@ export default function StudentApplication() {
     setVerificationPath(activeVerificationPath);
     setLrnVerificationToken('');
     setEmailOtp('');
-    setGeneratedEmailOtp('');
     setEmailOtpSentTo('');
     setIsEmailVerified(false);
+    setEmailVerificationToken('');
     setCurrentSection(0);
     setVisitedSections([0]);
     setReviewCertified(false);
@@ -2074,12 +2101,17 @@ export default function StudentApplication() {
       setErrors({ general: 'Certify that the reviewed registration details are accurate before submitting.' });
       return;
     }
+    if (!isEmailVerified || emailOtpSentTo !== formData.email.trim() || !emailVerificationToken) {
+      setErrors({ emailOtp: 'Please verify your email address using the OTP before continuing.' });
+      setCurrentSection(1);
+      return;
+    }
 
     clearRegistrationSessionDraft();
 
     setIsSubmitting(true);
     const result = await backendApplicationService.createAndSubmit(
-      createBackendApplicationDraftInput(lrnVerificationToken, {
+      createBackendApplicationDraftInput(lrnVerificationToken, emailVerificationToken, {
         ...formData,
         selfiePhotoUrl: capturedSelfiePreview,
       }),
@@ -3622,17 +3654,17 @@ export default function StudentApplication() {
                               <button
                                  type="button"
                                  onClick={handleSendEmailOtp}
-                                 disabled={isEmailVerified || Boolean(existingEmailMessage)}
+                                 disabled={isEmailVerified || Boolean(existingEmailMessage) || isSendingEmailOtp}
                                  className={cn(
                                     "px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200",
                                     isEmailVerified
                                       ? "bg-green-50 text-green-700 border-green-200 cursor-not-allowed"
-                                      : existingEmailMessage
+                                      : existingEmailMessage || isSendingEmailOtp
                                         ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                                       : "bg-philsa-navy text-white border-philsa-navy hover:bg-philsa-navy/90"
                                  )}
                               >
-                                 {generatedEmailOtp ? 'Resend OTP' : 'Send OTP'}
+                                 {isSendingEmailOtp ? 'Sending...' : emailOtpSentTo ? 'Resend OTP' : 'Send OTP'}
                               </button>
                            </div>
                            {(errors.email || existingEmailMessage) && (
@@ -3645,19 +3677,18 @@ export default function StudentApplication() {
                            )}
                         </div>
 
-                        {generatedEmailOtp && !isEmailVerified && (
-                           <div className="space-y-3 p-5 rounded-2xl border border-amber-200 bg-amber-50">
+                        {emailOtpSentTo && !isEmailVerified && (
+                           <div className="space-y-3 p-5 rounded-2xl border border-blue-200 bg-blue-50">
                               <div className="flex items-start gap-3">
-                                 <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                                 <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
                                     <Mail className="w-5 h-5" />
                                  </div>
                                  <div>
-                                    <h5 className="text-xs font-black text-amber-900 uppercase tracking-widest">Temporary Email OTP Simulation</h5>
-                                    <p className="text-xs text-amber-800 font-medium mt-1">
-                                       Email delivery is not connected yet. Use this temporary OTP for local testing:
-                                       <span className="ml-2 font-black tracking-[0.35em] text-philsa-navy">{generatedEmailOtp}</span>
+                                    <h5 className="text-xs font-black text-blue-900 uppercase tracking-widest">Email OTP Sent</h5>
+                                    <p className="text-xs text-blue-800 font-medium mt-1">
+                                       Enter the 6-digit OTP sent to your email address. In local development, read the OTP from the Django backend console.
                                     </p>
-                                    <p className="text-[11px] text-amber-700 mt-1">Target email: {emailOtpSentTo}</p>
+                                    <p className="text-[11px] text-blue-700 mt-1">Target email: {emailOtpSentTo}</p>
                                  </div>
                               </div>
                               <div className="flex flex-col sm:flex-row gap-3">
@@ -3676,23 +3707,29 @@ export default function StudentApplication() {
                                  <button
                                     type="button"
                                     onClick={handleVerifyEmailOtp}
-                                    className="px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border border-green-600 bg-green-600 text-white hover:bg-green-700 transition-all duration-200"
+                                    disabled={isVerifyingEmailOtp}
+                                    className={cn(
+                                       "px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest border transition-all duration-200",
+                                       isVerifyingEmailOtp
+                                         ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+                                         : "border-green-600 bg-green-600 text-white hover:bg-green-700"
+                                    )}
                                  >
-                                    Verify OTP
+                                    {isVerifyingEmailOtp ? 'Verifying...' : 'Verify OTP'}
                                  </button>
                               </div>
                               {errors.emailOtp && <p className="text-xs text-philsa-red font-bold pl-1">{errors.emailOtp}</p>}
                            </div>
                         )}
 
-                        {!generatedEmailOtp && !isEmailVerified && errors.emailOtp && (
+                        {!emailOtpSentTo && !isEmailVerified && errors.emailOtp && (
                            <p className="text-xs text-philsa-red font-bold pl-1">{errors.emailOtp}</p>
                         )}
 
                         <div className={cn("p-4 rounded-2xl border flex items-start gap-3", isEmailVerified ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200")}>
                            <ShieldCheck className={cn("w-5 h-5 mt-0.5 shrink-0", isEmailVerified ? "text-green-700" : "text-blue-700")} />
                            <p className={cn("text-xs font-bold leading-relaxed", isEmailVerified ? "text-green-800" : "text-blue-800")}>
-                              Email must be verified using OTP before setting password and mobile number. This OTP is currently displayed on-screen until email delivery is configured.
+                              Email must be verified using OTP before setting password and mobile number. For local development, the OTP email is printed in the Django backend console after Send OTP.
                            </p>
                         </div>
 

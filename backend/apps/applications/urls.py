@@ -10,6 +10,8 @@ from .views import (
     ApplicationSubmitView,
     LrnVerificationView,
     PublicStep2ConfigurationView,
+    RegistrationEmailOtpRequestView,
+    RegistrationEmailOtpVerifyView,
     RegistrationIdentitySelfieFaceValidationView,
     RegistrationManualIdentitySelfieFaceValidationView,
     RegistrationIdentitySelfieView,
@@ -20,6 +22,8 @@ from .views import (
 
 urlpatterns = [
     path("registration/lrn/verify/", LrnVerificationView.as_view(), name="verify-lrn"),
+    path("registration/email-otp/request/", RegistrationEmailOtpRequestView.as_view(), name="registration-email-otp-request"),
+    path("registration/email-otp/verify/", RegistrationEmailOtpVerifyView.as_view(), name="registration-email-otp-verify"),
     path("registration/identity/selfie/", RegistrationIdentitySelfieView.as_view(), name="registration-identity-selfie"),
     path("registration/identity/selfie-face/", RegistrationIdentitySelfieFaceValidationView.as_view(), name="registration-identity-selfie-face"),
     path("registration/identity/manual-selfie-face/", RegistrationManualIdentitySelfieFaceValidationView.as_view(), name="registration-manual-identity-selfie-face"),

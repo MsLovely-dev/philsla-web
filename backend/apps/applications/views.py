@@ -19,6 +19,8 @@ from .serializers import (
     ApplicationSubmitSerializer,
     ApplicationUpdateSerializer,
     LrnVerificationSerializer,
+    RegistrationEmailOtpRequestSerializer,
+    RegistrationEmailOtpVerifySerializer,
     RegistrationIdentitySelfieFaceValidationSerializer,
     RegistrationIdentitySelfieUploadSerializer,
     ReviewerDecisionSerializer,
@@ -29,7 +31,8 @@ from .serializers import (
 from .services import (active_step2_configuration, create_draft, decide_application,
                        decide_step2_manual_review, get_step2_verification, serialize_step2, submit_application,
                        update_draft, upload_step2_media, validate_manual_registration_selfie_face,
-                       validate_registration_selfie_face, verify_lrn)
+                       validate_registration_selfie_face, request_registration_email_otp,
+                       verify_registration_email_otp, verify_lrn)
 from .models import IdentityMediaType, Step2VerificationConfiguration
 from .throttling import DeviceScopedRateThrottle
 
@@ -50,6 +53,36 @@ class LrnVerificationView(APIView):
             client_identifier=DeviceScopedRateThrottle().get_ident(request),
         )
         record_application_event(event="registration_lrn_verified", outcome="success", request=request)
+        return Response(result)
+
+
+class RegistrationEmailOtpRequestView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [DeviceScopedRateThrottle]
+    throttle_scope = "registration_email_otp"
+
+    def post(self, request) -> Response:
+        serializer = RegistrationEmailOtpRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = request_registration_email_otp(email=serializer.validated_data["email"])
+        record_application_event(event="registration_email_otp_requested", outcome="success", request=request)
+        return Response(result)
+
+
+class RegistrationEmailOtpVerifyView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [DeviceScopedRateThrottle]
+    throttle_scope = "registration_email_otp"
+
+    def post(self, request) -> Response:
+        serializer = RegistrationEmailOtpVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = verify_registration_email_otp(
+            email=serializer.validated_data["email"],
+            code=serializer.validated_data["code"],
+        )
         return Response(result)
 
 
@@ -168,11 +201,13 @@ class ApplicationCreateView(APIView):
         serializer = ApplicationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         verification_token = serializer.validated_data.pop("verificationToken", "")
+        email_verification_token = serializer.validated_data.pop("emailVerificationToken", "")
         submit_on_create = serializer.validated_data.pop("submitOnCreate", False)
         owner = request.user if getattr(request.user, "is_authenticated", False) else None
         application = create_draft(
             owner=owner,
             verification_token=verification_token,
+            email_verification_token=email_verification_token,
             data=serializer.validated_data,
             submit_on_create=submit_on_create,
         )
@@ -187,7 +222,10 @@ class ApplicationSubmittedAuditLogView(APIView):
 
     def get(self, request) -> Response:
         logs = ApplicationAuditLog.objects.filter(
-            action="REGISTRATION_SUBMITTED",
+            action__in=(
+                "REGISTRATION_STUDENT_ACCOUNT_ACTIVATED",
+                "REGISTRATION_SUBMITTED",
+            ),
             outcome="success",
         ).order_by("-created_at")[:500]
         return Response(ApplicationAuditLogSerializer(logs, many=True).data)
@@ -226,6 +264,13 @@ class ApplicationReviewerDecisionView(APIView):
             request=request,
             user=request.user,
         )
+        if serializer.validated_data["decision"] == "APPROVE":
+            record_application_event(
+                event="student_account_activated",
+                outcome="success",
+                request=request,
+                application=decided,
+            )
         return Response(ApplicationSerializer(decided, context={"request": request}).data)
 
 

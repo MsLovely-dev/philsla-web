@@ -27,6 +27,19 @@ export interface LrnVerificationResult {
   step2: Step2Configuration;
 }
 
+export interface RegistrationEmailOtpRequestResult {
+  email: string;
+  expiresInSeconds: number;
+  resendCooldownSeconds: number;
+}
+
+export interface RegistrationEmailOtpVerifyResult {
+  email: string;
+  verified: true;
+  emailVerificationToken: string;
+  expiresInSeconds: number;
+}
+
 export interface Step2Configuration {
   configurationId: number | null;
   requireStudentIdVerification: boolean;
@@ -106,6 +119,7 @@ export interface BackendApplication {
 
 export interface BackendApplicationDraftInput {
   verificationToken: string;
+  emailVerificationToken?: string;
   submitOnCreate?: boolean;
   password?: string;
   personal: Record<string, unknown>;
@@ -117,7 +131,10 @@ export interface BackendApplicationDraftInput {
 
 export interface BackendRegistrationSubmittedAuditLog {
   id: number | string;
-  action: 'REGISTRATION_SUBMITTED';
+  action:
+    | 'REGISTRATION_ACCOUNT_CREDENTIALS_CREATED'
+    | 'REGISTRATION_STUDENT_ACCOUNT_ACTIVATED'
+    | 'REGISTRATION_SUBMITTED';
   event: string;
   outcome: 'success' | string;
   timestamp: string;
@@ -130,6 +147,8 @@ export interface BackendRegistrationSubmittedAuditLog {
   candidateId?: string;
   accountId: string;
   actor: string;
+  actorRole: string;
+  actorDisplay?: string;
   correlation_id: string;
 }
 
@@ -155,6 +174,26 @@ export class BackendApplicationService {
           verificationValue: verification.value,
         } : {}),
       }),
+    });
+  }
+
+  requestRegistrationEmailOtp(email: string, options: ApplicationRequestOptions = {}): Promise<ServiceResult<RegistrationEmailOtpRequestResult>> {
+    return this.apiClient.request<RegistrationEmailOtpRequestResult>('/api/v1/applications/registration/email-otp/request/', {
+      method: 'POST',
+      headers: {
+        ...(options.registrationSessionId ? { 'X-Registration-Session-Id': options.registrationSessionId } : {}),
+      },
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  verifyRegistrationEmailOtp(email: string, code: string, options: ApplicationRequestOptions = {}): Promise<ServiceResult<RegistrationEmailOtpVerifyResult>> {
+    return this.apiClient.request<RegistrationEmailOtpVerifyResult>('/api/v1/applications/registration/email-otp/verify/', {
+      method: 'POST',
+      headers: {
+        ...(options.registrationSessionId ? { 'X-Registration-Session-Id': options.registrationSessionId } : {}),
+      },
+      body: JSON.stringify({ email, code }),
     });
   }
 
@@ -299,6 +338,7 @@ export class BackendApplicationService {
 
 export function createBackendApplicationDraftInput(
   verificationToken: string,
+  emailVerificationToken: string,
   formData: {
     firstName: string;
     middleName: string;
@@ -354,6 +394,7 @@ export function createBackendApplicationDraftInput(
 
   return {
     verificationToken,
+    emailVerificationToken,
     password: formData.password,
     personal: {
       firstName: formData.firstName,

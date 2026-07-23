@@ -35,3 +35,9 @@ if STEP1_SELFIE_FACE_PROVIDER in {"mock", "unavailable"}:  # noqa: F405
     raise ImproperlyConfigured("STEP1_SELFIE_FACE_PROVIDER must be configured with a production face detector.")
 if ACTIVE_EXAM_CYCLE_ID == "TBD":  # noqa: F405
     raise ImproperlyConfigured("ACTIVE_EXAM_CYCLE_ID is required in production.")
+if AUTH_EMAIL_PROVIDER != "azure_communication_services_smtp":  # noqa: F405
+    raise ImproperlyConfigured("AUTH_EMAIL_PROVIDER=azure_communication_services_smtp is required in production.")
+if not AZURE_COMMUNICATION_EMAIL_SMTP_USERNAME or not AZURE_COMMUNICATION_EMAIL_SMTP_PASSWORD:  # noqa: F405
+    raise ImproperlyConfigured("Azure Communication Services SMTP credentials are required in production.")
+if not DEFAULT_FROM_EMAIL or DEFAULT_FROM_EMAIL == "PhilSA Admissions <no-reply@example.test>":  # noqa: F405
+    raise ImproperlyConfigured("DEFAULT_FROM_EMAIL must be configured with a verified sender in production.")

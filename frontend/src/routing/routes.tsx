@@ -120,6 +120,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/hub/exam-sets', element: <HubExamSets />, access: 'protected', allowedRoles: HUB },
   { path: '/admin/hub/upload', element: <HubBulkUpload />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/hub/audit', element: <HubAuditTrail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
+  { path: '/admin/hub/audit/student-registration', element: <HubAuditTrail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/hub/review', element: <ExamReviewList />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN') },
   { path: '/admin/hub/review/:id', element: <ExamReviewDetail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN') },
   { path: '/admin/hub/results-release', element: <ResultsRelease />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },

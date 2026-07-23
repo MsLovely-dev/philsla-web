@@ -113,6 +113,22 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/accounts/tests/test_recovery_endpoints.py",
         "route_namespace": "accounts",
     },
+    {
+        "method": "POST",
+        "path": "/api/v1/applications/registration/email-otp/request/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/applications/registration/email-otp/request/`",
+        "doc_test_reference": "backend/apps/applications/tests/test_registration_email_otp.py",
+        "route_namespace": "applications",
+    },
+    {
+        "method": "POST",
+        "path": "/api/v1/applications/registration/email-otp/verify/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/applications/registration/email-otp/verify/`",
+        "doc_test_reference": "backend/apps/applications/tests/test_registration_email_otp.py",
+        "route_namespace": "applications",
+    },
 )
 
 

@@ -7,8 +7,10 @@ from difflib import SequenceMatcher
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
+from django.core.mail import send_mail
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
+from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
 
@@ -37,6 +39,8 @@ LRN_ATTEMPT_PREFIX = "registration:lrn-attempt:"
 LRN_CLIENT_ATTEMPT_PREFIX = "registration:lrn-client-attempt:"
 LRN_PROOF_PREFIX = "registration:lrn-proof:"
 LRN_VERIFICATION_CATEGORIES = {"email", "birthday", "student_id", "mobile", "mother_name"}
+REGISTRATION_EMAIL_OTP_PREFIX = "registration:email-otp:"
+REGISTRATION_EMAIL_VERIFIED_PREFIX = "registration:email-verified:"
 
 
 class LrnVerificationRejected(APIException):
@@ -60,6 +64,110 @@ class LrnCooldown(APIException):
         self.error_meta = {
             "retryAfterSeconds": retry_after_seconds or settings.LRN_FAILED_ATTEMPT_WINDOW_MINUTES * 60,
         }
+
+
+class RegistrationEmailOtpRejected(APIException):
+    status_code = 400
+    default_code = "registration_email_otp_failed"
+    default_detail = "Invalid or expired code. Please try again."
+
+
+class RegistrationEmailOtpCooldown(APIException):
+    status_code = 429
+    default_code = "registration_email_otp_cooldown"
+    default_detail = "Please wait before requesting another OTP."
+
+    def __init__(self, retry_after_seconds: int | None = None):
+        super().__init__(self.default_detail)
+        self.error_meta = {"retryAfterSeconds": retry_after_seconds or settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS}
+
+
+class RegistrationEmailDeliveryUnavailable(APIException):
+    status_code = 503
+    default_code = "registration_email_delivery_unavailable"
+    default_detail = "We're unable to send the OTP right now. Please try again in a few minutes."
+
+
+def request_registration_email_otp(*, email: str) -> dict:
+    normalized_email = _normalize_email(email)
+    key = _registration_email_otp_key(normalized_email)
+    now = timezone.now()
+    state = cache.get(key)
+    if isinstance(state, dict):
+        last_sent_at = _parse_cached_datetime(state.get("last_sent_at"))
+        if last_sent_at is not None:
+            seconds_since_last_send = int((now - last_sent_at).total_seconds())
+            if seconds_since_last_send < settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS:
+                raise RegistrationEmailOtpCooldown(settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS - seconds_since_last_send)
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    nonce = secrets.token_urlsafe(16)
+    expires_at = now + timedelta(minutes=settings.AUTH_OTP_TTL_MINUTES)
+    state = {
+        "otp_hash": _hash_registration_email_otp(email=normalized_email, code=code, nonce=nonce),
+        "nonce": nonce,
+        "attempts": 0,
+        "expires_at": expires_at.isoformat(),
+        "last_sent_at": now.isoformat(),
+    }
+    cache.set(key, state, settings.AUTH_OTP_TTL_MINUTES * 60)
+    try:
+        send_mail(
+            subject="Your PhilSA registration verification code",
+            message=(
+                f"Your PhilSA registration verification code is {code}. "
+                f"This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. "
+                "If you did not request this code, you can ignore this email."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[normalized_email],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        cache.delete(key)
+        raise RegistrationEmailDeliveryUnavailable from exc
+
+    return {
+        "email": normalized_email,
+        "expiresInSeconds": settings.AUTH_OTP_TTL_MINUTES * 60,
+        "resendCooldownSeconds": settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS,
+    }
+
+
+def verify_registration_email_otp(*, email: str, code: str) -> dict:
+    normalized_email = _normalize_email(email)
+    key = _registration_email_otp_key(normalized_email)
+    state = cache.get(key)
+    if not isinstance(state, dict):
+        raise RegistrationEmailOtpRejected
+
+    attempts = int(state.get("attempts", 0))
+    expected_hash = str(state.get("otp_hash", ""))
+    nonce = str(state.get("nonce", ""))
+    submitted_hash = _hash_registration_email_otp(email=normalized_email, code=code, nonce=nonce)
+    if not expected_hash or not constant_time_compare(expected_hash, submitted_hash):
+        attempts += 1
+        if attempts >= settings.AUTH_OTP_MAX_ATTEMPTS:
+            cache.delete(key)
+        else:
+            state["attempts"] = attempts
+            cache.set(key, state, _registration_otp_seconds_left(state))
+        raise RegistrationEmailOtpRejected
+
+    cache.delete(key)
+    verification_token = secrets.token_urlsafe(32)
+    verified_key = _registration_email_verified_key(verification_token)
+    cache.set(
+        verified_key,
+        {"email": normalized_email, "verified_at": timezone.now().isoformat()},
+        settings.AUTH_PENDING_TOKEN_TTL_MINUTES * 60,
+    )
+    return {
+        "email": normalized_email,
+        "verified": True,
+        "emailVerificationToken": verification_token,
+        "expiresInSeconds": settings.AUTH_PENDING_TOKEN_TTL_MINUTES * 60,
+    }
 
 
 def verify_lrn(*, lrn: str, verification_category: str = "", verification_value: str = "", client_identifier: str = "") -> dict:
@@ -169,6 +277,37 @@ def _lrn_registered_value_matches(record, category: str, value: str) -> bool:
 
 def _token_digest(token: str) -> str:
     return hashlib.sha256(f"{settings.SECRET_KEY}:{token}".encode()).hexdigest()
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _registration_email_otp_key(email: str) -> str:
+    digest = hashlib.sha256(f"{settings.SECRET_KEY}:registration-email-otp:{email}".encode()).hexdigest()
+    return f"{REGISTRATION_EMAIL_OTP_PREFIX}{digest}"
+
+
+def _registration_email_verified_key(token: str) -> str:
+    return f"{REGISTRATION_EMAIL_VERIFIED_PREFIX}{_token_digest(token)}"
+
+
+def _hash_registration_email_otp(*, email: str, code: str, nonce: str) -> str:
+    return hashlib.sha256(f"{settings.SECRET_KEY}:{email}:{code}:{nonce}".encode()).hexdigest()
+
+
+def _parse_cached_datetime(value) -> datetime | None:
+    if not value:
+        return None
+    parsed = datetime.fromisoformat(str(value))
+    return timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+
+
+def _registration_otp_seconds_left(state: dict) -> int:
+    expires_at = _parse_cached_datetime(state.get("expires_at"))
+    if expires_at is None:
+        return settings.AUTH_OTP_TTL_MINUTES * 60
+    return max(1, int((expires_at - timezone.now()).total_seconds()))
 
 
 def active_step2_configuration() -> dict:
@@ -439,7 +578,7 @@ def _lrn_cooldown_seconds_left(attempt_state: dict) -> int:
 
 
 @transaction.atomic
-def create_draft(*, owner=None, verification_token: str = "", data: dict, submit_on_create: bool = False) -> StudentApplication:
+def create_draft(*, owner=None, verification_token: str = "", email_verification_token: str = "", data: dict, submit_on_create: bool = False) -> StudentApplication:
     password = data.pop("password", "")
     personal = dict(data.get("personal", {}))
     school = dict(data.get("school", {}))
@@ -486,6 +625,7 @@ def create_draft(*, owner=None, verification_token: str = "", data: dict, submit
     data.update(personal=personal, school=school)
     try:
         if submit_on_create:
+            _validate_registration_email_verification(email_verification_token=email_verification_token, email=str(personal.get("email", "")))
             _validate_registration_account_creation(data, password, require_valid_lrn=bool(verification_token))
         owner_id = None if owner is None else getattr(owner, "user_id", owner.id)
         indexed_lrn = str(school.get("lrn", "")) if verification_token else ""
@@ -510,7 +650,17 @@ def create_draft(*, owner=None, verification_token: str = "", data: dict, submit
         raise
     if verification_token:
         cache.delete(f"{LRN_PROOF_PREFIX}{verification_token}")
+    if submit_on_create and email_verification_token:
+        cache.delete(_registration_email_verified_key(email_verification_token))
     return application
+
+
+def _validate_registration_email_verification(*, email_verification_token: str, email: str) -> None:
+    if not email_verification_token:
+        raise ValidationError({"emailVerificationToken": ["Email OTP verification is required before registration submission."]})
+    verified = cache.get(_registration_email_verified_key(email_verification_token))
+    if not isinstance(verified, dict) or verified.get("email") != _normalize_email(email):
+        raise ValidationError({"emailVerificationToken": ["Email OTP verification has expired. Please verify your email again."]})
 
 
 def _validate_registration_account_creation(data: dict, password: str, *, require_valid_lrn: bool = True) -> None:

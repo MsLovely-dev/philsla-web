@@ -103,13 +103,15 @@ class ApplicationAuditLogSerializer(serializers.ModelSerializer):
     applicantId = serializers.CharField(source="applicant_id", read_only=True)
     accountId = serializers.CharField(source="account_id", read_only=True)
     actor = serializers.CharField(source="actor_user_id", read_only=True)
+    actorRole = serializers.CharField(source="actor_role", read_only=True)
+    actorDisplay = serializers.SerializerMethodField()
 
     class Meta:
         model = ApplicationAuditLog
         fields = (
             "id", "action", "event", "outcome", "timestamp", "sessionId",
             "ipAddress", "deviceBrowser", "registrationId", "applicantId",
-            "applicationId", "candidateId", "accountId", "actor", "correlation_id",
+            "applicationId", "candidateId", "accountId", "actor", "actorRole", "actorDisplay", "correlation_id",
         )
         read_only_fields = fields
 
@@ -119,6 +121,35 @@ class ApplicationAuditLogSerializer(serializers.ModelSerializer):
     def get_candidateId(self, obj):
         application = getattr(obj, "application", None)
         return getattr(application, "candidate_id", "") or obj.registration_id
+
+    def get_actorDisplay(self, obj):
+        application = self._display_application(obj)
+        personal = getattr(application, "personal", {}) if application is not None else {}
+        if not isinstance(personal, dict):
+            return obj.actor_role or "Student"
+
+        name_parts = [
+            personal.get("firstName"),
+            personal.get("middleName"),
+            personal.get("lastName"),
+            personal.get("suffix") or personal.get("extensionName"),
+        ]
+        display_name = " ".join(str(part).strip() for part in name_parts if str(part or "").strip())
+        return display_name or obj.actor_role or "Student"
+
+    def _display_application(self, obj):
+        application = getattr(obj, "application", None)
+        if application is not None:
+            return application
+        if not obj.session_id:
+            return None
+        related_log = (
+            ApplicationAuditLog.objects.select_related("application")
+            .filter(session_id=obj.session_id, application__isnull=False)
+            .order_by("-created_at")
+            .first()
+        )
+        return None if related_log is None else related_log.application
 
 
 class ReviewerDecisionSerializer(serializers.Serializer):
@@ -152,8 +183,25 @@ class LrnVerificationSerializer(serializers.Serializer):
     verificationValue = serializers.CharField(required=False, allow_blank=True, trim_whitespace=True, max_length=200)
 
 
+class RegistrationEmailOtpRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+
+
+class RegistrationEmailOtpVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField(max_length=254)
+    code = serializers.RegexField(
+        regex=r"^\d{6}$",
+        error_messages={
+            "invalid": "Enter the 6-digit OTP sent to your email address.",
+            "blank": "Enter the 6-digit OTP sent to your email address.",
+            "required": "Enter the 6-digit OTP sent to your email address.",
+        },
+    )
+
+
 class ApplicationCreateSerializer(ApplicationSerializer):
     verificationToken = serializers.CharField(write_only=True, trim_whitespace=False, required=False, allow_blank=True)
+    emailVerificationToken = serializers.CharField(write_only=True, trim_whitespace=False, required=False, allow_blank=True)
     submitOnCreate = serializers.BooleanField(write_only=True, required=False, default=False)
     password = serializers.CharField(
         write_only=True,
@@ -163,7 +211,7 @@ class ApplicationCreateSerializer(ApplicationSerializer):
     )
 
     class Meta(ApplicationSerializer.Meta):
-        fields = ApplicationSerializer.Meta.fields + ("verificationToken", "submitOnCreate", "password")
+        fields = ApplicationSerializer.Meta.fields + ("verificationToken", "emailVerificationToken", "submitOnCreate", "password")
 
     def validate_password(self, value: str) -> str:
         return validate_password_policy(value)

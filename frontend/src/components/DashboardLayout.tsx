@@ -85,9 +85,9 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
         icon: ClipboardList,
         label: 'Review Applications',
         href: '/admin/reviewer/applications',
-        roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN'],
+        roles: ['ADMISSIONS_REVIEWER'],
         subItems: [
-          { label: 'Audit Logs', href: '/admin/reviewer/applications/audit', roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN'] },
+          { label: 'Audit Logs', href: '/admin/reviewer/applications/audit', roles: ['ADMISSIONS_REVIEWER'] },
         ],
       },
       { icon: Users, label: 'University Applications', href: '/admin/university/applications', roles: ['UNIVERSITY_ADMIN', 'SYSTEM_ADMIN'] },
@@ -123,7 +123,14 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       },
       { icon: CheckCircle, label: 'Exam Review', href: '/admin/hub/review', roles: ['SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN'] },
       { icon: CheckCircle, label: 'Results Release', href: '/admin/hub/results-release' },
-      { icon: FileText, label: 'Audit Logs', href: '/admin/hub/audit' },
+      {
+        icon: FileText,
+        label: 'Audit Logs',
+        href: '/admin/hub/audit',
+        subItems: [
+          { label: 'Student Registration', href: '/admin/hub/audit/student-registration', roles: ['SYSTEM_ADMIN'] },
+        ],
+      },
     ]
   },
   {

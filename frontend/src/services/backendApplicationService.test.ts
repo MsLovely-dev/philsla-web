@@ -50,6 +50,59 @@ describe('BackendApplicationService', () => {
     );
   });
 
+  it('requests a registration email OTP through the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          email: 'student@example.test',
+          expiresInSeconds: 300,
+          resendCooldownSeconds: 60,
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.requestRegistrationEmailOtp('student@example.test', { registrationSessionId: 'REG-SESSION-OTP' });
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/registration/email-otp/request/',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-Registration-Session-Id': 'REG-SESSION-OTP' }),
+        body: JSON.stringify({ email: 'student@example.test' }),
+      }),
+    );
+  });
+
+  it('verifies a registration email OTP through the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          email: 'student@example.test',
+          verified: true,
+          emailVerificationToken: 'email-verification-token',
+          expiresInSeconds: 600,
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.verifyRegistrationEmailOtp('student@example.test', '123456', { registrationSessionId: 'REG-SESSION-OTP' });
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/registration/email-otp/verify/',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-Registration-Session-Id': 'REG-SESSION-OTP' }),
+        body: JSON.stringify({ email: 'student@example.test', code: '123456' }),
+      }),
+    );
+  });
+
   it('creates and submits a public registration through the token-protected create endpoint', async () => {
     const submitted = {
       id: 'application-id',
@@ -70,6 +123,7 @@ describe('BackendApplicationService', () => {
 
     const result = await service.createAndSubmit({
       verificationToken: 'verification-token',
+      emailVerificationToken: 'email-verification-token',
       password: 'Password1!',
       personal: {},
       address: {},
@@ -86,6 +140,7 @@ describe('BackendApplicationService', () => {
         method: 'POST',
         body: JSON.stringify({
           verificationToken: 'verification-token',
+          emailVerificationToken: 'email-verification-token',
           password: 'Password1!',
           personal: {},
           address: {},
@@ -284,7 +339,7 @@ describe('BackendApplicationService', () => {
   });
 
   it('maps the registration form into the backend draft payload', () => {
-    const payload = createBackendApplicationDraftInput('token', {
+    const payload = createBackendApplicationDraftInput('token', 'email-token', {
       firstName: 'Sample',
       middleName: 'Test',
       noMiddleName: false,
@@ -317,6 +372,7 @@ describe('BackendApplicationService', () => {
 
     expect(payload).toMatchObject({
       verificationToken: 'token',
+      emailVerificationToken: 'email-token',
       password: 'Password1!',
       personal: {
         firstName: 'Sample',
