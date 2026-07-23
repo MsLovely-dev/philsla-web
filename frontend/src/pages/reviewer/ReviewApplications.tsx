@@ -195,7 +195,6 @@ export default function ReviewApplications() {
             <thead className="bg-philsa-bg text-[10px] text-philsa-gray font-black uppercase tracking-[0.2em]">
               <tr>
                 <th className="px-8 py-5">Applicant Information</th>
-                <th className="px-8 py-5">Target Center</th>
                 <th className="px-8 py-5">Status</th>
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
@@ -203,14 +202,14 @@ export default function ReviewApplications() {
             <tbody className="divide-y divide-philsa-border">
               {isLoadingQueue && (
                 <tr>
-                  <td colSpan={4} className="px-8 py-10 text-center text-xs font-black uppercase tracking-widest text-philsa-gray">
+                  <td colSpan={3} className="px-8 py-10 text-center text-xs font-black uppercase tracking-widest text-philsa-gray">
                     Loading backend review queue...
                   </td>
                 </tr>
               )}
               {!isLoadingQueue && apps.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-8 py-10 text-center text-xs font-black uppercase tracking-widest text-philsa-gray">
+                  <td colSpan={3} className="px-8 py-10 text-center text-xs font-black uppercase tracking-widest text-philsa-gray">
                     No submitted applications found.
                   </td>
                 </tr>
@@ -244,16 +243,6 @@ export default function ReviewApplications() {
                         <p className="text-[10px] text-philsa-gray font-bold tracking-wider uppercase">{displayCandidateId} • {app.mobile}</p>
                       </div>
                     </div>
-                  </td>
-                  <td className="px-8 py-5">
-                    <p className="text-sm font-medium text-philsa-navy">{app.center}</p>
-                    {app.seat ? (
-                      <span className="text-[10px] text-emerald-600 font-extrabold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 flex items-center gap-1 w-fit mt-1 animate-fade-in">
-                        <Check className="w-3.5 h-3.5 text-emerald-500" /> {app.seat}
-                      </span>
-                    ) : (
-                      <p className="text-[10px] text-philsa-gray font-medium italic">{app.universities[0]}</p>
-                    )}
                   </td>
                   <td className="px-8 py-5">
                     <span className={cn(

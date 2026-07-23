@@ -48,7 +48,6 @@ export default function AuditTrail() {
   const [showFilters, setShowFilters] = useState(false);
   const [activityFilter, setActivityFilter] = useState<RegistrationAuditAction | 'ALL'>('ALL');
   const [candidateFilter, setCandidateFilter] = useState('');
-  const [sessionFilter, setSessionFilter] = useState('');
   const [dateFromFilter, setDateFromFilter] = useState('');
   const [dateToFilter, setDateToFilter] = useState('');
   const [studentRegistrationAuditRows, setStudentRegistrationAuditRows] = useState<StudentRegistrationAuditRow[]>([]);
@@ -85,13 +84,11 @@ export default function AuditTrail() {
         row.user.toLowerCase().includes(query) ||
         row.details.toLowerCase().includes(query) ||
         row.registrationId.toLowerCase().includes(query) ||
-        row.sessionId.toLowerCase().includes(query) ||
         row.ipAddress.toLowerCase().includes(query) ||
         row.actor.toLowerCase().includes(query)
       ))
       .filter((row) => activityFilter === 'ALL' || row.action === activityFilter)
       .filter((row) => !candidateFilter || row.candidateId.toLowerCase().includes(candidateFilter.toLowerCase()))
-      .filter((row) => !sessionFilter || row.sessionId.toLowerCase().includes(sessionFilter.toLowerCase()))
       .filter((row) => isWithinDateRange(row.timestamp, dateFromFilter, dateToFilter))
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [
@@ -100,14 +97,12 @@ export default function AuditTrail() {
     dateFromFilter,
     dateToFilter,
     searchQuery,
-    sessionFilter,
     studentRegistrationAuditRows,
   ]);
 
   const hasActiveFilters = Boolean(
     activityFilter !== 'ALL' ||
     candidateFilter ||
-    sessionFilter ||
     dateFromFilter ||
     dateToFilter,
   );
@@ -115,7 +110,6 @@ export default function AuditTrail() {
   const clearFilters = () => {
     setActivityFilter('ALL');
     setCandidateFilter('');
-    setSessionFilter('');
     setDateFromFilter('');
     setDateToFilter('');
   };
@@ -188,7 +182,7 @@ export default function AuditTrail() {
                   type="text"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search date, candidate ID, IP address, activity, user, details, registration ID, session, or actor..."
+                  placeholder="Search date, candidate ID, IP address, activity, user, details, registration ID, or actor..."
                   className="w-full bg-philsa-bg border-none rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-philsa-red/10 shadow-inner"
                 />
               </div>
@@ -206,7 +200,7 @@ export default function AuditTrail() {
             </div>
 
             {showFilters && (
-              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
                 <label className="space-y-2">
                   <span className="text-[10px] font-black uppercase tracking-widest text-philsa-gray">Activity</span>
                   <select
@@ -227,16 +221,6 @@ export default function AuditTrail() {
                     value={candidateFilter}
                     onChange={(event) => setCandidateFilter(event.target.value)}
                     placeholder="PS-2026..."
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-xl px-4 py-3 text-sm font-semibold text-philsa-navy focus:ring-2 focus:ring-philsa-red/10"
-                  />
-                </label>
-                <label className="space-y-2">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-philsa-gray">Session ID</span>
-                  <input
-                    type="text"
-                    value={sessionFilter}
-                    onChange={(event) => setSessionFilter(event.target.value)}
-                    placeholder="REG-SESSION..."
                     className="w-full bg-philsa-bg border border-philsa-border rounded-xl px-4 py-3 text-sm font-semibold text-philsa-navy focus:ring-2 focus:ring-philsa-red/10"
                   />
                 </label>
@@ -278,7 +262,6 @@ export default function AuditTrail() {
                 <tr>
                   <th className="px-8 py-5">Date &amp; Time</th>
                   <th className="px-8 py-5">Candidate ID</th>
-                  <th className="px-8 py-5">Session ID</th>
                   <th className="px-8 py-5">IP Address</th>
                   <th className="px-8 py-5">Activity</th>
                   <th className="px-8 py-5">User</th>
@@ -287,7 +270,7 @@ export default function AuditTrail() {
               <tbody className="divide-y divide-philsa-border">
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
+                    <td colSpan={5} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
                       {isLoadingStudentRegistrationAudit
                         ? 'Loading student registration audit logs...'
                         : 'No student registration audit logs have been captured.'}
@@ -303,7 +286,6 @@ export default function AuditTrail() {
                         </div>
                       </td>
                       <td className="px-8 py-6 text-xs font-black text-philsa-navy">{row.candidateId}</td>
-                      <td className="px-8 py-6 text-xs font-black text-philsa-navy break-words">{row.sessionId}</td>
                       <td className="px-8 py-6 text-xs font-black text-philsa-navy">{row.ipAddress}</td>
                       <td className="px-8 py-6 text-xs font-black text-philsa-navy">{row.activity}</td>
                       <td className="px-8 py-6 text-xs font-black text-philsa-navy">{row.user}</td>

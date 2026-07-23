@@ -170,7 +170,6 @@ export default function ReviewApplicationAuditLogs() {
       row.registrationId.toLowerCase().includes(query) ||
       row.applicantId.toLowerCase().includes(query) ||
       row.accountId.toLowerCase().includes(query) ||
-      row.sessionId.toLowerCase().includes(query) ||
       row.ipAddress.toLowerCase().includes(query) ||
       row.actor.toLowerCase().includes(query)
     );
@@ -210,7 +209,7 @@ export default function ReviewApplicationAuditLogs() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray" />
             <input
               type="text"
-              placeholder="Search date, candidate ID, IP address, activity, details, registration ID, session, or actor..."
+              placeholder="Search date, candidate ID, IP address, activity, details, registration ID, or actor..."
               className="w-full bg-philsa-bg border-none rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-philsa-red/10 transition-all font-medium"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
@@ -224,7 +223,6 @@ export default function ReviewApplicationAuditLogs() {
               <tr>
                 <th className="px-8 py-5">Date &amp; Time</th>
                 <th className="px-8 py-5">Candidate ID</th>
-                <th className="px-8 py-5">Session ID</th>
                 <th className="px-8 py-5">IP Address</th>
                 <th className="px-8 py-5">Activity</th>
                 <th className="px-8 py-5">User</th>
@@ -233,7 +231,7 @@ export default function ReviewApplicationAuditLogs() {
             <tbody className="divide-y divide-philsa-border">
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
+                  <td colSpan={5} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
                     {isLoadingBackendAudit
                       ? 'Loading registration audit logs...'
                       : 'No registration audit logs have been captured.'}
@@ -250,9 +248,6 @@ export default function ReviewApplicationAuditLogs() {
                     </td>
                     <td className="px-8 py-6">
                       <p className="text-xs font-black text-philsa-navy">{row.candidateId}</p>
-                    </td>
-                    <td className="px-8 py-6">
-                      <p className="max-w-xs text-xs font-black text-philsa-navy break-words">{row.sessionId}</p>
                     </td>
                     <td className="px-8 py-6">
                       <p className="text-xs font-black text-philsa-navy">{row.ipAddress}</p>
