@@ -41,6 +41,7 @@ export default function ReviewApplications() {
   const pendingReviewCount = apps.filter(app => app.status === 'PENDING').length;
   const acceptedCount = apps.filter(app => app.status === 'ACCEPTED').length;
   const rejectedCount = apps.filter(app => app.status === 'REJECTED').length;
+  const allCount = apps.length;
 
   const handleOpenAction = (app: any, type: typeof activeModal) => {
      setSelectedApp(app);
@@ -129,8 +130,9 @@ export default function ReviewApplications() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {[
+          { label: 'All', value: String(allCount), color: 'navy' },
           { label: 'Pending Review', value: String(pendingReviewCount), color: 'amber' },
           { label: 'Accepted', value: String(acceptedCount), color: 'emerald' },
           { label: 'Rejected', value: String(rejectedCount), color: 'philsa-red' }
