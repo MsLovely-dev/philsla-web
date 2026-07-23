@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    AdminUserAccountDetailView,
+    AdminUserAccountListCreateView,
     CurrentSessionView,
     AdminAccountRecoveryRequestView,
     IdentifierLoginView,
@@ -16,6 +18,8 @@ from .views import (
 )
 
 urlpatterns = [
+    path("admin/users/", AdminUserAccountListCreateView.as_view(), name="admin-user-list-create"),
+    path("admin/users/<str:user_id>/", AdminUserAccountDetailView.as_view(), name="admin-user-detail"),
     path("activation/staff/complete/", StaffActivationCompletionView.as_view(), name="staff-activation-complete"),
     path(
         "activation/student-registration/",

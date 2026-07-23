@@ -11,6 +11,8 @@ from .audit import record_auth_event
 from .permissions import RoleRequiredPermission, require_roles
 from .roles import PortalRole
 from .serializers import (
+    AdminUserAccountSerializer,
+    AdminUserAccountWriteSerializer,
     IdentifierLoginSerializer,
     OtpLoginSerializer,
     AdminAccountRecoveryRequestSerializer,
@@ -20,12 +22,16 @@ from .serializers import (
     StaffActivationCompletionSerializer,
     StudentRegistrationActivationSerializer,
     TokenRevocationSerializer,
+    serialize_admin_user_account,
 )
 from .services import (
     LoginFlowRejected,
     activate_student_registration_account,
+    create_admin_user_account,
+    deactivate_admin_user_account,
     complete_staff_activation,
     complete_password_recovery,
+    list_admin_user_accounts,
     request_admin_account_recovery,
     request_password_recovery,
     revoke_current_session,
@@ -33,6 +39,7 @@ from .services import (
     rotate_refresh_token,
     resolve_authenticated_account,
     start_identifier_login,
+    update_admin_user_account,
     verify_login_otp,
     verify_login_password,
 )
@@ -304,3 +311,60 @@ class AdminAccountRecoveryRequestView(APIView):
             },
             status=202,
         )
+
+
+class AdminUserAccountListCreateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request) -> Response:
+        accounts = [
+            serialize_admin_user_account(user, profile)
+            for user, profile in list_admin_user_accounts(
+                search=str(request.query_params.get("search", "")),
+                role=str(request.query_params.get("role", "")),
+            )
+        ]
+        return Response({"users": AdminUserAccountSerializer(accounts, many=True).data})
+
+    def post(self, request) -> Response:
+        serializer = AdminUserAccountWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user, profile = create_admin_user_account(
+            full_name=serializer.validated_data["fullName"],
+            email=serializer.validated_data["email"],
+            role=serializer.validated_data["role"],
+            module_access=serializer.validated_data.get("moduleAccess", []),
+            is_active=serializer.validated_data.get("isActive", True),
+        )
+        return Response(AdminUserAccountSerializer(serialize_admin_user_account(user, profile)).data, status=201)
+
+
+class AdminUserAccountDetailView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
+
+    def put(self, request, user_id: str) -> Response:
+        serializer = AdminUserAccountWriteSerializer(data=request.data, context={"user": self._get_user(user_id)})
+        serializer.is_valid(raise_exception=True)
+
+        user, profile = update_admin_user_account(
+            user_id=user_id,
+            full_name=serializer.validated_data["fullName"],
+            email=serializer.validated_data["email"],
+            role=serializer.validated_data["role"],
+            module_access=serializer.validated_data.get("moduleAccess", []),
+            is_active=serializer.validated_data.get("isActive", True),
+        )
+        return Response(AdminUserAccountSerializer(serialize_admin_user_account(user, profile)).data)
+
+    def delete(self, request, user_id: str) -> Response:
+        deactivate_admin_user_account(user_id=user_id, actor=request.user)
+        return Response(status=204)
+
+    def _get_user(self, user_id: str) -> object | None:
+        try:
+            return get_user_model().objects.get(id=user_id)
+        except (get_user_model().DoesNotExist, ValueError):
+            return None

@@ -10,6 +10,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
@@ -25,6 +26,11 @@ class LoginFlowRejected(APIException):
 
 
 class ActivationUnavailable(APIException):
+    status_code = 409
+    default_code = "conflict"
+
+
+class AccountManagementConflict(APIException):
     status_code = 409
     default_code = "conflict"
 
@@ -58,6 +64,13 @@ def _unique_username(UserModel, *, base: str, fallback: str) -> str:
         suffix_text = f"-{suffix}"
         username = f"{normalized[: max_length - len(suffix_text)]}{suffix_text}"
     return username
+
+
+def _split_full_name(full_name: str) -> tuple[str, str]:
+    parts = full_name.strip().split()
+    if len(parts) <= 1:
+        return full_name.strip(), ""
+    return " ".join(parts[:-1]), parts[-1]
 
 
 def _account_from_user(user: object, profile: AccountProfile | None = None) -> dict[str, Any] | None:
@@ -119,6 +132,18 @@ def _resolve_database_account(identifier: str) -> dict[str, Any] | None:
 def _get_user_for_account(account: dict[str, Any]) -> object | None:
     UserModel = get_user_model()
     return UserModel.objects.filter(id=account["user_id"], is_active=True).first()
+
+
+def _resolve_database_account_by_user_id(user_id: object) -> dict[str, Any] | None:
+    user = (
+        get_user_model()
+        .objects.filter(id=user_id, is_active=True)
+        .select_related("account_profile")
+        .first()
+    )
+    if user is None:
+        return None
+    return _account_from_user(user)
 
 
 def _ttl_seconds(minutes: int) -> int:
@@ -197,6 +222,112 @@ def resolve_authenticated_account(user: object) -> dict[str, Any] | None:
         "permissions": list(getattr(user, "api_permissions", []) or []),
         "scopes": dict(getattr(user, "scopes", {}) or {}),
     }
+
+
+def list_admin_user_accounts(*, search: str = "", role: str = "") -> list[tuple[object, AccountProfile]]:
+    """Return non-student accounts managed from System Admin user settings."""
+
+    queryset = (
+        AccountProfile.objects.select_related("user")
+        .exclude(role=PortalRole.STUDENT.value)
+        .filter(user__is_active=True)
+        .order_by("user__first_name", "user__last_name", "user__email")
+    )
+    normalized_search = search.strip()
+    if normalized_search:
+        queryset = queryset.filter(
+            Q(user__first_name__icontains=normalized_search)
+            | Q(user__last_name__icontains=normalized_search)
+            | Q(user__email__icontains=normalized_search)
+            | Q(role__icontains=normalized_search)
+        )
+    normalized_role = role.strip().upper()
+    if normalized_role:
+        queryset = queryset.filter(role=normalized_role)
+
+    return [(profile.user, profile) for profile in queryset]
+
+
+@transaction.atomic
+def create_admin_user_account(
+    *,
+    full_name: str,
+    email: str,
+    role: str,
+    module_access: list[str],
+    is_active: bool = True,
+) -> tuple[object, AccountProfile]:
+    UserModel = get_user_model()
+    if UserModel.objects.filter(email__iexact=email).exists():
+        raise AccountManagementConflict("This email is already assigned to an account.")
+
+    first_name, last_name = _split_full_name(full_name)
+    user = UserModel.objects.create(
+        username=_unique_username(UserModel, base=email.split("@", 1)[0], fallback=full_name),
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        is_active=is_active,
+        is_staff=role == PortalRole.SYSTEM_ADMIN.value,
+    )
+    user.set_unusable_password()
+    user.save(update_fields=["password"])
+    profile = AccountProfile.objects.create(user=user, role=role, api_permissions=module_access)
+    return user, profile
+
+
+@transaction.atomic
+def update_admin_user_account(
+    *,
+    user_id: str,
+    full_name: str,
+    email: str,
+    role: str,
+    module_access: list[str],
+    is_active: bool,
+) -> tuple[object, AccountProfile]:
+    UserModel = get_user_model()
+    try:
+        user = UserModel.objects.select_for_update().select_related("account_profile").get(id=user_id)
+        profile = user.account_profile
+    except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
+        raise AccountManagementConflict("The selected account could not be found.") from exc
+
+    if profile.role == PortalRole.STUDENT.value:
+        raise AccountManagementConflict("Student accounts cannot be managed from User & Role Settings.")
+
+    first_name, last_name = _split_full_name(full_name)
+    user.email = email
+    user.first_name = first_name
+    user.last_name = last_name
+    user.is_active = is_active
+    user.is_staff = role == PortalRole.SYSTEM_ADMIN.value
+    user.save(update_fields=["email", "first_name", "last_name", "is_active", "is_staff"])
+
+    profile.role = role
+    profile.api_permissions = module_access
+    profile.save(update_fields=["role", "api_permissions", "updated_at"])
+    return user, profile
+
+
+@transaction.atomic
+def deactivate_admin_user_account(*, user_id: str, actor: object) -> None:
+    UserModel = get_user_model()
+    if str(getattr(actor, "id", "")) == str(user_id):
+        raise AccountManagementConflict("You cannot deactivate your own account.")
+
+    try:
+        user = UserModel.objects.select_for_update().select_related("account_profile").get(id=user_id)
+        profile = user.account_profile
+    except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
+        raise AccountManagementConflict("The selected account could not be found.") from exc
+
+    if profile.role == PortalRole.STUDENT.value:
+        raise AccountManagementConflict("Student accounts cannot be managed from User & Role Settings.")
+
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+    return None
 
 
 def start_identifier_login(*, identifier: str) -> dict[str, Any]:
@@ -285,7 +416,7 @@ def validate_access_token(*, access_token: str) -> tuple[object, object] | None:
     if token_payload is None:
         return None
 
-    account = token_payload["account"]
+    account = _resolve_database_account_by_user_id(token_payload["account"]["user_id"]) or token_payload["account"]
     user = SimpleNamespace(
         id=account["id"],
         email=account["email"],
@@ -321,7 +452,8 @@ def rotate_refresh_token(*, refresh_token: str | None) -> AuthIssue:
     refresh_session.revoked_at = timezone.now()
     refresh_session.rotated_at = refresh_session.revoked_at
     refresh_session.save(update_fields=["revoked_at", "rotated_at"])
-    return _issue_tokens(refresh_session.account)
+    account = _resolve_database_account_by_user_id(refresh_session.user_id) or refresh_session.account
+    return _issue_tokens(account)
 
 
 def revoke_current_session(*, user: object, auth: object) -> None:
