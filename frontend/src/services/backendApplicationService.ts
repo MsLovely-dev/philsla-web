@@ -426,6 +426,7 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
 
   return {
     id: application.id,
+    candidateId: application.candidateId,
     userId,
     status: application.status === 'SUBMITTED' || application.status === 'RESUBMITTED' ? 'PENDING' : application.status === 'APPROVED' ? 'ACCEPTED' : application.status === 'FOR_CORRECTION' ? 'FOR_CORRECTION' : 'REJECTED',
     submittedAt: application.submittedAt ?? undefined,

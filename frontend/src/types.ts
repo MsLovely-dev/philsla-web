@@ -57,7 +57,8 @@ export type ExamStatus =
   | 'TERMINATED';
 
 export interface Application {
-  id: string; // Candidate ID
+  id: string; // Internal application ID
+  candidateId?: string;
   userId: string;
   status: ApplicationStatus;
   submittedAt?: string;

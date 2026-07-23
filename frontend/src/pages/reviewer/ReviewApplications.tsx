@@ -162,7 +162,7 @@ export default function ReviewApplications() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray" />
               <input 
                 type="text" 
-                placeholder="Search Applicant ID, Name, or University..." 
+                placeholder="Search Candidate ID, Name, or University..." 
                 className="w-full bg-philsa-bg border-none rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-philsa-red/10 transition-all font-medium"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -214,11 +214,16 @@ export default function ReviewApplications() {
                 </tr>
               )}
               {!isLoadingQueue && apps.filter(app => {
-                const matchesSearch = `${app.firstName} ${app.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) || app.id.toLowerCase().includes(searchTerm.toLowerCase());
+                const displayCandidateId = app.candidateId || app.id;
+                const matchesSearch =
+                  `${app.firstName} ${app.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  displayCandidateId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  app.id.toLowerCase().includes(searchTerm.toLowerCase());
                 const matchesStatus = statusFilter === 'ALL' || app.status === statusFilter;
                 return matchesSearch && matchesStatus;
               }).map((app) => {
                 const isDecisionFinal = ['ACCEPTED', 'APPROVED', 'REJECTED'].includes(app.status);
+                const displayCandidateId = app.candidateId || app.id;
 
                 return (
                 <tr key={app.id} className="hover:bg-philsa-bg/40 transition-colors group">
@@ -234,7 +239,7 @@ export default function ReviewApplications() {
                       </div>
                       <div>
                         <p className="text-sm font-bold text-philsa-navy mb-0.5">{app.firstName} {app.lastName}</p>
-                        <p className="text-[10px] text-philsa-gray font-bold tracking-wider uppercase">{app.id} • {app.mobile}</p>
+                        <p className="text-[10px] text-philsa-gray font-bold tracking-wider uppercase">{displayCandidateId} • {app.mobile}</p>
                       </div>
                     </div>
                   </td>
@@ -316,7 +321,7 @@ export default function ReviewApplications() {
                    </div>
                    <div>
                        <h3 className="text-sm font-bold text-philsa-navy leading-none mb-1">{selectedApp.firstName || selectedApp.name} {selectedApp.lastName || ''}</h3>
-                       <p className="text-[10px] font-semibold text-slate-400 font-mono leading-none">{selectedApp.id}</p>
+                       <p className="text-[10px] font-semibold text-slate-400 font-mono leading-none">{selectedApp.candidateId || selectedApp.id}</p>
                    </div>
                 </div>
 
@@ -331,7 +336,7 @@ export default function ReviewApplications() {
                    </button>
                    <button disabled={isSavingDecision} onClick={() => {
                        const centerCode = selectedApp.center ? selectedApp.center.split(" ").map((w) => w[0]).join("").toUpperCase() : "UPD";
-                       const applicantCode = String(selectedApp.id ?? '').replace(/\W/g, '').slice(-3).padStart(3, '0');
+                       const applicantCode = String(selectedApp.candidateId || selectedApp.id || '').replace(/\W/g, '').slice(-3).padStart(3, '0');
                        const seatVal = `Seat ${centerCode}-${applicantCode}`;
                        void handleReviewerDecision('APPROVE', { reason: 'Verified by admissions reviewer.', seat: seatVal });
                    }} className="px-5 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 hover:bg-emerald-700 transition-all cursor-pointer disabled:opacity-60">

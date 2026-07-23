@@ -166,7 +166,7 @@ export default function ReviewerApplicationDetail() {
   });
 
   const currentApp = application ?? EMPTY_REVIEW_APPLICATION;
-  const displayId = id || currentApp.id;
+  const displayId = currentApp.candidateId || id || currentApp.id;
   const fullName = `${currentApp.firstName} ${currentApp.lastName}`.trim();
   const photoUrl = currentApp.photoUrl?.trim() ?? '';
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
