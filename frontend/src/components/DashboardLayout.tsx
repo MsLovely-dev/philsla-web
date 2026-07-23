@@ -200,6 +200,10 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
   }
 ];
 
+function isRouteActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, logout, maintenanceModules } = usePhilSA();
   const location = useLocation();
@@ -362,7 +366,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                       {group.label}
                     </h2>
                     {group.items.map((item) => {
-                      const isActive = location.pathname === item.href || item.subItems?.some(sub => location.pathname === sub.href);
+                      const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                       const hasSubItems = item.subItems && item.subItems.length > 0;
                       
                       return (
@@ -460,7 +464,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 </h2>
               )}
               {group.items.map((item) => {
-                const isActive = location.pathname === item.href || item.subItems?.some(sub => location.pathname === sub.href);
+                const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                 const hasSubItems = item.subItems && item.subItems.length > 0;
                 
                 return (
