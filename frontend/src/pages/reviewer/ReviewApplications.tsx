@@ -173,7 +173,7 @@ export default function ReviewApplications() {
            </div>
            <div className="flex items-center gap-3">
               <div className="flex bg-philsa-bg p-1 rounded-xl">
-                {['ALL', 'PENDING', 'ASSIGNED', 'REJECTED'].map((status) => (
+                {['ALL', 'PENDING', 'REJECTED'].map((status) => (
                   <button
                     key={status}
                     onClick={() => setStatusFilter(status)}
