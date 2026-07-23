@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  Search, Filter, Eye, CheckCircle,
-  AlertTriangle, RefreshCw,
+import {
+  Search, Eye, CheckCircle,
+  AlertTriangle,
   User,
   ExternalLink,
   Check, X, AlertCircle, ChevronDown, 
-  Download, Clock,
-  FileText, CheckCircle2
+  Download,
+  FileText
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -40,7 +40,6 @@ export default function ReviewApplications() {
 
   const pendingReviewCount = apps.filter(app => app.status === 'PENDING').length;
   const acceptedCount = apps.filter(app => app.status === 'ACCEPTED').length;
-  const correctionCount = apps.filter(app => app.status === 'FOR_CORRECTION').length;
 
   const handleOpenAction = (app: any, type: typeof activeModal) => {
      setSelectedApp(app);
@@ -129,11 +128,10 @@ export default function ReviewApplications() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {[
-          { label: 'Pending Review', value: String(pendingReviewCount), color: 'amber', icon: Clock, change: 'Live' },
-          { label: 'Accepted', value: String(acceptedCount), color: 'emerald', icon: CheckCircle2, change: 'Live' },
-          { label: 'For Correction', value: String(correctionCount), color: 'blue', icon: RefreshCw, change: 'Live' }
+          { label: 'Pending Review', value: String(pendingReviewCount), color: 'amber', change: 'Live' },
+          { label: 'Accepted', value: String(acceptedCount), color: 'emerald', change: 'Live' }
         ].map((stat, i) => (
           <div key={i} className="card-philsa !p-6 flex items-center gap-5 bg-white border border-philsa-border">
             <div className={`w-2 h-10 rounded-full ${
@@ -188,9 +186,6 @@ export default function ReviewApplications() {
                   </button>
                 ))}
               </div>
-              <button className="btn-secondary py-2.5 px-4 text-sm flex items-center gap-2">
-                <Filter className="w-4 h-4" /> Filters
-              </button>
            </div>
         </div>
 
