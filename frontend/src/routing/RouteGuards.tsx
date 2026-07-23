@@ -4,9 +4,9 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { PublicLayout } from '../components/PublicLayout';
 import { LoadingState } from '../components/ui';
-import { usePhilSA } from '../PhilSAContext';
+import { INITIAL_MAINTENANCE_MODULES, usePhilSA } from '../PhilSAContext';
 import { useMockData } from '../services/mockService';
-import { UserRole } from '../types';
+import { User, UserRole } from '../types';
 
 function LoadingScreen() {
   return <LoadingState title="Initializing PhilSA Environment" message="Preparing your secure prototype session." fullPage />;
@@ -22,6 +22,24 @@ function routeForRole(role: UserRole): string {
   if (role === 'GOVERNMENT' || role === 'EXECUTIVE') return '/admin/government';
   if (role === 'TECH_SUPPORT') return '/support/dashboard';
   return '/dashboard';
+}
+
+function moduleKey(moduleName: string) {
+  return moduleName.replace(/&/g, '').replace(/\s+/g, '_').toUpperCase();
+}
+
+function canReadCurrentModule(user: User, pathname: string, maintenanceModules: typeof INITIAL_MAINTENANCE_MODULES) {
+  if (!user.permissions?.length) return true;
+
+  const module = maintenanceModules
+    .slice()
+    .sort((left, right) => right.path.length - left.path.length)
+    .find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`));
+
+  if (!module) return true;
+
+  const permissions = new Set(user.permissions);
+  return permissions.has(`MOD_${module.id}_READ`) || permissions.has(moduleKey(module.name));
 }
 
 function MaintenanceGuard({ children }: { children: ReactNode }) {
@@ -89,12 +107,15 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ allowedRoles, children, layout = 'dashboard' }: ProtectedRouteProps) {
-  const { user, isLoading } = usePhilSA();
+  const { user, isLoading, maintenanceModules } = usePhilSA();
   const location = useLocation();
 
   if (isLoading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   if (!allowedRoles.includes(user.role)) return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+  if (!canReadCurrentModule(user, location.pathname, maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES)) {
+    return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+  }
 
   const content = <MaintenanceGuard>{children}</MaintenanceGuard>;
   return layout === 'dashboard' ? <DashboardLayout>{content}</DashboardLayout> : content;

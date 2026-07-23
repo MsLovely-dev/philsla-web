@@ -20,6 +20,7 @@ export interface User {
   firstName: string;
   lastName: string;
   role: UserRole;
+  permissions?: string[];
   avatar?: string;
   candidateId?: string;
   university?: string; // For university admins

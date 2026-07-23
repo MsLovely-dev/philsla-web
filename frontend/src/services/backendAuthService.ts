@@ -143,6 +143,7 @@ export class BackendAuthService implements AuthService {
       firstName: 'Backend',
       lastName: 'User',
       role: this.mapRole(response.user.role),
+      permissions: response.user.permissions,
     };
   }
 

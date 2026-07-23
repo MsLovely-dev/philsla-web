@@ -109,7 +109,7 @@ describe('BackendAuthService', () => {
             id: 'user-123',
             role: 'SYSTEM_ADMIN',
             securityTier: 3,
-            permissions: [],
+            permissions: ['MOD_31_READ'],
             scopes: {},
           },
           session: {
@@ -126,7 +126,7 @@ describe('BackendAuthService', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data?.user).toMatchObject({ id: 'user-123', role: 'SYSTEM_ADMIN' });
+      expect(result.data?.user).toMatchObject({ id: 'user-123', role: 'SYSTEM_ADMIN', permissions: ['MOD_31_READ'] });
       expect(result.data?.expiresAt).toBe('2026-07-13T10:00:00Z');
     }
   });

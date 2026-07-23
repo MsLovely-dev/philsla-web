@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from rest_framework.exceptions import APIException
 
+from .default_permissions import module_access_or_role_default
 from .models import AccountProfile, AuthRefreshSession
 from .roles import PortalRole, get_security_tier, get_user_role
 
@@ -272,7 +273,11 @@ def create_admin_user_account(
     )
     user.set_unusable_password()
     user.save(update_fields=["password"])
-    profile = AccountProfile.objects.create(user=user, role=role, api_permissions=module_access)
+    profile = AccountProfile.objects.create(
+        user=user,
+        role=role,
+        api_permissions=module_access_or_role_default(role, module_access),
+    )
     return user, profile
 
 
@@ -305,7 +310,7 @@ def update_admin_user_account(
     user.save(update_fields=["email", "first_name", "last_name", "is_active", "is_staff"])
 
     profile.role = role
-    profile.api_permissions = module_access
+    profile.api_permissions = module_access_or_role_default(role, module_access)
     profile.save(update_fields=["role", "api_permissions", "updated_at"])
     return user, profile
 

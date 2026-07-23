@@ -15,6 +15,83 @@ interface InputModuleControl {
   isActive: boolean;
 }
 
+export interface MaintenanceModule {
+  id: string;
+  name: string;
+  path: string;
+  category: string;
+  status: string;
+}
+
+export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
+  // Student Portal
+  { id: '1', name: 'Dashboard', path: '/dashboard', category: 'Student Portal', status: 'ACTIVE' },
+  { id: '2', name: 'Student Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
+  { id: '3', name: 'Exam Permit', path: '/student/permit', category: 'Student Portal', status: 'ACTIVE' },
+  { id: '4', name: 'Results', path: '/student/results', category: 'Student Portal', status: 'ACTIVE' },
+
+  // Government Oversight
+  { id: '5', name: 'National Analytics', path: '/admin/government', category: 'Government Oversight', status: 'ACTIVE' },
+  { id: '6', name: 'Incident Monitor', path: '/admin/recordings/incidents', category: 'Government Oversight', status: 'ACTIVE' },
+  { id: '7', name: 'Recording Archive', path: '/admin/recordings', category: 'Government Oversight', status: 'ACTIVE' },
+
+  // System Administration
+  { id: '8', name: 'Device Requests', path: '/admin/maintenance/proctor-device', category: 'System Administration', status: 'ACTIVE' },
+  { id: '9', name: 'Review Applications', path: '/admin/reviewer/applications', category: 'System Administration', status: 'ACTIVE' },
+  { id: '10', name: 'University Applications', path: '/admin/university/applications', category: 'System Administration', status: 'ACTIVE' },
+  { id: '11', name: 'Proctors', path: '/admin/proctors', category: 'System Administration', status: 'ACTIVE' },
+  { id: '12', name: 'Center Availability', path: '/admin/reviewer/availability', category: 'System Administration', status: 'ACTIVE' },
+  { id: '13', name: 'Manage Courses', path: '/admin/university/courses', category: 'System Administration', status: 'ACTIVE' },
+  { id: '14', name: 'Batch Management', path: '/admin/university/schedules', category: 'System Administration', status: 'ACTIVE' },
+  { id: '15', name: 'Reporting Matrix', path: '/admin/results/matrix', category: 'System Administration', status: 'ACTIVE' },
+  { id: '48', name: 'Review Application Audit Logs', path: '/admin/reviewer/applications/audit', category: 'System Administration', status: 'ACTIVE' },
+
+  // Exam Management Hub
+  { id: '16', name: 'Overview', path: '/admin/hub/overview', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '17', name: 'Question Bank', path: '/admin/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '18', name: 'Writer Question Bank', path: '/admin/hub/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '19', name: 'Exam Sets', path: '/admin/hub/exam-sets', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '20', name: 'Exam Review', path: '/admin/hub/review', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '21', name: 'Bulk Upload Center', path: '/admin/hub/upload', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '22', name: 'Audit Logs', path: '/admin/hub/audit', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '46', name: 'Results Release', path: '/admin/hub/results-release', category: 'Exam Management Hub', status: 'ACTIVE' },
+
+  // Operations & Records
+  { id: '23', name: 'Command Center', path: '/admin/command-center', category: 'Operations & Records', status: 'ACTIVE' },
+
+  // Results & Analytics
+  { id: '24', name: 'Score Management', path: '/admin/results/scores', category: 'Results & Analytics', status: 'ACTIVE' },
+
+  // Proctor Operations
+  { id: '25', name: 'Register Device', path: '/proctor/devices', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '26', name: 'Exam Schedule', path: '/proctor/schedule', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '27', name: 'Device Readiness', path: '/proctor/readiness', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '28', name: 'Attendance', path: '/proctor/attendance', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '29', name: 'Exam Monitoring', path: '/proctor/monitoring', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '30', name: 'Student PC Reg', path: '/proctor/student-devices', category: 'Proctor Operations', status: 'ACTIVE' },
+
+  // System Admin
+  { id: '31', name: 'User Accounts', path: '/admin/users', category: 'System Admin', status: 'ACTIVE' },
+  { id: '32', name: 'Compliance', path: '/admin/system', category: 'System Admin', status: 'ACTIVE' },
+  { id: '47', name: 'System Integration', path: '/admin/integrations', category: 'System Admin', status: 'ACTIVE' },
+  { id: '34', name: 'Maintenance Center', path: '/admin/maintenance', category: 'System Admin', status: 'ACTIVE' },
+
+  // Testing Center Logistics
+  { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },
+
+  // Sub-modules of Maintenance Protocols
+  { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance Protocols', status: 'ACTIVE' }
+];
+
 interface PhilSAContextType {
   user: User | null;
   setUser: (user: User | null) => void;
@@ -74,77 +151,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     }
 
     const savedMaintenance = localStorage.getItem('philsa_maintenance_modules');
-    const initialModules = [
-      // Student Portal
-      { id: '1', name: 'Dashboard', path: '/dashboard', category: 'Student Portal', status: 'ACTIVE' },
-      { id: '2', name: 'Student Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
-      { id: '3', name: 'Exam Permit', path: '/student/permit', category: 'Student Portal', status: 'ACTIVE' },
-      { id: '4', name: 'Results', path: '/student/results', category: 'Student Portal', status: 'ACTIVE' },
-
-      // Government Oversight
-      { id: '5', name: 'National Analytics', path: '/admin/government', category: 'Government Oversight', status: 'ACTIVE' },
-      { id: '6', name: 'Incident Monitor', path: '/admin/recordings/incidents', category: 'Government Oversight', status: 'ACTIVE' },
-      { id: '7', name: 'Recording Archive', path: '/admin/recordings', category: 'Government Oversight', status: 'ACTIVE' },
-
-      // System Administration
-      { id: '8', name: 'Device Requests', path: '/admin/maintenance/proctor-device', category: 'System Administration', status: 'ACTIVE' },
-      { id: '9', name: 'Review Applications', path: '/admin/reviewer/applications', category: 'System Administration', status: 'ACTIVE' },
-      { id: '48', name: 'Review Application Audit Logs', path: '/admin/reviewer/applications/audit', category: 'System Administration', status: 'ACTIVE' },
-      { id: '10', name: 'University Applications', path: '/admin/university/applications', category: 'System Administration', status: 'ACTIVE' },
-      { id: '11', name: 'Proctors', path: '/admin/proctors', category: 'System Administration', status: 'ACTIVE' },
-      { id: '12', name: 'Center Availability', path: '/admin/reviewer/availability', category: 'System Administration', status: 'ACTIVE' },
-      { id: '13', name: 'Manage Courses', path: '/admin/university/courses', category: 'System Administration', status: 'ACTIVE' },
-      { id: '14', name: 'Batch Management', path: '/admin/university/schedules', category: 'System Administration', status: 'ACTIVE' },
-      { id: '15', name: 'Reporting Matrix', path: '/admin/results/matrix', category: 'System Administration', status: 'ACTIVE' },
-
-      // Exam Management Hub
-      { id: '16', name: 'Overview', path: '/admin/hub/overview', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '17', name: 'Question Bank', path: '/admin/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '18', name: 'Writer Question Bank', path: '/admin/hub/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '19', name: 'Exam Sets', path: '/admin/hub/exam-sets', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '20', name: 'Exam Review', path: '/admin/hub/review', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '21', name: 'Bulk Upload Center', path: '/admin/hub/upload', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '22', name: 'Audit Logs', path: '/admin/hub/audit', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '46', name: 'Results Release', path: '/admin/hub/results-release', category: 'Exam Management Hub', status: 'ACTIVE' },
-
-      // Operations & Records
-      { id: '23', name: 'Command Center', path: '/admin/command-center', category: 'Operations & Records', status: 'ACTIVE' },
-
-      // Results & Analytics
-      { id: '24', name: 'Score Management', path: '/admin/results/scores', category: 'Results & Analytics', status: 'ACTIVE' },
-
-      // Proctor Operations
-      { id: '25', name: 'Register Device', path: '/proctor/devices', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '26', name: 'Exam Schedule', path: '/proctor/schedule', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '27', name: 'Device Readiness', path: '/proctor/readiness', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '28', name: 'Attendance', path: '/proctor/attendance', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '29', name: 'Exam Monitoring', path: '/proctor/monitoring', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '30', name: 'Student PC Reg', path: '/proctor/student-devices', category: 'Proctor Operations', status: 'ACTIVE' },
-
-      // System Admin
-      { id: '31', name: 'User Accounts', path: '/admin/users', category: 'System Admin', status: 'ACTIVE' },
-      { id: '32', name: 'Compliance', path: '/admin/system', category: 'System Admin', status: 'ACTIVE' },
-      { id: '33', name: 'Agency Monitoring', path: '/admin/government', category: 'System Admin', status: 'ACTIVE' },
-      { id: '47', name: 'System Integration', path: '/admin/integrations', category: 'System Admin', status: 'ACTIVE' },
-
-      // Maintenance & Protocols
-      { id: '34', name: 'Maintenance Center', path: '/admin/maintenance', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-
-      // Testing Center Logistics
-      { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },
-
-      // Sub-modules of Maintenance Protocols
-      { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance Protocols', status: 'ACTIVE' }
-    ];
+    const initialModules = INITIAL_MAINTENANCE_MODULES;
 
     if (savedMaintenance) {
       try {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'motion/react';
 import { AlertTriangle, Check, Edit2, Filter, Search, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
-import { usePhilSA } from '../PhilSAContext';
+import { INITIAL_MAINTENANCE_MODULES, usePhilSA, type MaintenanceModule } from '../PhilSAContext';
 import { cn } from '../lib/utils';
 import {
   backendAdminUserService,
@@ -10,14 +10,77 @@ import {
   type AdminUserAccountInput,
 } from '../services/backendAdminUserService';
 
-const availableModules = [
-  'Admissions',
-  'Question Bank',
-  'Exam Delivery',
-  'Grading',
-  'Results & Analytics',
-  'System Settings',
-];
+const permissionActions = [
+  { key: 'READ', initial: 'R', label: 'Read' },
+  { key: 'WRITE', initial: 'W', label: 'Write' },
+  { key: 'EDIT', initial: 'E', label: 'Edit' },
+  { key: 'DELETE', initial: 'D', label: 'Delete' },
+  { key: 'APPROVE', initial: 'A', label: 'Approve' },
+  { key: 'REJECT', initial: 'RJ', label: 'Reject' },
+] as const;
+
+type PermissionActionKey = typeof permissionActions[number]['key'];
+
+interface RolePermissionRule {
+  moduleIds: string[];
+  modules?: string[];
+  actions: PermissionActionKey[];
+}
+
+const readOnly: PermissionActionKey[] = ['READ'];
+const operate: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT'];
+const decide: PermissionActionKey[] = ['READ', 'EDIT', 'APPROVE', 'REJECT'];
+const manage: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE'];
+const fullAccess: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT'];
+
+const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
+  ADMISSIONS_REVIEWER: [
+    { moduleIds: ['1', '12', '48'], actions: readOnly },
+    { moduleIds: ['9', '37'], actions: decide },
+    { moduleIds: ['36', '38', '39'], actions: operate },
+  ],
+  PROCTOR: [
+    { moduleIds: ['26'], actions: readOnly },
+    { moduleIds: ['25', '27', '28', '29', '40', '41', '42'], actions: operate },
+  ],
+  PROCTOR_ADMIN: [
+    { moduleIds: ['26'], actions: readOnly },
+    { moduleIds: ['25', '27', '28', '29', '40', '41', '42'], actions: operate },
+    { moduleIds: ['30'], actions: manage },
+  ],
+  UNIVERSITY_ADMIN: [
+    { moduleIds: ['1', '10', '15'], actions: readOnly },
+    { moduleIds: ['11', '12', '13', '14', '36', '38', '39', '43', '44', '45'], actions: operate },
+    { moduleIds: ['20'], actions: decide },
+  ],
+  TESTING_CENTER_ADMIN: [
+    { moduleIds: ['35', '11', '30'], actions: operate },
+  ],
+  EXAM_ADMINISTRATOR: [
+    { moduleIds: ['16', '22', '15', '7', '6'], actions: readOnly },
+    { moduleIds: ['17', '18', '19', '21', '43'], actions: manage },
+    { moduleIds: ['20', '46'], actions: decide },
+  ],
+  SYSTEM_ADMIN: [
+    { moduleIds: ['*'], actions: fullAccess },
+  ],
+  CHED_ADMIN: [
+    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+  ],
+  DEPED_ADMIN: [
+    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+  ],
+  TESDA_ADMIN: [
+    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+  ],
+  EXECUTIVE: [
+    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+  ],
+};
+
+const roleAliases: Record<string, string> = {
+  ADMISSION_REVIEWER: 'ADMISSIONS_REVIEWER',
+};
 
 const roles = [
   'ADMISSIONS_REVIEWER',
@@ -49,6 +112,46 @@ function moduleKey(moduleName: string) {
   return moduleName.replace(/&/g, '').replace(/\s+/g, '_').toUpperCase();
 }
 
+function modulePermissionKey(module: MaintenanceModule, permission: string) {
+  return `MOD_${module.id}_${permission}`;
+}
+
+function normalizeRoleKey(role: string) {
+  const normalized = role.trim().replace(/\s+/g, '_').toUpperCase();
+  return roleAliases[normalized] ?? normalized;
+}
+
+function getDefaultModuleAccessForRole(role: string, modules: MaintenanceModule[]) {
+  const rules = defaultRolePermissionRules[normalizeRoleKey(role)] ?? [];
+  const access = new Set<string>();
+
+  rules.forEach((rule) => {
+    const matchedModules = rule.moduleIds.includes('*')
+      ? modules
+      : modules.filter((module) => rule.moduleIds.includes(module.id) || rule.modules?.includes(module.name));
+
+    matchedModules.forEach((module) => {
+      rule.actions.forEach((permission) => {
+        access.add(modulePermissionKey(module, permission));
+      });
+    });
+  });
+
+  return modules.flatMap((module) =>
+    permissionActions
+      .map((permission) => modulePermissionKey(module, permission.key))
+      .filter((permissionKey) => access.has(permissionKey))
+  );
+}
+
+function mergeRoleDefaultModuleAccess(role: string, modules: MaintenanceModule[], moduleAccess: string[]) {
+  return Array.from(new Set([...getDefaultModuleAccessForRole(role, modules), ...moduleAccess]));
+}
+
+function isPermissionSelected(access: Set<string>, module: MaintenanceModule, permission: string) {
+  return access.has(modulePermissionKey(module, permission)) || (permission === 'READ' && access.has(moduleKey(module.name)));
+}
+
 function getInitials(name: string) {
   const initials = name
     .split(' ')
@@ -59,7 +162,7 @@ function getInitials(name: string) {
 }
 
 export default function UserManagement() {
-  const { addAuditLog } = usePhilSA();
+  const { addAuditLog, maintenanceModules } = usePhilSA();
   const [users, setUsers] = useState<AdminUserAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -79,7 +182,7 @@ export default function UserManagement() {
 
     backendAdminUserService.listUsers({ search, role: roleFilter }).then((result) => {
       if (!isMounted) return;
-      if (result.ok) {
+      if (result.ok === true) {
         setUsers(result.data);
       } else {
         setError(result.error.message);
@@ -94,11 +197,21 @@ export default function UserManagement() {
 
   const modalTitle = isAdding ? 'Add New Account' : 'Edit User Account';
   const hasUsers = users.length > 0;
+  const systemModules = useMemo(() => {
+    const source = maintenanceModules.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES;
+    return INITIAL_MAINTENANCE_MODULES.map((module) => {
+      const savedModule = source.find((item) => item.id === module.id);
+      return savedModule ? { ...module, status: savedModule.status } : module;
+    });
+  }, [maintenanceModules]);
 
   const selectedModuleAccess = useMemo(() => new Set(form.moduleAccess), [form.moduleAccess]);
 
   function openAddModal() {
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      moduleAccess: getDefaultModuleAccessForRole(emptyForm.role, systemModules),
+    });
     setFormError('');
     setSelectedUser(null);
     setIsAdding(true);
@@ -109,7 +222,7 @@ export default function UserManagement() {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
-      moduleAccess: user.moduleAccess,
+      moduleAccess: mergeRoleDefaultModuleAccess(user.role, systemModules, user.moduleAccess),
       isActive: user.isActive,
     });
     setFormError('');
@@ -124,13 +237,23 @@ export default function UserManagement() {
     setFormError('');
   }
 
-  function toggleModule(moduleName: string) {
-    const key = moduleKey(moduleName);
+  function togglePermission(module: MaintenanceModule, permission: string) {
+    const key = modulePermissionKey(module, permission);
+    const legacyModuleKey = moduleKey(module.name);
+
     setForm((current) => ({
       ...current,
-      moduleAccess: current.moduleAccess.includes(key)
-        ? current.moduleAccess.filter((module) => module !== key)
+      moduleAccess: current.moduleAccess.includes(key) || (permission === 'READ' && current.moduleAccess.includes(legacyModuleKey))
+        ? current.moduleAccess.filter((access) => access !== key && access !== legacyModuleKey)
         : [...current.moduleAccess, key],
+    }));
+  }
+
+  function handleRoleChange(role: string) {
+    setForm((current) => ({
+      ...current,
+      role,
+      moduleAccess: getDefaultModuleAccessForRole(role, systemModules),
     }));
   }
 
@@ -143,7 +266,7 @@ export default function UserManagement() {
       ? await backendAdminUserService.updateUser(selectedUser.id, form)
       : await backendAdminUserService.createUser(form);
 
-    if (result.ok) {
+    if (result.ok === true) {
       setUsers((current) => {
         if (!selectedUser) return [...current, result.data];
         return current.map((user) => (user.id === result.data.id ? result.data : user));
@@ -163,7 +286,7 @@ export default function UserManagement() {
 
     setDeletingId(user.id);
     const result = await backendAdminUserService.deleteUser(user.id);
-    if (result.ok) {
+    if (result.ok === true) {
       setUsers((current) => current.filter((item) => item.id !== user.id));
       addAuditLog('USER_PROVISIONING', `Deactivated account ${user.email}`);
     } else {
@@ -225,21 +348,20 @@ export default function UserManagement() {
               <tr className="bg-philsa-bg text-[10px] text-philsa-gray font-bold uppercase tracking-widest">
                 <th className="px-8 py-5">User Name</th>
                 <th className="px-8 py-5">Role</th>
-                <th className="px-8 py-5">Module Access</th>
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-philsa-border">
               {isLoading && (
                 <tr>
-                  <td colSpan={4} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
+                  <td colSpan={3} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
                     Loading backend users...
                   </td>
                 </tr>
               )}
               {!isLoading && !hasUsers && (
                 <tr>
-                  <td colSpan={4} className="px-8 py-12 text-center">
+                  <td colSpan={3} className="px-8 py-12 text-center">
                     <Users className="w-10 h-10 mx-auto mb-3 text-philsa-gray/50" />
                     <p className="text-sm font-extrabold text-philsa-navy">No backend users found</p>
                     <p className="text-xs text-philsa-gray">Create a staff or admin account to populate this table.</p>
@@ -263,15 +385,6 @@ export default function UserManagement() {
                     <div className="flex items-center gap-2 px-3 py-1 bg-philsa-bg border border-philsa-border rounded-lg w-fit">
                       <Shield className="w-3 h-3 text-philsa-red" />
                       <span className="text-[10px] font-bold text-philsa-navy uppercase tracking-wider">{formatLabel(user.role)}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex flex-wrap gap-1.5 max-w-xs">
-                      {(user.moduleAccess.length ? user.moduleAccess : ['NONE']).map((module) => (
-                        <span key={module} className="text-[9px] font-bold bg-white border border-philsa-border text-philsa-gray px-2 py-0.5 rounded uppercase">
-                          {formatLabel(module)}
-                        </span>
-                      ))}
                     </div>
                   </td>
                   <td className="px-8 py-6 text-right">
@@ -301,7 +414,7 @@ export default function UserManagement() {
             onSubmit={handleSubmit}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
           >
             <div className="p-8 border-b border-philsa-border flex justify-between items-center bg-philsa-bg/30">
               <div>
@@ -320,7 +433,7 @@ export default function UserManagement() {
                   {formError}
                 </div>
               )}
-              <div className="grid md:grid-cols-2 gap-8">
+              <div className="grid lg:grid-cols-[0.85fr_1.35fr] gap-8">
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-philsa-navy uppercase tracking-widest border-l-4 border-philsa-red pl-4">Identification</h3>
                   <div className="space-y-4">
@@ -334,7 +447,7 @@ export default function UserManagement() {
                     </label>
                     <label className="space-y-1.5 block">
                       <span className="text-[10px] font-bold text-philsa-gray uppercase tracking-widest pl-1">Role</span>
-                      <select className="input-philsa" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+                      <select className="input-philsa" value={form.role} onChange={(event) => handleRoleChange(event.target.value)}>
                         {roles.map((role) => <option key={role} value={role}>{formatLabel(role)}</option>)}
                       </select>
                     </label>
@@ -343,18 +456,61 @@ export default function UserManagement() {
 
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-philsa-navy uppercase tracking-widest border-l-4 border-philsa-red pl-4">Modular Permissions</h3>
-                  <div className="bg-philsa-bg rounded-2xl border border-philsa-border p-6 space-y-4">
-                    {availableModules.map((moduleName) => (
-                      <label key={moduleName} className="flex items-center justify-between pb-3 border-b border-philsa-border/50 last:border-0 last:pb-0">
-                        <span className="text-xs font-bold text-philsa-navy">{moduleName}</span>
-                        <input
-                          type="checkbox"
-                          className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red"
-                          checked={selectedModuleAccess.has(moduleKey(moduleName))}
-                          onChange={() => toggleModule(moduleName)}
-                        />
-                      </label>
-                    ))}
+                  <div className="bg-philsa-bg rounded-2xl border border-philsa-border overflow-hidden">
+                    <div className="max-h-[46vh] overflow-auto">
+                      <table className="w-full text-left">
+                        <thead className="sticky top-0 z-10 bg-white text-[10px] text-philsa-gray font-semibold uppercase tracking-widest shadow-sm">
+                          <tr>
+                            <th className="min-w-64 px-4 py-3">Module</th>
+                            {permissionActions.map((permission) => (
+                              <th key={permission.key} className="w-12 px-2 py-3 text-center" title={permission.label}>
+                                {permission.initial}
+                                <span className="sr-only"> {permission.label}</span>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-philsa-border/70">
+                          {systemModules.flatMap((module, index) => {
+                            const rows = [];
+
+                            if (systemModules[index - 1]?.category !== module.category) {
+                              rows.push(
+                                <tr key={`${module.category}-section`} className="bg-white">
+                                  <td
+                                    colSpan={permissionActions.length + 1}
+                                    className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-philsa-gray"
+                                  >
+                                    {module.category}
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            rows.push(
+                              <tr key={`${module.id}-${module.path}`} className="bg-philsa-bg/60">
+                                <td className="px-4 py-3">
+                                  <p className="text-xs font-medium text-philsa-navy">{module.name}</p>
+                                </td>
+                                {permissionActions.map((permission) => (
+                                  <td key={permission.key} className="px-2 py-3 text-center">
+                                    <input
+                                      type="checkbox"
+                                      className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red"
+                                      aria-label={`${permission.label} ${module.name}`}
+                                      checked={isPermissionSelected(selectedModuleAccess, module, permission.key)}
+                                      onChange={() => togglePermission(module, permission.key)}
+                                    />
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+
+                            return rows;
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               </div>

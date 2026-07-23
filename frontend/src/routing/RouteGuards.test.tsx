@@ -7,7 +7,12 @@ import { useMockData } from '../services/mockService';
 import { User } from '../types';
 import { ExamRoute, ProtectedRoute, PublicRoute } from './RouteGuards';
 
-vi.mock('../PhilSAContext', () => ({ usePhilSA: vi.fn() }));
+vi.mock('../PhilSAContext', () => ({
+  INITIAL_MAINTENANCE_MODULES: [
+    { id: '31', name: 'User Accounts', path: '/admin/users', category: 'System Admin', status: 'ACTIVE' },
+  ],
+  usePhilSA: vi.fn(),
+}));
 vi.mock('../services/mockService', () => ({ useMockData: vi.fn() }));
 
 const mockUsePhilSA = vi.mocked(usePhilSA);
@@ -93,6 +98,51 @@ describe('ProtectedRoute', () => {
 
     expect(screen.getByRole('heading', { name: 'Unauthorized page' })).toBeInTheDocument();
     expect(screen.getByText('Location: /unauthorized')).toBeInTheDocument();
+  });
+
+  it('redirects an allowed role without module read permission to unauthorized', () => {
+    mockUsePhilSA.mockReturnValue({
+      user: { ...admin, permissions: ['MOD_31_EDIT'] },
+      isLoading: false,
+      maintenanceModules: [],
+    } as ReturnType<typeof usePhilSA>);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/users']}>
+        <Routes>
+          <Route
+            path="/admin/users"
+            element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN']} layout="standalone"><h1>Protected content</h1></ProtectedRoute>}
+          />
+          <Route path="/unauthorized" element={<><h1>Unauthorized page</h1><LocationProbe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Unauthorized page' })).toBeInTheDocument();
+    expect(screen.getByText('Location: /unauthorized')).toBeInTheDocument();
+  });
+
+  it('renders an allowed role with module read permission', () => {
+    mockUsePhilSA.mockReturnValue({
+      user: { ...admin, permissions: ['MOD_31_READ'] },
+      isLoading: false,
+      maintenanceModules: [],
+    } as ReturnType<typeof usePhilSA>);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/users']}>
+        <Routes>
+          <Route
+            path="/admin/users"
+            element={<ProtectedRoute allowedRoles={['SYSTEM_ADMIN']} layout="standalone"><h1>Protected content</h1></ProtectedRoute>}
+          />
+          <Route path="/unauthorized" element={<h1>Unauthorized page</h1>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
   });
 });
 
