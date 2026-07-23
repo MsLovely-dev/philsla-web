@@ -131,9 +131,9 @@ export default function ReviewApplications() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
-          { label: 'Pending Review', value: String(pendingReviewCount), color: 'amber', change: 'Live' },
-          { label: 'Accepted', value: String(acceptedCount), color: 'emerald', change: 'Live' },
-          { label: 'Rejected', value: String(rejectedCount), color: 'philsa-red', change: 'Live' }
+          { label: 'Pending Review', value: String(pendingReviewCount), color: 'amber' },
+          { label: 'Accepted', value: String(acceptedCount), color: 'emerald' },
+          { label: 'Rejected', value: String(rejectedCount), color: 'philsa-red' }
         ].map((stat, i) => (
           <div key={i} className="card-philsa !p-6 flex items-center gap-5 bg-white border border-philsa-border">
             <div className={`w-2 h-10 rounded-full ${
@@ -145,9 +145,6 @@ export default function ReviewApplications() {
               <p className="text-[10px] font-black text-philsa-gray uppercase tracking-widest mb-1 leading-none">{stat.label}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-2xl font-black text-philsa-navy tracking-tighter leading-none">{stat.value}</span>
-                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${stat.color === 'philsa-red' ? 'bg-red-50 text-philsa-red' : 'bg-emerald-50 text-emerald-600'}`}>
-                  {stat.change}
-                </span>
               </div>
             </div>
           </div>
