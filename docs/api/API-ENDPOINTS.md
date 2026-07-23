@@ -108,7 +108,15 @@ In Student ID mode, the backend extracts the Student ID name and compares its no
 
 Admissions reviewers can load the review ledger with `GET /api/v1/applications/review-queue/`. The queue excludes `DRAFT` applications and includes submitted, resubmitted, correction, approved, and rejected registration records ordered by latest submission/creation time. Admissions reviewers and system admins can read a non-draft application detail with `GET /api/v1/applications/{applicationId}/`; draft detail remains limited to the owning student. Authorized callers can render application identity images through `GET /api/v1/applications/{applicationId}/identity-media/{mediaType}/`, where `mediaType` is a stored identity media value such as `SELFIE` or `STUDENT_ID_FRONT`. Student and unauthenticated callers are denied from the review queue.
 
-Successful registration audit responses include `candidateId` for reviewer-facing display and `applicationId` for the internal UUID reference. New audit rows use the same candidate ID in `registrationId` and `applicantId` to match the permanent candidate identifier shown to the applicant.
+The applicant registration audit log displays:
+
+| Date & Time | Activity | Details |
+| --- | --- | --- |
+| Backend-generated timestamp | OTP Verification Successful | Email verified successfully. |
+| Backend-generated timestamp | Account Credentials Created | Student Portal credentials created. |
+| Backend-generated timestamp | Registration Submitted | Registration submitted for admission review. |
+
+Successful registration audit responses include `candidateId` for reviewer-facing display and `applicationId` for the internal UUID reference. New submitted-registration audit rows use the same candidate ID in `registrationId` and `applicantId` to match the permanent candidate identifier shown to the applicant. The current backend persistence slice captures `Registration Submitted`; OTP verification and account credential audit persistence remain `TBD` until the registration OTP and account-token stores are implemented.
 
 Reviewer decisions are persisted through `POST /api/v1/applications/{applicationId}/review-decision/`:
 

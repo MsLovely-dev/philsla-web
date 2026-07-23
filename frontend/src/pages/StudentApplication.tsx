@@ -466,21 +466,6 @@ export default function StudentApplication() {
   const [showLrnCooldownModal, setShowLrnCooldownModal] = useState(initialLrnCooldownSecondsLeft > 0);
   const [cooldownSecondsLeft, setCooldownSecondsLeft] = useState(initialLrnCooldownSecondsLeft || LRN_COOLDOWN_SECONDS);
 
-  const getRegistrationAuditBase = () => ({
-    sessionId: registrationSessionIdRef.current,
-    timestamp: new Date().toISOString(),
-    ipAddress: 'TBD_BACKEND_CAPTURE',
-    deviceBrowser: navigator.userAgent,
-  });
-
-  const addRegistrationAuditLog = (auditEvent: string, data: Record<string, unknown> = {}) => {
-    addAuditLog(`REGISTRATION_${auditEvent}`, JSON.stringify({
-      auditEvent,
-      ...getRegistrationAuditBase(),
-      ...data,
-    }));
-  };
-
   useEffect(() => {
     if (!showLrnCooldownModal) return undefined;
 
@@ -2112,11 +2097,6 @@ export default function StudentApplication() {
     setApplications(prev => {
       const withoutDuplicate = prev.filter(app => app.id !== submittedApplication.id);
       return [...withoutDuplicate, submittedApplication];
-    });
-    addRegistrationAuditLog('SUBMITTED', {
-      registrationId: String(result.data.id ?? submittedApplication.id),
-      applicantId: submittedApplication.id,
-      accountId: user?.id || `PENDING-${registrationSessionIdRef.current}`,
     });
     setCandidateId(result.data.candidateId || formatCandidateId(submittedApplication.id, result.data.submittedAt ?? result.data.createdAt));
     resetRegistrationFormAfterSubmit();
