@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, Check, Edit2, Filter, Search, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { AlertTriangle, Check, Edit2, Eye, Filter, Plus, Search, Settings2, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { INITIAL_MAINTENANCE_MODULES, usePhilSA, type MaintenanceModule } from '../PhilSAContext';
 import { cn } from '../lib/utils';
 import {
@@ -25,6 +25,20 @@ interface RolePermissionRule {
   moduleIds: string[];
   modules?: string[];
   actions: PermissionActionKey[];
+}
+
+type SettingsSection = 'users' | 'roles';
+
+interface RoleDefinition {
+  id: string;
+  name: string;
+  moduleAccess: string[];
+  isCustom: boolean;
+}
+
+interface RoleForm {
+  name: string;
+  moduleAccess: string[];
 }
 
 const readOnly: PermissionActionKey[] = ['READ'];
@@ -104,6 +118,11 @@ const emptyForm: AdminUserAccountInput = {
   isActive: true,
 };
 
+const emptyRoleForm: RoleForm = {
+  name: '',
+  moduleAccess: [],
+};
+
 function formatLabel(value: string) {
   return value.replace(/_/g, ' ');
 }
@@ -144,10 +163,6 @@ function getDefaultModuleAccessForRole(role: string, modules: MaintenanceModule[
   );
 }
 
-function mergeRoleDefaultModuleAccess(role: string, modules: MaintenanceModule[], moduleAccess: string[]) {
-  return Array.from(new Set([...getDefaultModuleAccessForRole(role, modules), ...moduleAccess]));
-}
-
 function isPermissionSelected(access: Set<string>, module: MaintenanceModule, permission: string) {
   return access.has(modulePermissionKey(module, permission)) || (permission === 'READ' && access.has(moduleKey(module.name)));
 }
@@ -161,8 +176,78 @@ function getInitials(name: string) {
   return initials.slice(0, 3).toUpperCase() || 'UA';
 }
 
+interface PermissionMatrixProps {
+  modules: MaintenanceModule[];
+  selectedAccess: Set<string>;
+  onToggle: (module: MaintenanceModule, permission: PermissionActionKey) => void;
+  readOnly?: boolean;
+}
+
+function PermissionMatrix({ modules, selectedAccess, onToggle, readOnly = false }: PermissionMatrixProps) {
+  return (
+    <div className="bg-philsa-bg rounded-2xl border border-philsa-border overflow-hidden">
+      <div className="max-h-[46vh] overflow-auto">
+        <table className="w-full text-left">
+          <thead className="sticky top-0 z-10 bg-white text-[10px] text-philsa-gray font-semibold uppercase tracking-widest shadow-sm">
+            <tr>
+              <th className="min-w-64 px-4 py-3">Module</th>
+              {permissionActions.map((permission) => (
+                <th key={permission.key} className="w-12 px-2 py-3 text-center" title={permission.label}>
+                  {permission.initial}
+                  <span className="sr-only"> {permission.label}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-philsa-border/70">
+            {modules.flatMap((module, index) => {
+              const rows = [];
+
+              if (modules[index - 1]?.category !== module.category) {
+                rows.push(
+                  <tr key={`${module.category}-section`} className="bg-white">
+                    <td
+                      colSpan={permissionActions.length + 1}
+                      className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-philsa-gray"
+                    >
+                      {module.category}
+                    </td>
+                  </tr>
+                );
+              }
+
+              rows.push(
+                <tr key={`${module.id}-${module.path}`} className="bg-philsa-bg/60">
+                  <td className="px-4 py-3">
+                    <p className="text-xs font-medium text-philsa-navy">{module.name}</p>
+                  </td>
+                  {permissionActions.map((permission) => (
+                    <td key={permission.key} className="px-2 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red"
+                        aria-label={`${permission.label} ${module.name}`}
+                        checked={isPermissionSelected(selectedAccess, module, permission.key)}
+                        disabled={readOnly}
+                        onChange={() => onToggle(module, permission.key)}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              );
+
+              return rows;
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function UserManagement() {
   const { addAuditLog, maintenanceModules } = usePhilSA();
+  const [activeSection, setActiveSection] = useState<SettingsSection>('users');
   const [users, setUsers] = useState<AdminUserAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -174,6 +259,15 @@ export default function UserManagement() {
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [customRoles, setCustomRoles] = useState<RoleDefinition[]>([]);
+  const [roleAccessOverrides, setRoleAccessOverrides] = useState<Record<string, string[]>>({});
+  const [deletedRoleIds, setDeletedRoleIds] = useState<string[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [isAddingRole, setIsAddingRole] = useState(false);
+  const [editingRole, setEditingRole] = useState<RoleDefinition | null>(null);
+  const [viewingRoleId, setViewingRoleId] = useState<string | null>(null);
+  const [roleForm, setRoleForm] = useState<RoleForm>(emptyRoleForm);
+  const [roleFormError, setRoleFormError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -206,11 +300,53 @@ export default function UserManagement() {
   }, [maintenanceModules]);
 
   const selectedModuleAccess = useMemo(() => new Set(form.moduleAccess), [form.moduleAccess]);
+  const allRoles = useMemo(
+    () => Array.from(new Set([
+      ...roles.filter((role) => !deletedRoleIds.includes(role)),
+      ...customRoles.filter((role) => !deletedRoleIds.includes(role.id)).map((role) => role.name),
+    ])),
+    [customRoles, deletedRoleIds]
+  );
+  const roleDefinitions = useMemo<RoleDefinition[]>(
+    () => [
+      ...roles.filter((role) => !deletedRoleIds.includes(role)).map((role) => ({
+        id: role,
+        name: role,
+        moduleAccess: roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules),
+        isCustom: false,
+      })),
+      ...customRoles.filter((role) => !deletedRoleIds.includes(role.id)).map((role) => ({
+        ...role,
+        moduleAccess: roleAccessOverrides[role.id] ?? role.moduleAccess,
+      })),
+    ],
+    [customRoles, deletedRoleIds, roleAccessOverrides, systemModules]
+  );
+  const viewingRoleDefinition = useMemo(
+    () => roleDefinitions.find((role) => role.id === viewingRoleId) ?? null,
+    [roleDefinitions, viewingRoleId]
+  );
+  const viewingRoleModuleAccess = useMemo(
+    () => new Set(viewingRoleDefinition?.moduleAccess ?? []),
+    [viewingRoleDefinition]
+  );
+  const selectedRoleModuleAccess = useMemo(() => new Set(roleForm.moduleAccess), [roleForm.moduleAccess]);
+
+  function getRoleDefinition(role: string) {
+    const normalizedRole = normalizeRoleKey(role);
+    return roleDefinitions.find((definition) => normalizeRoleKey(definition.name) === normalizedRole);
+  }
+
+  function getModuleAccessForRole(role: string) {
+    return getRoleDefinition(role)?.moduleAccess ?? getDefaultModuleAccessForRole(role, systemModules);
+  }
 
   function openAddModal() {
+    const defaultRole = allRoles.includes(emptyForm.role) ? emptyForm.role : allRoles[0] ?? emptyForm.role;
     setForm({
       ...emptyForm,
-      moduleAccess: getDefaultModuleAccessForRole(emptyForm.role, systemModules),
+      role: defaultRole,
+      moduleAccess: getModuleAccessForRole(defaultRole),
     });
     setFormError('');
     setSelectedUser(null);
@@ -222,7 +358,7 @@ export default function UserManagement() {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
-      moduleAccess: mergeRoleDefaultModuleAccess(user.role, systemModules, user.moduleAccess),
+      moduleAccess: Array.from(new Set([...getModuleAccessForRole(user.role), ...user.moduleAccess])),
       isActive: user.isActive,
     });
     setFormError('');
@@ -237,7 +373,37 @@ export default function UserManagement() {
     setFormError('');
   }
 
-  function togglePermission(module: MaintenanceModule, permission: string) {
+  function openAddRoleModal() {
+    setRoleForm(emptyRoleForm);
+    setRoleFormError('');
+    setEditingRole(null);
+    setIsAddingRole(true);
+  }
+
+  function openEditRoleModal(role: RoleDefinition) {
+    setViewingRoleId(null);
+    setRoleForm({
+      name: role.name,
+      moduleAccess: role.moduleAccess,
+    });
+    setRoleFormError('');
+    setEditingRole(role);
+    setIsAddingRole(true);
+  }
+
+  function openViewRolePermissions(role: RoleDefinition) {
+    setSelectedRoleId(role.id);
+    setViewingRoleId(role.id);
+  }
+
+  function closeRoleModal() {
+    setIsAddingRole(false);
+    setEditingRole(null);
+    setRoleForm(emptyRoleForm);
+    setRoleFormError('');
+  }
+
+  function togglePermission(module: MaintenanceModule, permission: PermissionActionKey) {
     const key = modulePermissionKey(module, permission);
     const legacyModuleKey = moduleKey(module.name);
 
@@ -249,12 +415,128 @@ export default function UserManagement() {
     }));
   }
 
+  function toggleRolePermission(module: MaintenanceModule, permission: PermissionActionKey) {
+    const key = modulePermissionKey(module, permission);
+    const legacyModuleKey = moduleKey(module.name);
+
+    setRoleForm((current) => ({
+      ...current,
+      moduleAccess: current.moduleAccess.includes(key) || (permission === 'READ' && current.moduleAccess.includes(legacyModuleKey))
+        ? current.moduleAccess.filter((access) => access !== key && access !== legacyModuleKey)
+        : [...current.moduleAccess, key],
+    }));
+  }
+
   function handleRoleChange(role: string) {
     setForm((current) => ({
       ...current,
       role,
-      moduleAccess: getDefaultModuleAccessForRole(role, systemModules),
+      moduleAccess: getModuleAccessForRole(role),
     }));
+  }
+
+  function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedRoleName = editingRole?.isCustom === false ? editingRole.name : normalizeRoleKey(roleForm.name);
+
+    if (!normalizedRoleName) {
+      setRoleFormError('Enter a role name.');
+      return;
+    }
+
+    if (allRoles.some((role) => normalizeRoleKey(role) === normalizedRoleName && normalizeRoleKey(role) !== editingRole?.id)) {
+      setRoleFormError('A role with this name already exists.');
+      return;
+    }
+
+    if (editingRole) {
+      const previousRoleName = editingRole.name;
+      if (editingRole.isCustom) {
+        setCustomRoles((current) => current.map((role) => (
+          role.id === editingRole.id
+            ? { ...role, id: normalizedRoleName, name: normalizedRoleName, moduleAccess: roleForm.moduleAccess }
+            : role
+        )));
+        setRoleAccessOverrides((current) => {
+          const next = { ...current };
+          delete next[editingRole.id];
+          return { ...next, [normalizedRoleName]: roleForm.moduleAccess };
+        });
+      } else {
+        setRoleAccessOverrides((current) => ({
+          ...current,
+          [editingRole.id]: roleForm.moduleAccess,
+        }));
+      }
+      setUsers((current) => current.map((user) => (
+        normalizeRoleKey(user.role) === normalizeRoleKey(previousRoleName)
+          ? { ...user, role: normalizedRoleName, moduleAccess: roleForm.moduleAccess }
+          : user
+      )));
+      setForm((current) => (
+        normalizeRoleKey(current.role) === normalizeRoleKey(previousRoleName)
+          ? { ...current, role: normalizedRoleName, moduleAccess: roleForm.moduleAccess }
+          : current
+      ));
+      if (normalizeRoleKey(roleFilter) === normalizeRoleKey(previousRoleName)) {
+        setRoleFilter(normalizedRoleName);
+      }
+      setSelectedRoleId(normalizedRoleName);
+      setViewingRoleId(normalizedRoleName);
+      addAuditLog('ROLE_PROVISIONING', `Updated role ${normalizedRoleName}`);
+      closeRoleModal();
+      return;
+    }
+
+    setCustomRoles((current) => [
+      ...current,
+      {
+        id: normalizedRoleName,
+        name: normalizedRoleName,
+        moduleAccess: roleForm.moduleAccess,
+        isCustom: true,
+      },
+    ]);
+    setSelectedRoleId(normalizedRoleName);
+    addAuditLog('ROLE_PROVISIONING', `Created role ${normalizedRoleName}`);
+    closeRoleModal();
+  }
+
+  function handleRoleDelete(role: RoleDefinition) {
+    const assignedUsers = users.filter((user) => normalizeRoleKey(user.role) === normalizeRoleKey(role.name));
+    if (assignedUsers.length > 0) {
+      window.alert(`Cannot delete ${formatLabel(role.name)} while ${assignedUsers.length} user account${assignedUsers.length === 1 ? ' is' : 's are'} assigned to it.`);
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${formatLabel(role.name)} role?`);
+    if (!confirmed) return;
+
+    if (role.isCustom) {
+      setCustomRoles((current) => current.filter((item) => item.id !== role.id));
+    } else {
+      setDeletedRoleIds((current) => Array.from(new Set([...current, role.id])));
+    }
+
+    setRoleAccessOverrides((current) => {
+      const next = { ...current };
+      delete next[role.id];
+      return next;
+    });
+
+    if (selectedRoleId === role.id) setSelectedRoleId(null);
+    if (viewingRoleId === role.id) setViewingRoleId(null);
+    if (editingRole?.id === role.id) closeRoleModal();
+    if (normalizeRoleKey(roleFilter) === normalizeRoleKey(role.name)) setRoleFilter('');
+    if (normalizeRoleKey(form.role) === normalizeRoleKey(role.name)) {
+      const nextRole = allRoles.find((item) => normalizeRoleKey(item) !== normalizeRoleKey(role.name)) ?? emptyForm.role;
+      setForm((current) => ({
+        ...current,
+        role: nextRole,
+        moduleAccess: getModuleAccessForRole(nextRole),
+      }));
+    }
+    addAuditLog('ROLE_PROVISIONING', `Deleted role ${role.name}`);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -302,11 +584,61 @@ export default function UserManagement() {
           <h1 className="text-4xl font-black text-philsa-navy mb-2 tracking-tight">User & Role Settings</h1>
           <p className="text-philsa-gray">Manage admin access and set module permissions.</p>
         </div>
-        <button onClick={openAddModal} className="btn-primary flex items-center gap-2">
-          <UserPlus className="w-5 h-5" /> Add User
+        {activeSection === 'users' ? (
+          <button onClick={openAddModal} className="btn-primary flex items-center gap-2">
+            <UserPlus className="w-5 h-5" /> Add User
+          </button>
+        ) : (
+          <button onClick={openAddRoleModal} className="btn-primary flex items-center gap-2">
+            <Plus className="w-5 h-5" /> Add Role
+          </button>
+        )}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <button
+          type="button"
+          onClick={() => setActiveSection('users')}
+          className={cn(
+            'text-left rounded-2xl border p-5 transition-all bg-white',
+            activeSection === 'users'
+              ? 'border-philsa-red shadow-sm ring-2 ring-philsa-red/10'
+              : 'border-philsa-border hover:border-philsa-red/40'
+          )}
+        >
+          <div className="flex items-start gap-4">
+            <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center', activeSection === 'users' ? 'bg-philsa-red text-white' : 'bg-philsa-bg text-philsa-navy')}>
+              <Users className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-philsa-navy">Users Settings</p>
+              <p className="mt-1 text-xs leading-relaxed text-philsa-gray">User accounts, assigned roles, modular permissions, and adding new users.</p>
+            </div>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection('roles')}
+          className={cn(
+            'text-left rounded-2xl border p-5 transition-all bg-white',
+            activeSection === 'roles'
+              ? 'border-philsa-red shadow-sm ring-2 ring-philsa-red/10'
+              : 'border-philsa-border hover:border-philsa-red/40'
+          )}
+        >
+          <div className="flex items-start gap-4">
+            <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center', activeSection === 'roles' ? 'bg-philsa-red text-white' : 'bg-philsa-bg text-philsa-navy')}>
+              <Settings2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-extrabold text-philsa-navy">Role Settings</p>
+              <p className="mt-1 text-xs leading-relaxed text-philsa-gray">Role creation, default role access, and modular permission templates.</p>
+            </div>
+          </div>
         </button>
       </div>
 
+      {activeSection === 'users' && (
       <div className="bg-white rounded-3xl border border-philsa-border overflow-hidden shadow-sm">
         <div className="p-6 border-b border-philsa-border flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
@@ -328,7 +660,7 @@ export default function UserManagement() {
               aria-label="Filter roles"
             >
               <option value="">All Roles</option>
-              {roles.map((role) => (
+              {allRoles.map((role) => (
                 <option key={role} value={role}>{formatLabel(role)}</option>
               ))}
             </select>
@@ -407,6 +739,118 @@ export default function UserManagement() {
           </table>
         </div>
       </div>
+      )}
+
+      {activeSection === 'roles' && (
+        <div className="bg-white rounded-3xl border border-philsa-border overflow-hidden shadow-sm">
+          <div className="p-6 border-b border-philsa-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-extrabold text-philsa-navy">Role Settings</h2>
+              <p className="text-xs text-philsa-gray">Create roles and assign default modular permissions.</p>
+            </div>
+            <button onClick={openAddRoleModal} className="btn-secondary flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Add Role
+            </button>
+          </div>
+
+          <div className="divide-y divide-philsa-border">
+            {roleDefinitions.map((role) => (
+              <div
+                key={role.id}
+                className={cn(
+                  'flex items-center gap-4 p-6 transition-all hover:bg-philsa-bg/40',
+                  selectedRoleId === role.id && 'bg-philsa-bg/70'
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => openViewRolePermissions(role)}
+                  className="flex min-w-0 flex-1 items-center gap-4 text-left"
+                >
+                  <div className="w-11 h-11 rounded-xl bg-philsa-bg flex items-center justify-center text-philsa-red">
+                    <Shield className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-extrabold text-philsa-navy">{formatLabel(role.name)}</p>
+                      <span className="rounded-full border border-philsa-border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-philsa-gray">
+                        {role.isCustom ? 'Custom' : 'Default'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-philsa-gray">{role.moduleAccess.length} permissions selected</p>
+                  </div>
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openViewRolePermissions(role)}
+                    className="p-2 text-philsa-gray hover:text-philsa-navy hover:bg-white rounded-lg border border-transparent hover:border-philsa-border transition-all"
+                    aria-label={`View permissions for ${formatLabel(role.name)}`}
+                    title="View"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditRoleModal(role)}
+                    className="p-2 text-philsa-gray hover:text-philsa-navy hover:bg-white rounded-lg border border-transparent hover:border-philsa-border transition-all"
+                    aria-label={`Edit ${formatLabel(role.name)}`}
+                    title="Edit"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleRoleDelete(role)}
+                    className="p-2 text-philsa-gray hover:text-philsa-red hover:bg-white rounded-lg border border-transparent hover:border-philsa-border transition-all"
+                    aria-label={`Delete ${formatLabel(role.name)}`}
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {viewingRoleDefinition && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-philsa-navy/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            <div className="p-8 border-b border-philsa-border flex justify-between items-center bg-philsa-bg/30">
+              <div>
+                <h2 className="text-2xl font-extrabold text-philsa-navy">{formatLabel(viewingRoleDefinition.name)} Permissions</h2>
+                <p className="text-philsa-gray text-sm">{viewingRoleDefinition.moduleAccess.length} checked modular permissions.</p>
+              </div>
+              <button type="button" onClick={() => setViewingRoleId(null)} className="p-2 hover:bg-white rounded-full text-philsa-gray transition-colors">
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-10">
+              <h3 className="text-xs font-bold text-philsa-navy uppercase tracking-widest border-l-4 border-philsa-red pl-4 mb-4">Modular Permissions</h3>
+              <PermissionMatrix
+                modules={systemModules}
+                selectedAccess={viewingRoleModuleAccess}
+                onToggle={() => undefined}
+                readOnly
+              />
+            </div>
+
+            <div className="p-8 border-t border-philsa-border bg-philsa-bg/30 flex justify-end gap-4">
+              <button type="button" onClick={() => setViewingRoleId(null)} className="btn-secondary px-8">Close</button>
+              <button type="button" onClick={() => openEditRoleModal(viewingRoleDefinition)} className="btn-primary px-8 flex items-center gap-2">
+                <Edit2 className="w-4 h-4" /> Edit Role
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {(isAdding || selectedUser) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-philsa-navy/40 backdrop-blur-sm">
@@ -448,7 +892,7 @@ export default function UserManagement() {
                     <label className="space-y-1.5 block">
                       <span className="text-[10px] font-bold text-philsa-gray uppercase tracking-widest pl-1">Role</span>
                       <select className="input-philsa" value={form.role} onChange={(event) => handleRoleChange(event.target.value)}>
-                        {roles.map((role) => <option key={role} value={role}>{formatLabel(role)}</option>)}
+                        {allRoles.map((role) => <option key={role} value={role}>{formatLabel(role)}</option>)}
                       </select>
                     </label>
                   </div>
@@ -456,62 +900,7 @@ export default function UserManagement() {
 
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-philsa-navy uppercase tracking-widest border-l-4 border-philsa-red pl-4">Modular Permissions</h3>
-                  <div className="bg-philsa-bg rounded-2xl border border-philsa-border overflow-hidden">
-                    <div className="max-h-[46vh] overflow-auto">
-                      <table className="w-full text-left">
-                        <thead className="sticky top-0 z-10 bg-white text-[10px] text-philsa-gray font-semibold uppercase tracking-widest shadow-sm">
-                          <tr>
-                            <th className="min-w-64 px-4 py-3">Module</th>
-                            {permissionActions.map((permission) => (
-                              <th key={permission.key} className="w-12 px-2 py-3 text-center" title={permission.label}>
-                                {permission.initial}
-                                <span className="sr-only"> {permission.label}</span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-philsa-border/70">
-                          {systemModules.flatMap((module, index) => {
-                            const rows = [];
-
-                            if (systemModules[index - 1]?.category !== module.category) {
-                              rows.push(
-                                <tr key={`${module.category}-section`} className="bg-white">
-                                  <td
-                                    colSpan={permissionActions.length + 1}
-                                    className="px-4 py-3 text-[10px] font-semibold uppercase tracking-widest text-philsa-gray"
-                                  >
-                                    {module.category}
-                                  </td>
-                                </tr>
-                              );
-                            }
-
-                            rows.push(
-                              <tr key={`${module.id}-${module.path}`} className="bg-philsa-bg/60">
-                                <td className="px-4 py-3">
-                                  <p className="text-xs font-medium text-philsa-navy">{module.name}</p>
-                                </td>
-                                {permissionActions.map((permission) => (
-                                  <td key={permission.key} className="px-2 py-3 text-center">
-                                    <input
-                                      type="checkbox"
-                                      className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red"
-                                      aria-label={`${permission.label} ${module.name}`}
-                                      checked={isPermissionSelected(selectedModuleAccess, module, permission.key)}
-                                      onChange={() => togglePermission(module, permission.key)}
-                                    />
-                                  </td>
-                                ))}
-                              </tr>
-                            );
-
-                            return rows;
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                  <PermissionMatrix modules={systemModules} selectedAccess={selectedModuleAccess} onToggle={togglePermission} />
                 </div>
               </div>
             </div>
@@ -520,6 +909,66 @@ export default function UserManagement() {
               <button type="button" onClick={closeModal} className="btn-secondary px-8">Discard</button>
               <button disabled={isSaving} className={cn('btn-primary px-12 flex items-center gap-2', isSaving && 'opacity-70')}>
                 <Check className="w-5 h-5" /> {isSaving ? 'Saving...' : isAdding ? 'Create User' : 'Save Changes'}
+              </button>
+            </div>
+          </motion.form>
+        </div>
+      )}
+
+      {isAddingRole && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-philsa-navy/40 backdrop-blur-sm">
+          <motion.form
+            onSubmit={handleRoleSubmit}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            <div className="p-8 border-b border-philsa-border flex justify-between items-center bg-philsa-bg/30">
+              <div>
+                <h2 className="text-2xl font-extrabold text-philsa-navy">{editingRole ? 'Edit Role' : 'Add New Role'}</h2>
+                <p className="text-philsa-gray text-sm">Set the role name and default modular permissions.</p>
+              </div>
+              <button type="button" onClick={closeRoleModal} className="p-2 hover:bg-white rounded-full text-philsa-gray transition-colors">
+                <X className="w-8 h-8" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-10 space-y-8">
+              {roleFormError && (
+                <div className="flex items-center gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-philsa-red">
+                  <AlertTriangle className="w-4 h-4" />
+                  {roleFormError}
+                </div>
+              )}
+
+              <div className="grid lg:grid-cols-[0.85fr_1.35fr] gap-8">
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold text-philsa-navy uppercase tracking-widest border-l-4 border-philsa-red pl-4">Role Details</h3>
+                  <label className="space-y-1.5 block">
+                    <span className="text-[10px] font-bold text-philsa-gray uppercase tracking-widest pl-1">Role Name</span>
+                    <input
+                      type="text"
+                      required
+                      className="input-philsa"
+                      value={roleForm.name}
+                      disabled={editingRole?.isCustom === false}
+                      onChange={(event) => setRoleForm({ ...roleForm, name: event.target.value })}
+                      placeholder="e.g. Regional Admin"
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold text-philsa-navy uppercase tracking-widest border-l-4 border-philsa-red pl-4">Modular Permissions</h3>
+                  <PermissionMatrix modules={systemModules} selectedAccess={selectedRoleModuleAccess} onToggle={toggleRolePermission} />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 border-t border-philsa-border bg-philsa-bg/30 flex justify-end gap-4">
+              <button type="button" onClick={closeRoleModal} className="btn-secondary px-8">Discard</button>
+              <button className="btn-primary px-12 flex items-center gap-2">
+                <Check className="w-5 h-5" /> {editingRole ? 'Save Role' : 'Create Role'}
               </button>
             </div>
           </motion.form>
