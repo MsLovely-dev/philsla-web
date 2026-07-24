@@ -1,6 +1,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
-import { MOCK_USERS } from './lib/utils';
+import { createPrototypeAuthService } from './services';
+import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSession } from './services/contracts';
+import { authorizationError } from './services/serviceResult';
+import type { ServiceResult } from './services/serviceResult';
+
+const authService = createPrototypeAuthService();
 
 interface InputModuleControl {
   id: string;
@@ -10,10 +15,90 @@ interface InputModuleControl {
   isActive: boolean;
 }
 
+export interface MaintenanceModule {
+  id: string;
+  name: string;
+  path: string;
+  category: string;
+  status: string;
+}
+
+export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
+  // Student Portal
+  { id: '1', name: 'Dashboard', path: '/dashboard', category: 'Student Portal', status: 'ACTIVE' },
+  { id: '2', name: 'Student Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
+  { id: '3', name: 'Exam Permit', path: '/student/permit', category: 'Student Portal', status: 'ACTIVE' },
+  { id: '4', name: 'Results', path: '/student/results', category: 'Student Portal', status: 'ACTIVE' },
+
+  // Government Oversight
+  { id: '5', name: 'National Analytics', path: '/admin/government', category: 'Government Oversight', status: 'ACTIVE' },
+  { id: '6', name: 'Incident Monitor', path: '/admin/recordings/incidents', category: 'Government Oversight', status: 'ACTIVE' },
+  { id: '7', name: 'Recording Archive', path: '/admin/recordings', category: 'Government Oversight', status: 'ACTIVE' },
+
+  // System Administration
+  { id: '8', name: 'Device Requests', path: '/admin/maintenance/proctor-device', category: 'System Administration', status: 'ACTIVE' },
+  { id: '9', name: 'Review Applications', path: '/admin/reviewer/applications', category: 'System Administration', status: 'ACTIVE' },
+  { id: '10', name: 'University Applications', path: '/admin/university/applications', category: 'System Administration', status: 'ACTIVE' },
+  { id: '11', name: 'Proctors', path: '/admin/proctors', category: 'System Administration', status: 'ACTIVE' },
+  { id: '12', name: 'Center Availability', path: '/admin/reviewer/availability', category: 'System Administration', status: 'ACTIVE' },
+  { id: '13', name: 'Manage Courses', path: '/admin/university/courses', category: 'System Administration', status: 'ACTIVE' },
+  { id: '14', name: 'Batch Management', path: '/admin/university/schedules', category: 'System Administration', status: 'ACTIVE' },
+  { id: '15', name: 'Reporting Matrix', path: '/admin/results/matrix', category: 'System Administration', status: 'ACTIVE' },
+  { id: '48', name: 'Review Application Audit Logs', path: '/admin/reviewer/applications/audit', category: 'System Administration', status: 'ACTIVE' },
+
+  // Exam Management Hub
+  { id: '16', name: 'Overview', path: '/admin/hub/overview', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '17', name: 'Question Bank', path: '/admin/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '18', name: 'Writer Question Bank', path: '/admin/hub/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '19', name: 'Exam Sets', path: '/admin/hub/exam-sets', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '20', name: 'Exam Review', path: '/admin/hub/review', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '21', name: 'Bulk Upload Center', path: '/admin/hub/upload', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '22', name: 'Audit Logs', path: '/admin/hub/audit', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '46', name: 'Results Release', path: '/admin/hub/results-release', category: 'Exam Management Hub', status: 'ACTIVE' },
+
+  // Operations & Records
+  { id: '23', name: 'Command Center', path: '/admin/command-center', category: 'Operations & Records', status: 'ACTIVE' },
+
+  // Results & Analytics
+  { id: '24', name: 'Score Management', path: '/admin/results/scores', category: 'Results & Analytics', status: 'ACTIVE' },
+
+  // Proctor Operations
+  { id: '25', name: 'Register Device', path: '/proctor/devices', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '26', name: 'Exam Schedule', path: '/proctor/schedule', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '27', name: 'Device Readiness', path: '/proctor/readiness', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '28', name: 'Attendance', path: '/proctor/attendance', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '29', name: 'Exam Monitoring', path: '/proctor/monitoring', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '30', name: 'Student PC Reg', path: '/proctor/student-devices', category: 'Proctor Operations', status: 'ACTIVE' },
+
+  // System Admin
+  { id: '31', name: 'User Accounts', path: '/admin/users', category: 'System Admin', status: 'ACTIVE' },
+  { id: '32', name: 'Compliance', path: '/admin/system', category: 'System Admin', status: 'ACTIVE' },
+  { id: '47', name: 'System Integration', path: '/admin/integrations', category: 'System Admin', status: 'ACTIVE' },
+  { id: '34', name: 'Maintenance Center', path: '/admin/maintenance', category: 'System Admin', status: 'ACTIVE' },
+
+  // Testing Center Logistics
+  { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },
+
+  // Sub-modules of Maintenance Protocols
+  { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance Protocols', status: 'ACTIVE' },
+  { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance Protocols', status: 'ACTIVE' }
+];
+
 interface PhilSAContextType {
   user: User | null;
   setUser: (user: User | null) => void;
   login: (email: string, password?: string) => Promise<boolean>;
+  startLoginIdentifier: (identifier: string) => Promise<ServiceResult<AuthIdentifierChallenge>>;
+  verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthOtpChallenge>>;
+  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSession>>;
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
@@ -48,11 +133,17 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Check for existing session
-    const savedUser = localStorage.getItem('philsa_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
+    let isMounted = true;
+
+    void authService.getCurrentSession().then((result) => {
+      if (isMounted && result.ok) {
+        setUser(result.data?.user ?? null);
+      }
+    }).finally(() => {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    });
     
     const savedLogs = localStorage.getItem('philsa_logs');
     if (savedLogs) {
@@ -60,76 +151,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     }
 
     const savedMaintenance = localStorage.getItem('philsa_maintenance_modules');
-    const initialModules = [
-      // Student Portal
-      { id: '1', name: 'Dashboard', path: '/dashboard', category: 'Student Portal', status: 'ACTIVE' },
-      { id: '2', name: 'Student Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
-      { id: '3', name: 'Exam Permit', path: '/student/permit', category: 'Student Portal', status: 'ACTIVE' },
-      { id: '4', name: 'Results', path: '/student/results', category: 'Student Portal', status: 'ACTIVE' },
-
-      // Government Oversight
-      { id: '5', name: 'National Analytics', path: '/admin/government', category: 'Government Oversight', status: 'ACTIVE' },
-      { id: '6', name: 'Incident Monitor', path: '/admin/recordings/incidents', category: 'Government Oversight', status: 'ACTIVE' },
-      { id: '7', name: 'Recording Archive', path: '/admin/recordings', category: 'Government Oversight', status: 'ACTIVE' },
-
-      // System Administration
-      { id: '8', name: 'Device Requests', path: '/admin/maintenance/proctor-device', category: 'System Administration', status: 'ACTIVE' },
-      { id: '9', name: 'Review Applications', path: '/admin/reviewer/applications', category: 'System Administration', status: 'ACTIVE' },
-      { id: '10', name: 'University Applications', path: '/admin/university/applications', category: 'System Administration', status: 'ACTIVE' },
-      { id: '11', name: 'Proctors', path: '/admin/proctors', category: 'System Administration', status: 'ACTIVE' },
-      { id: '12', name: 'Center Availability', path: '/admin/reviewer/availability', category: 'System Administration', status: 'ACTIVE' },
-      { id: '13', name: 'Manage Courses', path: '/admin/university/courses', category: 'System Administration', status: 'ACTIVE' },
-      { id: '14', name: 'Batch Management', path: '/admin/university/schedules', category: 'System Administration', status: 'ACTIVE' },
-      { id: '15', name: 'Reporting Matrix', path: '/admin/results/matrix', category: 'System Administration', status: 'ACTIVE' },
-
-      // Exam Management Hub
-      { id: '16', name: 'Overview', path: '/admin/hub/overview', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '17', name: 'Question Bank', path: '/admin/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '18', name: 'Writer Question Bank', path: '/admin/hub/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '19', name: 'Exam Sets', path: '/admin/hub/exam-sets', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '20', name: 'Exam Review', path: '/admin/hub/review', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '21', name: 'Bulk Upload Center', path: '/admin/hub/upload', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '22', name: 'Audit Logs', path: '/admin/hub/audit', category: 'Exam Management Hub', status: 'ACTIVE' },
-      { id: '46', name: 'Results Release', path: '/admin/hub/results-release', category: 'Exam Management Hub', status: 'ACTIVE' },
-
-      // Operations & Records
-      { id: '23', name: 'Command Center', path: '/admin/command-center', category: 'Operations & Records', status: 'ACTIVE' },
-
-      // Results & Analytics
-      { id: '24', name: 'Score Management', path: '/admin/results/scores', category: 'Results & Analytics', status: 'ACTIVE' },
-
-      // Proctor Operations
-      { id: '25', name: 'Register Device', path: '/proctor/devices', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '26', name: 'Exam Schedule', path: '/proctor/schedule', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '27', name: 'Device Readiness', path: '/proctor/readiness', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '28', name: 'Attendance', path: '/proctor/attendance', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '29', name: 'Exam Monitoring', path: '/proctor/monitoring', category: 'Proctor Operations', status: 'ACTIVE' },
-      { id: '30', name: 'Student PC Reg', path: '/proctor/student-devices', category: 'Proctor Operations', status: 'ACTIVE' },
-
-      // System Admin
-      { id: '31', name: 'User Accounts', path: '/admin/users', category: 'System Admin', status: 'ACTIVE' },
-      { id: '32', name: 'Compliance', path: '/admin/system', category: 'System Admin', status: 'ACTIVE' },
-      { id: '33', name: 'Agency Monitoring', path: '/admin/government', category: 'System Admin', status: 'ACTIVE' },
-      { id: '47', name: 'System Integration', path: '/admin/integrations', category: 'System Admin', status: 'ACTIVE' },
-
-      // Maintenance & Protocols
-      { id: '34', name: 'Maintenance Center', path: '/admin/maintenance', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-
-      // Testing Center Logistics
-      { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },
-
-      // Sub-modules of Maintenance Protocols
-      { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance Protocols', status: 'ACTIVE' },
-      { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance Protocols', status: 'ACTIVE' }
-    ];
+    const initialModules = INITIAL_MAINTENANCE_MODULES;
 
     if (savedMaintenance) {
       try {
@@ -249,55 +271,62 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('philsa_tickets', JSON.stringify(initialTickets));
     }
     
-    setIsLoading(false);
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // In prototype mode, we accept any password if the email matches
-    // Check static mock users
-    let foundUser = MOCK_USERS.find(u => u.email === email);
-    
-    // Check registered applications if not found in mock users
-    if (!foundUser) {
-      const savedApps = localStorage.getItem('philsa_apps');
-      if (savedApps) {
-        try {
-          const apps = JSON.parse(savedApps);
-          const matchedApp = apps.find((a: any) => a.email === email);
-          if (matchedApp) {
-            foundUser = {
-              id: matchedApp.userId || matchedApp.id,
-              email: matchedApp.email,
-              firstName: matchedApp.firstName,
-              lastName: matchedApp.lastName,
-              role: 'STUDENT',
-              candidateId: matchedApp.id
-            };
-          }
-        } catch (e) {
-          console.error('Error parsing saved applications', e);
-        }
-      }
-    }
+    const result = await authService.login({ email, password });
 
-    if (foundUser) {
-      setUser(foundUser);
-      localStorage.setItem('philsa_user', JSON.stringify(foundUser));
-      addAuditLog('LOGIN', `User ${foundUser.email} logged in as ${foundUser.role}`);
+    if (result.ok) {
+      setUser(result.data.user);
+      addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
       return true;
     }
+
     return false;
   };
 
-  const logout = () => {
+  const startLoginIdentifier = async (identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>> => {
+    if (!authService.startLoginIdentifier) {
+      return authorizationError('Identifier login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+    return authService.startLoginIdentifier(identifier);
+  };
+
+  const verifyLoginPassword = async (
+    pendingAuthToken: string,
+    password: string,
+  ): Promise<ServiceResult<AuthOtpChallenge>> => {
+    if (!authService.verifyLoginPassword) {
+      return authorizationError('Password login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+    return authService.verifyLoginPassword(pendingAuthToken, password);
+  };
+
+  const verifyLoginOtp = async (
+    otpPendingAuthToken: string,
+    code: string,
+  ): Promise<ServiceResult<AuthSession>> => {
+    if (!authService.verifyLoginOtp) {
+      return authorizationError('OTP login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    const result = await authService.verifyLoginOtp(otpPendingAuthToken, code);
+    if (result.ok) {
+      setUser(result.data.user);
+      addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
+    }
+    return result;
+  };
+
+  const logout = async () => {
     if (user) {
       addAuditLog('LOGOUT', `User ${user.email} logged out`);
     }
+    await authService.logout();
     setUser(null);
-    localStorage.removeItem('philsa_user');
   };
 
   const addAuditLog = (action: string, details: string) => {
@@ -309,9 +338,11 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
       timestamp: new Date().toISOString(),
       role: user?.role || 'STUDENT',
     };
-    const updated = [newLog, ...auditLogs].slice(0, 500);
-    setAuditLogs(updated);
-    localStorage.setItem('philsa_logs', JSON.stringify(updated));
+    setAuditLogs(prev => {
+      const updated = [newLog, ...prev].slice(0, 500);
+      localStorage.setItem('philsa_logs', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const addTicket = (ticket: Omit<SupportTicket, 'id' | 'createdAt'>) => {
@@ -338,7 +369,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, verifyLoginOtp, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

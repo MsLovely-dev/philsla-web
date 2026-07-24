@@ -9,6 +9,7 @@ export type UserRole =
   | 'GRADER' 
   | 'SYSTEM_ADMIN' 
   | 'EXECUTIVE'
+  | 'GOVERNMENT'
   | 'EXAM_ADMINISTRATOR'
   | 'TESTING_CENTER_ADMIN'
   | 'TECH_SUPPORT';
@@ -19,6 +20,7 @@ export interface User {
   firstName: string;
   lastName: string;
   role: UserRole;
+  permissions?: string[];
   avatar?: string;
   candidateId?: string;
   university?: string; // For university admins
@@ -56,7 +58,8 @@ export type ExamStatus =
   | 'TERMINATED';
 
 export interface Application {
-  id: string; // Candidate ID
+  id: string; // Internal application ID
+  candidateId?: string;
   userId: string;
   status: ApplicationStatus;
   submittedAt?: string;
@@ -101,12 +104,16 @@ export interface Application {
 
   // Education
   lrn: string;
+  schoolId?: string;
   schoolName: string;
   schoolAddress: string;
   academicTrack: string;
   gradeLevel: string;
+  enrollmentStatus?: string;
+  schoolYear?: string;
   gwa: number;
   gradeRecordsUrl?: string;
+  additionalHighPriorityFields?: Record<string, string>;
 
   // Preferences
   universities: string[];

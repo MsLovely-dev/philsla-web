@@ -16,6 +16,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
     candidateType: '',
     idType: '',
     idNumber: '',
+    lrn: '',
     firstName: '',
     middleName: '',
     lastName: '',
@@ -28,9 +29,13 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
     email: '',
     shsTrack: '',
     program: '',
+    schoolId: '',
     schoolName: '',
     schoolAddress: '',
-    gradeLevel: ''
+    gradeLevel: '',
+    enrollmentStatus: '',
+    schoolYear: '',
+    customStep1Fields: {} as Record<string, string>
   });
 
   const handleInputChange = (field: string, val: string) => {
@@ -81,6 +86,88 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
   const activeGradeLevels = gradeLevels.length > 0 ? gradeLevels : ['Grade 11', 'Grade 12'];
   const activeSuffixes = suffixes.length > 0 ? suffixes : ['Jr.', 'Sr.', 'III', 'IV'];
   const activeNationalities = nationalities.length > 0 ? nationalities : ['Filipino', 'Dual Citizen', 'Foreign National'];
+  const activeRegistrationMethod = data.find(item => item.section === 'Step 1 Registration' && item.type === 'Verification Method' && isActive(item));
+  const activeRegistrationPath = activeRegistrationMethod?.value?.includes('Manual') ? 'manual' : activeRegistrationMethod?.value?.includes('LRN') ? 'lrn' : activeRegistrationMethod?.value?.includes('PhilSys') ? 'philsys' : null;
+  const activeStep1Fields = data
+    .filter(item => item.section === 'Step 1 Registration' && item.type === 'Student Registration Field' && isActive(item))
+    .sort((a, b) => (a.display_order ?? 100) - (b.display_order ?? 100));
+  const previewStep1Sections = ['Personal Information', 'School Information', 'Additional Information'];
+  const previewStep1FieldSections: Record<string, string> = {
+    'LRN': 'Personal Information',
+    'Birth Date': 'Personal Information',
+    'First Name': 'Personal Information',
+    'Middle Name': 'Personal Information',
+    'Last Name': 'Personal Information',
+    'Extension Name': 'Personal Information',
+    'Sex': 'Personal Information',
+    'School ID': 'School Information',
+    'School Name': 'School Information',
+    'Grade Level': 'School Information',
+    'Enrollment Status': 'School Information',
+    'School Year': 'School Information',
+  };
+  const previewStep1FieldKeys: Record<string, keyof typeof formState> = {
+    'LRN': 'lrn',
+    'Birth Date': 'dob',
+    'First Name': 'firstName',
+    'Middle Name': 'middleName',
+    'Last Name': 'lastName',
+    'Extension Name': 'suffix',
+    'Sex': 'sex',
+    'School ID': 'schoolId',
+    'School Name': 'schoolName',
+    'Grade Level': 'gradeLevel',
+    'Enrollment Status': 'enrollmentStatus',
+    'School Year': 'schoolYear',
+  };
+
+  const renderPreviewStep1Field = (field: any) => {
+    const formKey = previewStep1FieldKeys[field.value];
+    const value = typeof formKey === 'string'
+      ? String(formState[formKey] ?? '')
+      : formState.customStep1Fields[field.value] || '';
+    const options = Array.isArray(field.optionValues) ? field.optionValues : [];
+    const required = field.priority === 'High Priority';
+    const updateValue = (nextValue: string) => {
+      if (typeof formKey === 'string') {
+        handleInputChange(formKey, nextValue);
+        return;
+      }
+      setFormState(prev => ({
+        ...prev,
+        customStep1Fields: {
+          ...prev.customStep1Fields,
+          [field.value]: nextValue,
+        },
+      }));
+    };
+
+    return (
+      <div key={field.id || field.value} className="space-y-1">
+        <label className="label-philsa text-[10px]">{field.value}{required ? ' *' : ''}</label>
+        {field.inputType === 'dropdown' && options.length > 0 ? (
+          <select
+            value={value}
+            onChange={(e) => updateValue(e.target.value)}
+            className="input-philsa text-xs py-2 bg-white cursor-pointer"
+          >
+            <option value="">Select {field.value}</option>
+            {options.map((option: string) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            type={field.inputType === 'date' ? 'date' : 'text'}
+            value={value}
+            onChange={(e) => updateValue(e.target.value)}
+            placeholder={field.remarks || `Enter ${field.value}`}
+            className="input-philsa text-xs py-2 bg-white"
+          />
+        )}
+      </div>
+    );
+  };
 
   // Check which general fields should disappear
   const showFirstName = isFieldActive('First Name');
@@ -169,7 +256,46 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
           </button>
         </div>
 
-        {activeStep === 1 && (
+        {activeStep === 1 && activeRegistrationPath === 'manual' && (
+          <div className="space-y-4 animate-fadeIn">
+            <div>
+              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">1. Manual Registration</h3>
+              <p className="text-[10px] text-slate-400 font-semibold">Inputs are generated from active Step 1 Fields maintenance rows.</p>
+            </div>
+
+            {activeStep1Fields.length === 0 ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-800">
+                No active Step 1 fields are configured.
+              </div>
+            ) : (
+              previewStep1Sections.map(section => {
+                const fieldsInSection = activeStep1Fields.filter(field => (field.fieldSection || previewStep1FieldSections[field.value] || 'Additional Information') === section);
+                if (fieldsInSection.length === 0) return null;
+
+                return (
+                  <div key={section} className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4">
+                    <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">{section}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {fieldsInSection.map(renderPreviewStep1Field)}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+
+            <div className="pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setActiveStep(2)}
+                className="bg-philsa-navy hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                Next Step: Academics <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeStep === 1 && activeRegistrationPath !== 'manual' && (
           <div className="space-y-4 animate-fadeIn">
             {/* Heading */}
             <div>
@@ -571,6 +697,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
                     candidateType: '',
                     idType: '',
                     idNumber: '',
+                    lrn: '',
                     firstName: '',
                     middleName: '',
                     lastName: '',
@@ -583,9 +710,13 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
                     email: '',
                     shsTrack: '',
                     program: '',
+                    schoolId: '',
                     schoolName: '',
                     schoolAddress: '',
-                    gradeLevel: ''
+                    gradeLevel: '',
+                    enrollmentStatus: '',
+                    schoolYear: '',
+                    customStep1Fields: {}
                   });
                 }}
                 className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-xl transition-all cursor-pointer text-[10px] font-bold"
