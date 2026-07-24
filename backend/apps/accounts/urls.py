@@ -1,0 +1,39 @@
+from django.urls import path
+
+from .views import (
+    AdminUserAccountDetailView,
+    AdminUserAccountListCreateView,
+    CurrentSessionView,
+    AdminAccountRecoveryRequestView,
+    IdentifierLoginView,
+    LogoutView,
+    OtpLoginView,
+    PasswordLoginView,
+    PasswordRecoveryCompletionView,
+    PasswordRecoveryRequestView,
+    RefreshTokenView,
+    StaffActivationCompletionView,
+    StudentRegistrationActivationView,
+    TokenRevocationView,
+)
+
+urlpatterns = [
+    path("admin/users/", AdminUserAccountListCreateView.as_view(), name="admin-user-list-create"),
+    path("admin/users/<str:user_id>/", AdminUserAccountDetailView.as_view(), name="admin-user-detail"),
+    path("activation/staff/complete/", StaffActivationCompletionView.as_view(), name="staff-activation-complete"),
+    path(
+        "activation/student-registration/",
+        StudentRegistrationActivationView.as_view(),
+        name="student-registration-activation",
+    ),
+    path("login/identifier/", IdentifierLoginView.as_view(), name="login-identifier"),
+    path("login/password/", PasswordLoginView.as_view(), name="login-password"),
+    path("login/otp/", OtpLoginView.as_view(), name="login-otp"),
+    path("recovery/password/request/", PasswordRecoveryRequestView.as_view(), name="password-recovery-request"),
+    path("recovery/password/complete/", PasswordRecoveryCompletionView.as_view(), name="password-recovery-complete"),
+    path("recovery/admin/request/", AdminAccountRecoveryRequestView.as_view(), name="admin-account-recovery-request"),
+    path("logout/", LogoutView.as_view(), name="logout"),
+    path("token/refresh/", RefreshTokenView.as_view(), name="token-refresh"),
+    path("token/revoke/", TokenRevocationView.as_view(), name="token-revoke"),
+    path("session/", CurrentSessionView.as_view(), name="current-session"),
+]

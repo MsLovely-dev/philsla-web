@@ -39,6 +39,7 @@ export interface MaintenanceField {
   required?: boolean;
   placeholder?: string;
   dependsOn?: string;
+  dependsOnValue?: string;
   validation?: (val: any) => string | null;
   disabled?: boolean;
   onChange?: (val: any, currentData: any) => any;
@@ -63,6 +64,10 @@ interface MaintenancePageProps {
   sidePanel?: React.ReactNode;
   isSidePanelOpen?: boolean;
   aboveTableContent?: React.ReactNode;
+  showCreateAction?: boolean;
+  showRowActions?: boolean;
+  showApprovalColumn?: boolean;
+  renderRowActions?: (row: any) => React.ReactNode;
 }
 
 export default function MaintenancePageTemplate({
@@ -80,7 +85,11 @@ export default function MaintenancePageTemplate({
   extraHeaderActions,
   sidePanel,
   isSidePanelOpen,
-  aboveTableContent
+  aboveTableContent,
+  showCreateAction = true,
+  showRowActions = true,
+  showApprovalColumn = true,
+  renderRowActions,
 }: MaintenancePageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -154,12 +163,12 @@ export default function MaintenancePageTemplate({
               <Upload className="w-4 h-4" /> Bulk Import
             </button>
           )}
-          <button 
+          {showCreateAction && <button
             onClick={handleOpenCreate}
             className="bg-philsa-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-philsa-navy/10 hover:bg-philsa-navy/90 transition-all flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Create New Entry
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -199,8 +208,8 @@ export default function MaintenancePageTemplate({
                   <th key={col.key} className="px-8 py-5">{col.label}</th>
                 ))}
                 <th className="px-8 py-5">Audit Details</th>
-                <th className="px-8 py-5">Approval</th>
-                <th className="px-8 py-5 text-right">Actions</th>
+                {showApprovalColumn && <th className="px-8 py-5">Approval</th>}
+                {showRowActions && <th className="px-8 py-5 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-philsa-border">
@@ -223,36 +232,38 @@ export default function MaintenancePageTemplate({
                       </div>
                     </div>
                   </td>
-                  <td className="px-8 py-6">
-                     <StatusBadge status={row.approvalStatus || 'Approved'} isApproval />
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="flex justify-end gap-1">
-                      <button 
-                        onClick={() => onView?.(row)}
-                        className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleOpenEdit(row)}
-                        className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => onDelete?.(row)}
-                        className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+                  {showApprovalColumn && <td className="px-8 py-6">
+                    <StatusBadge status={row.approvalStatus || 'Approved'} isApproval />
+                  </td>}
+                  {showRowActions && <td className="px-8 py-6 text-right">
+                    {renderRowActions ? renderRowActions(row) : (
+                      <div className="flex justify-end gap-1">
+                        <button
+                          onClick={() => onView?.(row)}
+                          className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenEdit(row)}
+                          className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onDelete?.(row)}
+                          className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </td>}
                 </tr>
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length + 3} className="px-8 py-20 text-center">
+                  <td colSpan={columns.length + 1 + (showApprovalColumn ? 1 : 0) + (showRowActions ? 1 : 0)} className="px-8 py-20 text-center">
                     <div className="flex flex-col items-center justify-center grayscale opacity-30">
                        <Database className="w-16 h-16 mb-4" />
                        <p className="text-xl font-bold uppercase tracking-widest">No Records Found</p>
@@ -331,7 +342,7 @@ export default function MaintenancePageTemplate({
               <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
                 <div className="p-6 space-y-5 overflow-y-auto max-h-[55vh]">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    {fields.map(field => (
+                    {fields.filter(field => !field.dependsOn || (field.dependsOnValue ? formData[field.dependsOn] === field.dependsOnValue : Boolean(formData[field.dependsOn]))).map(field => (
                       <div key={field.name} className={cn("space-y-1.5", field.type === 'textarea' && "md:col-span-2")}>
                         <label className="text-[11px] font-extrabold text-philsa-navy uppercase tracking-wider flex items-center gap-1">
                           {field.label} {field.required && <span className="text-philsa-red">*</span>}

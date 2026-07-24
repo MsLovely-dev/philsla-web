@@ -81,7 +81,15 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard', roles: ['UNIVERSITY_ADMIN', 'SYSTEM_ADMIN', 'ADMISSIONS_REVIEWER'] },
       { icon: ShieldCheck, label: 'Device Requests', href: '/admin/maintenance/proctor-device', roles: ['SYSTEM_ADMIN'] },
-      { icon: ClipboardList, label: 'Review Applications', href: '/admin/reviewer/applications', roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN'] },
+      {
+        icon: ClipboardList,
+        label: 'Review Applications',
+        href: '/admin/reviewer/applications',
+        roles: ['ADMISSIONS_REVIEWER'],
+        subItems: [
+          { label: 'Audit Logs', href: '/admin/reviewer/applications/audit', roles: ['ADMISSIONS_REVIEWER'] },
+        ],
+      },
       { icon: Users, label: 'University Applications', href: '/admin/university/applications', roles: ['UNIVERSITY_ADMIN', 'SYSTEM_ADMIN'] },
       { icon: Users, label: 'Proctors', href: '/admin/proctors', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
       { icon: MapPin, label: 'Center Availability', href: '/admin/reviewer/availability', roles: ['ADMISSIONS_REVIEWER', 'SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
@@ -115,7 +123,14 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       },
       { icon: CheckCircle, label: 'Exam Review', href: '/admin/hub/review', roles: ['SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN'] },
       { icon: CheckCircle, label: 'Results Release', href: '/admin/hub/results-release' },
-      { icon: FileText, label: 'Audit Logs', href: '/admin/hub/audit' },
+      {
+        icon: FileText,
+        label: 'Audit Logs',
+        href: '/admin/hub/audit',
+        subItems: [
+          { label: 'Student Registration', href: '/admin/hub/audit/student-registration', roles: ['SYSTEM_ADMIN'] },
+        ],
+      },
     ]
   },
   {
@@ -191,6 +206,10 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     ]
   }
 ];
+
+function isRouteActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, logout, maintenanceModules } = usePhilSA();
@@ -354,7 +373,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                       {group.label}
                     </h2>
                     {group.items.map((item) => {
-                      const isActive = location.pathname === item.href || item.subItems?.some(sub => location.pathname === sub.href);
+                      const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                       const hasSubItems = item.subItems && item.subItems.length > 0;
                       
                       return (
@@ -452,7 +471,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 </h2>
               )}
               {group.items.map((item) => {
-                const isActive = location.pathname === item.href || item.subItems?.some(sub => location.pathname === sub.href);
+                const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                 const hasSubItems = item.subItems && item.subItems.length > 0;
                 
                 return (

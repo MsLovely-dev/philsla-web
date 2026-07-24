@@ -5,6 +5,51 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const CANDIDATE_CODE_ALPHABET = '0123456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+
+function getRegistrationYear(dateInput?: string | null) {
+  if (!dateInput) return new Date().getFullYear();
+
+  const date = new Date(dateInput);
+  return Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear();
+}
+
+function toCandidateCodeSeed(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function hashToCandidateCode(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  let code = '';
+  let state = hash >>> 0;
+  for (let index = 0; index < 8; index += 1) {
+    state = Math.imul(state ^ (state >>> 15), 2246822519) >>> 0;
+    code += CANDIDATE_CODE_ALPHABET[state % CANDIDATE_CODE_ALPHABET.length];
+  }
+
+  return code;
+}
+
+function splitCandidateCode(code: string) {
+  const normalizedCode = code.slice(0, 8).padEnd(8, '0');
+  return `${normalizedCode.slice(0, 4)}-${normalizedCode.slice(4, 8)}`;
+}
+
+export function formatCandidateId(applicationId: string, submittedAt?: string | null) {
+  if (/^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(applicationId)) return applicationId;
+
+  const year = getRegistrationYear(submittedAt);
+  const seed = toCandidateCodeSeed(applicationId);
+  const code = /^[A-Z0-9]{8}$/.test(seed) ? seed : hashToCandidateCode(applicationId || `${year}`);
+
+  return `PS-${year}-${splitCandidateCode(code)}`;
+}
+
 export const PHILSA_COLORS = {
   primary: '#8A1538',
   primaryHover: '#6D102C',
