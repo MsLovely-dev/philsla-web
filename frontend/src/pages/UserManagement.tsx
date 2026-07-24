@@ -43,9 +43,60 @@ interface RoleForm {
 
 const readOnly: PermissionActionKey[] = ['READ'];
 const operate: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT'];
+const manageRecords: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE'];
 const decide: PermissionActionKey[] = ['READ', 'EDIT', 'APPROVE', 'REJECT'];
 const manage: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE'];
 const fullAccess: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT'];
+
+const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
+  '1': readOnly,
+  '2': fullAccess,
+  '3': readOnly,
+  '4': readOnly,
+  '5': readOnly,
+  '6': readOnly,
+  '7': readOnly,
+  '8': decide,
+  '9': decide,
+  '10': decide,
+  '11': manageRecords,
+  '12': operate,
+  '13': manageRecords,
+  '14': manageRecords,
+  '15': readOnly,
+  '16': readOnly,
+  '17': manageRecords,
+  '18': manageRecords,
+  '19': manageRecords,
+  '20': decide,
+  '21': manageRecords,
+  '22': readOnly,
+  '23': readOnly,
+  '24': manageRecords,
+  '25': operate,
+  '26': readOnly,
+  '27': operate,
+  '28': operate,
+  '29': readOnly,
+  '30': manageRecords,
+  '31': manageRecords,
+  '32': operate,
+  '34': readOnly,
+  '35': operate,
+  '36': operate,
+  '37': decide,
+  '38': manageRecords,
+  '39': manageRecords,
+  '40': operate,
+  '41': operate,
+  '42': operate,
+  '43': manageRecords,
+  '44': manageRecords,
+  '45': manageRecords,
+  '46': decide,
+  '47': operate,
+  '48': readOnly,
+};
 
 const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
   ADMISSIONS_REVIEWER: [
@@ -135,9 +186,25 @@ function modulePermissionKey(module: MaintenanceModule, permission: string) {
   return `MOD_${module.id}_${permission}`;
 }
 
+function getApplicablePermissions(module: MaintenanceModule) {
+  return modulePermissionApplicability[module.id] ?? readOnly;
+}
+
+function isPermissionApplicable(module: MaintenanceModule, permission: PermissionActionKey) {
+  return getApplicablePermissions(module).includes(permission);
+}
+
 function normalizeRoleKey(role: string) {
   const normalized = role.trim().replace(/\s+/g, '_').toUpperCase();
   return roleAliases[normalized] ?? normalized;
+}
+
+function filterApplicableModuleAccess(modules: MaintenanceModule[], moduleAccess: string[]) {
+  const allowedKeys = new Set(
+    modules.flatMap((module) => getApplicablePermissions(module).map((permission) => modulePermissionKey(module, permission)))
+  );
+
+  return moduleAccess.filter((permissionKey) => allowedKeys.has(permissionKey));
 }
 
 function getDefaultModuleAccessForRole(role: string, modules: MaintenanceModule[]) {
@@ -151,7 +218,9 @@ function getDefaultModuleAccessForRole(role: string, modules: MaintenanceModule[
 
     matchedModules.forEach((module) => {
       rule.actions.forEach((permission) => {
-        access.add(modulePermissionKey(module, permission));
+        if (isPermissionApplicable(module, permission)) {
+          access.add(modulePermissionKey(module, permission));
+        }
       });
     });
   });
@@ -221,18 +290,22 @@ function PermissionMatrix({ modules, selectedAccess, onToggle, readOnly = false 
                   <td className="px-4 py-3">
                     <p className="text-xs font-medium text-philsa-navy">{module.name}</p>
                   </td>
-                  {permissionActions.map((permission) => (
-                    <td key={permission.key} className="px-2 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red"
-                        aria-label={`${permission.label} ${module.name}`}
-                        checked={isPermissionSelected(selectedAccess, module, permission.key)}
-                        disabled={readOnly}
-                        onChange={() => onToggle(module, permission.key)}
-                      />
-                    </td>
-                  ))}
+                  {permissionActions.map((permission) => {
+                    const applicable = isPermissionApplicable(module, permission.key);
+
+                    return (
+                      <td key={permission.key} className="px-2 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red disabled:cursor-not-allowed disabled:opacity-45"
+                          aria-label={applicable ? `${permission.label} ${module.name}` : `${permission.label} is not applicable for ${module.name}`}
+                          checked={applicable && isPermissionSelected(selectedAccess, module, permission.key)}
+                          disabled={readOnly || !applicable}
+                          onChange={() => onToggle(module, permission.key)}
+                        />
+                      </td>
+                    );
+                  })}
                 </tr>
               );
 
@@ -312,12 +385,12 @@ export default function UserManagement() {
       ...roles.filter((role) => !deletedRoleIds.includes(role)).map((role) => ({
         id: role,
         name: role,
-        moduleAccess: roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules),
+        moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules)),
         isCustom: false,
       })),
       ...customRoles.filter((role) => !deletedRoleIds.includes(role.id)).map((role) => ({
         ...role,
-        moduleAccess: roleAccessOverrides[role.id] ?? role.moduleAccess,
+        moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role.id] ?? role.moduleAccess),
       })),
     ],
     [customRoles, deletedRoleIds, roleAccessOverrides, systemModules]
@@ -338,7 +411,10 @@ export default function UserManagement() {
   }
 
   function getModuleAccessForRole(role: string) {
-    return getRoleDefinition(role)?.moduleAccess ?? getDefaultModuleAccessForRole(role, systemModules);
+    return filterApplicableModuleAccess(
+      systemModules,
+      getRoleDefinition(role)?.moduleAccess ?? getDefaultModuleAccessForRole(role, systemModules)
+    );
   }
 
   function openAddModal() {
@@ -358,7 +434,7 @@ export default function UserManagement() {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
-      moduleAccess: Array.from(new Set([...getModuleAccessForRole(user.role), ...user.moduleAccess])),
+      moduleAccess: filterApplicableModuleAccess(systemModules, Array.from(new Set([...getModuleAccessForRole(user.role), ...user.moduleAccess]))),
       isActive: user.isActive,
     });
     setFormError('');
@@ -404,6 +480,8 @@ export default function UserManagement() {
   }
 
   function togglePermission(module: MaintenanceModule, permission: PermissionActionKey) {
+    if (!isPermissionApplicable(module, permission)) return;
+
     const key = modulePermissionKey(module, permission);
     const legacyModuleKey = moduleKey(module.name);
 
@@ -416,6 +494,8 @@ export default function UserManagement() {
   }
 
   function toggleRolePermission(module: MaintenanceModule, permission: PermissionActionKey) {
+    if (!isPermissionApplicable(module, permission)) return;
+
     const key = modulePermissionKey(module, permission);
     const legacyModuleKey = moduleKey(module.name);
 
@@ -438,6 +518,7 @@ export default function UserManagement() {
   function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedRoleName = editingRole?.isCustom === false ? editingRole.name : normalizeRoleKey(roleForm.name);
+    const normalizedModuleAccess = filterApplicableModuleAccess(systemModules, roleForm.moduleAccess);
 
     if (!normalizedRoleName) {
       setRoleFormError('Enter a role name.');
@@ -454,28 +535,28 @@ export default function UserManagement() {
       if (editingRole.isCustom) {
         setCustomRoles((current) => current.map((role) => (
           role.id === editingRole.id
-            ? { ...role, id: normalizedRoleName, name: normalizedRoleName, moduleAccess: roleForm.moduleAccess }
+            ? { ...role, id: normalizedRoleName, name: normalizedRoleName, moduleAccess: normalizedModuleAccess }
             : role
         )));
         setRoleAccessOverrides((current) => {
           const next = { ...current };
           delete next[editingRole.id];
-          return { ...next, [normalizedRoleName]: roleForm.moduleAccess };
+          return { ...next, [normalizedRoleName]: normalizedModuleAccess };
         });
       } else {
         setRoleAccessOverrides((current) => ({
           ...current,
-          [editingRole.id]: roleForm.moduleAccess,
+          [editingRole.id]: normalizedModuleAccess,
         }));
       }
       setUsers((current) => current.map((user) => (
         normalizeRoleKey(user.role) === normalizeRoleKey(previousRoleName)
-          ? { ...user, role: normalizedRoleName, moduleAccess: roleForm.moduleAccess }
+          ? { ...user, role: normalizedRoleName, moduleAccess: normalizedModuleAccess }
           : user
       )));
       setForm((current) => (
         normalizeRoleKey(current.role) === normalizeRoleKey(previousRoleName)
-          ? { ...current, role: normalizedRoleName, moduleAccess: roleForm.moduleAccess }
+          ? { ...current, role: normalizedRoleName, moduleAccess: normalizedModuleAccess }
           : current
       ));
       if (normalizeRoleKey(roleFilter) === normalizeRoleKey(previousRoleName)) {
@@ -493,7 +574,7 @@ export default function UserManagement() {
       {
         id: normalizedRoleName,
         name: normalizedRoleName,
-        moduleAccess: roleForm.moduleAccess,
+        moduleAccess: normalizedModuleAccess,
         isCustom: true,
       },
     ]);
@@ -543,10 +624,14 @@ export default function UserManagement() {
     event.preventDefault();
     setIsSaving(true);
     setFormError('');
+    const normalizedForm = {
+      ...form,
+      moduleAccess: filterApplicableModuleAccess(systemModules, form.moduleAccess),
+    };
 
     const result = selectedUser
-      ? await backendAdminUserService.updateUser(selectedUser.id, form)
-      : await backendAdminUserService.createUser(form);
+      ? await backendAdminUserService.updateUser(selectedUser.id, normalizedForm)
+      : await backendAdminUserService.createUser(normalizedForm);
 
     if (result.ok === true) {
       setUsers((current) => {
