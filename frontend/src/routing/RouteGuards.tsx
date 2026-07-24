@@ -24,6 +24,22 @@ function routeForRole(role: UserRole): string {
   return '/dashboard';
 }
 
+function routeForUser(user: User, maintenanceModules: typeof INITIAL_MAINTENANCE_MODULES): string {
+  if (user.permissions?.length) {
+    const firstPermittedModule = user.permissions
+      .map((permission) => {
+        const match = permission.match(/^MOD_([^_]+)_/);
+        if (!match) return null;
+        return maintenanceModules.find((module) => module.id === match[1]) ?? null;
+      })
+      .find(Boolean);
+
+    if (firstPermittedModule) return firstPermittedModule.path;
+  }
+
+  return routeForRole(user.role);
+}
+
 function moduleKey(moduleName: string) {
   return moduleName.replace(/&/g, '').replace(/\s+/g, '_').toUpperCase();
 }
@@ -39,7 +55,22 @@ function canReadCurrentModule(user: User, pathname: string, maintenanceModules: 
   if (!module) return true;
 
   const permissions = new Set(user.permissions);
-  return permissions.has(`MOD_${module.id}_READ`) || permissions.has(moduleKey(module.name));
+  return user.permissions.some((permission) => permission.startsWith(`MOD_${module.id}_`)) || permissions.has(moduleKey(module.name));
+}
+
+function canAccessRouteByModulePermission(user: User, pathname: string, maintenanceModules: typeof INITIAL_MAINTENANCE_MODULES) {
+  if (!user.permissions?.length) return false;
+
+  const module = maintenanceModules
+    .slice()
+    .sort((left, right) => right.path.length - left.path.length)
+    .find((item) => pathname === item.path || pathname.startsWith(`${item.path}/`));
+
+  if (!module) return false;
+
+  return user.permissions.some((permission) => (
+    permission.startsWith(`MOD_${module.id}_`) || permission === moduleKey(module.name)
+  ));
 }
 
 function MaintenanceGuard({ children }: { children: ReactNode }) {
@@ -89,12 +120,12 @@ function MaintenanceGuard({ children }: { children: ReactNode }) {
 }
 
 export function PublicRoute({ children }: { children: ReactNode }) {
-  const { user, isLoading } = usePhilSA();
+  const { user, isLoading, maintenanceModules } = usePhilSA();
   const { pathname } = useLocation();
 
   if (pathname === '/login') {
     if (isLoading) return <LoadingScreen />;
-    if (user) return <Navigate to={routeForRole(user.role)} replace />;
+    if (user) return <Navigate to={routeForUser(user, maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES)} replace />;
   }
 
   return <PublicLayout><MaintenanceGuard>{children}</MaintenanceGuard></PublicLayout>;
@@ -109,11 +140,14 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ allowedRoles, children, layout = 'dashboard' }: ProtectedRouteProps) {
   const { user, isLoading, maintenanceModules } = usePhilSA();
   const location = useLocation();
+  const modules = maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES;
 
   if (isLoading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  if (!allowedRoles.includes(user.role)) return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
-  if (!canReadCurrentModule(user, location.pathname, maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES)) {
+  if (!allowedRoles.includes(user.role) && !canAccessRouteByModulePermission(user, location.pathname, modules)) {
+    return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+  }
+  if (!canReadCurrentModule(user, location.pathname, modules)) {
     return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
   }
 
