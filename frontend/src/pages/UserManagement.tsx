@@ -434,7 +434,7 @@ export default function UserManagement() {
       fullName: user.fullName,
       email: user.email,
       role: user.role,
-      moduleAccess: filterApplicableModuleAccess(systemModules, Array.from(new Set([...getModuleAccessForRole(user.role), ...user.moduleAccess]))),
+      moduleAccess: filterApplicableModuleAccess(systemModules, user.moduleAccess),
       isActive: user.isActive,
     });
     setFormError('');
@@ -549,16 +549,18 @@ export default function UserManagement() {
           [editingRole.id]: normalizedModuleAccess,
         }));
       }
-      setUsers((current) => current.map((user) => (
-        normalizeRoleKey(user.role) === normalizeRoleKey(previousRoleName)
-          ? { ...user, role: normalizedRoleName, moduleAccess: normalizedModuleAccess }
-          : user
-      )));
-      setForm((current) => (
-        normalizeRoleKey(current.role) === normalizeRoleKey(previousRoleName)
-          ? { ...current, role: normalizedRoleName, moduleAccess: normalizedModuleAccess }
-          : current
-      ));
+      if (editingRole.isCustom && normalizeRoleKey(previousRoleName) !== normalizedRoleName) {
+        setUsers((current) => current.map((user) => (
+          normalizeRoleKey(user.role) === normalizeRoleKey(previousRoleName)
+            ? { ...user, role: normalizedRoleName }
+            : user
+        )));
+        setForm((current) => (
+          normalizeRoleKey(current.role) === normalizeRoleKey(previousRoleName)
+            ? { ...current, role: normalizedRoleName }
+            : current
+        ));
+      }
       if (normalizeRoleKey(roleFilter) === normalizeRoleKey(previousRoleName)) {
         setRoleFilter(normalizedRoleName);
       }
