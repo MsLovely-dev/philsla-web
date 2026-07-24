@@ -1,6 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { usePhilSA } from '../PhilSAContext';
+import { INITIAL_MAINTENANCE_MODULES, usePhilSA, type MaintenanceModule } from '../PhilSAContext';
 import { cn } from '../lib/utils';
 import { 
   LayoutDashboard, 
@@ -211,6 +211,29 @@ function isRouteActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function moduleKey(moduleName: string) {
+  return moduleName.replace(/&/g, '').replace(/\s+/g, '_').toUpperCase();
+}
+
+function findModuleForNavigation(modules: MaintenanceModule[], href: string, label: string) {
+  return modules
+    .slice()
+    .sort((left, right) => right.path.length - left.path.length)
+    .find((module) => (
+      module.path === href ||
+      href.startsWith(`${module.path}/`) ||
+      module.name.toLowerCase() === label.toLowerCase()
+    ));
+}
+
+function hasAnyModulePermission(userPermissions: string[] | undefined, module?: MaintenanceModule) {
+  if (!module || !userPermissions?.length) return false;
+
+  return userPermissions.some((permission) => (
+    permission.startsWith(`MOD_${module.id}_`) || permission === moduleKey(module.name)
+  ));
+}
+
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, logout, maintenanceModules } = usePhilSA();
   const location = useLocation();
@@ -244,6 +267,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   ];
 
   if (!user) return null;
+  const modules = maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES;
 
   const agency = user.email?.includes('ched') ? 'CHED' : 
                  user.email?.includes('deped') ? 'DEPED' : 
@@ -257,8 +281,17 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       if (user.role === 'GOVERNMENT' && agency !== 'NATIONAL') return false;
     }
     
-    // Role check
-    return !group.roles || group.roles.includes(user.role);
+    const groupHasPermission = group.items.some((item) => {
+      const itemModule = findModuleForNavigation(modules, item.href, item.label);
+      if (hasAnyModulePermission(user.permissions, itemModule)) return true;
+
+      return item.subItems?.some((sub) => {
+        const subModule = findModuleForNavigation(modules, sub.href, sub.label);
+        return hasAnyModulePermission(user.permissions, subModule);
+      });
+    });
+
+    return !group.roles || group.roles.includes(user.role) || groupHasPermission;
   }).map(group => {
     let items = [...group.items];
     
@@ -290,28 +323,36 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     }
 
     const activeItems = items.filter(item => {
+      const matched = findModuleForNavigation(modules, item.href, item.label);
+      const hasItemPermission = hasAnyModulePermission(user.permissions, matched);
+
       // Role check
-      if (item.roles && !item.roles.includes(user.role)) return false;
+      if (item.roles && !item.roles.includes(user.role) && !hasItemPermission) return false;
 
       // Compliance Status Check (locked/disabled modules do not appear in the sidebar)
-      const matched = maintenanceModules?.find(
-        mod => mod.path === item.href || mod.name.toLowerCase() === item.label.toLowerCase()
-      );
       if (matched && matched.status === 'MAINTENANCE') return false;
 
-      return true;
+      if (hasItemPermission) return true;
+
+      if (item.subItems?.some((sub) => {
+        const matchedSub = findModuleForNavigation(modules, sub.href, sub.label);
+        if (matchedSub?.status === 'MAINTENANCE') return false;
+        return hasAnyModulePermission(user.permissions, matchedSub);
+      })) return true;
+
+      return !group.roles || group.roles.includes(user.role);
     }).map(item => {
       // Filter subItems if present
       if (item.subItems) {
         const activeSub = item.subItems.filter(sub => {
-          if (sub.roles && !sub.roles.includes(user.role)) return false;
+          const matchedSub = findModuleForNavigation(modules, sub.href, sub.label);
+          const hasSubPermission = hasAnyModulePermission(user.permissions, matchedSub);
 
-          const matchedSub = maintenanceModules?.find(
-            mod => mod.path === sub.href || mod.name.toLowerCase() === sub.label.toLowerCase()
-          );
+          if (sub.roles && !sub.roles.includes(user.role) && !hasSubPermission) return false;
+
           if (matchedSub && matchedSub.status === 'MAINTENANCE') return false;
 
-          return true;
+          return hasSubPermission || !sub.roles || sub.roles.includes(user.role);
         });
         return { ...item, subItems: activeSub };
       }
@@ -398,7 +439,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                           
                           {hasSubItems && (
                             <div className="ml-8 space-y-1 pt-1 border-l border-philsa-border mt-1">
-                              {item.subItems?.filter(sub => !sub.roles || sub.roles.includes(user.role)).map(sub => {
+                              {item.subItems?.map(sub => {
                                 const isSubActive = location.pathname === sub.href;
                                 return (
                                   <Link
@@ -491,7 +532,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                     
                     {isSidebarOpen && hasSubItems && (
                       <div className="ml-8 space-y-1 pt-1 border-l border-philsa-border mt-1">
-                        {item.subItems?.filter(sub => !sub.roles || sub.roles.includes(user.role)).map(sub => {
+                        {item.subItems?.map(sub => {
                           const isSubActive = location.pathname === sub.href;
                           return (
                             <Link

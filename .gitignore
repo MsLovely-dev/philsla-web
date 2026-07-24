@@ -16,6 +16,7 @@ __pycache__/
 venv/
 db.sqlite3
 media/
+backend/private-media/
 staticfiles/
 
 # Local tooling
