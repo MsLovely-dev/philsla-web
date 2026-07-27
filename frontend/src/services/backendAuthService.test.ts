@@ -241,4 +241,24 @@ describe('BackendAuthService', () => {
       }),
     );
   });
+
+  it('submits first-login staff activation password setup to the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.completeStaffActivation('activation-token', 'Password1!', 'Password1!');
+
+    expect(result).toEqual({ ok: true, data: null });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/auth/activation/staff/complete/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          activationToken: 'activation-token',
+          password: 'Password1!',
+          confirmPassword: 'Password1!',
+        }),
+      }),
+    );
+  });
 });

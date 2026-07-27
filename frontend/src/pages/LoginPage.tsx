@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, CheckCircle2, LogIn, Mail, Shield } from 'lucide-react';
+import { ArrowRight, CheckCircle2, KeyRound, LogIn, Mail, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
@@ -22,7 +22,7 @@ const LOCAL_BACKEND_ACCOUNTS = [
   'executive@yopmail.com',
 ];
 
-type LoginStep = 'identifier' | 'password' | 'otp';
+type LoginStep = 'identifier' | 'activation' | 'password' | 'otp';
 
 function isValidIdentifier(value: string): boolean {
   const trimmed = value.trim();
@@ -54,14 +54,18 @@ function maskIdentifier(identifier: string): string {
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [step, setStep] = useState<LoginStep>('identifier');
   const [pendingAuthToken, setPendingAuthToken] = useState('');
+  const [activationToken, setActivationToken] = useState('');
   const [otpPendingAuthToken, setOtpPendingAuthToken] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [localDevOtp, setLocalDevOtp] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
-  const { startLoginIdentifier, verifyLoginPassword, verifyLoginOtp } = usePhilSA();
+  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp } = usePhilSA();
   const navigate = useNavigate();
 
   const handleIdentifierStep = async (event: React.FormEvent) => {
@@ -88,7 +92,61 @@ export default function LoginPage() {
     }
 
     setIdentifier(normalizedIdentifier);
-    setPendingAuthToken(result.data.pendingAuthToken);
+    setNotice('');
+
+    if (result.data.nextStep === 'activation') {
+      setActivationToken(result.data.activationToken ?? '');
+      setNewPassword('');
+      setConfirmPassword('');
+      setStep('activation');
+      return;
+    }
+
+    setPendingAuthToken(result.data.pendingAuthToken ?? '');
+    setStep('password');
+  };
+
+  const handleActivationStep = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!newPassword || !confirmPassword) {
+      setError('Enter and confirm your new password.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setNotice('');
+    const result = await completeStaffActivation(activationToken, newPassword, confirmPassword);
+    setLoading(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    const loginRestart = await startLoginIdentifier(identifier);
+    if (loginRestart.ok === false) {
+      setError(loginRestart.error.message);
+      return;
+    }
+
+    if (loginRestart.data.nextStep !== 'password') {
+      setError('Password setup did not complete. Please start again.');
+      return;
+    }
+
+    setPendingAuthToken(loginRestart.data.pendingAuthToken ?? '');
+    setPassword(newPassword);
+    setNewPassword('');
+    setConfirmPassword('');
+    setActivationToken('');
+    setNotice('Password set. Continue with your new password.');
     setStep('password');
   };
 
@@ -152,11 +210,15 @@ export default function LoginPage() {
   const resetToIdentifier = () => {
     setStep('identifier');
     setPendingAuthToken('');
+    setActivationToken('');
     setOtpPendingAuthToken('');
     setPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
     setOtp(['', '', '', '', '', '']);
     setLocalDevOtp(null);
     setError('');
+    setNotice('');
   };
 
   return (
@@ -186,15 +248,17 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mb-8">
+          <div className="grid grid-cols-4 gap-2 mb-8">
             {[
               ['identifier', 'Identifier'],
+              ['activation', 'Setup'],
               ['password', 'Password'],
               ['otp', 'Email OTP'],
             ].map(([key, label], index) => {
               const active = step === key;
               const complete =
                 (key === 'identifier' && step !== 'identifier') ||
+                (key === 'activation' && (step === 'password' || step === 'otp')) ||
                 (key === 'password' && step === 'otp');
               return (
                 <div
@@ -218,6 +282,13 @@ export default function LoginPage() {
             <div className="bg-red-50 border border-red-100 text-red-600 px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
               {error}
+            </div>
+          )}
+
+          {notice && (
+            <div className="bg-[#e5f1ec] border border-[#00563F]/15 text-[#00563F] px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
+              <CheckCircle2 className="w-4 h-4" />
+              {notice}
             </div>
           )}
 
@@ -265,6 +336,68 @@ export default function LoginPage() {
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
                 {loading ? 'Checking Identifier...' : 'Continue to Password'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </form>
+          )}
+
+          {step === 'activation' && (
+            <form onSubmit={handleActivationStep} className="space-y-8">
+              <div>
+                <label className="label-philsa block mb-3 ml-1">Create Password</label>
+                <div className="relative group">
+                  <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    placeholder="Set your account password"
+                    className="input-philsa pl-14"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
+                  Use at least 8 characters with uppercase, lowercase, number, and special character.
+                </p>
+              </div>
+
+              <div>
+                <label className="label-philsa block mb-3 ml-1">Confirm Password</label>
+                <div className="relative group">
+                  <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Confirm your password"
+                    className="input-philsa pl-14"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="bg-[#e5f1ec]/30 p-4 rounded-lg border border-[#00563F]/15 flex items-start gap-4">
+                <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-xs border border-gray-200">
+                  <Shield className="w-4 h-4 text-[#00563F]" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-[#00563F] uppercase tracking-widest mb-1">Account</p>
+                  <p className="text-[10px] text-[#00563F]/80 font-bold leading-tight uppercase">{maskIdentifier(identifier)}</p>
+                </div>
+              </div>
+
+              <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
+                {loading ? 'Setting Password...' : 'Set Password'}
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+
+              <button
+                type="button"
+                onClick={resetToIdentifier}
+                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
+              >
+                Change Account
               </button>
             </form>
           )}
