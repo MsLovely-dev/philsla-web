@@ -2,16 +2,22 @@ from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
+from apps.accounts.services import PENDING_STAFF_ACTIVATION_PREFIX
 from apps.applications.models import ApplicationStatus, StudentApplication
 
 
 @override_settings(ROOT_URLCONF="config.urls")
 class ActivationEndpointTests(TestCase):
+    def tearDown(self) -> None:
+        cache.clear()
+        super().tearDown()
+
     def test_student_registration_activation_requires_authentication(self) -> None:
         response = self.client.post(
             "/api/v1/auth/activation/student-registration/",
@@ -125,7 +131,35 @@ class ActivationEndpointTests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "VALIDATION_FAILED")
         self.assertIn("password", response.json()["error"]["fields"])
 
-    def test_staff_activation_completion_uses_safe_expired_link_error_until_token_store_exists(self) -> None:
+    def test_staff_activation_completion_sets_password_for_passwordless_staff_account(self) -> None:
+        user = get_user_model().objects.create(
+            username="new.staff",
+            email="new.staff@example.test",
+            first_name="New",
+            last_name="Staff",
+            is_active=True,
+        )
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        AccountProfile.objects.create(user=user, role=PortalRole.ADMISSIONS_REVIEWER.value)
+        cache.set(f"{PENDING_STAFF_ACTIVATION_PREFIX}activation-token", {"user_id": str(user.id)}, 600)
+
+        response = self.client.post(
+            "/api/v1/auth/activation/staff/complete/",
+            data={
+                "activationToken": "activation-token",
+                "password": "Password1!",
+                "confirmPassword": "Password1!",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 204)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("Password1!"))
+        self.assertIsNone(cache.get(f"{PENDING_STAFF_ACTIVATION_PREFIX}activation-token"))
+
+    def test_staff_activation_completion_uses_safe_expired_link_error_for_missing_token(self) -> None:
         response = self.client.post(
             "/api/v1/auth/activation/staff/complete/",
             data={

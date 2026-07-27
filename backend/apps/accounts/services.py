@@ -47,6 +47,7 @@ class AuthIssue:
 
 PENDING_IDENTIFIER_PREFIX = "auth:pending:identifier:"
 PENDING_OTP_PREFIX = "auth:pending:otp:"
+PENDING_STAFF_ACTIVATION_PREFIX = "auth:pending:staff-activation:"
 ACCESS_TOKEN_PREFIX = "auth:access:"
 
 
@@ -347,6 +348,21 @@ def start_identifier_login(*, identifier: str) -> dict[str, Any]:
     if account is None:
         raise LoginFlowRejected("Identifier not found or invalid. Please check and try again.")
 
+    user = _get_user_for_account(account)
+    if user is not None and account["role"] != PortalRole.STUDENT.value and not user.has_usable_password():
+        activation_token = _new_token()
+        ttl = _ttl_seconds(settings.AUTH_PENDING_TOKEN_TTL_MINUTES)
+        cache.set(
+            f"{PENDING_STAFF_ACTIVATION_PREFIX}{activation_token}",
+            {"user_id": str(getattr(user, "id"))},
+            ttl,
+        )
+        return {
+            "activationToken": activation_token,
+            "nextStep": "activation",
+            "expiresInSeconds": ttl,
+        }
+
     pending_token = _new_token()
     ttl = _ttl_seconds(settings.AUTH_PENDING_TOKEN_TTL_MINUTES)
     cache.set(f"{PENDING_IDENTIFIER_PREFIX}{pending_token}", {"account": _session_account(account)}, ttl)
@@ -540,7 +556,26 @@ def activate_student_registration_account(*, registration_application_id: str) -
 def complete_staff_activation(*, activation_token: str, password: str) -> None:
     """Complete first-time staff/admin activation from a time-limited link."""
 
-    raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")
+    pending_key = f"{PENDING_STAFF_ACTIVATION_PREFIX}{activation_token}"
+    pending = cache.get(pending_key)
+    if pending is None:
+        raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")
+
+    UserModel = get_user_model()
+    try:
+        user = UserModel.objects.select_related("account_profile").get(id=pending["user_id"], is_active=True)
+        profile = user.account_profile
+    except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.") from exc
+
+    if profile.role == PortalRole.STUDENT.value or user.has_usable_password():
+        cache.delete(pending_key)
+        raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")
+
+    user.set_password(password)
+    user.save(update_fields=["password"])
+    cache.delete(pending_key)
 
 
 def request_password_recovery(*, identifier: str) -> None:

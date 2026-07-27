@@ -20,8 +20,9 @@ export interface AuthSession {
 }
 
 export interface AuthIdentifierChallenge {
-  pendingAuthToken: string;
-  nextStep: 'password';
+  pendingAuthToken?: string;
+  activationToken?: string;
+  nextStep: 'password' | 'activation';
   expiresInSeconds: number;
 }
 
@@ -38,6 +39,7 @@ export interface AuthService {
   login(credentials: AuthCredentials): Promise<ServiceResult<AuthSession>>;
   startLoginIdentifier?(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>>;
   verifyLoginPassword?(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>>;
+  completeStaffActivation?(activationToken: string, password: string, confirmPassword: string): Promise<ServiceResult<null>>;
   verifyLoginOtp?(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSession>>;
   logout(): Promise<ServiceResult<null>>;
   refreshSession(): Promise<ServiceResult<AuthSession>>;

@@ -56,12 +56,15 @@ export class BackendAuthService implements AuthService {
     const identifierResult = await this.startLoginIdentifier(credentials.email);
 
     if (identifierResult.ok === false) return identifierResult as ServiceFailure;
+    if (identifierResult.data.nextStep === 'activation') {
+      return authorizationError('Set your account password before continuing.', 'ACTIVATION_REQUIRED');
+    }
 
     if (!credentials.password) {
       return authorizationError('Password is required to continue backend login.', 'PASSWORD_REQUIRED');
     }
 
-    const passwordResult = await this.verifyLoginPassword(identifierResult.data.pendingAuthToken, credentials.password);
+    const passwordResult = await this.verifyLoginPassword(identifierResult.data.pendingAuthToken ?? '', credentials.password);
 
     if (passwordResult.ok === false) return passwordResult as ServiceFailure;
 
@@ -89,6 +92,21 @@ export class BackendAuthService implements AuthService {
       body: JSON.stringify({
         pendingAuthToken,
         password,
+      }),
+    });
+  }
+
+  async completeStaffActivation(
+    activationToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<null>> {
+    return this.apiClient.request<null>('/api/v1/auth/activation/staff/complete/', {
+      method: 'POST',
+      body: JSON.stringify({
+        activationToken,
+        password,
+        confirmPassword,
       }),
     });
   }

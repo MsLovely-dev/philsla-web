@@ -50,6 +50,30 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(payload["error"]["code"], "AUTHENTICATION_FAILED")
         self.assertEqual(payload["error"]["message"], "Identifier not found or invalid. Please check and try again.")
 
+    def test_identifier_step_returns_activation_for_passwordless_staff_account(self) -> None:
+        user = get_user_model().objects.create(
+            username="staff",
+            email="staff@example.test",
+            first_name="Staff",
+            last_name="User",
+            is_active=True,
+        )
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        AccountProfile.objects.create(user=user, role=PortalRole.ADMISSIONS_REVIEWER.value)
+
+        response = self.client.post(
+            "/api/v1/auth/login/identifier/",
+            data={"identifier": "staff@example.test"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        payload = response.json()
+        self.assertIn("activationToken", payload)
+        self.assertNotIn("pendingAuthToken", payload)
+        self.assertEqual(payload["nextStep"], "activation")
+
     def test_password_step_requires_password(self) -> None:
         response = self.client.post(
             "/api/v1/auth/login/password/",

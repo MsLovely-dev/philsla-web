@@ -10,14 +10,14 @@ The baseline health and authentication boundaries plus the first student-applica
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/health/` | Public; no credentials required | `AllowAny` | Safe service liveness smoke check | Implemented |
 | `GET` | `/api/v1/auth/session/` | Required bearer access token | `IsAuthenticated` | Return server-derived session, role, permission, and scope claims | Implemented boundary; token validation pending |
-| `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented boundary; account lookup pending |
+| `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented |
 | `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented boundary; pending-token/password verification pending |
 | `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and complete session issuance | Implemented boundary; OTP/session issuance pending |
 | `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented boundary; token store pending |
 | `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create or reactivate a Student account for an approved registration | Implemented |
-| `POST` | `/api/v1/auth/activation/staff/complete/` | Public activation link | `AllowAny` | Complete first-time staff/admin activation by setting the user's password | Implemented boundary; activation-token storage pending |
+| `POST` | `/api/v1/auth/activation/staff/complete/` | Public activation link | `AllowAny` | Complete first-time staff/admin activation by setting the user's password | Implemented |
 | `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented boundary; email/token storage pending |
 | `POST` | `/api/v1/auth/recovery/password/complete/` | Public recovery link | `AllowAny` | Complete password reset from a recovery link | Implemented boundary; recovery-token storage pending |
 | `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented boundary; email/token storage pending |
@@ -249,7 +249,7 @@ Test coverage:
 
 Use this endpoint for Step 1 of the shared login flow. It accepts one identifier field labeled "LRN or Email". The backend routes lookup by identifier format, not by user-selected role.
 
-Current implementation status: request validation, route, safe error shape, and tests exist. Account lookup, anti-enumeration timing controls, pending-auth token storage, and audit events remain pending until the account model and token store are implemented.
+Current implementation status: request validation, account lookup, pending-auth token storage, safe error shape, and audit events exist.
 
 Request:
 
@@ -267,15 +267,27 @@ Validation behavior:
 
 Current response behavior:
 
-- Well-formed identifiers return `401 AUTHENTICATION_FAILED` with `Identifier not found or invalid. Please check and try again.` until account lookup exists.
-- The response must not reveal whether an identifier belongs to a student, staff/admin user, inactive account, suspended account, or unverified account.
+- Unknown, inactive, or invalid identifiers return `401 AUTHENTICATION_FAILED` with `Identifier not found or invalid. Please check and try again.`
+- Active accounts with usable passwords receive a password-step pending token.
+- Active staff/admin accounts without usable passwords receive an activation token for first-time password setup.
+- The response must not reveal whether a rejected identifier belongs to a student, staff/admin user, inactive account, suspended account, or unverified account.
 
-Future successful response:
+Password-step response:
 
 ```json
 {
   "pendingAuthToken": "opaque-step-1-token",
   "nextStep": "password",
+  "expiresInSeconds": 600
+}
+```
+
+First-time staff/admin activation response:
+
+```json
+{
+  "activationToken": "opaque-activation-token",
+  "nextStep": "activation",
   "expiresInSeconds": 600
 }
 ```
@@ -529,7 +541,7 @@ Test coverage:
 
 Use this endpoint for first-time staff/admin activation from a secure, time-limited activation link sent during System Admin provisioning.
 
-Current implementation status: route, request validation, password-policy validation, safe expired-link response, and tests exist. Staff/admin account storage, activation-token hashing, token expiry/revocation, password hashing, activation completion, session revocation, and audit events remain pending until the account/token store slices exist.
+Current implementation status: route, request validation, password-policy validation, activation-token lookup, password hashing, activation completion, and safe expired-link response exist. Durable token revocation and delivery remain TBD.
 
 Request:
 
@@ -550,9 +562,9 @@ Validation behavior:
 Current response behavior:
 
 - `400 VALIDATION_FAILED` is returned for invalid password policy or mismatched confirmation.
-- `401 AUTHENTICATION_FAILED` with `This activation link has expired. Please request a new one from your administrator.` is returned until activation-token storage exists.
+- `401 AUTHENTICATION_FAILED` with `This activation link has expired. Please request a new one from your administrator.` is returned for expired, invalid, already-used, or ineligible activation tokens.
 
-Future successful response:
+Successful response:
 
 - `204 No Content`.
 
