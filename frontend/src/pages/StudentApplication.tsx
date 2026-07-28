@@ -930,6 +930,12 @@ export default function StudentApplication() {
 
   const isStep1FieldRequired = (field: StudentRegistrationFieldConfig) => field.priority === 'High Priority';
   const selectedMultiplePwdEntries = Object.entries(formData.pwdMultipleCategories).filter(([, condition]) => condition.trim());
+  const manualStep1NamePlaceholders: Record<string, string> = {
+    'First Name': 'Enter First Name',
+    'Middle Name': 'Enter Middle Name',
+    'Last Name': 'Enter Last Name',
+    'LRN': 'Enter Learner Reference Number',
+  };
 
   const renderManualStep1Field = (field: StudentRegistrationFieldConfig) => {
     const formKey = step1FormFieldKeys[field.value];
@@ -984,7 +990,7 @@ export default function StudentApplication() {
             className={cn("input-philsa bg-white", (errors[errorKey] || existingValueMessage) && "border-philsa-red bg-philsa-red/5")}
             value={value}
             onChange={(e) => updateValue(e.target.value)}
-            placeholder={field.remarks || `Enter ${field.value}`}
+            placeholder={manualStep1NamePlaceholders[field.value] || field.remarks || `Enter ${field.value}`}
           />
         )}
         {(errors[errorKey] || existingValueMessage) && (
