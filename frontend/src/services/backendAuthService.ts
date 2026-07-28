@@ -68,15 +68,14 @@ export class BackendAuthService implements AuthService {
 
     if (passwordResult.ok === false) return passwordResult as ServiceFailure;
 
-    const otpCode = credentials.otp ?? passwordResult.data.devOtp;
-    if (!otpCode) {
+    if (!credentials.otp) {
       return authorizationError(
         'Backend OTP verification is required. Enter the 6-digit email code to continue.',
         'OTP_REQUIRED',
       );
     }
 
-    return this.verifyLoginOtp(passwordResult.data.otpPendingAuthToken, otpCode);
+    return this.verifyLoginOtp(passwordResult.data.otpPendingAuthToken, credentials.otp);
   }
 
   async startLoginIdentifier(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>> {

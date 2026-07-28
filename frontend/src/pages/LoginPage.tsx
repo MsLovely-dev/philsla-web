@@ -61,7 +61,6 @@ export default function LoginPage() {
   const [activationToken, setActivationToken] = useState('');
   const [otpPendingAuthToken, setOtpPendingAuthToken] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [localDevOtp, setLocalDevOtp] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
@@ -169,7 +168,6 @@ export default function LoginPage() {
     }
 
     setOtpPendingAuthToken(result.data.otpPendingAuthToken);
-    setLocalDevOtp(result.data.devOtp ?? null);
     setOtp(['', '', '', '', '', '']);
     setStep('otp');
   };
@@ -216,7 +214,6 @@ export default function LoginPage() {
     setNewPassword('');
     setConfirmPassword('');
     setOtp(['', '', '', '', '', '']);
-    setLocalDevOtp(null);
     setError('');
     setNotice('');
   };
@@ -246,36 +243,6 @@ export default function LoginPage() {
               <h2 className="text-2xl font-black text-philsa-navy tracking-tight leading-none mb-1">Exam Portal</h2>
               <p className="text-[10px] font-black text-philsa-gray uppercase tracking-[0.2em] opacity-60">Authorized Access Only</p>
             </div>
-          </div>
-
-          <div className="grid grid-cols-4 gap-2 mb-8">
-            {[
-              ['identifier', 'Identifier'],
-              ['activation', 'Setup'],
-              ['password', 'Password'],
-              ['otp', 'Email OTP'],
-            ].map(([key, label], index) => {
-              const active = step === key;
-              const complete =
-                (key === 'identifier' && step !== 'identifier') ||
-                (key === 'activation' && (step === 'password' || step === 'otp')) ||
-                (key === 'password' && step === 'otp');
-              return (
-                <div
-                  key={key}
-                  className={`rounded-xl px-3 py-2 text-center text-[9px] font-black uppercase tracking-widest border ${
-                    active || complete
-                      ? 'bg-philsa-red text-white border-philsa-red'
-                      : 'bg-philsa-bg text-philsa-gray border-philsa-border/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    {complete ? <CheckCircle2 className="w-3 h-3" /> : index + 1}
-                    {label}
-                  </div>
-                </div>
-              );
-            })}
           </div>
 
           {error && (
@@ -457,12 +424,6 @@ export default function LoginPage() {
                 <p className="text-[11px] text-philsa-gray font-bold text-center mb-8 uppercase">
                   Sent to {maskIdentifier(identifier)}
                 </p>
-
-                {localDevOtp && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-2xl mb-6 text-xs font-bold">
-                    Local development OTP: <span className="font-black tracking-widest">{localDevOtp}</span>
-                  </div>
-                )}
 
                 <div className="flex justify-between gap-3">
                   {otp.map((digit, index) => (

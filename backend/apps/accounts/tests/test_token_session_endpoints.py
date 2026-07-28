@@ -1,6 +1,8 @@
+import re
 from types import SimpleNamespace
 
 from django.conf import settings
+from django.core import mail
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -80,17 +82,18 @@ class TokenSessionEndpointTests(TestCase):
             },
             content_type="application/json",
         )
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[-1].body)
+        self.assertIsNotNone(code_match)
         otp_response = self.client.post(
             "/api/v1/auth/login/otp/",
             data={
                 "otpPendingAuthToken": password_response.json()["otpPendingAuthToken"],
-                "code": password_response.json()["devOtp"],
+                "code": code_match.group(1),
             },
             content_type="application/json",
         )
         return otp_response
 
-    @override_settings(AUTH_LOCAL_EXPOSE_OTP=True)
     def test_refresh_token_survives_cache_restart_and_rotates_cookie(self) -> None:
         otp_response = self.login_student()
         self.client.cookies["refreshToken"] = otp_response.cookies["refreshToken"].value
@@ -109,7 +112,6 @@ class TokenSessionEndpointTests(TestCase):
         self.assertEqual(replay_response.status_code, 401)
         self.assertEqual(replay_response.json()["error"]["code"], "AUTHENTICATION_FAILED")
 
-    @override_settings(AUTH_LOCAL_EXPOSE_OTP=True)
     def test_logout_revokes_persistent_refresh_session(self) -> None:
         otp_response = self.login_student()
 

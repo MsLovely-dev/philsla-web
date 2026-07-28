@@ -1,6 +1,6 @@
 # PhilSA Backend
 
-> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, Django Admin, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, database-backed auth account profiles, cache-backed local-development login/session handling, and baseline tests are implemented. Production OTP email delivery, job processing, storage provider, deployment, and production database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
+> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, Django Admin, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, database-backed auth account profiles, cache-backed local-development login/session handling, Django email-backend OTP delivery, and baseline tests are implemented. Job processing, storage provider, deployment, and production database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
 
 ## Local setup
 
@@ -35,15 +35,7 @@ Use an email address when creating the superuser. Newly created superusers recei
 
 For non-superuser accounts, open `http://localhost:8000/admin/`, create a Django user, then add an `Account profile` with the required role and optional Student LRN.
 
-Until email delivery is implemented, local manual login needs the OTP helper enabled in the backend environment:
-
-```env
-AUTH_LOCAL_EXPOSE_OTP="true"
-```
-
-`AUTH_LOCAL_EXPOSE_OTP=true` returns the generated OTP to the frontend so the current prototype login page can complete the backend flow. Keep this disabled outside local development. Login OTP email delivery, lockout persistence, and production-grade token storage remain future work. Student registration email OTP delivery is implemented through Django's email backend.
-
-Local student registration OTP emails are printed to the Django console with:
+Login and student registration OTP emails are sent through Django's configured email backend. Local console-only OTP emails use:
 
 ```env
 AUTH_EMAIL_PROVIDER="console"
@@ -105,7 +97,7 @@ VITE_AUTH_SERVICE_MODE="backend"
 VITE_BACKEND_API_BASE_URL="http://localhost:8000"
 ```
 
-With a migrated backend database, a real Django user/account profile, and local OTP exposure enabled, the frontend can complete manual login against the backend auth endpoints. Full production login remains pending OTP email delivery, lockout persistence, and production-grade token/session storage.
+With a migrated backend database, a real Django user/account profile, backend service mode, and a configured email backend, the frontend can complete manual login against the backend auth endpoints. Full production login still needs lockout persistence and production-grade token/session storage hardening.
 
 ## Dependency updates
 

@@ -1,3 +1,6 @@
+import re
+
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.conf import settings
 from django.core.cache import cache
@@ -120,7 +123,6 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(payload["error"]["code"], "AUTHENTICATION_FAILED")
         self.assertEqual(payload["error"]["message"], "Invalid or expired code. Please try again.")
 
-    @override_settings(AUTH_LOCAL_EXPOSE_OTP=True)
     def test_database_account_can_complete_three_step_login(self) -> None:
         user = get_user_model().objects.create_user(
             username="student",
@@ -152,13 +154,17 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(password_response.status_code, 202)
         password_payload = password_response.json()
         self.assertIn("otpPendingAuthToken", password_payload)
-        self.assertRegex(password_payload["devOtp"], r"^\d{6}$")
+        self.assertNotIn("devOtp", password_payload)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["student@example.test"])
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[0].body)
+        self.assertIsNotNone(code_match)
 
         otp_response = self.client.post(
             "/api/v1/auth/login/otp/",
             data={
                 "otpPendingAuthToken": password_payload["otpPendingAuthToken"],
-                "code": password_payload["devOtp"],
+                "code": code_match.group(1),
             },
             content_type="application/json",
         )

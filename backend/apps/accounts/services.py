@@ -9,6 +9,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils.text import slugify
@@ -399,6 +400,21 @@ def verify_login_password(*, pending_auth_token: str, password: str) -> dict[str
         },
         ttl,
     )
+    try:
+        send_mail(
+            subject="Your PhilSA login verification code",
+            message=(
+                f"Your PhilSA login verification code is {otp_code}. "
+                f"This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. "
+                "If you did not request this code, reset your password or contact support."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[account["email"]],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        cache.delete(f"{PENDING_OTP_PREFIX}{otp_pending_token}")
+        raise LoginFlowRejected("We could not send the email verification code. Please try again.") from exc
 
     response = {
         "otpPendingAuthToken": otp_pending_token,

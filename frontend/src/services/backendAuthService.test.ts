@@ -163,7 +163,7 @@ describe('BackendAuthService', () => {
     );
   });
 
-  it('completes local dev backend login when the backend exposes a dev OTP', async () => {
+  it('completes backend login with a user-entered email OTP', async () => {
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(
@@ -183,7 +183,6 @@ describe('BackendAuthService', () => {
             nextStep: 'otp',
             expiresInSeconds: 300,
             resendCooldownSeconds: 60,
-            devOtp: '123456',
           },
           { status: 202 },
         ),
@@ -219,7 +218,7 @@ describe('BackendAuthService', () => {
       );
     const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
 
-    const result = await service.login({ email: 'student@example.test', password: 'Password1!' });
+    const result = await service.login({ email: 'student@example.test', password: 'Password1!', otp: '123456' });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
