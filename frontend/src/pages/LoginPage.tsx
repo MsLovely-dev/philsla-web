@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, CheckCircle2, KeyRound, LogIn, Mail, Shield } from 'lucide-react';
+import { ArrowRight, Camera, CheckCircle2, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
@@ -21,7 +21,7 @@ const LOCAL_BACKEND_ACCOUNTS = [
   'executive@yopmail.com',
 ];
 
-type LoginStep = 'identifier' | 'activation' | 'password' | 'otp';
+type LoginStep = 'identifier' | 'activation' | 'password' | 'otp' | 'selfie';
 
 function isValidIdentifier(value: string): boolean {
   const trimmed = value.trim();
@@ -56,12 +56,37 @@ export default function LoginPage() {
   const [pendingAuthToken, setPendingAuthToken] = useState('');
   const [activationToken, setActivationToken] = useState('');
   const [otpPendingAuthToken, setOtpPendingAuthToken] = useState('');
+  const [selfiePendingAuthToken, setSelfiePendingAuthToken] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [selfiePreviewUrl, setSelfiePreviewUrl] = useState('');
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
-  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp } = usePhilSA();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, completeLoginSelfie } = usePhilSA();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      cameraStream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      if (selfiePreviewUrl) {
+        URL.revokeObjectURL(selfiePreviewUrl);
+      }
+    };
+  }, [selfiePreviewUrl]);
 
   const handleIdentifierStep = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -164,6 +189,8 @@ export default function LoginPage() {
     }
 
     setOtpPendingAuthToken(result.data.otpPendingAuthToken);
+    setSelfiePendingAuthToken('');
+    resetSelfieCapture();
     setOtp(['', '', '', '', '', '']);
     setStep('otp');
   };
@@ -187,6 +214,99 @@ export default function LoginPage() {
       return;
     }
 
+    setSelfiePendingAuthToken(result.data.selfiePendingAuthToken);
+    resetSelfieCapture();
+    setStep('selfie');
+  };
+
+  const startCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Camera access is not available in this browser.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      cameraStream?.getTracks().forEach((track) => track.stop());
+      setCameraStream(stream);
+      clearSelfiePreview();
+    } catch {
+      setError('Camera permission is required to complete login.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearSelfiePreview = () => {
+    if (selfiePreviewUrl) {
+      URL.revokeObjectURL(selfiePreviewUrl);
+    }
+    setSelfiePreviewUrl('');
+    setSelfieFile(null);
+  };
+
+  const resetSelfieCapture = () => {
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+    clearSelfiePreview();
+  };
+
+  const captureSelfie = async () => {
+    const video = videoRef.current;
+    if (!video || !cameraStream || video.videoWidth === 0 || video.videoHeight === 0) {
+      setError('Initialize the camera before capturing your selfie.');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setError('Selfie capture failed. Please try again.');
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) {
+      setError('Selfie capture failed. Please try again.');
+      return;
+    }
+
+    clearSelfiePreview();
+    const file = new File([blob], `login-selfie-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    cameraStream.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+    setSelfieFile(file);
+    setSelfiePreviewUrl(URL.createObjectURL(file));
+    setError('');
+  };
+
+  const handleSelfieStep = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!selfieFile) {
+      setError('Capture a selfie before continuing.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    const result = await completeLoginSelfie(selfiePendingAuthToken, selfieFile);
+    setLoading(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    resetSelfieCapture();
     navigate(routeForRole(result.data.user.role));
   };
 
@@ -206,10 +326,12 @@ export default function LoginPage() {
     setPendingAuthToken('');
     setActivationToken('');
     setOtpPendingAuthToken('');
+    setSelfiePendingAuthToken('');
     setPassword('');
     setNewPassword('');
     setConfirmPassword('');
     setOtp(['', '', '', '', '', '']);
+    resetSelfieCapture();
     setError('');
     setNotice('');
   };
@@ -456,6 +578,104 @@ export default function LoginPage() {
                 className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
               >
                 ← Back to Password
+              </button>
+            </form>
+          )}
+
+          {step === 'selfie' && (
+            <form onSubmit={handleSelfieStep} className="space-y-8">
+              <div className="text-center">
+                <p className="text-[10px] font-black text-philsa-red uppercase tracking-[0.28em] mb-2">
+                  Secure Login Verification
+                </p>
+                <h3 className="text-2xl font-black text-philsa-navy tracking-tight leading-none mb-2">
+                  Selfie Photo Log
+                </h3>
+                <p className="text-[10px] text-[#31548a] font-bold uppercase tracking-wider">
+                  Take a quick selfie photograph to log your entry session
+                </p>
+              </div>
+
+              <div className="bg-[#101827] rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-sm">
+                <div className="relative aspect-video bg-[#101827] flex items-center justify-center">
+                  {selfiePreviewUrl ? (
+                    <img src={selfiePreviewUrl} alt="Captured login selfie preview" className="w-full h-full object-cover" />
+                  ) : cameraStream ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover scale-x-[-1]"
+                    />
+                  ) : (
+                    <div className="text-center px-6">
+                      <div className="w-16 h-16 rounded-full bg-white/10 border border-white/15 flex items-center justify-center mx-auto mb-5">
+                        <Camera className="w-8 h-8 text-white/80" />
+                      </div>
+                      <p className="text-white text-sm font-black uppercase tracking-wider mb-2">
+                        Device Camera Portal Ready
+                      </p>
+                      <p className="text-white/50 text-[11px] font-bold leading-relaxed">
+                        Camera permission is required to capture your login selfie.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-5 bg-[#101827] flex flex-col sm:flex-row gap-3">
+                  {!cameraStream && !selfiePreviewUrl && (
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      disabled={loading}
+                      className="w-full bg-white text-philsa-navy rounded-xl py-3 text-[11px] font-black uppercase tracking-widest hover:bg-white/90 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Initialize Camera
+                    </button>
+                  )}
+
+                  {cameraStream && !selfiePreviewUrl && (
+                    <button
+                      type="button"
+                      onClick={captureSelfie}
+                      disabled={loading}
+                      className="w-full bg-white text-philsa-navy rounded-xl py-3 text-[11px] font-black uppercase tracking-widest hover:bg-white/90 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Capture Selfie
+                    </button>
+                  )}
+
+                  {selfiePreviewUrl && (
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      disabled={loading}
+                      className="w-full bg-white/10 text-white rounded-xl py-3 text-[11px] font-black uppercase tracking-widest hover:bg-white/15 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Retake
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <button disabled={loading || !selfieFile} className="btn-primary w-full flex items-center justify-center gap-3">
+                {loading ? 'Saving Selfie Log...' : 'Establish Session'}
+                <LogIn className="w-5 h-5 text-white/50" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  resetSelfieCapture();
+                  setStep('otp');
+                }}
+                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
+              >
+                &larr; Back to OTP Code
               </button>
             </form>
           )}

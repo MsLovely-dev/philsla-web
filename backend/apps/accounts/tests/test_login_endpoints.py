@@ -1,12 +1,13 @@
 import re
 
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.conf import settings
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
 
-from apps.accounts.models import AccountProfile
+from apps.accounts.models import AccountProfile, LoginSelfieLog
 from apps.accounts.roles import PortalRole
 
 
@@ -123,7 +124,7 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(payload["error"]["code"], "AUTHENTICATION_FAILED")
         self.assertEqual(payload["error"]["message"], "Invalid or expired code. Please try again.")
 
-    def test_database_account_can_complete_three_step_login(self) -> None:
+    def test_database_account_can_complete_otp_and_selfie_login(self) -> None:
         user = get_user_model().objects.create_user(
             username="student",
             email="student@example.test",
@@ -169,16 +170,34 @@ class LoginEndpointTests(TestCase):
             content_type="application/json",
         )
 
-        self.assertEqual(otp_response.status_code, 200)
+        self.assertEqual(otp_response.status_code, 202)
         otp_payload = otp_response.json()
-        self.assertEqual(otp_payload["tokenType"], "Bearer")
-        self.assertIn("accessToken", otp_payload)
-        self.assertIn("refreshToken", otp_response.cookies)
+        self.assertEqual(otp_payload["nextStep"], "selfie")
+        self.assertIn("selfiePendingAuthToken", otp_payload)
+        self.assertNotIn("accessToken", otp_payload)
+        self.assertNotIn("refreshToken", otp_response.cookies)
+
+        selfie_response = self.client.post(
+            "/api/v1/auth/login/selfie/",
+            data={
+                "selfiePendingAuthToken": otp_payload["selfiePendingAuthToken"],
+                "file": SimpleUploadedFile("selfie.jpg", b"selfie-image", content_type="image/jpeg"),
+            },
+        )
+
+        self.assertEqual(selfie_response.status_code, 200)
+        selfie_payload = selfie_response.json()
+        self.assertEqual(selfie_payload["tokenType"], "Bearer")
+        self.assertIn("accessToken", selfie_payload)
+        self.assertIn("refreshToken", selfie_response.cookies)
         self.assertIn(settings.SESSION_COOKIE_NAME, self.client.cookies)
+        selfie_log = LoginSelfieLog.objects.get(user=user)
+        self.assertEqual(selfie_log.content_type, "image/jpeg")
+        self.assertEqual(selfie_log.size, len(b"selfie-image"))
 
         session_response = self.client.get(
             "/api/v1/auth/session/",
-            HTTP_AUTHORIZATION=f"Bearer {otp_payload['accessToken']}",
+            HTTP_AUTHORIZATION=f"Bearer {selfie_payload['accessToken']}",
         )
 
         self.assertEqual(session_response.status_code, 200)

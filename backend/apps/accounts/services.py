@@ -18,7 +18,7 @@ from django.utils.crypto import constant_time_compare
 from rest_framework.exceptions import APIException
 
 from .default_permissions import module_access_or_role_default
-from .models import AccountProfile, AuthRefreshSession
+from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog
 from .roles import PortalRole, get_security_tier, get_user_role
 
 
@@ -48,6 +48,7 @@ class AuthIssue:
 
 PENDING_IDENTIFIER_PREFIX = "auth:pending:identifier:"
 PENDING_OTP_PREFIX = "auth:pending:otp:"
+PENDING_SELFIE_PREFIX = "auth:pending:selfie:"
 PENDING_STAFF_ACTIVATION_PREFIX = "auth:pending:staff-activation:"
 ACCESS_TOKEN_PREFIX = "auth:access:"
 
@@ -427,8 +428,8 @@ def verify_login_password(*, pending_auth_token: str, password: str) -> dict[str
     return response
 
 
-def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> AuthIssue:
-    """Validate the email OTP and issue the full backend session."""
+def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> dict[str, Any]:
+    """Validate the email OTP and issue a selfie-scoped pending-auth token."""
 
     pending_key = f"{PENDING_OTP_PREFIX}{otp_pending_auth_token}"
     pending = cache.get(pending_key)
@@ -445,7 +446,52 @@ def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> AuthIssue:
         raise LoginFlowRejected("Invalid or expired code. Please try again.")
 
     cache.delete(pending_key)
-    return _issue_tokens(pending["account"])
+    selfie_pending_token = _new_token()
+    ttl = _ttl_seconds(settings.AUTH_PENDING_TOKEN_TTL_MINUTES)
+    cache.set(f"{PENDING_SELFIE_PREFIX}{selfie_pending_token}", {"account": pending["account"]}, ttl)
+    return {
+        "selfiePendingAuthToken": selfie_pending_token,
+        "nextStep": "selfie",
+        "expiresInSeconds": ttl,
+    }
+
+
+def complete_login_selfie(
+    *,
+    selfie_pending_auth_token: str,
+    image_file,
+    request: object | None = None,
+) -> AuthIssue:
+    """Persist the login selfie evidence and issue the full backend session."""
+
+    pending_key = f"{PENDING_SELFIE_PREFIX}{selfie_pending_auth_token}"
+    pending = cache.get(pending_key)
+    if pending is None:
+        raise LoginFlowRejected("Your selfie verification session has expired. Please start again.")
+
+    account = pending["account"]
+    user = _get_user_for_account(account)
+    if user is None:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("Your selfie verification session has expired. Please start again.")
+
+    digest = hashlib.sha256()
+    for chunk in image_file.chunks():
+        digest.update(chunk)
+    image_file.seek(0)
+
+    LoginSelfieLog.objects.create(
+        user=user,
+        file=image_file,
+        content_type=getattr(image_file, "content_type", "") or "application/octet-stream",
+        size=getattr(image_file, "size", 0),
+        sha256=digest.hexdigest(),
+        ip_address=str(getattr(request, "META", {}).get("REMOTE_ADDR", ""))[:45] if request is not None else "",
+        user_agent=str(getattr(request, "META", {}).get("HTTP_USER_AGENT", ""))[:512] if request is not None else "",
+        correlation_id=str(getattr(request, "correlation_id", ""))[:80] if request is not None else "",
+    )
+    cache.delete(pending_key)
+    return _issue_tokens(account)
 
 
 def validate_access_token(*, access_token: str) -> tuple[object, object] | None:

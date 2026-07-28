@@ -1,7 +1,7 @@
 import type { Application, User } from '../types';
 import { MOCK_USERS } from '../lib/utils';
 import { BackendAuthService } from './backendAuthService';
-import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthService, AuthSession } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession } from './contracts';
 import { authorizationError, serviceSuccess, validationError } from './serviceResult';
 import type { ServiceResult } from './serviceResult';
 
@@ -18,6 +18,7 @@ export class LocalStorageAuthService implements AuthService {
   private readonly applicationStorageKey: string;
   private readonly delayMs: number;
   private pendingIdentifier: string | null = null;
+  private pendingSelfieIdentifier: string | null = null;
 
   constructor(private readonly options: PrototypeAuthServiceOptions) {
     this.sessionStorageKey = options.sessionStorageKey ?? 'philsa_user';
@@ -88,15 +89,31 @@ export class LocalStorageAuthService implements AuthService {
     });
   }
 
-  async verifyLoginOtp(_otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSession>> {
+  async verifyLoginOtp(_otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSelfieChallenge>> {
     await this.delay();
 
     if (!this.pendingIdentifier || code !== '000000') {
       return authorizationError('Invalid or expired code. Please try again.', 'AUTHENTICATION_FAILED');
     }
 
-    const session = await this.login({ email: this.pendingIdentifier });
+    this.pendingSelfieIdentifier = this.pendingIdentifier;
     this.pendingIdentifier = null;
+    return serviceSuccess({
+      selfiePendingAuthToken: 'prototype-selfie-pending-auth',
+      nextStep: 'selfie',
+      expiresInSeconds: 600,
+    });
+  }
+
+  async completeLoginSelfie(_selfiePendingAuthToken: string, file: File): Promise<ServiceResult<AuthSession>> {
+    await this.delay();
+
+    if (!this.pendingSelfieIdentifier || file.size <= 0) {
+      return authorizationError('Capture a selfie before continuing.', 'AUTHENTICATION_FAILED');
+    }
+
+    const session = await this.login({ email: this.pendingSelfieIdentifier });
+    this.pendingSelfieIdentifier = null;
     return session;
   }
 

@@ -95,7 +95,7 @@ Auth events must be recorded through a safe audit boundary using approved metada
 ## Security and correctness
 
 - The backend authenticates, authorizes, validates, and enforces workflow state; frontend validation is for usability only.
-- Portal authentication uses the three-step LRN/email, password, and email OTP flow defined in [ADR-011](../decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). Full sessions are issued only after OTP verification succeeds.
+- Portal authentication uses the LRN/email, password, email OTP, and selfie photo log flow defined in [ADR-011](../decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). Full sessions are issued only after the login selfie image is saved.
 - Full sessions use a short-lived access token and rotating refresh token in an HttpOnly, Secure, SameSite=Strict cookie.
 - Protected endpoints require backend authentication by default. Public endpoints must explicitly opt out, as the health endpoint does.
 - Derive identity and permissions from verified server-side context, never client-supplied roles. Backend roles and prototype-role alignment are defined in [ADR-010](../decisions/ADR-010-BACKEND-ROLES-AND-PERMISSIONS.md).

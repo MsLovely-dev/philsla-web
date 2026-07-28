@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
-import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSession } from './services/contracts';
+import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession } from './services/contracts';
 import { authorizationError } from './services/serviceResult';
 import type { ServiceResult } from './services/serviceResult';
 
@@ -113,7 +113,8 @@ interface PhilSAContextType {
   startLoginIdentifier: (identifier: string) => Promise<ServiceResult<AuthIdentifierChallenge>>;
   verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthOtpChallenge>>;
   completeStaffActivation: (activationToken: string, password: string, confirmPassword: string) => Promise<ServiceResult<null>>;
-  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSession>>;
+  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSelfieChallenge>>;
+  completeLoginSelfie: (selfiePendingAuthToken: string, file: File) => Promise<ServiceResult<AuthSession>>;
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
@@ -335,12 +336,23 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const verifyLoginOtp = async (
     otpPendingAuthToken: string,
     code: string,
-  ): Promise<ServiceResult<AuthSession>> => {
+  ): Promise<ServiceResult<AuthSelfieChallenge>> => {
     if (!authService.verifyLoginOtp) {
       return authorizationError('OTP login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
     }
 
-    const result = await authService.verifyLoginOtp(otpPendingAuthToken, code);
+    return authService.verifyLoginOtp(otpPendingAuthToken, code);
+  };
+
+  const completeLoginSelfie = async (
+    selfiePendingAuthToken: string,
+    file: File,
+  ): Promise<ServiceResult<AuthSession>> => {
+    if (!authService.completeLoginSelfie) {
+      return authorizationError('Selfie photo log is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    const result = await authService.completeLoginSelfie(selfiePendingAuthToken, file);
     if (result.ok) {
       setUser(result.data.user);
       addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
@@ -396,7 +408,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, completeLoginSelfie, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );
