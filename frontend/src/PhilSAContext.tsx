@@ -23,9 +23,10 @@ export interface MaintenanceModule {
   status: string;
 }
 
+const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1']);
+
 export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   // Student Portal
-  { id: '1', name: 'Dashboard', path: '/dashboard', category: 'Student Portal', status: 'ACTIVE' },
   { id: '2', name: 'Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
   { id: '3', name: 'Exam Permit', path: '/student/permit', category: 'Student Portal', status: 'ACTIVE' },
   { id: '4', name: 'Results', path: '/student/results', category: 'Student Portal', status: 'ACTIVE' },
@@ -101,6 +102,10 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   { id: '55', name: 'Student PC Regs', path: '/admin/student-devices', category: 'Testing Center Logistics', status: 'ACTIVE' }
 ];
 
+function pruneRetiredMaintenanceModules(modules: MaintenanceModule[]) {
+  return modules.filter((module) => !RETIRED_MAINTENANCE_MODULE_IDS.has(module.id));
+}
+
 interface PhilSAContextType {
   user: User | null;
   setUser: (user: User | null) => void;
@@ -133,8 +138,9 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const setMaintenanceModules = (modules: any[]) => {
-    setMaintenanceModulesInternal(modules);
-    localStorage.setItem('philsa_maintenance_modules', JSON.stringify(modules));
+    const activeModules = pruneRetiredMaintenanceModules(modules);
+    setMaintenanceModulesInternal(activeModules);
+    localStorage.setItem('philsa_maintenance_modules', JSON.stringify(activeModules));
   };
 
   const setInputModules = (modules: InputModuleControl[]) => {
@@ -165,7 +171,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
 
     if (savedMaintenance) {
       try {
-        const parsed = JSON.parse(savedMaintenance);
+        const parsed = pruneRetiredMaintenanceModules(JSON.parse(savedMaintenance));
         if (parsed.length < 25) {
           // Force override if old schema is found
           setMaintenanceModulesInternal(initialModules);
