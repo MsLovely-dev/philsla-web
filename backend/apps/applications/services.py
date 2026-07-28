@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils.crypto import constant_time_compare
@@ -88,6 +88,81 @@ class RegistrationEmailDeliveryUnavailable(APIException):
     default_detail = "We're unable to send the OTP right now. Please try again in a few minutes."
 
 
+def _registration_email_otp_plain_message(*, code: str) -> str:
+    return (
+        f"Your PhilSLA registration verification code is {code}. "
+        f"This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. "
+        "If you did not request this code, you can ignore this email."
+    )
+
+
+def _registration_email_otp_html_message(*, code: str) -> str:
+    return f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;background:#ffffff;border:1px solid #d9dde5;border-radius:20px;">
+            <tr>
+              <td style="padding:46px 48px 28px;text-align:center;">
+                <div style="display:inline-block;text-align:left;">
+                  <div style="font-size:72px;line-height:0.9;font-weight:800;letter-spacing:0;font-family:Arial Black,Arial,Helvetica,sans-serif;">
+                    <span style="color:#18345c;">Phil</span><span style="color:#a5162d;">SLA</span>
+                  </div>
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;">
+                    <tr>
+                      <td width="34%" style="height:8px;background:#18345c;font-size:0;line-height:0;">&nbsp;</td>
+                      <td width="33%" style="height:8px;background:#dfb52d;font-size:0;line-height:0;">&nbsp;</td>
+                      <td width="33%" style="height:8px;background:#a5162d;font-size:0;line-height:0;">&nbsp;</td>
+                    </tr>
+                  </table>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 50px 36px;font-size:14px;line-height:1.6;text-align:left;">
+                <p style="margin:0 0 18px;">Dear PhilSLA User,</p>
+                <p style="margin:0 0 24px;">
+                  Your PhilSLA registration verification code is:
+                </p>
+                <p style="margin:0 0 8px;font-size:14px;text-transform:uppercase;">Email Code:</p>
+                <p style="margin:0 0 28px;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:1px;color:#1f2937;">{code}</p>
+                <p style="margin:0 0 20px;">
+                  This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. If you did not request this code, you can ignore this email.
+                </p>
+                <p style="margin:0 0 28px;">
+                  Best regards,<br>
+                  The PhilSLA Team
+                </p>
+                <p style="margin:0;text-align:center;font-size:12px;color:#374151;">&copy; PhilSLA 2026</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _send_registration_email_otp(*, email: str, code: str) -> None:
+    plain_message = _registration_email_otp_plain_message(code=code)
+    email_message = EmailMultiAlternatives(
+        subject="Your PhilSLA registration verification code",
+        body=plain_message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[email],
+    )
+    email_message.attach_alternative(
+        _registration_email_otp_html_message(code=code),
+        "text/html",
+    )
+    email_message.send(fail_silently=False)
+
+
 def request_registration_email_otp(*, email: str) -> dict:
     normalized_email = _normalize_email(email)
     key = _registration_email_otp_key(normalized_email)
@@ -112,17 +187,7 @@ def request_registration_email_otp(*, email: str) -> dict:
     }
     cache.set(key, state, settings.AUTH_OTP_TTL_MINUTES * 60)
     try:
-        send_mail(
-            subject="Your PhilSA registration verification code",
-            message=(
-                f"Your PhilSA registration verification code is {code}. "
-                f"This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. "
-                "If you did not request this code, you can ignore this email."
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[normalized_email],
-            fail_silently=False,
-        )
+        _send_registration_email_otp(email=normalized_email, code=code)
     except Exception as exc:
         cache.delete(key)
         raise RegistrationEmailDeliveryUnavailable from exc

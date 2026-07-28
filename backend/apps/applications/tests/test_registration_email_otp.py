@@ -30,12 +30,27 @@ class RegistrationEmailOtpTests(TestCase):
     def test_request_sends_registration_otp_email_without_exposing_code(self):
         response = self.request_otp()
 
+        code = self.latest_code()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["email"], "student@example.test")
         self.assertEqual(response.data["expiresInSeconds"], 300)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["student@example.test"])
-        self.assertNotIn(self.latest_code(), str(response.data))
+        self.assertEqual(mail.outbox[0].subject, "Your PhilSLA registration verification code")
+        self.assertIn(f"Your PhilSLA registration verification code is {code}.", mail.outbox[0].body)
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        html_body, content_type = mail.outbox[0].alternatives[0]
+        self.assertEqual(content_type, "text/html")
+        self.assertNotIn("<img", html_body)
+        self.assertNotIn('src="cid:', html_body)
+        self.assertIn('<span style="color:#18345c;">Phil</span><span style="color:#a5162d;">SLA</span>', html_body)
+        self.assertIn("background:#dfb52d", html_body)
+        self.assertIn(f">{code}<", html_body)
+        self.assertIn("Dear PhilSLA User", html_body)
+        self.assertNotIn("Verification</div>", html_body)
+        self.assertNotIn("<mark", html_body)
+        self.assertEqual(mail.outbox[0].attachments, [])
+        self.assertNotIn(code, str(response.data))
 
     def test_verify_valid_email_otp_returns_registration_email_token(self):
         self.request_otp("Student@Example.Test")
