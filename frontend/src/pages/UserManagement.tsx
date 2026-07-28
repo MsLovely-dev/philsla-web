@@ -49,7 +49,6 @@ const manage: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPRO
 const fullAccess: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT'];
 
 const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
-  '1': readOnly,
   '2': fullAccess,
   '3': readOnly,
   '4': readOnly,
@@ -108,7 +107,7 @@ const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
 };
 
 const permissionMatrixModuleIds = new Set([
-  '1', '2', '3', '4',
+  '2', '3', '4',
   '5', '6', '7',
   '8', '9', '48', '10', '11', '12', '13', '14', '15',
   '16', '49', '19', '17', '20', '46', '22', '56',

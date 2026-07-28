@@ -1,5 +1,5 @@
 import type { User, UserRole } from '../types';
-import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthService, AuthSession } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession } from './contracts';
 import { sharedApiClient, type ApiClient } from './apiClient';
 import { authorizationError, serviceSuccess } from './serviceResult';
 import type { ServiceFailure, ServiceResult } from './serviceResult';
@@ -68,15 +68,16 @@ export class BackendAuthService implements AuthService {
 
     if (passwordResult.ok === false) return passwordResult as ServiceFailure;
 
-    const otpCode = credentials.otp ?? passwordResult.data.devOtp;
-    if (!otpCode) {
+    if (!credentials.otp) {
       return authorizationError(
         'Backend OTP verification is required. Enter the 6-digit email code to continue.',
         'OTP_REQUIRED',
       );
     }
 
-    return this.verifyLoginOtp(passwordResult.data.otpPendingAuthToken, otpCode);
+    const otpResult = await this.verifyLoginOtp(passwordResult.data.otpPendingAuthToken, credentials.otp);
+    if (otpResult.ok === false) return otpResult as ServiceFailure;
+    return authorizationError('Selfie photo log is required before creating the backend session.', 'SELFIE_REQUIRED');
   }
 
   async startLoginIdentifier(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>> {
@@ -111,18 +112,29 @@ export class BackendAuthService implements AuthService {
     });
   }
 
-  async verifyLoginOtp(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSession>> {
-    const otpResult = await this.apiClient.request<BackendTokenResponse>('/api/v1/auth/login/otp/', {
+  async verifyLoginOtp(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSelfieChallenge>> {
+    return this.apiClient.request<AuthSelfieChallenge>('/api/v1/auth/login/otp/', {
       method: 'POST',
       body: JSON.stringify({
         otpPendingAuthToken,
         code,
       }),
     });
+  }
 
-    if (otpResult.ok === false) return otpResult as ServiceFailure;
+  async completeLoginSelfie(selfiePendingAuthToken: string, file: File): Promise<ServiceResult<AuthSession>> {
+    const body = new FormData();
+    body.append('selfiePendingAuthToken', selfiePendingAuthToken);
+    body.append('file', file);
 
-    this.apiClient.setBearerToken(otpResult.data.accessToken);
+    const selfieResult = await this.apiClient.request<BackendTokenResponse>('/api/v1/auth/login/selfie/', {
+      method: 'POST',
+      body,
+    });
+
+    if (selfieResult.ok === false) return selfieResult as ServiceFailure;
+
+    this.apiClient.setBearerToken(selfieResult.data.accessToken);
     const sessionResult = await this.requestCurrentSession();
     if (sessionResult.ok === false) return sessionResult as ServiceFailure;
     if (!sessionResult.data) return authorizationError('The backend session was not created.', 'SESSION_NOT_CREATED');

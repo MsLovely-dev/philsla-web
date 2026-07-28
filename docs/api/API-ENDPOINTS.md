@@ -12,7 +12,8 @@ The baseline health and authentication boundaries plus the first student-applica
 | `GET` | `/api/v1/auth/session/` | Required bearer access token | `IsAuthenticated` | Return server-derived session, role, permission, and scope claims | Implemented boundary; token validation pending |
 | `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented |
 | `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented boundary; pending-token/password verification pending |
-| `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and complete session issuance | Implemented boundary; OTP/session issuance pending |
+| `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and advance to selfie photo logging | Implemented |
+| `POST` | `/api/v1/auth/login/selfie/` | Public with selfie pending-auth token | `AllowAny` | Store the captured login selfie image and complete session issuance | Implemented |
 | `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented boundary; token store pending |
 | `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
@@ -338,7 +339,7 @@ Test coverage:
 
 Use this endpoint for Step 3 of the shared login flow. It accepts the OTP-scoped pending-auth token and a six-digit email OTP.
 
-Current implementation status: request validation, route, safe error shape, and tests exist. OTP verification, OTP-attempt lockout, refresh-token rotation, secure refresh cookie issuance, access-token issuance, session audit events, and role landing behavior remain pending.
+Current implementation status: request validation, OTP verification, OTP-attempt lockout, safe error shape, and tests exist. A successful OTP response does not issue a full session; it issues a selfie-scoped pending-auth token for the required login selfie photo log.
 
 Request:
 
@@ -354,20 +355,35 @@ Validation behavior:
 - `code` must be a six-digit numeric string.
 - Invalid format returns `400 VALIDATION_FAILED`.
 
-Current response behavior:
+Successful response:
 
-- Any well-formed code currently returns `401 AUTHENTICATION_FAILED` with `Invalid or expired code. Please try again.` until OTP storage and verification exist.
+```json
+{
+  "selfiePendingAuthToken": "opaque-step-4-token",
+  "nextStep": "selfie",
+  "expiresInSeconds": 600
+}
+```
 
-Future successful response:
+### `POST /api/v1/auth/login/selfie/`
+
+Use this endpoint for Step 4 of the shared login flow. It accepts `multipart/form-data` with the selfie-scoped pending-auth token and a captured camera image. The selfie is stored as login evidence only; it is not used for facial recognition or face matching.
+
+Request:
+
+```text
+selfiePendingAuthToken=opaque-step-4-token
+file=<JPEG or PNG image>
+```
+
+Successful response:
 
 ```json
 {
   "accessToken": "opaque-access-token",
   "tokenType": "Bearer",
   "expiresInSeconds": 900,
-  "session": {
-    "authenticated": true
-  }
+  "expiresAt": "2026-07-13T10:00:00Z"
 }
 ```
 

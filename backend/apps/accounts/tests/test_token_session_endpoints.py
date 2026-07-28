@@ -1,7 +1,10 @@
+import re
 from types import SimpleNamespace
 
 from django.conf import settings
+from django.core import mail
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -80,20 +83,27 @@ class TokenSessionEndpointTests(TestCase):
             },
             content_type="application/json",
         )
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[-1].body)
+        self.assertIsNotNone(code_match)
         otp_response = self.client.post(
             "/api/v1/auth/login/otp/",
             data={
                 "otpPendingAuthToken": password_response.json()["otpPendingAuthToken"],
-                "code": password_response.json()["devOtp"],
+                "code": code_match.group(1),
             },
             content_type="application/json",
         )
-        return otp_response
+        return self.client.post(
+            "/api/v1/auth/login/selfie/",
+            data={
+                "selfiePendingAuthToken": otp_response.json()["selfiePendingAuthToken"],
+                "file": SimpleUploadedFile("selfie.jpg", b"selfie-image", content_type="image/jpeg"),
+            },
+        )
 
-    @override_settings(AUTH_LOCAL_EXPOSE_OTP=True)
     def test_refresh_token_survives_cache_restart_and_rotates_cookie(self) -> None:
-        otp_response = self.login_student()
-        self.client.cookies["refreshToken"] = otp_response.cookies["refreshToken"].value
+        login_response = self.login_student()
+        self.client.cookies["refreshToken"] = login_response.cookies["refreshToken"].value
         cache.clear()
 
         refresh_response = self.client.post("/api/v1/auth/token/refresh/")
@@ -103,19 +113,18 @@ class TokenSessionEndpointTests(TestCase):
         self.assertIn("refreshToken", refresh_response.cookies)
         self.assertEqual(AuthRefreshSession.objects.filter(revoked_at__isnull=True).count(), 1)
 
-        self.client.cookies["refreshToken"] = otp_response.cookies["refreshToken"].value
+        self.client.cookies["refreshToken"] = login_response.cookies["refreshToken"].value
         replay_response = self.client.post("/api/v1/auth/token/refresh/")
 
         self.assertEqual(replay_response.status_code, 401)
         self.assertEqual(replay_response.json()["error"]["code"], "AUTHENTICATION_FAILED")
 
-    @override_settings(AUTH_LOCAL_EXPOSE_OTP=True)
     def test_logout_revokes_persistent_refresh_session(self) -> None:
-        otp_response = self.login_student()
+        login_response = self.login_student()
 
         response = self.client.post(
             "/api/v1/auth/logout/",
-            headers={"Authorization": f"Bearer {otp_response.json()['accessToken']}"},
+            headers={"Authorization": f"Bearer {login_response.json()['accessToken']}"},
         )
 
         self.assertEqual(response.status_code, 204)

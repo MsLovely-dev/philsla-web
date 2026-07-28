@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
-import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSession } from './services/contracts';
+import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession } from './services/contracts';
 import { authorizationError } from './services/serviceResult';
 import type { ServiceResult } from './services/serviceResult';
 
@@ -23,9 +23,10 @@ export interface MaintenanceModule {
   status: string;
 }
 
+const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1']);
+
 export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   // Student Portal
-  { id: '1', name: 'Dashboard', path: '/dashboard', category: 'Student Portal', status: 'ACTIVE' },
   { id: '2', name: 'Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
   { id: '3', name: 'Exam Permit', path: '/student/permit', category: 'Student Portal', status: 'ACTIVE' },
   { id: '4', name: 'Results', path: '/student/results', category: 'Student Portal', status: 'ACTIVE' },
@@ -101,6 +102,10 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   { id: '55', name: 'Student PC Regs', path: '/admin/student-devices', category: 'Testing Center Logistics', status: 'ACTIVE' }
 ];
 
+function pruneRetiredMaintenanceModules(modules: MaintenanceModule[]) {
+  return modules.filter((module) => !RETIRED_MAINTENANCE_MODULE_IDS.has(module.id));
+}
+
 interface PhilSAContextType {
   user: User | null;
   setUser: (user: User | null) => void;
@@ -108,7 +113,8 @@ interface PhilSAContextType {
   startLoginIdentifier: (identifier: string) => Promise<ServiceResult<AuthIdentifierChallenge>>;
   verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthOtpChallenge>>;
   completeStaffActivation: (activationToken: string, password: string, confirmPassword: string) => Promise<ServiceResult<null>>;
-  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSession>>;
+  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSelfieChallenge>>;
+  completeLoginSelfie: (selfiePendingAuthToken: string, file: File) => Promise<ServiceResult<AuthSession>>;
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
@@ -133,8 +139,9 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const setMaintenanceModules = (modules: any[]) => {
-    setMaintenanceModulesInternal(modules);
-    localStorage.setItem('philsa_maintenance_modules', JSON.stringify(modules));
+    const activeModules = pruneRetiredMaintenanceModules(modules);
+    setMaintenanceModulesInternal(activeModules);
+    localStorage.setItem('philsa_maintenance_modules', JSON.stringify(activeModules));
   };
 
   const setInputModules = (modules: InputModuleControl[]) => {
@@ -165,7 +172,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
 
     if (savedMaintenance) {
       try {
-        const parsed = JSON.parse(savedMaintenance);
+        const parsed = pruneRetiredMaintenanceModules(JSON.parse(savedMaintenance));
         if (parsed.length < 25) {
           // Force override if old schema is found
           setMaintenanceModulesInternal(initialModules);
@@ -329,12 +336,23 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const verifyLoginOtp = async (
     otpPendingAuthToken: string,
     code: string,
-  ): Promise<ServiceResult<AuthSession>> => {
+  ): Promise<ServiceResult<AuthSelfieChallenge>> => {
     if (!authService.verifyLoginOtp) {
       return authorizationError('OTP login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
     }
 
-    const result = await authService.verifyLoginOtp(otpPendingAuthToken, code);
+    return authService.verifyLoginOtp(otpPendingAuthToken, code);
+  };
+
+  const completeLoginSelfie = async (
+    selfiePendingAuthToken: string,
+    file: File,
+  ): Promise<ServiceResult<AuthSession>> => {
+    if (!authService.completeLoginSelfie) {
+      return authorizationError('Selfie photo log is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    const result = await authService.completeLoginSelfie(selfiePendingAuthToken, file);
     if (result.ok) {
       setUser(result.data.user);
       addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
@@ -390,7 +408,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, completeLoginSelfie, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

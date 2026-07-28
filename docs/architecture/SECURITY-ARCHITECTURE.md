@@ -8,7 +8,7 @@ Supabase Postgres is accepted only as the database provider. Supabase Auth and S
 
 Documents, recordings, exports, and evidence must use private S3-compatible object storage after [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md). The backend must authorize every object access and must not expose permanent public URLs for sensitive files.
 
-Initial portal authentication uses Django-managed backend accounts and the three-step LRN/email, password, and email OTP flow accepted in [ADR-011](../decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). Supabase Auth is not adopted.
+Initial portal authentication uses Django-managed backend accounts and the LRN/email, password, email OTP, and selfie photo log flow accepted in [ADR-011](../decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). Supabase Auth is not adopted.
 
 ## Backend roles and permissions
 

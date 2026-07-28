@@ -4,7 +4,7 @@
 
 This checklist prioritizes backend work now that PhilSA is moving beyond the frontend prototype. It is scoped to the future Django and Django REST Framework service under `backend/`.
 
-Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, private S3-compatible object storage as the file/evidence storage approach, Django-managed backend accounts, the three-step LRN/email, password, and email OTP authentication flow, and OpenAPI 3 with DRF Spectacular for API schema tooling are adopted. Deployment, object storage provider, email provider, background jobs, and production infrastructure remain `TBD` unless a later ADR accepts them.
+Django, Django REST Framework, pip-tools dependency locking, PostgreSQL-compatible storage, Supabase Postgres as the database provider, private S3-compatible object storage as the file/evidence storage approach, Django-managed backend accounts, the LRN/email, password, email OTP, and selfie photo log authentication flow, and OpenAPI 3 with DRF Spectacular for API schema tooling are adopted. Deployment, object storage provider, email provider, background jobs, and production infrastructure remain `TBD` unless a later ADR accepts them.
 
 Priority meanings:
 
@@ -92,7 +92,7 @@ Build these after P0 backend foundation is running and tested.
 ### 1. Authentication and account entry
 
 - [x] Implement current-session endpoint with server-derived role, permission, and scope claims.
-- [x] Implement three-step login endpoint boundaries for identifier resolution, password verification, and email OTP verification; account lookup, pending-token storage, password verification, OTP delivery, and session issuance remain in later auth slices.
+- [x] Implement login endpoint boundaries for identifier resolution, password verification, email OTP verification, and selfie photo logging.
 - [x] Implement logout, refresh-token rotation, token revocation, and session-expiry endpoint boundaries; durable token storage, rotation, revocation records, and audit events remain in later auth slices.
 - [x] Implement student registration account activation on successful submission and staff/admin provisioning activation endpoint boundaries; activation-token storage, email delivery, and audit events remain in later auth/account slices.
 - [x] Implement password recovery and account recovery endpoint boundaries from ADR-011; recovery-token storage, email delivery, password hashing, session revocation, and audit events remain in later auth/account slices.

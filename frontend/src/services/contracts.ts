@@ -34,13 +34,20 @@ export interface AuthOtpChallenge {
   devOtp?: string;
 }
 
+export interface AuthSelfieChallenge {
+  selfiePendingAuthToken: string;
+  nextStep: 'selfie';
+  expiresInSeconds: number;
+}
+
 export interface AuthService {
   getCurrentSession(): Promise<ServiceResult<AuthSession | null>>;
   login(credentials: AuthCredentials): Promise<ServiceResult<AuthSession>>;
   startLoginIdentifier?(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>>;
   verifyLoginPassword?(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>>;
   completeStaffActivation?(activationToken: string, password: string, confirmPassword: string): Promise<ServiceResult<null>>;
-  verifyLoginOtp?(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSession>>;
+  verifyLoginOtp?(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSelfieChallenge>>;
+  completeLoginSelfie?(selfiePendingAuthToken: string, file: File): Promise<ServiceResult<AuthSession>>;
   logout(): Promise<ServiceResult<null>>;
   refreshSession(): Promise<ServiceResult<AuthSession>>;
 }

@@ -1,3 +1,24 @@
+import os
+from pathlib import Path
+
+
+def load_local_env() -> None:
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text().splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+load_local_env()
+
 from .base import *  # noqa: F403
 
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = "mock"
@@ -5,7 +26,7 @@ STEP1_SELFIE_FACE_PROVIDER = "opencv"
 
 DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
-AUTH_LOCAL_EXPOSE_OTP = True
+AUTH_LOCAL_EXPOSE_OTP = False
 ACTIVE_EXAM_CYCLE_ID = "2026"
 LRN_REGISTRY_PROVIDER = "mock"
 CSRF_TRUSTED_ORIGINS = [
