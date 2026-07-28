@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
-import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSession } from './services/contracts';
+import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession } from './services/contracts';
 import { authorizationError } from './services/serviceResult';
 import type { ServiceResult } from './services/serviceResult';
 
@@ -23,10 +23,11 @@ export interface MaintenanceModule {
   status: string;
 }
 
+const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1']);
+
 export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   // Student Portal
-  { id: '1', name: 'Dashboard', path: '/dashboard', category: 'Student Portal', status: 'ACTIVE' },
-  { id: '2', name: 'Student Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
+  { id: '2', name: 'Application', path: '/student/application', category: 'Student Portal', status: 'ACTIVE' },
   { id: '3', name: 'Exam Permit', path: '/student/permit', category: 'Student Portal', status: 'ACTIVE' },
   { id: '4', name: 'Results', path: '/student/results', category: 'Student Portal', status: 'ACTIVE' },
 
@@ -48,16 +49,20 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
 
   // Exam Management Hub
   { id: '16', name: 'Overview', path: '/admin/hub/overview', category: 'Exam Management Hub', status: 'ACTIVE' },
-  { id: '17', name: 'Question Bank', path: '/admin/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
-  { id: '18', name: 'Writer Question Bank', path: '/admin/hub/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '49', name: 'Exam Blueprints', path: '/admin/blueprints', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '19', name: 'Exam Sets', path: '/admin/hub/exam-sets', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '17', name: 'Question Bank', path: '/admin/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '18', name: 'Question Bank', path: '/admin/hub/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '20', name: 'Exam Review', path: '/admin/hub/review', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '21', name: 'Bulk Upload Center', path: '/admin/hub/upload', category: 'Exam Management Hub', status: 'ACTIVE' },
-  { id: '22', name: 'Audit Logs', path: '/admin/hub/audit', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '46', name: 'Results Release', path: '/admin/hub/results-release', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '22', name: 'Audit Logs', path: '/admin/hub/audit', category: 'Exam Management Hub', status: 'ACTIVE' },
+  { id: '56', name: 'Student Registration', path: '/admin/hub/audit/student-registration', category: 'Exam Management Hub', status: 'ACTIVE' },
 
   // Operations & Records
   { id: '23', name: 'Command Center', path: '/admin/command-center', category: 'Operations & Records', status: 'ACTIVE' },
+  { id: '50', name: 'Recording Archive', path: '/admin/recordings', category: 'Operations & Records', status: 'ACTIVE' },
+  { id: '51', name: 'Incident Records', path: '/admin/recordings/incidents', category: 'Operations & Records', status: 'ACTIVE' },
 
   // Results & Analytics
   { id: '24', name: 'Score Management', path: '/admin/results/scores', category: 'Results & Analytics', status: 'ACTIVE' },
@@ -68,29 +73,38 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   { id: '27', name: 'Device Readiness', path: '/proctor/readiness', category: 'Proctor Operations', status: 'ACTIVE' },
   { id: '28', name: 'Attendance', path: '/proctor/attendance', category: 'Proctor Operations', status: 'ACTIVE' },
   { id: '29', name: 'Exam Monitoring', path: '/proctor/monitoring', category: 'Proctor Operations', status: 'ACTIVE' },
+  { id: '52', name: 'Incident Records', path: '/proctor/incidents', category: 'Proctor Operations', status: 'ACTIVE' },
   { id: '30', name: 'Student PC Reg', path: '/proctor/student-devices', category: 'Proctor Operations', status: 'ACTIVE' },
 
   // System Admin
   { id: '31', name: 'User Accounts', path: '/admin/users', category: 'System Admin', status: 'ACTIVE' },
   { id: '32', name: 'Compliance', path: '/admin/system', category: 'System Admin', status: 'ACTIVE' },
+  { id: '33', name: 'Student Appeals', path: '/admin/appeals', category: 'System Admin', status: 'ACTIVE' },
   { id: '47', name: 'System Integration', path: '/admin/integrations', category: 'System Admin', status: 'ACTIVE' },
-  { id: '34', name: 'Maintenance Center', path: '/admin/maintenance', category: 'System Admin', status: 'ACTIVE' },
+  { id: '53', name: 'Agency Monitoring', path: '/admin/government', category: 'System Admin', status: 'ACTIVE' },
+  { id: '34', name: 'Maintenance Center', path: '/admin/maintenance', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+
+  // Sub-modules of Maintenance & Protocols
+  { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance & Protocols', status: 'ACTIVE' },
 
   // Testing Center Logistics
   { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },
-
-  // Sub-modules of Maintenance Protocols
-  { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance Protocols', status: 'ACTIVE' },
-  { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance Protocols', status: 'ACTIVE' }
+  { id: '54', name: 'Proctor Management', path: '/admin/proctors', category: 'Testing Center Logistics', status: 'ACTIVE' },
+  { id: '55', name: 'Student PC Regs', path: '/admin/student-devices', category: 'Testing Center Logistics', status: 'ACTIVE' }
 ];
+
+function pruneRetiredMaintenanceModules(modules: MaintenanceModule[]) {
+  return modules.filter((module) => !RETIRED_MAINTENANCE_MODULE_IDS.has(module.id));
+}
 
 interface PhilSAContextType {
   user: User | null;
@@ -98,7 +112,9 @@ interface PhilSAContextType {
   login: (email: string, password?: string) => Promise<boolean>;
   startLoginIdentifier: (identifier: string) => Promise<ServiceResult<AuthIdentifierChallenge>>;
   verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthOtpChallenge>>;
-  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSession>>;
+  completeStaffActivation: (activationToken: string, password: string, confirmPassword: string) => Promise<ServiceResult<null>>;
+  verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSelfieChallenge>>;
+  completeLoginSelfie: (selfiePendingAuthToken: string, file: File) => Promise<ServiceResult<AuthSession>>;
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
@@ -123,8 +139,9 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const setMaintenanceModules = (modules: any[]) => {
-    setMaintenanceModulesInternal(modules);
-    localStorage.setItem('philsa_maintenance_modules', JSON.stringify(modules));
+    const activeModules = pruneRetiredMaintenanceModules(modules);
+    setMaintenanceModulesInternal(activeModules);
+    localStorage.setItem('philsa_maintenance_modules', JSON.stringify(activeModules));
   };
 
   const setInputModules = (modules: InputModuleControl[]) => {
@@ -155,17 +172,17 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
 
     if (savedMaintenance) {
       try {
-        const parsed = JSON.parse(savedMaintenance);
+        const parsed = pruneRetiredMaintenanceModules(JSON.parse(savedMaintenance));
         if (parsed.length < 25) {
           // Force override if old schema is found
           setMaintenanceModulesInternal(initialModules);
           localStorage.setItem('philsa_maintenance_modules', JSON.stringify(initialModules));
         } else {
           // Dynamic merge of any missing ones
-          const paths = parsed.map((item: any) => item.path);
+          const ids = parsed.map((item: any) => item.id);
           const merged = [
             ...parsed,
-            ...initialModules.filter(item => !paths.includes(item.path))
+            ...initialModules.filter(item => !ids.includes(item.id))
           ];
           setMaintenanceModulesInternal(merged);
           localStorage.setItem('philsa_maintenance_modules', JSON.stringify(merged));
@@ -305,15 +322,37 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     return authService.verifyLoginPassword(pendingAuthToken, password);
   };
 
+  const completeStaffActivation = async (
+    activationToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<null>> => {
+    if (!authService.completeStaffActivation) {
+      return authorizationError('Account activation is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+    return authService.completeStaffActivation(activationToken, password, confirmPassword);
+  };
+
   const verifyLoginOtp = async (
     otpPendingAuthToken: string,
     code: string,
-  ): Promise<ServiceResult<AuthSession>> => {
+  ): Promise<ServiceResult<AuthSelfieChallenge>> => {
     if (!authService.verifyLoginOtp) {
       return authorizationError('OTP login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
     }
 
-    const result = await authService.verifyLoginOtp(otpPendingAuthToken, code);
+    return authService.verifyLoginOtp(otpPendingAuthToken, code);
+  };
+
+  const completeLoginSelfie = async (
+    selfiePendingAuthToken: string,
+    file: File,
+  ): Promise<ServiceResult<AuthSession>> => {
+    if (!authService.completeLoginSelfie) {
+      return authorizationError('Selfie photo log is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    const result = await authService.completeLoginSelfie(selfiePendingAuthToken, file);
     if (result.ok) {
       setUser(result.data.user);
       addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
@@ -369,7 +408,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, verifyLoginOtp, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, completeLoginSelfie, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

@@ -3,6 +3,7 @@ from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model, login as django_login, logout as django_logout
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,6 +15,7 @@ from .serializers import (
     AdminUserAccountSerializer,
     AdminUserAccountWriteSerializer,
     IdentifierLoginSerializer,
+    LoginSelfieSerializer,
     OtpLoginSerializer,
     AdminAccountRecoveryRequestSerializer,
     PasswordLoginSerializer,
@@ -31,6 +33,7 @@ from .services import (
     deactivate_admin_user_account,
     complete_staff_activation,
     complete_password_recovery,
+    complete_login_selfie,
     list_admin_user_accounts,
     request_admin_account_recovery,
     request_password_recovery,
@@ -160,7 +163,7 @@ class OtpLoginView(APIView):
         serializer.is_valid(raise_exception=True)
 
         try:
-            issue = verify_login_otp(
+            result = verify_login_otp(
                 otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
                 code=serializer.validated_data["code"],
             )
@@ -168,6 +171,30 @@ class OtpLoginView(APIView):
             record_auth_event(event="auth.otp_submitted", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.otp_submitted", outcome="accepted", request=request)
+        return Response(result, status=202)
+
+
+class LoginSelfieView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+    parser_classes = [MultiPartParser, FormParser]
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
+
+    def post(self, request) -> Response:
+        serializer = LoginSelfieSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            issue = complete_login_selfie(
+                selfie_pending_auth_token=serializer.validated_data["selfiePendingAuthToken"],
+                image_file=serializer.validated_data["file"],
+                request=request,
+            )
+        except LoginFlowRejected:
+            record_auth_event(event="auth.login_selfie_submitted", outcome="rejected", request=request)
+            raise
+        record_auth_event(event="auth.login_selfie_submitted", outcome="accepted", request=request)
         user = get_user_model().objects.get(id=issue.user_id)
         django_login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         response = Response(

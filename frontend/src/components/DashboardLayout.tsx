@@ -60,7 +60,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: 'Student Portal',
     roles: ['STUDENT'],
     items: [
-      { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
       { icon: FileText, label: 'Application', href: '/student/application' },
       { icon: ClipboardList, label: 'Exam Permit', href: '/student/permit' },
       { icon: CheckCircle, label: 'Results', href: '/student/results' },
@@ -79,7 +78,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: 'System Administration',
     roles: ['UNIVERSITY_ADMIN', 'SYSTEM_ADMIN', 'ADMISSIONS_REVIEWER', 'EXECUTIVE', 'GOVERNMENT'],
     items: [
-      { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard', roles: ['UNIVERSITY_ADMIN', 'SYSTEM_ADMIN', 'ADMISSIONS_REVIEWER'] },
       { icon: ShieldCheck, label: 'Device Requests', href: '/admin/maintenance/proctor-device', roles: ['SYSTEM_ADMIN'] },
       {
         icon: ClipboardList,

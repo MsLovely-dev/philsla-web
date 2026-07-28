@@ -49,7 +49,6 @@ const manage: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPRO
 const fullAccess: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT'];
 
 const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
-  '1': readOnly,
   '2': fullAccess,
   '3': readOnly,
   '4': readOnly,
@@ -81,6 +80,7 @@ const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
   '30': manageRecords,
   '31': manageRecords,
   '32': operate,
+  '33': decide,
   '34': readOnly,
   '35': operate,
   '36': operate,
@@ -96,6 +96,50 @@ const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
   '46': decide,
   '47': operate,
   '48': readOnly,
+  '49': manageRecords,
+  '50': readOnly,
+  '51': readOnly,
+  '52': operate,
+  '53': readOnly,
+  '54': operate,
+  '55': manageRecords,
+  '56': readOnly,
+};
+
+const permissionMatrixModuleIds = new Set([
+  '2', '3', '4',
+  '5', '6', '7',
+  '8', '9', '48', '10', '11', '12', '13', '14', '15',
+  '16', '49', '19', '17', '20', '46', '22', '56',
+  '23', '50', '51',
+  '24',
+  '25', '26', '27', '28', '29', '52', '30',
+  '31', '32', '33', '47', '53',
+  '34', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45',
+  '35', '54', '55',
+]);
+
+const permissionMatrixModuleOrder = new Map(
+  Array.from(permissionMatrixModuleIds).map((id, index) => [id, index])
+);
+
+const permissionSubmoduleParentIds: Record<string, string> = {
+  '48': '9',
+  '56': '22',
+  '36': '34',
+  '37': '34',
+  '38': '34',
+  '39': '34',
+  '40': '34',
+  '41': '34',
+  '42': '34',
+  '43': '34',
+  '44': '34',
+  '45': '34',
+};
+
+const permissionModuleDisplayNames: Record<string, string> = {
+  '48': 'Audit Logs',
 };
 
 const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
@@ -106,12 +150,12 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
   ],
   PROCTOR: [
     { moduleIds: ['26'], actions: readOnly },
-    { moduleIds: ['25', '27', '28', '29', '40', '41', '42'], actions: operate },
+    { moduleIds: ['25', '27', '28', '29', '52', '40', '41', '42'], actions: operate },
   ],
   PROCTOR_ADMIN: [
     { moduleIds: ['26'], actions: readOnly },
-    { moduleIds: ['25', '27', '28', '29', '40', '41', '42'], actions: operate },
-    { moduleIds: ['30'], actions: manage },
+    { moduleIds: ['25', '27', '28', '29', '52', '40', '41', '42'], actions: operate },
+    { moduleIds: ['30', '55'], actions: manage },
   ],
   UNIVERSITY_ADMIN: [
     { moduleIds: ['1', '10', '15'], actions: readOnly },
@@ -119,10 +163,10 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
     { moduleIds: ['20'], actions: decide },
   ],
   TESTING_CENTER_ADMIN: [
-    { moduleIds: ['35', '11', '30'], actions: operate },
+    { moduleIds: ['35', '54', '55'], actions: operate },
   ],
   EXAM_ADMINISTRATOR: [
-    { moduleIds: ['16', '22', '15', '7', '6'], actions: readOnly },
+    { moduleIds: ['16', '22', '49', '15', '7', '6', '56'], actions: readOnly },
     { moduleIds: ['17', '18', '19', '21', '43'], actions: manage },
     { moduleIds: ['20', '46'], actions: decide },
   ],
@@ -130,16 +174,16 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
     { moduleIds: ['*'], actions: fullAccess },
   ],
   CHED_ADMIN: [
-    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+    { moduleIds: ['5', '6', '7', '15', '50', '51', '53'], actions: readOnly },
   ],
   DEPED_ADMIN: [
-    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+    { moduleIds: ['5', '6', '7', '15', '50', '51', '53'], actions: readOnly },
   ],
   TESDA_ADMIN: [
-    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+    { moduleIds: ['5', '6', '7', '15', '53'], actions: readOnly },
   ],
   EXECUTIVE: [
-    { moduleIds: ['5', '6', '7', '15'], actions: readOnly },
+    { moduleIds: ['5', '6', '7', '15', '50', '51', '53'], actions: readOnly },
   ],
 };
 
@@ -236,6 +280,14 @@ function isPermissionSelected(access: Set<string>, module: MaintenanceModule, pe
   return access.has(modulePermissionKey(module, permission)) || (permission === 'READ' && access.has(moduleKey(module.name)));
 }
 
+function isPermissionSubmodule(module: MaintenanceModule) {
+  return Boolean(permissionSubmoduleParentIds[module.id]);
+}
+
+function getPermissionModuleDisplayName(module: MaintenanceModule) {
+  return permissionModuleDisplayNames[module.id] ?? module.name;
+}
+
 function getInitials(name: string) {
   const initials = name
     .split(' ')
@@ -285,10 +337,15 @@ function PermissionMatrix({ modules, selectedAccess, onToggle, readOnly = false 
                 );
               }
 
+              const isSubmodule = isPermissionSubmodule(module);
+              const moduleDisplayName = getPermissionModuleDisplayName(module);
+
               rows.push(
                 <tr key={`${module.id}-${module.path}`} className="bg-philsa-bg/60">
-                  <td className="px-4 py-3">
-                    <p className="text-xs font-medium text-philsa-navy">{module.name}</p>
+                  <td className={cn('px-4 py-3', isSubmodule && 'pl-10')}>
+                    <p className={cn('text-xs text-philsa-navy flex items-center', isSubmodule ? 'font-normal' : 'font-semibold')}>
+                      <span>{moduleDisplayName}</span>
+                    </p>
                   </td>
                   {permissionActions.map((permission) => {
                     const applicable = isPermissionApplicable(module, permission.key);
@@ -298,7 +355,7 @@ function PermissionMatrix({ modules, selectedAccess, onToggle, readOnly = false 
                         <input
                           type="checkbox"
                           className="rounded border-philsa-border text-philsa-red focus:ring-philsa-red disabled:cursor-not-allowed disabled:opacity-45"
-                          aria-label={applicable ? `${permission.label} ${module.name}` : `${permission.label} is not applicable for ${module.name}`}
+                          aria-label={applicable ? `${permission.label} ${moduleDisplayName}` : `${permission.label} is not applicable for ${moduleDisplayName}`}
                           checked={applicable && isPermissionSelected(selectedAccess, module, permission.key)}
                           disabled={readOnly || !applicable}
                           onChange={() => onToggle(module, permission.key)}
@@ -369,7 +426,12 @@ export default function UserManagement() {
     return INITIAL_MAINTENANCE_MODULES.map((module) => {
       const savedModule = source.find((item) => item.id === module.id);
       return savedModule ? { ...module, status: savedModule.status } : module;
-    });
+    })
+      .filter((module) => permissionMatrixModuleIds.has(module.id))
+      .sort((left, right) => (
+        (permissionMatrixModuleOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+        (permissionMatrixModuleOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+      ));
   }, [maintenanceModules]);
 
   const selectedModuleAccess = useMemo(() => new Set(form.moduleAccess), [form.moduleAccess]);

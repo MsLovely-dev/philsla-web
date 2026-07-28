@@ -163,7 +163,7 @@ describe('BackendAuthService', () => {
     );
   });
 
-  it('completes local dev backend login when the backend exposes a dev OTP', async () => {
+  it('completes backend login after email OTP and selfie photo log', async () => {
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(
@@ -183,7 +183,16 @@ describe('BackendAuthService', () => {
             nextStep: 'otp',
             expiresInSeconds: 300,
             resendCooldownSeconds: 60,
-            devOtp: '123456',
+          },
+          { status: 202 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            selfiePendingAuthToken: 'selfie-token',
+            nextStep: 'selfie',
+            expiresInSeconds: 600,
           },
           { status: 202 },
         ),
@@ -216,11 +225,25 @@ describe('BackendAuthService', () => {
           },
           { status: 200 },
         ),
-      );
+    );
     const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
 
-    const result = await service.login({ email: 'student@example.test', password: 'Password1!' });
+    await service.startLoginIdentifier('student@example.test');
+    await service.verifyLoginPassword('identifier-token', 'Password1!');
+    const otpResult = await service.verifyLoginOtp('otp-token', '123456');
 
+    expect(otpResult).toEqual({
+      ok: true,
+      data: {
+        selfiePendingAuthToken: 'selfie-token',
+        nextStep: 'selfie',
+        expiresInSeconds: 600,
+      },
+    });
+    const result = await service.completeLoginSelfie(
+      'selfie-token',
+      new File(['selfie'], 'selfie.jpg', { type: 'image/jpeg' }),
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.user).toMatchObject({ id: 'dev-student', role: 'STUDENT' });
@@ -235,9 +258,37 @@ describe('BackendAuthService', () => {
     );
     expect(fetcher).toHaveBeenNthCalledWith(
       4,
+      'http://backend.test/api/v1/auth/login/selfie/',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(FormData),
+      }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      5,
       'http://backend.test/api/v1/auth/session/',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
+      }),
+    );
+  });
+
+  it('submits first-login staff activation password setup to the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.completeStaffActivation('activation-token', 'Password1!', 'Password1!');
+
+    expect(result).toEqual({ ok: true, data: null });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/auth/activation/staff/complete/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          activationToken: 'activation-token',
+          password: 'Password1!',
+          confirmPassword: 'Password1!',
+        }),
       }),
     );
   });

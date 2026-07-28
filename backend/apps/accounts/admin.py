@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import AccountProfile, AuthRefreshSession
+from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog
 
 
 class AccountProfileInline(admin.StackedInline):
@@ -27,6 +27,23 @@ class AuthRefreshSessionAdmin(admin.ModelAdmin):
     list_filter = ("revoked_at", "expires_at")
     search_fields = ("user__username", "user__email")
     readonly_fields = ("user", "token_hash", "account", "expires_at", "revoked_at", "created_at", "rotated_at")
+
+
+@admin.register(LoginSelfieLog)
+class LoginSelfieLogAdmin(admin.ModelAdmin):
+    list_display = ("user", "content_type", "size", "ip_address", "created_at")
+    search_fields = ("user__username", "user__email", "sha256", "correlation_id")
+    readonly_fields = (
+        "user",
+        "file",
+        "content_type",
+        "size",
+        "sha256",
+        "ip_address",
+        "user_agent",
+        "correlation_id",
+        "created_at",
+    )
 
 
 User = get_user_model()

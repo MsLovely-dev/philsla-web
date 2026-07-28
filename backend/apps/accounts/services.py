@@ -9,6 +9,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils.text import slugify
@@ -17,7 +18,7 @@ from django.utils.crypto import constant_time_compare
 from rest_framework.exceptions import APIException
 
 from .default_permissions import module_access_or_role_default
-from .models import AccountProfile, AuthRefreshSession
+from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog
 from .roles import PortalRole, get_security_tier, get_user_role
 
 
@@ -47,6 +48,8 @@ class AuthIssue:
 
 PENDING_IDENTIFIER_PREFIX = "auth:pending:identifier:"
 PENDING_OTP_PREFIX = "auth:pending:otp:"
+PENDING_SELFIE_PREFIX = "auth:pending:selfie:"
+PENDING_STAFF_ACTIVATION_PREFIX = "auth:pending:staff-activation:"
 ACCESS_TOKEN_PREFIX = "auth:access:"
 
 
@@ -347,6 +350,21 @@ def start_identifier_login(*, identifier: str) -> dict[str, Any]:
     if account is None:
         raise LoginFlowRejected("Identifier not found or invalid. Please check and try again.")
 
+    user = _get_user_for_account(account)
+    if user is not None and account["role"] != PortalRole.STUDENT.value and not user.has_usable_password():
+        activation_token = _new_token()
+        ttl = _ttl_seconds(settings.AUTH_PENDING_TOKEN_TTL_MINUTES)
+        cache.set(
+            f"{PENDING_STAFF_ACTIVATION_PREFIX}{activation_token}",
+            {"user_id": str(getattr(user, "id"))},
+            ttl,
+        )
+        return {
+            "activationToken": activation_token,
+            "nextStep": "activation",
+            "expiresInSeconds": ttl,
+        }
+
     pending_token = _new_token()
     ttl = _ttl_seconds(settings.AUTH_PENDING_TOKEN_TTL_MINUTES)
     cache.set(f"{PENDING_IDENTIFIER_PREFIX}{pending_token}", {"account": _session_account(account)}, ttl)
@@ -383,6 +401,21 @@ def verify_login_password(*, pending_auth_token: str, password: str) -> dict[str
         },
         ttl,
     )
+    try:
+        send_mail(
+            subject="Your PhilSA login verification code",
+            message=(
+                f"Your PhilSA login verification code is {otp_code}. "
+                f"This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. "
+                "If you did not request this code, reset your password or contact support."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[account["email"]],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        cache.delete(f"{PENDING_OTP_PREFIX}{otp_pending_token}")
+        raise LoginFlowRejected("We could not send the email verification code. Please try again.") from exc
 
     response = {
         "otpPendingAuthToken": otp_pending_token,
@@ -395,8 +428,8 @@ def verify_login_password(*, pending_auth_token: str, password: str) -> dict[str
     return response
 
 
-def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> AuthIssue:
-    """Validate the email OTP and issue the full backend session."""
+def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> dict[str, Any]:
+    """Validate the email OTP and issue a selfie-scoped pending-auth token."""
 
     pending_key = f"{PENDING_OTP_PREFIX}{otp_pending_auth_token}"
     pending = cache.get(pending_key)
@@ -413,7 +446,52 @@ def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> AuthIssue:
         raise LoginFlowRejected("Invalid or expired code. Please try again.")
 
     cache.delete(pending_key)
-    return _issue_tokens(pending["account"])
+    selfie_pending_token = _new_token()
+    ttl = _ttl_seconds(settings.AUTH_PENDING_TOKEN_TTL_MINUTES)
+    cache.set(f"{PENDING_SELFIE_PREFIX}{selfie_pending_token}", {"account": pending["account"]}, ttl)
+    return {
+        "selfiePendingAuthToken": selfie_pending_token,
+        "nextStep": "selfie",
+        "expiresInSeconds": ttl,
+    }
+
+
+def complete_login_selfie(
+    *,
+    selfie_pending_auth_token: str,
+    image_file,
+    request: object | None = None,
+) -> AuthIssue:
+    """Persist the login selfie evidence and issue the full backend session."""
+
+    pending_key = f"{PENDING_SELFIE_PREFIX}{selfie_pending_auth_token}"
+    pending = cache.get(pending_key)
+    if pending is None:
+        raise LoginFlowRejected("Your selfie verification session has expired. Please start again.")
+
+    account = pending["account"]
+    user = _get_user_for_account(account)
+    if user is None:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("Your selfie verification session has expired. Please start again.")
+
+    digest = hashlib.sha256()
+    for chunk in image_file.chunks():
+        digest.update(chunk)
+    image_file.seek(0)
+
+    LoginSelfieLog.objects.create(
+        user=user,
+        file=image_file,
+        content_type=getattr(image_file, "content_type", "") or "application/octet-stream",
+        size=getattr(image_file, "size", 0),
+        sha256=digest.hexdigest(),
+        ip_address=str(getattr(request, "META", {}).get("REMOTE_ADDR", ""))[:45] if request is not None else "",
+        user_agent=str(getattr(request, "META", {}).get("HTTP_USER_AGENT", ""))[:512] if request is not None else "",
+        correlation_id=str(getattr(request, "correlation_id", ""))[:80] if request is not None else "",
+    )
+    cache.delete(pending_key)
+    return _issue_tokens(account)
 
 
 def validate_access_token(*, access_token: str) -> tuple[object, object] | None:
@@ -540,7 +618,26 @@ def activate_student_registration_account(*, registration_application_id: str) -
 def complete_staff_activation(*, activation_token: str, password: str) -> None:
     """Complete first-time staff/admin activation from a time-limited link."""
 
-    raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")
+    pending_key = f"{PENDING_STAFF_ACTIVATION_PREFIX}{activation_token}"
+    pending = cache.get(pending_key)
+    if pending is None:
+        raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")
+
+    UserModel = get_user_model()
+    try:
+        user = UserModel.objects.select_related("account_profile").get(id=pending["user_id"], is_active=True)
+        profile = user.account_profile
+    except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.") from exc
+
+    if profile.role == PortalRole.STUDENT.value or user.has_usable_password():
+        cache.delete(pending_key)
+        raise LoginFlowRejected("This activation link has expired. Please request a new one from your administrator.")
+
+    user.set_password(password)
+    user.save(update_fields=["password"])
+    cache.delete(pending_key)
 
 
 def request_password_recovery(*, identifier: str) -> None:

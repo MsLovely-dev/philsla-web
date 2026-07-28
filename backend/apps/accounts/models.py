@@ -1,8 +1,15 @@
+import uuid
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from .roles import PortalRole, get_security_tier
+
+
+def login_selfie_upload_to(instance, filename):
+    extension = ".png" if instance.content_type == "image/png" else ".jpg"
+    return f"private/login-selfies/{instance.user_id}/{uuid.uuid4().hex}{extension}"
 
 
 class AccountProfile(models.Model):
@@ -57,3 +64,24 @@ class AuthRefreshSession(models.Model):
         from django.utils import timezone
 
         return self.revoked_at is None and self.expires_at > timezone.now()
+
+
+class LoginSelfieLog(models.Model):
+    """Captured selfie evidence required before issuing a login session."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="login_selfie_logs")
+    file = models.FileField(upload_to=login_selfie_upload_to)
+    content_type = models.CharField(max_length=32)
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    ip_address = models.CharField(max_length=45, blank=True, default="")
+    user_agent = models.CharField(max_length=512, blank=True, default="")
+    correlation_id = models.CharField(max_length=80, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+            models.Index(fields=["sha256"]),
+        ]

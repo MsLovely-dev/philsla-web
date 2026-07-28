@@ -8,17 +8,18 @@
 
 User story `US-SR-002` defines a shared login flow for registered PhilSLA users. It supersedes the earlier browser session assumption in [ADR-009](ADR-009-AUTHENTICATION-SESSION-AND-ACCOUNT-PROVISIONING.md) for portal authentication.
 
-The flow must support Student login by LRN or email, staff/admin login by email, mandatory password verification, mandatory email OTP verification, security-tier session policies, anti-enumeration controls, and audit logging at each step.
+The flow must support Student login by LRN or email, staff/admin login by email, mandatory password verification, mandatory email OTP verification, mandatory login selfie photo logging, security-tier session policies, anti-enumeration controls, and audit logging at each step.
 
 ## Decision
 
-Use a three-step backend-authenticated login flow for all portal users:
+Use a four-step backend-authenticated login flow for all portal users:
 
 1. Identifier entry.
 2. Password verification.
 3. Mandatory six-digit email OTP verification.
+4. Mandatory login selfie photo logging.
 
-No full session is issued until all three steps succeed server-side.
+No full session is issued until all four steps succeed server-side.
 
 Identifier resolution:
 
@@ -64,7 +65,7 @@ Password and account recovery:
 - Password recovery uses the account's verified email address only.
 - A recovery request must not reveal whether the identifier exists, whether the account is inactive, or whether the account belongs to a student or staff/admin user.
 - Recovery links must be single-use, stored server-side only as hashes, and expire after 30 minutes.
-- Recovery links must not create a session. After password reset, the user must complete the normal three-step login flow.
+- Recovery links must not create a session. After password reset, the user must complete the normal four-step login flow.
 - A password reset invalidates all active access and refresh tokens for the account.
 - Recovery is denied with a generic message for suspended, deactivated, unverified, role-revoked, or scope-revoked accounts.
 - Staff/admin account recovery may also be initiated by an authorized `SYSTEM_ADMIN`, but the reset must still send a user-controlled activation/recovery link to the account email. System administrators must not set a reusable password for another user.
@@ -82,7 +83,7 @@ Invitation and activation:
 
 Full session:
 
-- After OTP success, issue a short-lived access token and rotating refresh token.
+- After OTP success, issue a selfie-scoped pending-auth token. After the login selfie image is saved for audit evidence, issue a short-lived access token and rotating refresh token.
 - Access token lifetime is approximately 15 minutes.
 - Refresh token is stored in an HttpOnly, Secure, SameSite=Strict cookie with approximately seven-day expiry unless a shorter security-tier policy applies.
 - Refresh tokens rotate on every use and the previous refresh token is invalidated.
@@ -120,7 +121,7 @@ Out of scope:
 - [ADR-009](ADR-009-AUTHENTICATION-SESSION-AND-ACCOUNT-PROVISIONING.md) remains the account-provisioning decision, but its earlier browser server-side session assumption is superseded by this ADR.
 - Authentication implementation must include pending-auth token storage, OTP hashing, email delivery integration, refresh-token rotation, session revocation, account lockout, rate limits, audit events, and security-tier enforcement.
 - Account implementation must include activation, password reset, recovery-link hashing, recovery rate limits, and full session revocation after password reset.
-- API clients must not receive role or permission details before OTP verification succeeds.
+- API clients must not receive role or permission details before the login selfie step succeeds.
 - CORS, CSRF, cookie domain, trusted origins, TLS termination, WAF/API gateway rate limits, email provider, and deployment-specific security settings remain `TBD`.
 
 ## Alternatives considered

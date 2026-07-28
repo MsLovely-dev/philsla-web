@@ -298,6 +298,7 @@ function getEmptyRegistrationFormData() {
 export default function StudentApplication() {
   const isPwaMode = new URLSearchParams(window.location.search).get('pwa') === 'true';
   const { user, addAuditLog, inputModules, addTicket } = usePhilSA();
+  const usesBackendServiceMode = import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend';
   const registrationSessionIdRef = useRef(getOrCreateRegistrationSessionId());
   const restoredSessionDraftRef = useRef<RegistrationSessionDraft | null>(readRegistrationSessionDraft());
   const restoredSessionDraft = restoredSessionDraftRef.current;
@@ -691,7 +692,6 @@ export default function StudentApplication() {
     setVerificationPath(activeVerificationPath);
     setLrnVerificationToken('');
     setEmailOtp('');
-    setGeneratedEmailOtp('');
     setEmailOtpSentTo('');
     setIsEmailVerified(false);
     setCurrentSection(0);
@@ -850,6 +850,7 @@ export default function StudentApplication() {
     Boolean(myApp && (application.id === myApp.id || (application.userId && myApp.userId && application.userId === myApp.userId)));
 
   const doesLrnAlreadyExist = (value: string) => {
+    if (usesBackendServiceMode) return false;
     const normalizedValue = value.trim();
     if (!normalizedValue) return false;
     return applications.some(application =>
@@ -858,6 +859,7 @@ export default function StudentApplication() {
   };
 
   const doesEmailAlreadyExist = (value: string) => {
+    if (usesBackendServiceMode) return false;
     const normalizedValue = value.trim().toLowerCase();
     if (!normalizedValue) return false;
     return applications.some(application =>
@@ -928,6 +930,12 @@ export default function StudentApplication() {
 
   const isStep1FieldRequired = (field: StudentRegistrationFieldConfig) => field.priority === 'High Priority';
   const selectedMultiplePwdEntries = Object.entries(formData.pwdMultipleCategories).filter(([, condition]) => condition.trim());
+  const manualStep1NamePlaceholders: Record<string, string> = {
+    'First Name': 'Enter First Name',
+    'Middle Name': 'Enter Middle Name',
+    'Last Name': 'Enter Last Name',
+    'LRN': 'Enter Learner Reference Number',
+  };
 
   const renderManualStep1Field = (field: StudentRegistrationFieldConfig) => {
     const formKey = step1FormFieldKeys[field.value];
@@ -982,7 +990,7 @@ export default function StudentApplication() {
             className={cn("input-philsa bg-white", (errors[errorKey] || existingValueMessage) && "border-philsa-red bg-philsa-red/5")}
             value={value}
             onChange={(e) => updateValue(e.target.value)}
-            placeholder={field.remarks || `Enter ${field.value}`}
+            placeholder={manualStep1NamePlaceholders[field.value] || field.remarks || `Enter ${field.value}`}
           />
         )}
         {(errors[errorKey] || existingValueMessage) && (
@@ -3686,7 +3694,7 @@ export default function StudentApplication() {
                                  <div>
                                     <h5 className="text-xs font-black text-blue-900 uppercase tracking-widest">Email OTP Sent</h5>
                                     <p className="text-xs text-blue-800 font-medium mt-1">
-                                       Enter the 6-digit OTP sent to your email address. In local development, read the OTP from the Django backend console.
+                                       Enter the 6-digit OTP sent to your email address. Check your inbox and spam folder if it does not arrive soon.
                                     </p>
                                     <p className="text-[11px] text-blue-700 mt-1">Target email: {emailOtpSentTo}</p>
                                  </div>
@@ -3729,7 +3737,7 @@ export default function StudentApplication() {
                         <div className={cn("p-4 rounded-2xl border flex items-start gap-3", isEmailVerified ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200")}>
                            <ShieldCheck className={cn("w-5 h-5 mt-0.5 shrink-0", isEmailVerified ? "text-green-700" : "text-blue-700")} />
                            <p className={cn("text-xs font-bold leading-relaxed", isEmailVerified ? "text-green-800" : "text-blue-800")}>
-                              Email must be verified using OTP before setting password and mobile number. For local development, the OTP email is printed in the Django backend console after Send OTP.
+                              Email must be verified using OTP before setting password and mobile number. Select Send OTP and use the code delivered to your email address.
                            </p>
                         </div>
 

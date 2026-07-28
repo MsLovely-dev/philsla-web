@@ -51,6 +51,14 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
     },
     {
         "method": "POST",
+        "path": "/api/v1/auth/login/selfie/",
+        "response": None,
+        "doc_heading": "### `POST /api/v1/auth/login/selfie/`",
+        "doc_test_reference": "backend/apps/accounts/tests/test_login_endpoints.py",
+        "route_namespace": "accounts",
+    },
+    {
+        "method": "POST",
         "path": "/api/v1/auth/logout/",
         "response": None,
         "doc_heading": "### `POST /api/v1/auth/logout/`",

@@ -76,6 +76,30 @@ class OtpLoginSerializer(serializers.Serializer):
         raise serializers.ValidationError("Please enter the 6-digit code sent to your email.")
 
 
+class LoginSelfieSerializer(serializers.Serializer):
+    selfiePendingAuthToken = serializers.CharField(
+        trim_whitespace=True,
+        error_messages={
+            "blank": "Your selfie verification session has expired. Please start again.",
+            "required": "Your selfie verification session has expired. Please start again.",
+        },
+    )
+    file = serializers.FileField(
+        error_messages={
+            "blank": "Capture a selfie before continuing.",
+            "required": "Capture a selfie before continuing.",
+        },
+    )
+
+    def validate_file(self, value):
+        content_type = getattr(value, "content_type", "")
+        if content_type not in {"image/jpeg", "image/png"}:
+            raise serializers.ValidationError("Selfie image must be a JPEG or PNG file.")
+        if getattr(value, "size", 0) <= 0:
+            raise serializers.ValidationError("Capture a selfie before continuing.")
+        return value
+
+
 class TokenRevocationSerializer(serializers.Serializer):
     scope = serializers.ChoiceField(choices=("current", "all"), default="current", required=False)
 

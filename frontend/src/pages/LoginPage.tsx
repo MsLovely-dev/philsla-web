@@ -1,13 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, CheckCircle2, LogIn, Mail, Shield } from 'lucide-react';
+import { ArrowRight, Camera, CheckCircle2, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LRN_PATTERN = /^\d{12}$/;
 const LOCAL_BACKEND_ACCOUNTS = [
   'admissions.reviewer@yopmail.com',
   'proctor@yopmail.com',
@@ -22,11 +21,11 @@ const LOCAL_BACKEND_ACCOUNTS = [
   'executive@yopmail.com',
 ];
 
-type LoginStep = 'identifier' | 'password' | 'otp';
+type LoginStep = 'identifier' | 'activation' | 'password' | 'otp' | 'selfie';
 
 function isValidIdentifier(value: string): boolean {
   const trimmed = value.trim();
-  return LRN_PATTERN.test(trimmed) || EMAIL_PATTERN.test(trimmed);
+  return EMAIL_PATTERN.test(trimmed);
 }
 
 function routeForRole(role: UserRole): string {
@@ -45,35 +44,60 @@ function maskIdentifier(identifier: string): string {
   if (EMAIL_PATTERN.test(identifier)) {
     return identifier.replace(/(.{3})(.*)(?=@)/, '$1***');
   }
-  if (LRN_PATTERN.test(identifier)) {
-    return `${identifier.slice(0, 3)}******${identifier.slice(-3)}`;
-  }
   return identifier;
 }
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [step, setStep] = useState<LoginStep>('identifier');
   const [pendingAuthToken, setPendingAuthToken] = useState('');
+  const [activationToken, setActivationToken] = useState('');
   const [otpPendingAuthToken, setOtpPendingAuthToken] = useState('');
+  const [selfiePendingAuthToken, setSelfiePendingAuthToken] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
-  const [localDevOtp, setLocalDevOtp] = useState<string | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [selfiePreviewUrl, setSelfiePreviewUrl] = useState('');
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
-  const { startLoginIdentifier, verifyLoginPassword, verifyLoginOtp } = usePhilSA();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, completeLoginSelfie } = usePhilSA();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      cameraStream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      if (selfiePreviewUrl) {
+        URL.revokeObjectURL(selfiePreviewUrl);
+      }
+    };
+  }, [selfiePreviewUrl]);
 
   const handleIdentifierStep = async (event: React.FormEvent) => {
     event.preventDefault();
     const normalizedIdentifier = identifier.trim();
 
     if (!normalizedIdentifier) {
-      setError('Please enter your LRN or email address.');
+      setError('Please enter your email address.');
       return;
     }
     if (!isValidIdentifier(normalizedIdentifier)) {
-      setError('Enter a valid LRN or email address.');
+      setError('Enter a valid email address.');
       return;
     }
 
@@ -88,7 +112,61 @@ export default function LoginPage() {
     }
 
     setIdentifier(normalizedIdentifier);
-    setPendingAuthToken(result.data.pendingAuthToken);
+    setNotice('');
+
+    if (result.data.nextStep === 'activation') {
+      setActivationToken(result.data.activationToken ?? '');
+      setNewPassword('');
+      setConfirmPassword('');
+      setStep('activation');
+      return;
+    }
+
+    setPendingAuthToken(result.data.pendingAuthToken ?? '');
+    setStep('password');
+  };
+
+  const handleActivationStep = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!newPassword || !confirmPassword) {
+      setError('Enter and confirm your new password.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setNotice('');
+    const result = await completeStaffActivation(activationToken, newPassword, confirmPassword);
+    setLoading(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    const loginRestart = await startLoginIdentifier(identifier);
+    if (loginRestart.ok === false) {
+      setError(loginRestart.error.message);
+      return;
+    }
+
+    if (loginRestart.data.nextStep !== 'password') {
+      setError('Password setup did not complete. Please start again.');
+      return;
+    }
+
+    setPendingAuthToken(loginRestart.data.pendingAuthToken ?? '');
+    setPassword(newPassword);
+    setNewPassword('');
+    setConfirmPassword('');
+    setActivationToken('');
+    setNotice('Password set. Continue with your new password.');
     setStep('password');
   };
 
@@ -111,7 +189,8 @@ export default function LoginPage() {
     }
 
     setOtpPendingAuthToken(result.data.otpPendingAuthToken);
-    setLocalDevOtp(result.data.devOtp ?? null);
+    setSelfiePendingAuthToken('');
+    resetSelfieCapture();
     setOtp(['', '', '', '', '', '']);
     setStep('otp');
   };
@@ -135,6 +214,99 @@ export default function LoginPage() {
       return;
     }
 
+    setSelfiePendingAuthToken(result.data.selfiePendingAuthToken);
+    resetSelfieCapture();
+    setStep('selfie');
+  };
+
+  const startCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Camera access is not available in this browser.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      cameraStream?.getTracks().forEach((track) => track.stop());
+      setCameraStream(stream);
+      clearSelfiePreview();
+    } catch {
+      setError('Camera permission is required to complete login.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearSelfiePreview = () => {
+    if (selfiePreviewUrl) {
+      URL.revokeObjectURL(selfiePreviewUrl);
+    }
+    setSelfiePreviewUrl('');
+    setSelfieFile(null);
+  };
+
+  const resetSelfieCapture = () => {
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+    clearSelfiePreview();
+  };
+
+  const captureSelfie = async () => {
+    const video = videoRef.current;
+    if (!video || !cameraStream || video.videoWidth === 0 || video.videoHeight === 0) {
+      setError('Initialize the camera before capturing your selfie.');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      setError('Selfie capture failed. Please try again.');
+      return;
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) {
+      setError('Selfie capture failed. Please try again.');
+      return;
+    }
+
+    clearSelfiePreview();
+    const file = new File([blob], `login-selfie-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    cameraStream.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+    setSelfieFile(file);
+    setSelfiePreviewUrl(URL.createObjectURL(file));
+    setError('');
+  };
+
+  const handleSelfieStep = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!selfieFile) {
+      setError('Capture a selfie before continuing.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    const result = await completeLoginSelfie(selfiePendingAuthToken, selfieFile);
+    setLoading(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    resetSelfieCapture();
     navigate(routeForRole(result.data.user.role));
   };
 
@@ -152,11 +324,16 @@ export default function LoginPage() {
   const resetToIdentifier = () => {
     setStep('identifier');
     setPendingAuthToken('');
+    setActivationToken('');
     setOtpPendingAuthToken('');
+    setSelfiePendingAuthToken('');
     setPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
     setOtp(['', '', '', '', '', '']);
-    setLocalDevOtp(null);
+    resetSelfieCapture();
     setError('');
+    setNotice('');
   };
 
   return (
@@ -186,34 +363,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mb-8">
-            {[
-              ['identifier', 'Identifier'],
-              ['password', 'Password'],
-              ['otp', 'Email OTP'],
-            ].map(([key, label], index) => {
-              const active = step === key;
-              const complete =
-                (key === 'identifier' && step !== 'identifier') ||
-                (key === 'password' && step === 'otp');
-              return (
-                <div
-                  key={key}
-                  className={`rounded-xl px-3 py-2 text-center text-[9px] font-black uppercase tracking-widest border ${
-                    active || complete
-                      ? 'bg-philsa-red text-white border-philsa-red'
-                      : 'bg-philsa-bg text-philsa-gray border-philsa-border/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-center gap-1">
-                    {complete ? <CheckCircle2 className="w-3 h-3" /> : index + 1}
-                    {label}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
           {error && (
             <div className="bg-red-50 border border-red-100 text-red-600 px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
@@ -221,25 +370,32 @@ export default function LoginPage() {
             </div>
           )}
 
+          {notice && (
+            <div className="bg-[#e5f1ec] border border-[#00563F]/15 text-[#00563F] px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
+              <CheckCircle2 className="w-4 h-4" />
+              {notice}
+            </div>
+          )}
+
           {step === 'identifier' && (
             <form onSubmit={handleIdentifierStep} className="space-y-8">
               <div>
-                <label className="label-philsa block mb-3 ml-1">LRN or Email</label>
+                <label className="label-philsa block mb-3 ml-1">Email</label>
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
                   <input
-                    type="text"
+                    type="email"
                     inputMode="email"
                     value={identifier}
                     onChange={(event) => setIdentifier(event.target.value)}
-                    placeholder="Student LRN or account email"
+                    placeholder="Enter your account email"
                     className="input-philsa pl-14"
                     autoComplete="username"
                     required
                   />
                 </div>
                 <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
-                  Students may use LRN or email. Staff and admin users must use email.
+                  Students, staff, and admin users must use their registered email address.
                 </p>
               </div>
 
@@ -263,8 +419,70 @@ export default function LoginPage() {
               </div>
 
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
-                {loading ? 'Checking Identifier...' : 'Continue to Password'}
+                {loading ? 'Checking Email...' : 'Continue to Password'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+            </form>
+          )}
+
+          {step === 'activation' && (
+            <form onSubmit={handleActivationStep} className="space-y-8">
+              <div>
+                <label className="label-philsa block mb-3 ml-1">Create Password</label>
+                <div className="relative group">
+                  <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    placeholder="Set your account password"
+                    className="input-philsa pl-14"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
+                  Use at least 8 characters with uppercase, lowercase, number, and special character.
+                </p>
+              </div>
+
+              <div>
+                <label className="label-philsa block mb-3 ml-1">Confirm Password</label>
+                <div className="relative group">
+                  <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Confirm your password"
+                    className="input-philsa pl-14"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="bg-[#e5f1ec]/30 p-4 rounded-lg border border-[#00563F]/15 flex items-start gap-4">
+                <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-xs border border-gray-200">
+                  <Shield className="w-4 h-4 text-[#00563F]" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-[#00563F] uppercase tracking-widest mb-1">Account</p>
+                  <p className="text-[10px] text-[#00563F]/80 font-bold leading-tight uppercase">{maskIdentifier(identifier)}</p>
+                </div>
+              </div>
+
+              <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
+                {loading ? 'Setting Password...' : 'Set Password'}
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+
+              <button
+                type="button"
+                onClick={resetToIdentifier}
+                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
+              >
+                Change Account
               </button>
             </form>
           )}
@@ -325,12 +543,6 @@ export default function LoginPage() {
                   Sent to {maskIdentifier(identifier)}
                 </p>
 
-                {localDevOtp && (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-2xl mb-6 text-xs font-bold">
-                    Local development OTP: <span className="font-black tracking-widest">{localDevOtp}</span>
-                  </div>
-                )}
-
                 <div className="flex justify-between gap-3">
                   {otp.map((digit, index) => (
                     <input
@@ -366,6 +578,104 @@ export default function LoginPage() {
                 className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
               >
                 ← Back to Password
+              </button>
+            </form>
+          )}
+
+          {step === 'selfie' && (
+            <form onSubmit={handleSelfieStep} className="space-y-8">
+              <div className="text-center">
+                <p className="text-[10px] font-black text-philsa-red uppercase tracking-[0.28em] mb-2">
+                  Secure Login Verification
+                </p>
+                <h3 className="text-2xl font-black text-philsa-navy tracking-tight leading-none mb-2">
+                  Selfie Photo Log
+                </h3>
+                <p className="text-[10px] text-[#31548a] font-bold uppercase tracking-wider">
+                  Take a quick selfie photograph to log your entry session
+                </p>
+              </div>
+
+              <div className="bg-[#101827] rounded-2xl overflow-hidden ring-1 ring-white/10 shadow-sm">
+                <div className="relative aspect-video bg-[#101827] flex items-center justify-center">
+                  {selfiePreviewUrl ? (
+                    <img src={selfiePreviewUrl} alt="Captured login selfie preview" className="w-full h-full object-cover" />
+                  ) : cameraStream ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover scale-x-[-1]"
+                    />
+                  ) : (
+                    <div className="text-center px-6">
+                      <div className="w-16 h-16 rounded-full bg-white/10 border border-white/15 flex items-center justify-center mx-auto mb-5">
+                        <Camera className="w-8 h-8 text-white/80" />
+                      </div>
+                      <p className="text-white text-sm font-black uppercase tracking-wider mb-2">
+                        Device Camera Portal Ready
+                      </p>
+                      <p className="text-white/50 text-[11px] font-bold leading-relaxed">
+                        Camera permission is required to capture your login selfie.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="p-5 bg-[#101827] flex flex-col sm:flex-row gap-3">
+                  {!cameraStream && !selfiePreviewUrl && (
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      disabled={loading}
+                      className="w-full bg-white text-philsa-navy rounded-xl py-3 text-[11px] font-black uppercase tracking-widest hover:bg-white/90 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Initialize Camera
+                    </button>
+                  )}
+
+                  {cameraStream && !selfiePreviewUrl && (
+                    <button
+                      type="button"
+                      onClick={captureSelfie}
+                      disabled={loading}
+                      className="w-full bg-white text-philsa-navy rounded-xl py-3 text-[11px] font-black uppercase tracking-widest hover:bg-white/90 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Camera className="w-4 h-4" />
+                      Capture Selfie
+                    </button>
+                  )}
+
+                  {selfiePreviewUrl && (
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      disabled={loading}
+                      className="w-full bg-white/10 text-white rounded-xl py-3 text-[11px] font-black uppercase tracking-widest hover:bg-white/15 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Retake
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <button disabled={loading || !selfieFile} className="btn-primary w-full flex items-center justify-center gap-3">
+                {loading ? 'Saving Selfie Log...' : 'Establish Session'}
+                <LogIn className="w-5 h-5 text-white/50" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  resetSelfieCapture();
+                  setStep('otp');
+                }}
+                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
+              >
+                &larr; Back to OTP Code
               </button>
             </form>
           )}
