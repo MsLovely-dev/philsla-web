@@ -50,6 +50,21 @@ AUTH_EMAIL_PROVIDER="console"
 DEFAULT_FROM_EMAIL="PhilSA Admissions <no-reply@example.test>"
 ```
 
+To send local development registration OTP emails to real inboxes through Brevo SMTP, use:
+
+```env
+AUTH_EMAIL_PROVIDER="brevo_smtp"
+BREVO_EMAIL_SENDER="PhilSA Admissions <no-reply@your-verified-domain.example>"
+BREVO_SMTP_HOST="smtp-relay.brevo.com"
+BREVO_SMTP_PORT="587"
+BREVO_SMTP_USERNAME="your-brevo-smtp-login"
+BREVO_SMTP_PASSWORD="your-brevo-smtp-key"
+BREVO_SMTP_USE_TLS="true"
+DEFAULT_FROM_EMAIL="PhilSA Admissions <no-reply@your-verified-domain.example>"
+```
+
+The Brevo sender should be verified in Brevo before relying on delivery. Keep SMTP login values and keys in local environment files only.
+
 Azure Communication Services Email is the production email provider because the platform is expected to deploy on Azure. Switch the same OTP implementation to Azure Communication Services SMTP with environment settings like:
 
 ```env
@@ -65,7 +80,7 @@ AZURE_COMMUNICATION_EMAIL_SMTP_PASSWORD=""
 DEFAULT_FROM_EMAIL="PhilSA Admissions <no-reply@your-verified-domain.example>"
 ```
 
-Keep `AUTH_EMAIL_PROVIDER="console"` in development. Do not commit Azure connection strings, access keys, SMTP passwords, sender secrets, or verified-domain credentials.
+Keep `AUTH_EMAIL_PROVIDER="console"` for local console-only development, or use `AUTH_EMAIL_PROVIDER="brevo_smtp"` when real dev email delivery is needed. Do not commit Azure connection strings, access keys, Brevo SMTP keys, SMTP passwords, sender secrets, or verified-domain credentials.
 
 Security settings use strict defaults for cookies and headers. Local development allows only localhost origins. Production must provide `DJANGO_ALLOWED_HOSTS`; trusted CSRF/CORS origins remain environment-specific until deployment domains are selected.
 

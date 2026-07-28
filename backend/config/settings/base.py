@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 
@@ -20,6 +22,10 @@ def env_bool(name: str, default: bool) -> bool:
 
 def env_list(name: str) -> list[str]:
     return [value.strip() for value in os.environ.get(name, "").split(",") if value.strip()]
+
+
+def is_placeholder_email_sender(value: str) -> bool:
+    return not value or "example" in value or "your-verified-domain" in value
 
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "unsafe-development-key")
@@ -144,6 +150,12 @@ AZURE_COMMUNICATION_EMAIL_SMTP_HOST = os.environ.get("AZURE_COMMUNICATION_EMAIL_
 AZURE_COMMUNICATION_EMAIL_SMTP_PORT = env_int("AZURE_COMMUNICATION_EMAIL_SMTP_PORT", 587)
 AZURE_COMMUNICATION_EMAIL_SMTP_USERNAME = os.environ.get("AZURE_COMMUNICATION_EMAIL_SMTP_USERNAME", "")
 AZURE_COMMUNICATION_EMAIL_SMTP_PASSWORD = os.environ.get("AZURE_COMMUNICATION_EMAIL_SMTP_PASSWORD", "")
+BREVO_EMAIL_SENDER = os.environ.get("BREVO_EMAIL_SENDER", "")
+BREVO_SMTP_HOST = os.environ.get("BREVO_SMTP_HOST", "smtp-relay.brevo.com")
+BREVO_SMTP_PORT = env_int("BREVO_SMTP_PORT", 587)
+BREVO_SMTP_USERNAME = os.environ.get("BREVO_SMTP_USERNAME", "")
+BREVO_SMTP_PASSWORD = os.environ.get("BREVO_SMTP_PASSWORD", "")
+BREVO_SMTP_USE_TLS = env_bool("BREVO_SMTP_USE_TLS", True)
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "PhilSA Admissions <no-reply@example.test>")
@@ -156,6 +168,19 @@ if AUTH_EMAIL_PROVIDER == "azure_communication_services_smtp":
     EMAIL_HOST_PASSWORD = AZURE_COMMUNICATION_EMAIL_SMTP_PASSWORD
     if AZURE_COMMUNICATION_EMAIL_SENDER:
         DEFAULT_FROM_EMAIL = AZURE_COMMUNICATION_EMAIL_SENDER
+elif AUTH_EMAIL_PROVIDER == "brevo_smtp":
+    if not BREVO_SMTP_USERNAME or not BREVO_SMTP_PASSWORD:
+        raise ImproperlyConfigured("BREVO_SMTP_USERNAME and BREVO_SMTP_PASSWORD are required when AUTH_EMAIL_PROVIDER=brevo_smtp.")
+    brevo_from_email = BREVO_EMAIL_SENDER or DEFAULT_FROM_EMAIL
+    if is_placeholder_email_sender(brevo_from_email):
+        raise ImproperlyConfigured("BREVO_EMAIL_SENDER or DEFAULT_FROM_EMAIL must be set to a verified Brevo sender.")
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = BREVO_SMTP_HOST
+    EMAIL_PORT = BREVO_SMTP_PORT
+    EMAIL_USE_TLS = BREVO_SMTP_USE_TLS
+    EMAIL_HOST_USER = BREVO_SMTP_USERNAME
+    EMAIL_HOST_PASSWORD = BREVO_SMTP_PASSWORD
+    DEFAULT_FROM_EMAIL = brevo_from_email
 
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 CORS_ALLOWED_ORIGINS = env_list("DJANGO_CORS_ALLOWED_ORIGINS")
