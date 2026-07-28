@@ -57,7 +57,7 @@ export class LocalStorageAuthService implements AuthService {
     const user = this.findUser(normalizedIdentifier) ?? this.findStudentFromSavedApplication(normalizedIdentifier);
 
     if (!user) {
-      return authorizationError('Identifier not found or invalid. Please check and try again.', 'AUTHENTICATION_FAILED');
+      return authorizationError('Email not found or invalid. Please check and try again.', 'AUTHENTICATION_FAILED');
     }
 
     this.pendingIdentifier = normalizedIdentifier;
@@ -76,7 +76,7 @@ export class LocalStorageAuthService implements AuthService {
     }
 
     if (!password) {
-      return authorizationError('Incorrect email/LRN or password.', 'AUTHENTICATION_FAILED');
+      return authorizationError('Incorrect email or password.', 'AUTHENTICATION_FAILED');
     }
 
     return serviceSuccess({

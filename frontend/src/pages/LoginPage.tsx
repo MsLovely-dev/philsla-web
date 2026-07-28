@@ -7,7 +7,6 @@ import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LRN_PATTERN = /^\d{12}$/;
 const LOCAL_BACKEND_ACCOUNTS = [
   'admissions.reviewer@yopmail.com',
   'proctor@yopmail.com',
@@ -26,7 +25,7 @@ type LoginStep = 'identifier' | 'activation' | 'password' | 'otp';
 
 function isValidIdentifier(value: string): boolean {
   const trimmed = value.trim();
-  return LRN_PATTERN.test(trimmed) || EMAIL_PATTERN.test(trimmed);
+  return EMAIL_PATTERN.test(trimmed);
 }
 
 function routeForRole(role: UserRole): string {
@@ -44,9 +43,6 @@ function routeForRole(role: UserRole): string {
 function maskIdentifier(identifier: string): string {
   if (EMAIL_PATTERN.test(identifier)) {
     return identifier.replace(/(.{3})(.*)(?=@)/, '$1***');
-  }
-  if (LRN_PATTERN.test(identifier)) {
-    return `${identifier.slice(0, 3)}******${identifier.slice(-3)}`;
   }
   return identifier;
 }
@@ -72,11 +68,11 @@ export default function LoginPage() {
     const normalizedIdentifier = identifier.trim();
 
     if (!normalizedIdentifier) {
-      setError('Please enter your LRN or email address.');
+      setError('Please enter your email address.');
       return;
     }
     if (!isValidIdentifier(normalizedIdentifier)) {
-      setError('Enter a valid LRN or email address.');
+      setError('Enter a valid email address.');
       return;
     }
 
@@ -262,22 +258,22 @@ export default function LoginPage() {
           {step === 'identifier' && (
             <form onSubmit={handleIdentifierStep} className="space-y-8">
               <div>
-                <label className="label-philsa block mb-3 ml-1">LRN or Email</label>
+                <label className="label-philsa block mb-3 ml-1">Email</label>
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
                   <input
-                    type="text"
+                    type="email"
                     inputMode="email"
                     value={identifier}
                     onChange={(event) => setIdentifier(event.target.value)}
-                    placeholder="Student LRN or account email"
+                    placeholder="Enter your account email"
                     className="input-philsa pl-14"
                     autoComplete="username"
                     required
                   />
                 </div>
                 <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
-                  Students may use LRN or email. Staff and admin users must use email.
+                  Students, staff, and admin users must use their registered email address.
                 </p>
               </div>
 
@@ -301,7 +297,7 @@ export default function LoginPage() {
               </div>
 
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
-                {loading ? 'Checking Identifier...' : 'Continue to Password'}
+                {loading ? 'Checking Email...' : 'Continue to Password'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </form>
