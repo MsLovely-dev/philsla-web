@@ -17,6 +17,35 @@ class LoginEndpointTests(TestCase):
         cache.clear()
         super().tearDown()
 
+    def create_student_account(self):
+        user = get_user_model().objects.create_user(
+            username="student",
+            email="student@example.test",
+            password="Password1!",
+        )
+        AccountProfile.objects.create(user=user, role=PortalRole.STUDENT.value, lrn="123456789012")
+        return user
+
+    def start_student_otp_login(self) -> dict:
+        self.create_student_account()
+        identifier_response = self.client.post(
+            "/api/v1/auth/login/identifier/",
+            data={"identifier": "student@example.test"},
+            content_type="application/json",
+        )
+        self.assertEqual(identifier_response.status_code, 202)
+
+        password_response = self.client.post(
+            "/api/v1/auth/login/password/",
+            data={
+                "pendingAuthToken": identifier_response.json()["pendingAuthToken"],
+                "password": "Password1!",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(password_response.status_code, 202)
+        return password_response.json()
+
     def test_identifier_step_rejects_invalid_identifier_format(self) -> None:
         response = self.client.post(
             "/api/v1/auth/login/identifier/",
@@ -220,3 +249,49 @@ class LoginEndpointTests(TestCase):
 
         self.assertEqual(bearerless_session_response.status_code, 200)
         self.assertEqual(bearerless_session_response.json()["user"]["role"], "STUDENT")
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0)
+    def test_otp_resend_sends_replacement_code_for_pending_login(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+
+        resend_response = self.client.post(
+            "/api/v1/auth/login/otp/resend/",
+            data={"otpPendingAuthToken": otp_pending_token},
+            content_type="application/json",
+        )
+
+        self.assertEqual(resend_response.status_code, 202)
+        resend_payload = resend_response.json()
+        self.assertEqual(resend_payload["otpPendingAuthToken"], otp_pending_token)
+        self.assertEqual(resend_payload["nextStep"], "otp")
+        self.assertEqual(len(mail.outbox), 2)
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[1].body)
+        self.assertIsNotNone(code_match)
+
+        otp_response = self.client.post(
+            "/api/v1/auth/login/otp/",
+            data={
+                "otpPendingAuthToken": otp_pending_token,
+                "code": code_match.group(1),
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(otp_response.status_code, 202)
+        self.assertEqual(otp_response.json()["nextStep"], "selfie")
+
+    def test_otp_resend_during_cooldown_is_rejected(self) -> None:
+        password_payload = self.start_student_otp_login()
+
+        response = self.client.post(
+            "/api/v1/auth/login/otp/resend/",
+            data={"otpPendingAuthToken": password_payload["otpPendingAuthToken"]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 429)
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "OTP_COOLDOWN")
+        self.assertIn("Please wait", payload["error"]["message"])
+        self.assertEqual(len(mail.outbox), 1)

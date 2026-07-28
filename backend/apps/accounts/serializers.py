@@ -76,6 +76,16 @@ class OtpLoginSerializer(serializers.Serializer):
         raise serializers.ValidationError("Please enter the 6-digit code sent to your email.")
 
 
+class OtpResendLoginSerializer(serializers.Serializer):
+    otpPendingAuthToken = serializers.CharField(
+        trim_whitespace=True,
+        error_messages={
+            "blank": "Your session has expired. Please start again.",
+            "required": "Your session has expired. Please start again.",
+        },
+    )
+
+
 class LoginSelfieSerializer(serializers.Serializer):
     selfiePendingAuthToken = serializers.CharField(
         trim_whitespace=True,

@@ -46,6 +46,7 @@ export interface AuthService {
   startLoginIdentifier?(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>>;
   verifyLoginPassword?(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>>;
   completeStaffActivation?(activationToken: string, password: string, confirmPassword: string): Promise<ServiceResult<null>>;
+  resendLoginOtp?(otpPendingAuthToken: string): Promise<ServiceResult<AuthOtpChallenge>>;
   verifyLoginOtp?(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSelfieChallenge>>;
   completeLoginSelfie?(selfiePendingAuthToken: string, file: File): Promise<ServiceResult<AuthSession>>;
   logout(): Promise<ServiceResult<null>>;

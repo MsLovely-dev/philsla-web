@@ -15,6 +15,7 @@ from django.db.models import Q
 from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
+from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import APIException
 
 from .default_permissions import module_access_or_role_default
@@ -25,6 +26,11 @@ from .roles import PortalRole, get_security_tier, get_user_role
 class LoginFlowRejected(APIException):
     status_code = 401
     default_code = "authentication_failed"
+
+
+class LoginOtpCooldown(APIException):
+    status_code = 429
+    default_code = "otp_cooldown"
 
 
 class ActivationUnavailable(APIException):
@@ -227,6 +233,24 @@ def _send_login_otp(*, email: str, code: str) -> None:
     )
     email_message.attach_alternative(_login_otp_html_message(code=code), "text/html")
     email_message.send(fail_silently=False)
+
+
+def _parse_cached_datetime(value: object):
+    if not isinstance(value, str):
+        return None
+    parsed = parse_datetime(value)
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
+def _otp_seconds_left(state: dict[str, Any]) -> int:
+    expires_at = _parse_cached_datetime(state.get("expires_at"))
+    if expires_at is None:
+        return _ttl_seconds(settings.AUTH_OTP_TTL_MINUTES)
+    return max(0, int((expires_at - timezone.now()).total_seconds()))
 
 
 def _issue_tokens(account: dict[str, Any]) -> AuthIssue:
@@ -458,12 +482,16 @@ def verify_login_password(*, pending_auth_token: str, password: str) -> dict[str
     otp_pending_token = _new_token()
     otp_code = f"{secrets.randbelow(1_000_000):06d}"
     ttl = _ttl_seconds(settings.AUTH_OTP_TTL_MINUTES)
+    now = timezone.now()
     cache.set(
         f"{PENDING_OTP_PREFIX}{otp_pending_token}",
         {
             "account": pending["account"],
             "otp_hash": _hash_otp(token=otp_pending_token, code=otp_code),
             "attempts": 0,
+            "resends": 0,
+            "expires_at": (now + timedelta(seconds=ttl)).isoformat(),
+            "last_sent_at": now.isoformat(),
         },
         ttl,
     )
@@ -484,6 +512,55 @@ def verify_login_password(*, pending_auth_token: str, password: str) -> dict[str
     return response
 
 
+def resend_login_otp(*, otp_pending_auth_token: str) -> dict[str, Any]:
+    """Rotate and resend the email OTP for an active OTP pending-auth token."""
+
+    pending_key = f"{PENDING_OTP_PREFIX}{otp_pending_auth_token}"
+    pending = cache.get(pending_key)
+    if pending is None:
+        raise LoginFlowRejected("Invalid or expired code. Please try again.")
+
+    ttl = _otp_seconds_left(pending)
+    if ttl <= 0:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("Invalid or expired code. Please try again.")
+
+    last_sent_at = _parse_cached_datetime(pending.get("last_sent_at"))
+    if last_sent_at is not None:
+        seconds_since_last_send = int((timezone.now() - last_sent_at).total_seconds())
+        if seconds_since_last_send < settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS:
+            retry_after = settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS - seconds_since_last_send
+            raise LoginOtpCooldown(f"Please wait {retry_after} seconds before requesting another code.")
+
+    if int(pending.get("resends", 0)) >= settings.AUTH_OTP_MAX_RESENDS:
+        raise LoginFlowRejected("Maximum resend attempts reached. Please start again.")
+
+    otp_code = f"{secrets.randbelow(1_000_000):06d}"
+    updated_pending = {
+        **pending,
+        "otp_hash": _hash_otp(token=otp_pending_auth_token, code=otp_code),
+        "attempts": 0,
+        "resends": int(pending.get("resends", 0)) + 1,
+        "last_sent_at": timezone.now().isoformat(),
+    }
+    cache.set(pending_key, updated_pending, ttl)
+    try:
+        _send_login_otp(email=pending["account"]["email"], code=otp_code)
+    except Exception as exc:
+        cache.set(pending_key, pending, ttl)
+        raise LoginFlowRejected("We could not send the email verification code. Please try again.") from exc
+
+    response = {
+        "otpPendingAuthToken": otp_pending_auth_token,
+        "nextStep": "otp",
+        "expiresInSeconds": ttl,
+        "resendCooldownSeconds": settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS,
+    }
+    if settings.AUTH_LOCAL_EXPOSE_OTP:
+        response["devOtp"] = otp_code
+    return response
+
+
 def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> dict[str, Any]:
     """Validate the email OTP and issue a selfie-scoped pending-auth token."""
 
@@ -492,13 +569,18 @@ def verify_login_otp(*, otp_pending_auth_token: str, code: str) -> dict[str, Any
     if pending is None:
         raise LoginFlowRejected("Invalid or expired code. Please try again.")
 
+    ttl = _otp_seconds_left(pending)
+    if ttl <= 0:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("Invalid or expired code. Please try again.")
+
     expected_hash = pending["otp_hash"]
     if not constant_time_compare(expected_hash, _hash_otp(token=otp_pending_auth_token, code=code)):
         pending["attempts"] = int(pending.get("attempts", 0)) + 1
         if pending["attempts"] >= settings.AUTH_OTP_MAX_ATTEMPTS:
             cache.delete(pending_key)
         else:
-            cache.set(pending_key, pending, _ttl_seconds(settings.AUTH_OTP_TTL_MINUTES))
+            cache.set(pending_key, pending, ttl)
         raise LoginFlowRejected("Invalid or expired code. Please try again.")
 
     cache.delete(pending_key)

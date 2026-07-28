@@ -292,4 +292,38 @@ describe('BackendAuthService', () => {
       }),
     );
   });
+
+  it('requests a replacement login OTP from the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          otpPendingAuthToken: 'otp-token',
+          nextStep: 'otp',
+          expiresInSeconds: 240,
+          resendCooldownSeconds: 60,
+        },
+        { status: 202 },
+      ),
+    );
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.resendLoginOtp('otp-token');
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        otpPendingAuthToken: 'otp-token',
+        nextStep: 'otp',
+        expiresInSeconds: 240,
+        resendCooldownSeconds: 60,
+      },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/auth/login/otp/resend/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ otpPendingAuthToken: 'otp-token' }),
+      }),
+    );
+  });
 });

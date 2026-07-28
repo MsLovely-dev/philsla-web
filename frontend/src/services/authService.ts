@@ -105,6 +105,22 @@ export class LocalStorageAuthService implements AuthService {
     });
   }
 
+  async resendLoginOtp(_otpPendingAuthToken: string): Promise<ServiceResult<AuthOtpChallenge>> {
+    await this.delay();
+
+    if (!this.pendingIdentifier) {
+      return authorizationError('Invalid or expired code. Please try again.', 'AUTHENTICATION_FAILED');
+    }
+
+    return serviceSuccess({
+      otpPendingAuthToken: 'prototype-otp-pending-auth',
+      nextStep: 'otp',
+      expiresInSeconds: 300,
+      resendCooldownSeconds: 60,
+      devOtp: '000000',
+    });
+  }
+
   async completeLoginSelfie(_selfiePendingAuthToken: string, file: File): Promise<ServiceResult<AuthSession>> {
     await this.delay();
 

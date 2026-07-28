@@ -122,6 +122,15 @@ export class BackendAuthService implements AuthService {
     });
   }
 
+  async resendLoginOtp(otpPendingAuthToken: string): Promise<ServiceResult<AuthOtpChallenge>> {
+    return this.apiClient.request<AuthOtpChallenge>('/api/v1/auth/login/otp/resend/', {
+      method: 'POST',
+      body: JSON.stringify({
+        otpPendingAuthToken,
+      }),
+    });
+  }
+
   async completeLoginSelfie(selfiePendingAuthToken: string, file: File): Promise<ServiceResult<AuthSession>> {
     const body = new FormData();
     body.append('selfiePendingAuthToken', selfiePendingAuthToken);
