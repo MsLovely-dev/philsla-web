@@ -9,7 +9,7 @@ from typing import Any
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils.text import slugify
@@ -161,6 +161,72 @@ def _new_token() -> str:
 def _hash_otp(*, token: str, code: str) -> str:
     material = f"{settings.SECRET_KEY}:{token}:{code}".encode()
     return hashlib.sha256(material).hexdigest()
+
+
+def _login_otp_plain_message(*, code: str) -> str:
+    return (
+        f"Your PhilSLA login verification code is {code}. "
+        f"This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. "
+        "If you did not request this code, reset your password or contact support."
+    )
+
+
+def _login_otp_html_message(*, code: str) -> str:
+    return f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:760px;background:#ffffff;border:1px solid #d9dde5;border-radius:20px;">
+            <tr>
+              <td style="padding:46px 48px 28px;text-align:center;">
+                <div style="display:inline-block;text-align:left;">
+                  <div style="font-size:72px;line-height:0.9;font-weight:800;letter-spacing:0;font-family:Arial Black,Arial,Helvetica,sans-serif;">
+                    <span style="color:#18345c;">Phil</span><span style="color:#a5162d;">SLA</span>
+                  </div>
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;">
+                    <tr>
+                      <td width="34%" style="height:8px;background:#18345c;font-size:0;line-height:0;">&nbsp;</td>
+                      <td width="33%" style="height:8px;background:#dfb52d;font-size:0;line-height:0;">&nbsp;</td>
+                      <td width="33%" style="height:8px;background:#a5162d;font-size:0;line-height:0;">&nbsp;</td>
+                    </tr>
+                  </table>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 50px 36px;font-size:14px;line-height:1.6;text-align:left;">
+                <p style="margin:0 0 18px;">Dear PhilSLA User,</p>
+                <p style="margin:0 0 24px;">
+                  Your PhilSLA login verification code is:
+                </p>
+                <p style="margin:0 0 24px;">
+                  This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. If you did not request this code, reset your password or contact support.
+                </p>
+                <p style="margin:0 0 8px;font-size:14px;text-transform:uppercase;">Email Code:</p>
+                <p style="margin:0;font-size:26px;line-height:1.2;font-weight:700;letter-spacing:1px;color:#1f2937;">{code}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _send_login_otp(*, email: str, code: str) -> None:
+    email_message = EmailMultiAlternatives(
+        subject="Your PhilSLA login verification code",
+        body=_login_otp_plain_message(code=code),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[email],
+    )
+    email_message.attach_alternative(_login_otp_html_message(code=code), "text/html")
+    email_message.send(fail_silently=False)
 
 
 def _issue_tokens(account: dict[str, Any]) -> AuthIssue:
@@ -402,17 +468,7 @@ def verify_login_password(*, pending_auth_token: str, password: str) -> dict[str
         ttl,
     )
     try:
-        send_mail(
-            subject="Your PhilSA login verification code",
-            message=(
-                f"Your PhilSA login verification code is {otp_code}. "
-                f"This code expires in {settings.AUTH_OTP_TTL_MINUTES} minutes. "
-                "If you did not request this code, reset your password or contact support."
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[account["email"]],
-            fail_silently=False,
-        )
+        _send_login_otp(email=account["email"], code=otp_code)
     except Exception as exc:
         cache.delete(f"{PENDING_OTP_PREFIX}{otp_pending_token}")
         raise LoginFlowRejected("We could not send the email verification code. Please try again.") from exc

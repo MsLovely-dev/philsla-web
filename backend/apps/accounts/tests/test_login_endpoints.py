@@ -158,14 +158,27 @@ class LoginEndpointTests(TestCase):
         self.assertNotIn("devOtp", password_payload)
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["student@example.test"])
+        self.assertEqual(mail.outbox[0].subject, "Your PhilSLA login verification code")
         code_match = re.search(r"\b(\d{6})\b", mail.outbox[0].body)
         self.assertIsNotNone(code_match)
+        code = code_match.group(1)
+        self.assertIn(f"Your PhilSLA login verification code is {code}.", mail.outbox[0].body)
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        html_body, content_type = mail.outbox[0].alternatives[0]
+        self.assertEqual(content_type, "text/html")
+        self.assertNotIn("<img", html_body)
+        self.assertNotIn('src="cid:', html_body)
+        self.assertIn('<span style="color:#18345c;">Phil</span><span style="color:#a5162d;">SLA</span>', html_body)
+        self.assertIn("reset your password or contact support", html_body)
+        self.assertLess(html_body.index("This code expires in 5 minutes."), html_body.index(f">{code}<"))
+        self.assertIn(f">{code}<", html_body)
+        self.assertEqual(mail.outbox[0].attachments, [])
 
         otp_response = self.client.post(
             "/api/v1/auth/login/otp/",
             data={
                 "otpPendingAuthToken": password_payload["otpPendingAuthToken"],
-                "code": code_match.group(1),
+                "code": code,
             },
             content_type="application/json",
         )
