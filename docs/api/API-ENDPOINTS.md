@@ -11,7 +11,7 @@ The baseline health and authentication boundaries plus the first student-applica
 | `GET` | `/api/v1/health/` | Public; no credentials required | `AllowAny` | Safe service liveness smoke check | Implemented |
 | `GET` | `/api/v1/auth/session/` | Required bearer access token | `IsAuthenticated` | Return server-derived session, role, permission, and scope claims | Implemented boundary; token validation pending |
 | `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented |
-| `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented boundary; pending-token/password verification pending |
+| `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented |
 | `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and advance to selfie photo logging | Implemented |
 | `POST` | `/api/v1/auth/login/otp/resend/` | Public with OTP pending-auth token | `AllowAny` | Resend the login email OTP with cooldown and resend limits | Implemented |
 | `POST` | `/api/v1/auth/login/selfie/` | Public with selfie pending-auth token | `AllowAny` | Store the captured login selfie image and complete session issuance | Implemented |
@@ -303,7 +303,7 @@ Test coverage:
 
 Use this endpoint for Step 2 of the shared login flow. It accepts the Step-1 pending-auth token and password.
 
-Current implementation status: request validation, route, safe error shape, and tests exist. Pending-auth token validation, password hash verification, failed-attempt lockout, OTP generation, OTP hashing, email dispatch, and audit events remain pending.
+Current implementation status: request validation, pending-token validation, password hash verification, OTP generation, OTP hashing, email dispatch, account OTP request limits, IP monitoring, safe error shape, and audit events are implemented.
 
 Request:
 
@@ -314,13 +314,15 @@ Request:
 }
 ```
 
-Current response behavior:
+Response behavior:
 
 - Missing password returns `400 VALIDATION_FAILED`.
-- Any submitted pending-auth token currently returns `401 AUTHENTICATION_FAILED` with `Your session has expired. Please start again.` until the pending-token store exists.
+- Invalid or expired pending-auth tokens return `401 AUTHENTICATION_FAILED` with `Your session has expired. Please start again.`.
+- Accepted password submissions count as OTP requests for account-level rate limits.
+- Account OTP request limit violations return `429 OTP_RATE_LIMITED` with `meta.retryAfterSeconds`.
 - Passwords must never be logged or returned.
 
-Future successful response:
+Successful response:
 
 ```json
 {
@@ -355,6 +357,9 @@ Validation behavior:
 
 - `code` must be a six-digit numeric string.
 - Invalid format returns `400 VALIDATION_FAILED`.
+- Invalid or expired OTPs return `401 AUTHENTICATION_FAILED`.
+- The OTP is bound to the OTP pending-auth token, single-use, and consumed immediately on successful verification.
+- Five failed OTP verification attempts invalidate the OTP pending-auth token.
 
 Successful response:
 
@@ -394,7 +399,13 @@ Validation behavior:
 - Missing `otpPendingAuthToken` returns `400 VALIDATION_FAILED`.
 - Invalid or expired pending OTP tokens return `401 AUTHENTICATION_FAILED`.
 - Requests inside the resend cooldown return `429 OTP_COOLDOWN`.
-- The backend enforces the maximum resend count and never returns the OTP code outside local development settings.
+- Resend resets the pending-auth inactivity timer but does not extend the absolute pending-auth expiry.
+- Resend is rejected when less than 90 seconds remain before absolute pending-auth expiry.
+- The replacement OTP invalidates the previous OTP. Its expiry is `min(5 minutes, remaining absolute pending-auth lifetime)`.
+- Initial OTP sends and resends both count toward account OTP request limits: 5 per rolling 15 minutes and 20 per rolling 24 hours.
+- Account request limit violations escalate backoff to 5 minutes, then 15 minutes, then 1 hour, and return `429 OTP_RATE_LIMITED` with `meta.retryAfterSeconds`.
+- IP thresholds are monitored at 20 OTP requests per 15 minutes and 80 per 24 hours. Thresholds log safe security events and may add a short server delay, but do not hard-block by default.
+- The backend never returns the OTP code outside local development settings.
 
 ### `POST /api/v1/auth/login/selfie/`
 

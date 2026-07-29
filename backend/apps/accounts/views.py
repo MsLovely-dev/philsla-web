@@ -30,6 +30,7 @@ from .serializers import (
 from .services import (
     LoginFlowRejected,
     LoginOtpCooldown,
+    LoginOtpRateLimited,
     activate_student_registration_account,
     create_admin_user_account,
     deactivate_admin_user_account,
@@ -147,8 +148,9 @@ class PasswordLoginView(APIView):
             result = verify_login_password(
                 pending_auth_token=serializer.validated_data["pendingAuthToken"],
                 password=serializer.validated_data["password"],
+                request=request,
             )
-        except LoginFlowRejected:
+        except (LoginFlowRejected, LoginOtpRateLimited):
             record_auth_event(event="auth.password_submitted", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.password_submitted", outcome="accepted", request=request)
@@ -190,8 +192,9 @@ class OtpResendLoginView(APIView):
         try:
             result = resend_login_otp(
                 otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
+                request=request,
             )
-        except (LoginFlowRejected, LoginOtpCooldown):
+        except (LoginFlowRejected, LoginOtpCooldown, LoginOtpRateLimited):
             record_auth_event(event="auth.otp_resend_requested", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.otp_resend_requested", outcome="accepted", request=request)

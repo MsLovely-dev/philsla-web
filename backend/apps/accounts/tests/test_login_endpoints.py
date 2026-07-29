@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timedelta
 
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -6,9 +7,11 @@ from django.test import TestCase, override_settings
 from django.conf import settings
 from django.core.cache import cache
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from apps.accounts.models import AccountProfile, LoginSelfieLog
 from apps.accounts.roles import PortalRole
+from apps.accounts.services import OTP_ACCOUNT_RATE_PREFIX, PENDING_OTP_PREFIX, _safe_account_rate_key
 
 
 @override_settings(ROOT_URLCONF="config.urls")
@@ -45,6 +48,11 @@ class LoginEndpointTests(TestCase):
         )
         self.assertEqual(password_response.status_code, 202)
         return password_response.json()
+
+    def otp_code_from_outbox(self, index: int = -1) -> str:
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[index].body)
+        self.assertIsNotNone(code_match)
+        return code_match.group(1)
 
     def test_identifier_step_rejects_invalid_identifier_format(self) -> None:
         response = self.client.post(
@@ -254,6 +262,7 @@ class LoginEndpointTests(TestCase):
     def test_otp_resend_sends_replacement_code_for_pending_login(self) -> None:
         password_payload = self.start_student_otp_login()
         otp_pending_token = password_payload["otpPendingAuthToken"]
+        original_code = self.otp_code_from_outbox()
 
         resend_response = self.client.post(
             "/api/v1/auth/login/otp/resend/",
@@ -266,20 +275,192 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(resend_payload["otpPendingAuthToken"], otp_pending_token)
         self.assertEqual(resend_payload["nextStep"], "otp")
         self.assertEqual(len(mail.outbox), 2)
-        code_match = re.search(r"\b(\d{6})\b", mail.outbox[1].body)
-        self.assertIsNotNone(code_match)
+        replacement_code = self.otp_code_from_outbox()
+
+        old_otp_response = self.client.post(
+            "/api/v1/auth/login/otp/",
+            data={
+                "otpPendingAuthToken": otp_pending_token,
+                "code": original_code,
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(old_otp_response.status_code, 401)
 
         otp_response = self.client.post(
             "/api/v1/auth/login/otp/",
             data={
                 "otpPendingAuthToken": otp_pending_token,
-                "code": code_match.group(1),
+                "code": replacement_code,
             },
             content_type="application/json",
         )
 
         self.assertEqual(otp_response.status_code, 202)
         self.assertEqual(otp_response.json()["nextStep"], "selfie")
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0)
+    def test_otp_resend_resets_inactivity_without_extending_absolute_expiry(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+        pending_key = f"{PENDING_OTP_PREFIX}{otp_pending_token}"
+        state = cache.get(pending_key)
+        now = timezone.now()
+        state["inactivity_expires_at"] = (now + timedelta(seconds=120)).isoformat()
+        state["absolute_expires_at"] = (now + timedelta(seconds=200)).isoformat()
+        state["otp_expires_at"] = (now + timedelta(seconds=1)).isoformat()
+        state["last_sent_at"] = (now - timedelta(minutes=5)).isoformat()
+        cache.set(pending_key, state, 200)
+
+        response = self.client.post(
+            "/api/v1/auth/login/otp/resend/",
+            data={"otpPendingAuthToken": otp_pending_token},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        payload = response.json()
+        self.assertGreaterEqual(payload["expiresInSeconds"], 195)
+        self.assertLessEqual(payload["expiresInSeconds"], 200)
+        updated_state = cache.get(pending_key)
+        self.assertEqual(updated_state["absolute_expires_at"], state["absolute_expires_at"])
+        inactivity_seconds = int(
+            (
+                datetime.fromisoformat(updated_state["inactivity_expires_at"])
+                - datetime.fromisoformat(updated_state["last_sent_at"])
+            ).total_seconds()
+        )
+        self.assertEqual(inactivity_seconds, settings.AUTH_PENDING_INACTIVITY_TTL_MINUTES * 60)
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0)
+    def test_otp_resend_requires_minimum_remaining_absolute_time(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+        pending_key = f"{PENDING_OTP_PREFIX}{otp_pending_token}"
+        state = cache.get(pending_key)
+        now = timezone.now()
+        state["absolute_expires_at"] = (now + timedelta(seconds=89)).isoformat()
+        state["inactivity_expires_at"] = (now + timedelta(minutes=10)).isoformat()
+        state["last_sent_at"] = (now - timedelta(minutes=5)).isoformat()
+        cache.set(pending_key, state, 89)
+
+        response = self.client.post(
+            "/api/v1/auth/login/otp/resend/",
+            data={"otpPendingAuthToken": otp_pending_token},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(
+            response.json()["error"]["message"],
+            "Verification code expired. Please start login again to request a new code.",
+        )
+
+    def test_otp_is_single_use(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+        code = self.otp_code_from_outbox()
+
+        first_response = self.client.post(
+            "/api/v1/auth/login/otp/",
+            data={"otpPendingAuthToken": otp_pending_token, "code": code},
+            content_type="application/json",
+        )
+        second_response = self.client.post(
+            "/api/v1/auth/login/otp/",
+            data={"otpPendingAuthToken": otp_pending_token, "code": code},
+            content_type="application/json",
+        )
+
+        self.assertEqual(first_response.status_code, 202)
+        self.assertEqual(second_response.status_code, 401)
+
+    def test_otp_max_attempts_consumes_pending_login(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+        code = self.otp_code_from_outbox()
+
+        for _attempt in range(settings.AUTH_OTP_MAX_ATTEMPTS):
+            response = self.client.post(
+                "/api/v1/auth/login/otp/",
+                data={"otpPendingAuthToken": otp_pending_token, "code": "999999"},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 401)
+
+        response = self.client.post(
+            "/api/v1/auth/login/otp/",
+            data={"otpPendingAuthToken": otp_pending_token, "code": code},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0, AUTH_OTP_ACCOUNT_WINDOW_LIMIT=1)
+    def test_account_otp_request_limit_counts_initial_send_and_resend(self) -> None:
+        password_payload = self.start_student_otp_login()
+
+        response = self.client.post(
+            "/api/v1/auth/login/otp/resend/",
+            data={"otpPendingAuthToken": password_payload["otpPendingAuthToken"]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 429)
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "OTP_RATE_LIMITED")
+        self.assertEqual(payload["error"]["meta"]["retryAfterSeconds"], 5 * 60)
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0, AUTH_OTP_ACCOUNT_WINDOW_LIMIT=1)
+    def test_account_otp_request_limit_escalates_backoff(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+        pending_state = cache.get(f"{PENDING_OTP_PREFIX}{otp_pending_token}")
+        rate_key = f"{OTP_ACCOUNT_RATE_PREFIX}{_safe_account_rate_key(pending_state['account'])}"
+
+        retry_after_values = []
+        for _violation in range(3):
+            response = self.client.post(
+                "/api/v1/auth/login/otp/resend/",
+                data={"otpPendingAuthToken": otp_pending_token},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 429)
+            retry_after_values.append(response.json()["error"]["meta"]["retryAfterSeconds"])
+            rate_state = cache.get(rate_key)
+            rate_state["backoff_until"] = 0
+            cache.set(rate_key, rate_state, settings.AUTH_OTP_ACCOUNT_DAILY_SECONDS + 60 * 60)
+
+        self.assertEqual(retry_after_values, [5 * 60, 15 * 60, 60 * 60])
+
+    @override_settings(
+        AUTH_OTP_RESEND_COOLDOWN_SECONDS=0,
+        AUTH_OTP_ACCOUNT_WINDOW_LIMIT=10,
+        AUTH_OTP_IP_WINDOW_ALERT_THRESHOLD=0,
+        AUTH_OTP_IP_DAILY_ALERT_THRESHOLD=50,
+        AUTH_OTP_IP_HIGH_RISK_DELAY_SECONDS=0,
+    )
+    def test_ip_otp_threshold_logs_alert_without_blocking(self) -> None:
+        first_payload = self.start_student_otp_login()
+        first_token = first_payload["otpPendingAuthToken"]
+
+        with self.assertLogs("philsa.audit", level="INFO") as captured:
+            response = self.client.post(
+                "/api/v1/auth/login/otp/resend/",
+                data={"otpPendingAuthToken": first_token},
+                content_type="application/json",
+                REMOTE_ADDR="203.0.113.10",
+            )
+
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(
+            any(
+                getattr(record, "event", "") == "auth.otp_ip_threshold_exceeded"
+                and getattr(record, "outcome", "") == "alerted"
+                for record in captured.records
+            )
+        )
 
     def test_otp_resend_during_cooldown_is_rejected(self) -> None:
         password_payload = self.start_student_otp_login()
