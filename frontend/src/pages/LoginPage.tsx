@@ -7,6 +7,8 @@ import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ERROR_AUTO_DISMISS_MS = 6000;
+const NOTICE_AUTO_DISMISS_MS = 5000;
 const LOCAL_BACKEND_ACCOUNTS = [
   'admissions.reviewer@yopmail.com',
   'proctor@yopmail.com',
@@ -110,6 +112,26 @@ export default function LoginPage() {
 
     return () => window.clearTimeout(timer);
   }, [otpExpiresIn, step]);
+
+  useEffect(() => {
+    if (!error) return;
+
+    const timer = window.setTimeout(() => {
+      setError('');
+    }, ERROR_AUTO_DISMISS_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
+    if (!notice) return;
+
+    const timer = window.setTimeout(() => {
+      setNotice('');
+    }, NOTICE_AUTO_DISMISS_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const handleIdentifierStep = async (event: React.FormEvent) => {
     event.preventDefault();
