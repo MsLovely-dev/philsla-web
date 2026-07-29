@@ -632,13 +632,6 @@ export default function LoginPage() {
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
-              <button
-                type="button"
-                onClick={resetToIdentifier}
-                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
-              >
-                ← Change Account
-              </button>
             </form>
           )}
 
