@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
-import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession } from './services/contracts';
+import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './services/contracts';
 import { authorizationError } from './services/serviceResult';
 import type { ServiceResult } from './services/serviceResult';
 
@@ -116,6 +116,9 @@ interface PhilSAContextType {
   resendLoginOtp: (otpPendingAuthToken: string) => Promise<ServiceResult<AuthOtpChallenge>>;
   verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSelfieChallenge>>;
   completeLoginSelfie: (selfiePendingAuthToken: string, file: File) => Promise<ServiceResult<AuthSession>>;
+  requestPasswordRecovery: (identifier: string) => Promise<ServiceResult<PasswordRecoveryRequestResult>>;
+  inspectPasswordRecovery: (recoveryToken: string) => Promise<ServiceResult<PasswordRecoveryInspection>>;
+  completePasswordRecovery: (recoveryToken: string, password: string, confirmPassword: string) => Promise<ServiceResult<null>>;
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
@@ -371,6 +374,38 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     return result;
   };
 
+  const requestPasswordRecovery = async (
+    identifier: string,
+  ): Promise<ServiceResult<PasswordRecoveryRequestResult>> => {
+    if (!authService.requestPasswordRecovery) {
+      return authorizationError('Password recovery is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    return authService.requestPasswordRecovery(identifier);
+  };
+
+  const completePasswordRecovery = async (
+    recoveryToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<null>> => {
+    if (!authService.completePasswordRecovery) {
+      return authorizationError('Password recovery is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    return authService.completePasswordRecovery(recoveryToken, password, confirmPassword);
+  };
+
+  const inspectPasswordRecovery = async (
+    recoveryToken: string,
+  ): Promise<ServiceResult<PasswordRecoveryInspection>> => {
+    if (!authService.inspectPasswordRecovery) {
+      return authorizationError('Password recovery is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    return authService.inspectPasswordRecovery(recoveryToken);
+  };
+
   const logout = async () => {
     if (user) {
       addAuditLog('LOGOUT', `User ${user.email} logged out`);
@@ -419,7 +454,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery, inspectPasswordRecovery, completePasswordRecovery, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

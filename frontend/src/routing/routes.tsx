@@ -44,6 +44,7 @@ import ProctorConsole from '../pages/ProctorConsole';
 import RecordingsCommand from '../pages/RecordingsCommand';
 import ResultsManagement from '../pages/ResultsManagement';
 import ResultsPage from '../pages/ResultsPage';
+import ResetPasswordPage from '../pages/ResetPasswordPage';
 import ScoreManagement from '../pages/results/ScoreManagement';
 import ReportingMatrix from '../pages/results/ReportingMatrix';
 import ReviewerApplicationDetail from '../pages/reviewer/ReviewerApplicationDetail';
@@ -94,6 +95,7 @@ const OVERSIGHT = withSystemAdmin('EXECUTIVE', 'GOVERNMENT', 'UNIVERSITY_ADMIN',
 export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/', element: <LandingPage />, access: 'public' },
   { path: '/login', element: <LoginPage />, access: 'public' },
+  { path: '/reset-password', element: <ResetPasswordPage />, access: 'public' },
   { path: '/register', element: <StudentApplication />, access: 'public' },
   { path: '/unauthorized', element: <UnauthorizedPage />, access: 'protected', allowedRoles: ALL_USER_ROLES, layout: 'standalone' },
 

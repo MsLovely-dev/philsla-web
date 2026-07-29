@@ -1,25 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, Camera, CheckCircle2, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock, Info, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LOCAL_BACKEND_ACCOUNTS = [
-  'admissions.reviewer@yopmail.com',
-  'proctor@yopmail.com',
-  'proctor.admin@yopmail.com',
-  'university.admin@yopmail.com',
-  'testing.center.admin@yopmail.com',
-  'exam.admin@yopmail.com',
-  'system.admin@yopmail.com',
-  'ched.admin@yopmail.com',
-  'deped.admin@yopmail.com',
-  'tesda.admin@yopmail.com',
-  'executive@yopmail.com',
-];
+const MESSAGE_AUTO_DISMISS_MS = 10000;
 
 type LoginStep = 'identifier' | 'activation' | 'password' | 'otp' | 'selfie';
 
@@ -47,6 +35,13 @@ function maskIdentifier(identifier: string): string {
   return identifier;
 }
 
+function formatOtpTime(seconds: number): string {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -68,7 +63,7 @@ export default function LoginPage() {
   const [otpResendCooldown, setOtpResendCooldown] = useState(0);
   const [otpExpiresIn, setOtpExpiresIn] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie } = usePhilSA();
+  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery } = usePhilSA();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -110,6 +105,26 @@ export default function LoginPage() {
 
     return () => window.clearTimeout(timer);
   }, [otpExpiresIn, step]);
+
+  useEffect(() => {
+    if (!error) return;
+
+    const timer = window.setTimeout(() => {
+      setError('');
+    }, MESSAGE_AUTO_DISMISS_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => {
+    if (!notice) return;
+
+    const timer = window.setTimeout(() => {
+      setNotice('');
+    }, MESSAGE_AUTO_DISMISS_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const handleIdentifierStep = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -243,6 +258,27 @@ export default function LoginPage() {
     document.getElementById('otp-0')?.focus();
   };
 
+  const handleForgotPassword = async () => {
+    if (!identifier.trim()) {
+      setError('Enter your account email before requesting password recovery.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setNotice('');
+
+    const result = await requestPasswordRecovery(identifier);
+
+    setLoading(false);
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    setNotice(result.data.detail);
+  };
+
   const handleOtpStep = async (event: React.FormEvent) => {
     event.preventDefault();
     const code = otp.join('');
@@ -369,6 +405,51 @@ export default function LoginPage() {
     }
   };
 
+  const focusOtpInput = (index: number) => {
+    document.getElementById(`otp-${index}`)?.focus();
+  };
+
+  const handleOtpPaste = (event: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+    event.preventDefault();
+
+    const clipboardDigits = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    const startIndex = clipboardDigits.length === 6 ? 0 : index;
+    const pastedDigits = clipboardDigits.slice(0, 6 - startIndex);
+    if (!pastedDigits) return;
+
+    const newOtp = [...otp];
+    pastedDigits.split('').forEach((digit, offset) => {
+      newOtp[startIndex + offset] = digit;
+    });
+    setOtp(newOtp);
+
+    focusOtpInput(Math.min(startIndex + pastedDigits.length, 5));
+  };
+
+  const handleOtpKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (event.key !== 'Backspace') return;
+
+    event.preventDefault();
+    const newOtp = [...otp];
+
+    if (newOtp[index]) {
+      newOtp[index] = '';
+      setOtp(newOtp);
+      return;
+    }
+
+    if (index > 0) {
+      newOtp[index - 1] = '';
+      setOtp(newOtp);
+      focusOtpInput(index - 1);
+    }
+  };
+
+  const clearOtp = () => {
+    setOtp(['', '', '', '', '', '']);
+    focusOtpInput(0);
+  };
+
   const resetToIdentifier = () => {
     setStep('identifier');
     setPendingAuthToken('');
@@ -414,14 +495,14 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {error && (
+          {error && step !== 'otp' && (
             <div className="bg-red-50 border border-red-100 text-red-600 px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
               {error}
             </div>
           )}
 
-          {notice && (
+          {notice && step !== 'otp' && (
             <div className="bg-[#e5f1ec] border border-[#00563F]/15 text-[#00563F] px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
               <CheckCircle2 className="w-4 h-4" />
               {notice}
@@ -431,7 +512,12 @@ export default function LoginPage() {
           {step === 'identifier' && (
             <form onSubmit={handleIdentifierStep} className="space-y-8">
               <div>
-                <label className="label-philsa block mb-3 ml-1">Email</label>
+                <h1 className="text-2xl font-black text-philsa-navy tracking-tight mb-2">Welcome Back!</h1>
+                <p className="text-sm text-philsa-navy/75 font-medium">Sign in to continue to your account.</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-black text-philsa-navy block mb-3 ml-1">Email Address</label>
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
                   <input
@@ -445,32 +531,14 @@ export default function LoginPage() {
                     required
                   />
                 </div>
-                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
-                  Students, staff, and admin users must use their registered email address.
+                <p className="text-sm text-philsa-gray font-medium leading-relaxed mt-4 ml-1 flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  Use the email address registered with your PhilSLA account.
                 </p>
-              </div>
-
-              <div className="bg-philsa-bg p-5 rounded-2xl border border-philsa-border/40 ring-1 ring-inset ring-white">
-                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider block mb-3 opacity-60">
-                  Local backend role accounts
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {LOCAL_BACKEND_ACCOUNTS.map((account) => (
-                    <button
-                      key={account}
-                      type="button"
-                      onClick={() => setIdentifier(account)}
-                      className="text-[10px] text-philsa-navy font-bold hover:text-philsa-red transition-colors text-left flex items-center gap-2 group p-1 hover:bg-philsa-red/5 rounded-md"
-                    >
-                      <div className="w-1 h-1 rounded-full bg-philsa-border group-hover:bg-philsa-red" />
-                      {account.split('@')[0]}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
-                {loading ? 'Checking Email...' : 'Continue to Password'}
+                {loading ? 'Checking Email...' : 'Continue'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
             </form>
@@ -543,7 +611,12 @@ export default function LoginPage() {
               <div>
                 <div className="flex justify-between items-center mb-3 ml-1">
                   <label className="label-philsa">Password</label>
-                  <button type="button" className="text-[10px] text-philsa-red font-black uppercase tracking-widest hover:underline">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={loading}
+                    className="text-[10px] text-philsa-red font-black uppercase tracking-widest hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                  >
                     Forgot Password?
                   </button>
                 </div>
@@ -576,22 +649,89 @@ export default function LoginPage() {
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
-              <button
-                type="button"
-                onClick={resetToIdentifier}
-                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
-              >
-                ← Change Account
-              </button>
             </form>
           )}
 
-          {step === 'otp' && (
-            <form onSubmit={handleOtpStep} className="space-y-10">
+          {step === 'otp' && otpExpiresIn <= 0 && (
+            <div className="pt-4 text-center">
+              <div className="relative mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-philsa-red/10">
+                <Clock className="h-14 w-14 text-philsa-red" strokeWidth={2.2} />
+                <div className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white shadow-md ring-4 ring-white">
+                  <AlertTriangle className="h-5 w-5" fill="currentColor" strokeWidth={2.5} />
+                </div>
+              </div>
+
+              <h3 className="mb-5 text-xl font-black text-philsa-navy tracking-tight">
+                Verification Session Expired
+              </h3>
+              <p className="mx-auto mb-8 max-w-sm text-sm font-medium leading-7 text-philsa-navy/80">
+                Your verification session has expired for security reasons.
+                <br />
+                Please sign in again to request a new verification code.
+              </p>
+
+              <div className="mb-8 h-px bg-philsa-border" />
+
+              <button
+                type="button"
+                onClick={resetToIdentifier}
+                className="mx-auto flex h-12 w-full max-w-xs items-center justify-center gap-3 rounded-lg border border-philsa-red bg-white text-sm font-black text-philsa-red transition-colors hover:bg-philsa-red hover:text-white"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                Return to Login
+              </button>
+            </div>
+          )}
+
+          {step === 'otp' && otpExpiresIn > 0 && (
+            <form onSubmit={handleOtpStep} className="space-y-8">
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50/80 p-4 text-left shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500 text-white">
+                      <AlertTriangle className="h-4 w-4" fill="currentColor" strokeWidth={2.5} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-black text-red-600">Incorrect verification code</h3>
+                      <p className="mt-2 text-xs font-medium leading-5 text-philsa-navy">
+                        The code you entered is incorrect or has already expired.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="my-3 h-px bg-red-200/80" />
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-500">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <p className="text-xs font-medium leading-5 text-philsa-navy">
+                      Use the latest verification code sent to <span className="font-black">{maskIdentifier(identifier)}</span>.
+                      <br />
+                      Request a new code if this one has expired.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {notice && (
+                <div className="rounded-lg border border-[#00563F]/20 bg-[#e5f1ec]/70 p-4 text-left shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0f8b5f] text-white">
+                      <CheckCircle2 className="h-4 w-4" fill="currentColor" strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-[#00563F]">New verification code sent</h3>
+                      <p className="mt-2 text-xs font-medium leading-5 text-philsa-navy">
+                        A new code has been sent to <span className="font-black">{maskIdentifier(identifier)}</span>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label className="label-philsa block mb-2 text-center uppercase tracking-widest">Email Verification Code</label>
-                <p className="text-[11px] text-philsa-gray font-bold text-center mb-8 uppercase">
-                  Sent to {maskIdentifier(identifier)}
+                <label className="mb-2 block text-base font-black text-philsa-navy">Email Verification</label>
+                <p className="mb-5 text-xs font-medium leading-5 text-philsa-navy">
+                  Enter the 6-digit code sent to <span className="font-black text-[#31548a]">{maskIdentifier(identifier)}</span>
                 </p>
 
                 <div className="flex justify-between gap-3">
@@ -604,49 +744,49 @@ export default function LoginPage() {
                       maxLength={1}
                       value={digit}
                       onChange={(event) => updateOtp(event.target.value, index)}
-                      className="w-full h-16 bg-philsa-bg border-none rounded-2xl text-center text-2xl font-black focus:ring-4 focus:ring-philsa-red/10 transition-all shadow-sm ring-1 ring-philsa-border/30"
+                      onKeyDown={(event) => handleOtpKeyDown(event, index)}
+                      onPaste={(event) => handleOtpPaste(event, index)}
+                      className="h-16 w-full rounded-lg border border-philsa-border bg-white text-center text-2xl font-black shadow-sm transition-all focus:border-philsa-red focus:ring-4 focus:ring-philsa-red/10"
                     />
                   ))}
                 </div>
-                <div className="flex items-center justify-between mt-8">
-                  <p className="text-[11px] text-philsa-gray font-bold uppercase tracking-wider">
-                    {otpExpiresIn > 0 ? `Code expires in ${Math.ceil(otpExpiresIn / 60)} min` : 'Verification session expired'}
+                <div className="mt-6 text-center">
+                  <p className="inline-flex items-center justify-center gap-2 text-sm font-medium text-philsa-navy">
+                    <Clock className="h-4 w-4 text-philsa-gray" />
+                    Code expires in <span className="font-black text-[#0f8b5f]">{formatOtpTime(otpExpiresIn)}</span>
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    className="text-[11px] text-philsa-red font-black uppercase tracking-widest hover:underline disabled:text-philsa-gray/60 disabled:no-underline disabled:cursor-not-allowed inline-flex items-center gap-2"
-                    disabled={otpExpiresIn <= 0 || otpResendCooldown > 0 || loading || resendingOtp}
-                  >
-                    <RotateCcw className={`w-3.5 h-3.5 ${resendingOtp ? 'animate-spin' : ''}`} />
-                    {resendingOtp
-                      ? 'Resending...'
-                      : otpExpiresIn <= 0
-                        ? 'Expired'
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-philsa-navy">
+                    <span>Didn't receive the code?</span>
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      className="font-bold text-[#31548a] hover:underline disabled:text-philsa-gray/60 disabled:no-underline disabled:cursor-not-allowed"
+                      disabled={otpResendCooldown > 0 || loading || resendingOtp}
+                    >
+                      {resendingOtp
+                        ? 'Resending...'
                         : otpResendCooldown > 0
                         ? `Resend in ${otpResendCooldown}s`
-                        : 'Resend Code'}
-                  </button>
+                        : 'Resend code'}
+                    </button>
+                  </div>
                 </div>
-                {otpExpiresIn <= 0 && (
-                  <p className="text-[11px] text-philsa-red font-bold uppercase tracking-wider mt-4 text-center">
-                    Go back to password to request a new verification code.
-                  </p>
+                {otp.some(Boolean) && (
+                  <button
+                    type="button"
+                    onClick={clearOtp}
+                    className="mx-auto mt-5 block text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-red transition-colors"
+                  >
+                    Clear Code
+                  </button>
                 )}
               </div>
 
-              <button disabled={loading || resendingOtp || otpExpiresIn <= 0} className="btn-primary w-full flex items-center justify-center gap-3">
-                {loading ? 'Creating Session...' : 'Establish Session'}
-                <LogIn className="w-5 h-5 text-white/50" />
+              <button disabled={loading || resendingOtp} className="btn-primary w-full flex items-center justify-center gap-3">
+                {loading ? 'Verifying Code...' : 'Verify Code'}
+                <ArrowRight className="w-5 h-5 text-white/70" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => setStep('password')}
-                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
-              >
-                ← Back to Password
-              </button>
             </form>
           )}
 

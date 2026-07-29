@@ -1,10 +1,18 @@
 import logging
+from typing import Any
 
 
 logger = logging.getLogger("philsa.audit")
 
 
-def record_auth_event(*, event: str, outcome: str, request: object | None = None, user: object | None = None) -> None:
+def record_auth_event(
+    *,
+    event: str,
+    outcome: str,
+    request: object | None = None,
+    user: object | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
     """Record a safe auth audit boundary event.
 
     Durable audit persistence is intentionally deferred until the audit module
@@ -19,5 +27,6 @@ def record_auth_event(*, event: str, outcome: str, request: object | None = None
             "outcome": outcome,
             "correlation_id": getattr(request, "correlation_id", None),
             "user_id": str(getattr(user, "id", "")) if user is not None else "",
+            "metadata": metadata or {},
         },
     )

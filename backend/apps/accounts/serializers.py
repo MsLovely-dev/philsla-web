@@ -174,6 +174,16 @@ class PasswordRecoveryRequestSerializer(IdentifierLoginSerializer):
     pass
 
 
+class PasswordRecoveryInspectionSerializer(serializers.Serializer):
+    recoveryToken = serializers.CharField(
+        trim_whitespace=True,
+        error_messages={
+            "blank": "This recovery link has expired. Please request a new one.",
+            "required": "This recovery link has expired. Please request a new one.",
+        },
+    )
+
+
 class PasswordRecoveryCompletionSerializer(serializers.Serializer):
     recoveryToken = serializers.CharField(
         trim_whitespace=True,

@@ -8,10 +8,23 @@ class AuthFlowSettings:
     access_token_lifetime_minutes: int
     refresh_token_lifetime_days: int
     pending_auth_token_ttl_minutes: int
+    pending_auth_inactivity_ttl_minutes: int
+    pending_auth_absolute_ttl_minutes: int
     otp_ttl_minutes: int
     otp_resend_cooldown_seconds: int
     otp_max_resends: int
     otp_max_attempts: int
+    otp_min_resend_remaining_seconds: int
+    otp_account_window_limit: int
+    otp_account_window_seconds: int
+    otp_account_daily_limit: int
+    otp_account_daily_seconds: int
+    otp_backoff_seconds: list[int]
+    otp_ip_window_alert_threshold: int
+    otp_ip_daily_alert_threshold: int
+    otp_ip_high_risk_delay_seconds: int
+    otp_ip_confirmed_abuse_block_seconds: int
+    otp_ip_blocking_enabled: bool
     password_max_attempts: int
     password_lockout_minutes: int
     student_idle_timeout_minutes: int
@@ -43,10 +56,23 @@ def get_auth_flow_settings() -> AuthFlowSettings:
         access_token_lifetime_minutes=settings.AUTH_ACCESS_TOKEN_LIFETIME_MINUTES,
         refresh_token_lifetime_days=settings.AUTH_REFRESH_TOKEN_LIFETIME_DAYS,
         pending_auth_token_ttl_minutes=settings.AUTH_PENDING_TOKEN_TTL_MINUTES,
+        pending_auth_inactivity_ttl_minutes=settings.AUTH_PENDING_INACTIVITY_TTL_MINUTES,
+        pending_auth_absolute_ttl_minutes=settings.AUTH_PENDING_ABSOLUTE_TTL_MINUTES,
         otp_ttl_minutes=settings.AUTH_OTP_TTL_MINUTES,
         otp_resend_cooldown_seconds=settings.AUTH_OTP_RESEND_COOLDOWN_SECONDS,
         otp_max_resends=settings.AUTH_OTP_MAX_RESENDS,
         otp_max_attempts=settings.AUTH_OTP_MAX_ATTEMPTS,
+        otp_min_resend_remaining_seconds=settings.AUTH_OTP_MIN_RESEND_REMAINING_SECONDS,
+        otp_account_window_limit=settings.AUTH_OTP_ACCOUNT_WINDOW_LIMIT,
+        otp_account_window_seconds=settings.AUTH_OTP_ACCOUNT_WINDOW_SECONDS,
+        otp_account_daily_limit=settings.AUTH_OTP_ACCOUNT_DAILY_LIMIT,
+        otp_account_daily_seconds=settings.AUTH_OTP_ACCOUNT_DAILY_SECONDS,
+        otp_backoff_seconds=list(settings.AUTH_OTP_BACKOFF_SECONDS),
+        otp_ip_window_alert_threshold=settings.AUTH_OTP_IP_WINDOW_ALERT_THRESHOLD,
+        otp_ip_daily_alert_threshold=settings.AUTH_OTP_IP_DAILY_ALERT_THRESHOLD,
+        otp_ip_high_risk_delay_seconds=settings.AUTH_OTP_IP_HIGH_RISK_DELAY_SECONDS,
+        otp_ip_confirmed_abuse_block_seconds=settings.AUTH_OTP_IP_CONFIRMED_ABUSE_BLOCK_SECONDS,
+        otp_ip_blocking_enabled=settings.AUTH_OTP_IP_BLOCKING_ENABLED,
         password_max_attempts=settings.AUTH_PASSWORD_MAX_ATTEMPTS,
         password_lockout_minutes=settings.AUTH_PASSWORD_LOCKOUT_MINUTES,
         student_idle_timeout_minutes=settings.AUTH_STUDENT_IDLE_TIMEOUT_MINUTES,
