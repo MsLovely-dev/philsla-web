@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock, Info, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
@@ -491,7 +491,12 @@ export default function LoginPage() {
           {step === 'identifier' && (
             <form onSubmit={handleIdentifierStep} className="space-y-8">
               <div>
-                <label className="label-philsa block mb-3 ml-1">Email</label>
+                <h1 className="text-2xl font-black text-philsa-navy tracking-tight mb-2">Welcome Back!</h1>
+                <p className="text-sm text-philsa-navy/75 font-medium">Sign in to continue to your account.</p>
+              </div>
+
+              <div>
+                <label className="text-sm font-black text-philsa-navy block mb-3 ml-1">Email Address</label>
                 <div className="relative group">
                   <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
                   <input
@@ -505,15 +510,25 @@ export default function LoginPage() {
                     required
                   />
                 </div>
-                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
-                  Students, staff, and admin users must use their registered email address.
+                <p className="text-sm text-philsa-gray font-medium leading-relaxed mt-4 ml-1 flex items-start gap-2">
+                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                  Use the email address registered with your PhilSLA account.
                 </p>
               </div>
 
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
-                {loading ? 'Checking Email...' : 'Continue to Password'}
+                {loading ? 'Checking Email...' : 'Continue'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
+
+              <div className="border-t border-philsa-border pt-6">
+                <div className="flex items-start gap-3 text-philsa-gray">
+                  <Shield className="w-7 h-7 shrink-0" />
+                  <p className="text-sm font-medium leading-5">
+                    Your information is protected and secured in compliance with data privacy standards.
+                  </p>
+                </div>
+              </div>
             </form>
           )}
 
