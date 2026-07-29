@@ -8,19 +8,6 @@ import type { UserRole } from '../types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MESSAGE_AUTO_DISMISS_MS = 10000;
-const LOCAL_BACKEND_ACCOUNTS = [
-  'admissions.reviewer@yopmail.com',
-  'proctor@yopmail.com',
-  'proctor.admin@yopmail.com',
-  'university.admin@yopmail.com',
-  'testing.center.admin@yopmail.com',
-  'exam.admin@yopmail.com',
-  'system.admin@yopmail.com',
-  'ched.admin@yopmail.com',
-  'deped.admin@yopmail.com',
-  'tesda.admin@yopmail.com',
-  'executive@yopmail.com',
-];
 
 type LoginStep = 'identifier' | 'activation' | 'password' | 'otp' | 'selfie';
 
@@ -521,25 +508,6 @@ export default function LoginPage() {
                 <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
                   Students, staff, and admin users must use their registered email address.
                 </p>
-              </div>
-
-              <div className="bg-philsa-bg p-5 rounded-2xl border border-philsa-border/40 ring-1 ring-inset ring-white">
-                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider block mb-3 opacity-60">
-                  Local backend role accounts
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {LOCAL_BACKEND_ACCOUNTS.map((account) => (
-                    <button
-                      key={account}
-                      type="button"
-                      onClick={() => setIdentifier(account)}
-                      className="text-[10px] text-philsa-navy font-bold hover:text-philsa-red transition-colors text-left flex items-center gap-2 group p-1 hover:bg-philsa-red/5 rounded-md"
-                    >
-                      <div className="w-1 h-1 rounded-full bg-philsa-border group-hover:bg-philsa-red" />
-                      {account.split('@')[0]}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
