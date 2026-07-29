@@ -686,7 +686,7 @@ export default function LoginPage() {
                 )}
                 {otpExpiresIn <= 0 && (
                   <p className="text-[11px] text-philsa-red font-bold uppercase tracking-wider mt-4 text-center">
-                    Go back to password to request a new verification code.
+                    Verification code expired. Please start login again to request a new code.
                   </p>
                 )}
               </div>
