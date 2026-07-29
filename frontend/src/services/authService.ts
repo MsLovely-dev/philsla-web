@@ -1,7 +1,7 @@
 import type { Application, User } from '../types';
 import { MOCK_USERS } from '../lib/utils';
 import { BackendAuthService } from './backendAuthService';
-import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
 import { authorizationError, serviceSuccess, validationError } from './serviceResult';
 import type { ServiceResult } from './serviceResult';
 
@@ -131,6 +131,46 @@ export class LocalStorageAuthService implements AuthService {
     const session = await this.login({ email: this.pendingSelfieIdentifier });
     this.pendingSelfieIdentifier = null;
     return session;
+  }
+
+  async requestPasswordRecovery(identifier: string): Promise<ServiceResult<PasswordRecoveryRequestResult>> {
+    await this.delay();
+    if (!identifier.trim()) {
+      return validationError('Please enter your LRN or email address.', {
+        identifier: ['Please enter your LRN or email address.'],
+      });
+    }
+    return serviceSuccess({
+      detail: 'If the account can be recovered, instructions will be sent to the verified email address.',
+    });
+  }
+
+  async inspectPasswordRecovery(recoveryToken: string): Promise<ServiceResult<PasswordRecoveryInspection>> {
+    await this.delay();
+    if (!recoveryToken) {
+      return authorizationError('This recovery link has expired. Please request a new one.', 'AUTHENTICATION_FAILED');
+    }
+    return serviceSuccess({
+      accountLabel: 'pro***@example.test',
+      maskedEmail: 'pro***@example.test',
+    });
+  }
+
+  async completePasswordRecovery(
+    recoveryToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<null>> {
+    await this.delay();
+    if (!recoveryToken) {
+      return authorizationError('This recovery link has expired. Please request a new one.', 'AUTHENTICATION_FAILED');
+    }
+    if (!password || password !== confirmPassword) {
+      return validationError('Passwords do not match.', {
+        confirmPassword: ['Passwords do not match.'],
+      });
+    }
+    return serviceSuccess(null);
   }
 
   async logout(): Promise<ServiceResult<null>> {

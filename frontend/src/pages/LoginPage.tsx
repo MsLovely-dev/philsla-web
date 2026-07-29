@@ -63,7 +63,7 @@ export default function LoginPage() {
   const [otpResendCooldown, setOtpResendCooldown] = useState(0);
   const [otpExpiresIn, setOtpExpiresIn] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie } = usePhilSA();
+  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery } = usePhilSA();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -256,6 +256,27 @@ export default function LoginPage() {
     setOtp(['', '', '', '', '', '']);
     setNotice(`A new verification code was sent to ${maskIdentifier(identifier)}.`);
     document.getElementById('otp-0')?.focus();
+  };
+
+  const handleForgotPassword = async () => {
+    if (!identifier.trim()) {
+      setError('Enter your account email before requesting password recovery.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setNotice('');
+
+    const result = await requestPasswordRecovery(identifier);
+
+    setLoading(false);
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    setNotice(result.data.detail);
   };
 
   const handleOtpStep = async (event: React.FormEvent) => {
@@ -520,15 +541,6 @@ export default function LoginPage() {
                 {loading ? 'Checking Email...' : 'Continue'}
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
-
-              <div className="border-t border-philsa-border pt-6">
-                <div className="flex items-start gap-3 text-philsa-gray">
-                  <Shield className="w-7 h-7 shrink-0" />
-                  <p className="text-sm font-medium leading-5">
-                    Your information is protected and secured in compliance with data privacy standards.
-                  </p>
-                </div>
-              </div>
             </form>
           )}
 
@@ -599,7 +611,12 @@ export default function LoginPage() {
               <div>
                 <div className="flex justify-between items-center mb-3 ml-1">
                   <label className="label-philsa">Password</label>
-                  <button type="button" className="text-[10px] text-philsa-red font-black uppercase tracking-widest hover:underline">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    disabled={loading}
+                    className="text-[10px] text-philsa-red font-black uppercase tracking-widest hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                  >
                     Forgot Password?
                   </button>
                 </div>

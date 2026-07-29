@@ -6,6 +6,7 @@ import secrets
 import time
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -21,7 +22,7 @@ from rest_framework.exceptions import APIException
 
 from .audit import record_auth_event
 from .default_permissions import module_access_or_role_default
-from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog
+from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog, PasswordRecoveryToken
 from .roles import PortalRole, get_security_tier, get_user_role
 
 
@@ -75,6 +76,7 @@ ACCESS_TOKEN_PREFIX = "auth:access:"
 OTP_ACCOUNT_RATE_PREFIX = "auth:otp-rate:account:"
 OTP_IP_RATE_PREFIX = "auth:otp-rate:ip:"
 OTP_IP_CONFIRMED_ABUSE_PREFIX = "auth:otp-ip-confirmed-abuse:"
+PASSWORD_RECOVERY_LINK_PATH = "/reset-password"
 
 
 def _hash_token(token: str) -> str:
@@ -250,6 +252,70 @@ def _send_login_otp(*, email: str, code: str) -> None:
         to=[email],
     )
     email_message.attach_alternative(_login_otp_html_message(code=code), "text/html")
+    email_message.send(fail_silently=False)
+
+
+def _frontend_url(path: str, query: dict[str, str]) -> str:
+    base = str(settings.FRONTEND_BASE_URL).rstrip("/")
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{base}{normalized_path}?{urlencode(query)}"
+
+
+def _password_recovery_plain_message(*, reset_url: str) -> str:
+    return (
+        "Use this PhilSLA password recovery link to set a new password: "
+        f"{reset_url} "
+        f"This link expires in {settings.AUTH_PASSWORD_RECOVERY_TTL_MINUTES} minutes. "
+        "If you did not request this change, you can ignore this email."
+    )
+
+
+def _password_recovery_html_message(*, reset_url: str) -> str:
+    return f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #d9dde5;border-radius:18px;">
+            <tr>
+              <td style="padding:36px 42px 18px;text-align:center;">
+                <div style="font-size:46px;line-height:1;font-weight:800;font-family:Arial Black,Arial,Helvetica,sans-serif;">
+                  <span style="color:#18345c;">Phil</span><span style="color:#a5162d;">SLA</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 42px 40px;font-size:14px;line-height:1.6;text-align:left;">
+                <p style="margin:0 0 18px;">Dear PhilSLA User,</p>
+                <p style="margin:0 0 22px;">A password recovery request was made for your account.</p>
+                <p style="margin:0 0 26px;">
+                  <a href="{reset_url}" style="display:inline-block;background:#a5162d;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px;">
+                    Reset Password
+                  </a>
+                </p>
+                <p style="margin:0 0 12px;">This link expires in {settings.AUTH_PASSWORD_RECOVERY_TTL_MINUTES} minutes.</p>
+                <p style="margin:0;">If you did not request this change, you can ignore this email.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _send_password_recovery_link(*, email: str, reset_url: str) -> None:
+    email_message = EmailMultiAlternatives(
+        subject="Reset your PhilSLA password",
+        body=_password_recovery_plain_message(reset_url=reset_url),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[email],
+    )
+    email_message.attach_alternative(_password_recovery_html_message(reset_url=reset_url), "text/html")
     email_message.send(fail_silently=False)
 
 
@@ -918,6 +984,12 @@ def revoke_current_session(*, user: object, auth: object) -> None:
 def revoke_tokens(*, user: object, scope: str) -> None:
     """Revoke refresh/access tokens for the requested scope."""
 
+    if scope != "all":
+        return None
+
+    AuthRefreshSession.objects.filter(user_id=getattr(user, "id", None), revoked_at__isnull=True).update(
+        revoked_at=timezone.now()
+    )
     return None
 
 
@@ -1007,16 +1079,90 @@ def complete_staff_activation(*, activation_token: str, password: str) -> None:
 def request_password_recovery(*, identifier: str) -> None:
     """Request a password recovery link without revealing account existence."""
 
+    account = _resolve_database_account(identifier)
+    if account is None:
+        return None
+
+    user = _get_user_for_account(account)
+    email = str(account.get("email") or "").strip()
+    if user is None or not email:
+        return None
+
+    token = _new_token()
+    expires_at = timezone.now() + timedelta(minutes=settings.AUTH_PASSWORD_RECOVERY_TTL_MINUTES)
+    PasswordRecoveryToken.objects.filter(user=user, used_at__isnull=True).update(used_at=timezone.now())
+    recovery = PasswordRecoveryToken.objects.create(
+        user=user,
+        token_hash=_hash_token(token),
+        requested_identifier=identifier.strip()[:254],
+        expires_at=expires_at,
+    )
+    reset_url = _frontend_url(PASSWORD_RECOVERY_LINK_PATH, {"token": token})
+
+    try:
+        _send_password_recovery_link(email=email, reset_url=reset_url)
+    except Exception:
+        recovery.delete()
+        raise
+
     return None
 
 
+def _mask_email(email: str) -> str:
+    local_part, separator, domain = email.partition("@")
+    if not separator:
+        return email
+    if len(local_part) <= 2:
+        masked_local = f"{local_part[:1]}***"
+    else:
+        masked_local = f"{local_part[:3]}***"
+    return f"{masked_local}@{domain}"
+
+
+def inspect_password_recovery(*, recovery_token: str) -> dict[str, str]:
+    """Return safe account display metadata for an active recovery token."""
+
+    recovery = (
+        PasswordRecoveryToken.objects.select_related("user")
+        .filter(token_hash=_hash_token(recovery_token), used_at__isnull=True, expires_at__gt=timezone.now(), user__is_active=True)
+        .first()
+    )
+    if recovery is None:
+        raise LoginFlowRejected("This recovery link has expired. Please request a new one.")
+
+    user = recovery.user
+    full_name = " ".join(part for part in (user.first_name, user.last_name) if part).strip()
+    email = str(user.email or "").strip()
+    return {
+        "accountLabel": full_name or _mask_email(email),
+        "maskedEmail": _mask_email(email) if email else "",
+    }
+
+
+@transaction.atomic
 def complete_password_recovery(*, recovery_token: str, password: str) -> None:
     """Complete password reset and revoke active sessions."""
 
-    raise LoginFlowRejected("This recovery link has expired. Please request a new one.")
+    token_hash = _hash_token(recovery_token)
+    recovery = (
+        PasswordRecoveryToken.objects.select_for_update()
+        .select_related("user")
+        .filter(token_hash=token_hash, used_at__isnull=True, expires_at__gt=timezone.now(), user__is_active=True)
+        .first()
+    )
+    if recovery is None:
+        raise LoginFlowRejected("This recovery link has expired. Please request a new one.")
+
+    user = recovery.user
+    user.set_password(password)
+    user.save(update_fields=["password"])
+    recovery.used_at = timezone.now()
+    recovery.save(update_fields=["used_at"])
+    revoke_tokens(user=user, scope="all")
+    return None
 
 
 def request_admin_account_recovery(*, email: str, actor: object) -> None:
     """System Admin initiated staff/admin account recovery request."""
 
-    return None
+    return request_password_recovery(identifier=email)

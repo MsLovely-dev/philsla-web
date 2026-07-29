@@ -21,6 +21,7 @@ from .serializers import (
     AdminAccountRecoveryRequestSerializer,
     PasswordLoginSerializer,
     PasswordRecoveryCompletionSerializer,
+    PasswordRecoveryInspectionSerializer,
     PasswordRecoveryRequestSerializer,
     StaffActivationCompletionSerializer,
     StudentRegistrationActivationSerializer,
@@ -37,6 +38,7 @@ from .services import (
     complete_staff_activation,
     complete_password_recovery,
     complete_login_selfie,
+    inspect_password_recovery,
     list_admin_user_accounts,
     request_admin_account_recovery,
     request_password_recovery,
@@ -348,6 +350,22 @@ class PasswordRecoveryCompletionView(APIView):
             password=serializer.validated_data["password"],
         )
         return Response(status=204)
+
+
+class PasswordRecoveryInspectionView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
+
+    def post(self, request) -> Response:
+        serializer = PasswordRecoveryInspectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        return Response(
+            inspect_password_recovery(recovery_token=serializer.validated_data["recoveryToken"]),
+            status=200,
+        )
 
 
 class AdminAccountRecoveryRequestView(APIView):

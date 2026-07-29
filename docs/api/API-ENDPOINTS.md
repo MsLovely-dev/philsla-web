@@ -20,9 +20,10 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create or reactivate a Student account for an approved registration | Implemented |
 | `POST` | `/api/v1/auth/activation/staff/complete/` | Public activation link | `AllowAny` | Complete first-time staff/admin activation by setting the user's password | Implemented |
-| `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented boundary; email/token storage pending |
-| `POST` | `/api/v1/auth/recovery/password/complete/` | Public recovery link | `AllowAny` | Complete password reset from a recovery link | Implemented boundary; recovery-token storage pending |
-| `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented boundary; email/token storage pending |
+| `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented |
+| `POST` | `/api/v1/auth/recovery/password/inspect/` | Public recovery link | `AllowAny` | Return safe account display metadata for a valid recovery token | Implemented |
+| `POST` | `/api/v1/auth/recovery/password/complete/` | Public recovery link | `AllowAny` | Complete password reset from a recovery link | Implemented |
+| `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented |
 | `GET`, `POST` | `/api/v1/auth/admin/users/` | Required bearer access token | `SYSTEM_ADMIN` | List or create non-student staff/admin accounts for User & Role Settings | Implemented |
 | `PUT`, `DELETE` | `/api/v1/auth/admin/users/{userId}/` | Required bearer access token | `SYSTEM_ADMIN` | Update or deactivate a non-student staff/admin account | Implemented |
 | `POST` | `/api/v1/applications/` | Public with LRN verification token; bearer token optional | `AllowAny` for initial registration | Create a registration draft, or create and submit final registration with `submitOnCreate` | Implemented |
@@ -493,7 +494,7 @@ Test coverage:
 
 Use this endpoint to request password recovery instructions for a Student or staff/admin account. The response must not reveal whether the identifier exists, whether the account is inactive, or which account table/role matched.
 
-Current implementation status: route, identifier validation, anti-enumeration response, and tests exist. Recovery-token generation, token hashing/storage, email delivery, rate limits, and audit events remain pending.
+Current implementation status: route, identifier validation, anti-enumeration response, recovery-token generation, token hashing/storage, email delivery, auth recovery throttle scope, audit event, and tests exist.
 
 Request:
 
@@ -524,11 +525,40 @@ Test coverage:
 - Behavior tests: `backend/apps/accounts/tests/test_recovery_endpoints.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
 
+### `POST /api/v1/auth/recovery/password/inspect/`
+
+Use this endpoint to show safe account context on the password reset page. The client must submit the opaque recovery token in the request body, not in a query string.
+
+Current implementation status: route, recovery-token lookup, safe masked email display, safe expired-link response, and tests exist.
+
+Request:
+
+```json
+{
+  "recoveryToken": "opaque-recovery-token"
+}
+```
+
+Successful response:
+
+```json
+{
+  "accountLabel": "cha***@gmail.com",
+  "maskedEmail": "cha***@gmail.com"
+}
+```
+
+Response behavior:
+
+- `200 OK` is returned for a valid, unused, unexpired recovery token.
+- `401 AUTHENTICATION_FAILED` with `This recovery link has expired. Please request a new one.` is returned for missing, expired, already-used, or invalid recovery tokens.
+- The response must not include raw recovery tokens, password state, internal user IDs, roles, or unmasked email addresses when no account display name is available.
+
 ### `POST /api/v1/auth/recovery/password/complete/`
 
 Use this endpoint to complete password recovery from a secure, time-limited recovery link. Completing recovery must not create a session; the user must complete the normal three-step login flow after reset.
 
-Current implementation status: route, password-policy validation, password-confirmation validation, safe expired-link response, and tests exist. Recovery-token lookup, password hashing, session revocation, and audit events remain pending.
+Current implementation status: route, password-policy validation, password-confirmation validation, recovery-token lookup, password hashing, single-use token consumption, refresh-session revocation, safe expired-link response, audit event, and tests exist.
 
 Request:
 
@@ -549,11 +579,8 @@ Validation behavior:
 Current response behavior:
 
 - `400 VALIDATION_FAILED` is returned for invalid password policy or mismatched confirmation.
-- `401 AUTHENTICATION_FAILED` with `This recovery link has expired. Please request a new one.` is returned until recovery-token storage exists.
-
-Future successful response:
-
-- `204 No Content`.
+- `401 AUTHENTICATION_FAILED` with `This recovery link has expired. Please request a new one.` is returned for missing, expired, already-used, or invalid recovery tokens.
+- `204 No Content` is returned after the password is reset successfully.
 
 Test coverage:
 

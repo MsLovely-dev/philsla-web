@@ -40,6 +40,15 @@ export interface AuthSelfieChallenge {
   expiresInSeconds: number;
 }
 
+export interface PasswordRecoveryRequestResult {
+  detail: string;
+}
+
+export interface PasswordRecoveryInspection {
+  accountLabel: string;
+  maskedEmail: string;
+}
+
 export interface AuthService {
   getCurrentSession(): Promise<ServiceResult<AuthSession | null>>;
   login(credentials: AuthCredentials): Promise<ServiceResult<AuthSession>>;
@@ -49,6 +58,9 @@ export interface AuthService {
   resendLoginOtp?(otpPendingAuthToken: string): Promise<ServiceResult<AuthOtpChallenge>>;
   verifyLoginOtp?(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSelfieChallenge>>;
   completeLoginSelfie?(selfiePendingAuthToken: string, file: File): Promise<ServiceResult<AuthSession>>;
+  requestPasswordRecovery?(identifier: string): Promise<ServiceResult<PasswordRecoveryRequestResult>>;
+  inspectPasswordRecovery?(recoveryToken: string): Promise<ServiceResult<PasswordRecoveryInspection>>;
+  completePasswordRecovery?(recoveryToken: string, password: string, confirmPassword: string): Promise<ServiceResult<null>>;
   logout(): Promise<ServiceResult<null>>;
   refreshSession(): Promise<ServiceResult<AuthSession>>;
 }
