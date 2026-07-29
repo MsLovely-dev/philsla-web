@@ -369,6 +369,51 @@ export default function LoginPage() {
     }
   };
 
+  const focusOtpInput = (index: number) => {
+    document.getElementById(`otp-${index}`)?.focus();
+  };
+
+  const handleOtpPaste = (event: React.ClipboardEvent<HTMLInputElement>, index: number) => {
+    event.preventDefault();
+
+    const clipboardDigits = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    const startIndex = clipboardDigits.length === 6 ? 0 : index;
+    const pastedDigits = clipboardDigits.slice(0, 6 - startIndex);
+    if (!pastedDigits) return;
+
+    const newOtp = [...otp];
+    pastedDigits.split('').forEach((digit, offset) => {
+      newOtp[startIndex + offset] = digit;
+    });
+    setOtp(newOtp);
+
+    focusOtpInput(Math.min(startIndex + pastedDigits.length, 5));
+  };
+
+  const handleOtpKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (event.key !== 'Backspace') return;
+
+    event.preventDefault();
+    const newOtp = [...otp];
+
+    if (newOtp[index]) {
+      newOtp[index] = '';
+      setOtp(newOtp);
+      return;
+    }
+
+    if (index > 0) {
+      newOtp[index - 1] = '';
+      setOtp(newOtp);
+      focusOtpInput(index - 1);
+    }
+  };
+
+  const clearOtp = () => {
+    setOtp(['', '', '', '', '', '']);
+    focusOtpInput(0);
+  };
+
   const resetToIdentifier = () => {
     setStep('identifier');
     setPendingAuthToken('');
@@ -604,6 +649,8 @@ export default function LoginPage() {
                       maxLength={1}
                       value={digit}
                       onChange={(event) => updateOtp(event.target.value, index)}
+                      onKeyDown={(event) => handleOtpKeyDown(event, index)}
+                      onPaste={(event) => handleOtpPaste(event, index)}
                       className="w-full h-16 bg-philsa-bg border-none rounded-2xl text-center text-2xl font-black focus:ring-4 focus:ring-philsa-red/10 transition-all shadow-sm ring-1 ring-philsa-border/30"
                     />
                   ))}
@@ -628,6 +675,15 @@ export default function LoginPage() {
                         : 'Resend Code'}
                   </button>
                 </div>
+                {otp.some(Boolean) && (
+                  <button
+                    type="button"
+                    onClick={clearOtp}
+                    className="mx-auto mt-5 block text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-red transition-colors"
+                  >
+                    Clear Code
+                  </button>
+                )}
                 {otpExpiresIn <= 0 && (
                   <p className="text-[11px] text-philsa-red font-bold uppercase tracking-wider mt-4 text-center">
                     Go back to password to request a new verification code.
