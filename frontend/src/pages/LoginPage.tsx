@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, Camera, CheckCircle2, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
 import { usePhilSA } from '../PhilSAContext';
 import type { UserRole } from '../types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ERROR_AUTO_DISMISS_MS = 6000;
-const NOTICE_AUTO_DISMISS_MS = 5000;
+const MESSAGE_AUTO_DISMISS_MS = 10000;
 const LOCAL_BACKEND_ACCOUNTS = [
   'admissions.reviewer@yopmail.com',
   'proctor@yopmail.com',
@@ -47,6 +46,13 @@ function maskIdentifier(identifier: string): string {
     return identifier.replace(/(.{3})(.*)(?=@)/, '$1***');
   }
   return identifier;
+}
+
+function formatOtpTime(seconds: number): string {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
 export default function LoginPage() {
@@ -118,7 +124,7 @@ export default function LoginPage() {
 
     const timer = window.setTimeout(() => {
       setError('');
-    }, ERROR_AUTO_DISMISS_MS);
+    }, MESSAGE_AUTO_DISMISS_MS);
 
     return () => window.clearTimeout(timer);
   }, [error]);
@@ -128,7 +134,7 @@ export default function LoginPage() {
 
     const timer = window.setTimeout(() => {
       setNotice('');
-    }, NOTICE_AUTO_DISMISS_MS);
+    }, MESSAGE_AUTO_DISMISS_MS);
 
     return () => window.clearTimeout(timer);
   }, [notice]);
@@ -481,14 +487,14 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {error && (
+          {error && step !== 'otp' && (
             <div className="bg-red-50 border border-red-100 text-red-600 px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
               {error}
             </div>
           )}
 
-          {notice && (
+          {notice && step !== 'otp' && (
             <div className="bg-[#e5f1ec] border border-[#00563F]/15 text-[#00563F] px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
               <CheckCircle2 className="w-4 h-4" />
               {notice}
@@ -653,12 +659,86 @@ export default function LoginPage() {
             </form>
           )}
 
-          {step === 'otp' && (
-            <form onSubmit={handleOtpStep} className="space-y-10">
+          {step === 'otp' && otpExpiresIn <= 0 && (
+            <div className="pt-4 text-center">
+              <div className="relative mx-auto mb-8 flex h-24 w-24 items-center justify-center rounded-full bg-philsa-red/10">
+                <Clock className="h-14 w-14 text-philsa-red" strokeWidth={2.2} />
+                <div className="absolute -bottom-1 -right-1 flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white shadow-md ring-4 ring-white">
+                  <AlertTriangle className="h-5 w-5" fill="currentColor" strokeWidth={2.5} />
+                </div>
+              </div>
+
+              <h3 className="mb-5 text-xl font-black text-philsa-navy tracking-tight">
+                Verification Session Expired
+              </h3>
+              <p className="mx-auto mb-8 max-w-sm text-sm font-medium leading-7 text-philsa-navy/80">
+                Your verification session has expired for security reasons.
+                <br />
+                Please sign in again to request a new verification code.
+              </p>
+
+              <div className="mb-8 h-px bg-philsa-border" />
+
+              <button
+                type="button"
+                onClick={resetToIdentifier}
+                className="mx-auto flex h-12 w-full max-w-xs items-center justify-center gap-3 rounded-lg border border-philsa-red bg-white text-sm font-black text-philsa-red transition-colors hover:bg-philsa-red hover:text-white"
+              >
+                <ArrowLeft className="h-5 w-5" />
+                Return to Login
+              </button>
+            </div>
+          )}
+
+          {step === 'otp' && otpExpiresIn > 0 && (
+            <form onSubmit={handleOtpStep} className="space-y-8">
+              {error && (
+                <div className="rounded-lg border border-red-200 bg-red-50/80 p-4 text-left shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500 text-white">
+                      <AlertTriangle className="h-4 w-4" fill="currentColor" strokeWidth={2.5} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-black text-red-600">Incorrect verification code</h3>
+                      <p className="mt-2 text-xs font-medium leading-5 text-philsa-navy">
+                        The code you entered is incorrect or has already expired.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="my-3 h-px bg-red-200/80" />
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-500">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <p className="text-xs font-medium leading-5 text-philsa-navy">
+                      Use the latest verification code sent to <span className="font-black">{maskIdentifier(identifier)}</span>.
+                      <br />
+                      Request a new code if this one has expired.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {notice && (
+                <div className="rounded-lg border border-[#00563F]/20 bg-[#e5f1ec]/70 p-4 text-left shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0f8b5f] text-white">
+                      <CheckCircle2 className="h-4 w-4" fill="currentColor" strokeWidth={2.5} />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-[#00563F]">New verification code sent</h3>
+                      <p className="mt-2 text-xs font-medium leading-5 text-philsa-navy">
+                        A new code has been sent to <span className="font-black">{maskIdentifier(identifier)}</span>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
-                <label className="label-philsa block mb-2 text-center uppercase tracking-widest">Email Verification Code</label>
-                <p className="text-[11px] text-philsa-gray font-bold text-center mb-8 uppercase">
-                  Sent to {maskIdentifier(identifier)}
+                <label className="mb-2 block text-base font-black text-philsa-navy">Email Verification</label>
+                <p className="mb-5 text-xs font-medium leading-5 text-philsa-navy">
+                  Enter the 6-digit code sent to <span className="font-black text-[#31548a]">{maskIdentifier(identifier)}</span>
                 </p>
 
                 <div className="flex justify-between gap-3">
@@ -673,29 +753,30 @@ export default function LoginPage() {
                       onChange={(event) => updateOtp(event.target.value, index)}
                       onKeyDown={(event) => handleOtpKeyDown(event, index)}
                       onPaste={(event) => handleOtpPaste(event, index)}
-                      className="w-full h-16 bg-philsa-bg border-none rounded-2xl text-center text-2xl font-black focus:ring-4 focus:ring-philsa-red/10 transition-all shadow-sm ring-1 ring-philsa-border/30"
+                      className="h-16 w-full rounded-lg border border-philsa-border bg-white text-center text-2xl font-black shadow-sm transition-all focus:border-philsa-red focus:ring-4 focus:ring-philsa-red/10"
                     />
                   ))}
                 </div>
-                <div className="flex items-center justify-between mt-8">
-                  <p className="text-[11px] text-philsa-gray font-bold uppercase tracking-wider">
-                    {otpExpiresIn > 0 ? `Code expires in ${Math.ceil(otpExpiresIn / 60)} min` : 'Verification session expired'}
+                <div className="mt-6 text-center">
+                  <p className="inline-flex items-center justify-center gap-2 text-sm font-medium text-philsa-navy">
+                    <Clock className="h-4 w-4 text-philsa-gray" />
+                    Code expires in <span className="font-black text-[#0f8b5f]">{formatOtpTime(otpExpiresIn)}</span>
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleResendOtp}
-                    className="text-[11px] text-philsa-red font-black uppercase tracking-widest hover:underline disabled:text-philsa-gray/60 disabled:no-underline disabled:cursor-not-allowed inline-flex items-center gap-2"
-                    disabled={otpExpiresIn <= 0 || otpResendCooldown > 0 || loading || resendingOtp}
-                  >
-                    <RotateCcw className={`w-3.5 h-3.5 ${resendingOtp ? 'animate-spin' : ''}`} />
-                    {resendingOtp
-                      ? 'Resending...'
-                      : otpExpiresIn <= 0
-                        ? 'Expired'
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-philsa-navy">
+                    <span>Didn't receive the code?</span>
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      className="font-bold text-[#31548a] hover:underline disabled:text-philsa-gray/60 disabled:no-underline disabled:cursor-not-allowed"
+                      disabled={otpResendCooldown > 0 || loading || resendingOtp}
+                    >
+                      {resendingOtp
+                        ? 'Resending...'
                         : otpResendCooldown > 0
                         ? `Resend in ${otpResendCooldown}s`
-                        : 'Resend Code'}
-                  </button>
+                        : 'Resend code'}
+                    </button>
+                  </div>
                 </div>
                 {otp.some(Boolean) && (
                   <button
@@ -706,16 +787,11 @@ export default function LoginPage() {
                     Clear Code
                   </button>
                 )}
-                {otpExpiresIn <= 0 && (
-                  <p className="text-[11px] text-philsa-red font-bold uppercase tracking-wider mt-4 text-center">
-                    Verification code expired. Please start login again to request a new code.
-                  </p>
-                )}
               </div>
 
-              <button disabled={loading || resendingOtp || otpExpiresIn <= 0} className="btn-primary w-full flex items-center justify-center gap-3">
-                {loading ? 'Creating Session...' : 'Establish Session'}
-                <LogIn className="w-5 h-5 text-white/50" />
+              <button disabled={loading || resendingOtp} className="btn-primary w-full flex items-center justify-center gap-3">
+                {loading ? 'Verifying Code...' : 'Verify Code'}
+                <ArrowRight className="w-5 h-5 text-white/70" />
               </button>
 
               <button
