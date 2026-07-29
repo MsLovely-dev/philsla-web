@@ -305,8 +305,47 @@ interface PermissionMatrixProps {
 }
 
 function PermissionMatrix({ modules, selectedAccess, onToggle, readOnly = false }: PermissionMatrixProps) {
+  const [showSelectedOnly, setShowSelectedOnly] = useState(false);
+  const selectedPermissionCount = useMemo(
+    () => modules.reduce((count, module) => (
+      count + permissionActions.filter((permission) => (
+        isPermissionApplicable(module, permission.key) &&
+        isPermissionSelected(selectedAccess, module, permission.key)
+      )).length
+    ), 0),
+    [modules, selectedAccess]
+  );
+  const visibleModules = useMemo(
+    () => showSelectedOnly
+      ? modules.filter((module) => permissionActions.some((permission) => (
+        isPermissionApplicable(module, permission.key) &&
+        isPermissionSelected(selectedAccess, module, permission.key)
+      )))
+      : modules,
+    [modules, selectedAccess, showSelectedOnly]
+  );
+
   return (
     <div className="bg-philsa-bg rounded-2xl border border-philsa-border overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-philsa-border bg-white px-4 py-3">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-philsa-gray">
+          {selectedPermissionCount} selected
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowSelectedOnly((current) => !current)}
+          aria-pressed={showSelectedOnly}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-widest transition-colors',
+            showSelectedOnly
+              ? 'border-philsa-red bg-philsa-red text-white'
+              : 'border-philsa-border bg-white text-philsa-gray hover:border-philsa-red hover:text-philsa-red'
+          )}
+        >
+          <Filter className="w-3.5 h-3.5" />
+          Selected Only
+        </button>
+      </div>
       <div className="max-h-[46vh] overflow-auto">
         <table className="w-full text-left">
           <thead className="sticky top-0 z-10 bg-white text-[10px] text-philsa-gray font-semibold uppercase tracking-widest shadow-sm">
@@ -321,10 +360,20 @@ function PermissionMatrix({ modules, selectedAccess, onToggle, readOnly = false 
             </tr>
           </thead>
           <tbody className="divide-y divide-philsa-border/70">
-            {modules.flatMap((module, index) => {
+            {visibleModules.length === 0 && (
+              <tr className="bg-philsa-bg/60">
+                <td
+                  colSpan={permissionActions.length + 1}
+                  className="px-4 py-8 text-center text-sm font-semibold text-philsa-gray"
+                >
+                  No selected permissions to show.
+                </td>
+              </tr>
+            )}
+            {visibleModules.flatMap((module, index) => {
               const rows = [];
 
-              if (modules[index - 1]?.category !== module.category) {
+              if (visibleModules[index - 1]?.category !== module.category) {
                 rows.push(
                   <tr key={`${module.category}-section`} className="bg-white">
                     <td

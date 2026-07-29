@@ -113,6 +113,7 @@ interface PhilSAContextType {
   startLoginIdentifier: (identifier: string) => Promise<ServiceResult<AuthIdentifierChallenge>>;
   verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthOtpChallenge>>;
   completeStaffActivation: (activationToken: string, password: string, confirmPassword: string) => Promise<ServiceResult<null>>;
+  resendLoginOtp: (otpPendingAuthToken: string) => Promise<ServiceResult<AuthOtpChallenge>>;
   verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSelfieChallenge>>;
   completeLoginSelfie: (selfiePendingAuthToken: string, file: File) => Promise<ServiceResult<AuthSession>>;
   logout: () => void;
@@ -344,6 +345,16 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     return authService.verifyLoginOtp(otpPendingAuthToken, code);
   };
 
+  const resendLoginOtp = async (
+    otpPendingAuthToken: string,
+  ): Promise<ServiceResult<AuthOtpChallenge>> => {
+    if (!authService.resendLoginOtp) {
+      return authorizationError('OTP resend is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+
+    return authService.resendLoginOtp(otpPendingAuthToken);
+  };
+
   const completeLoginSelfie = async (
     selfiePendingAuthToken: string,
     file: File,
@@ -408,7 +419,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, completeLoginSelfie, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

@@ -64,8 +64,11 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendingOtp, setResendingOtp] = useState(false);
+  const [otpResendCooldown, setOtpResendCooldown] = useState(0);
+  const [otpExpiresIn, setOtpExpiresIn] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, verifyLoginOtp, completeLoginSelfie } = usePhilSA();
+  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie } = usePhilSA();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -87,6 +90,26 @@ export default function LoginPage() {
       }
     };
   }, [selfiePreviewUrl]);
+
+  useEffect(() => {
+    if (step !== 'otp' || otpResendCooldown <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      setOtpResendCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [otpResendCooldown, step]);
+
+  useEffect(() => {
+    if (step !== 'otp' || otpExpiresIn <= 0) return;
+
+    const timer = window.setTimeout(() => {
+      setOtpExpiresIn((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [otpExpiresIn, step]);
 
   const handleIdentifierStep = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -189,10 +212,35 @@ export default function LoginPage() {
     }
 
     setOtpPendingAuthToken(result.data.otpPendingAuthToken);
+    setOtpResendCooldown(result.data.resendCooldownSeconds);
+    setOtpExpiresIn(result.data.expiresInSeconds);
     setSelfiePendingAuthToken('');
     resetSelfieCapture();
     setOtp(['', '', '', '', '', '']);
+    setNotice('');
     setStep('otp');
+  };
+
+  const handleResendOtp = async () => {
+    if (!otpPendingAuthToken || otpResendCooldown > 0 || resendingOtp) return;
+
+    setResendingOtp(true);
+    setError('');
+    setNotice('');
+    const result = await resendLoginOtp(otpPendingAuthToken);
+    setResendingOtp(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    setOtpPendingAuthToken(result.data.otpPendingAuthToken);
+    setOtpResendCooldown(result.data.resendCooldownSeconds);
+    setOtpExpiresIn(result.data.expiresInSeconds);
+    setOtp(['', '', '', '', '', '']);
+    setNotice(`A new verification code was sent to ${maskIdentifier(identifier)}.`);
+    document.getElementById('otp-0')?.focus();
   };
 
   const handleOtpStep = async (event: React.FormEvent) => {
@@ -327,6 +375,9 @@ export default function LoginPage() {
     setActivationToken('');
     setOtpPendingAuthToken('');
     setSelfiePendingAuthToken('');
+    setOtpResendCooldown(0);
+    setOtpExpiresIn(0);
+    setResendingOtp(false);
     setPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -559,15 +610,32 @@ export default function LoginPage() {
                 </div>
                 <div className="flex items-center justify-between mt-8">
                   <p className="text-[11px] text-philsa-gray font-bold uppercase tracking-wider">
-                    Code expires in 5 minutes
+                    {otpExpiresIn > 0 ? `Code expires in ${Math.ceil(otpExpiresIn / 60)} min` : 'Verification session expired'}
                   </p>
-                  <button type="button" className="text-[11px] text-philsa-red font-black uppercase tracking-widest hover:underline" disabled>
-                    Resend Coming Soon
+                  <button
+                    type="button"
+                    onClick={handleResendOtp}
+                    className="text-[11px] text-philsa-red font-black uppercase tracking-widest hover:underline disabled:text-philsa-gray/60 disabled:no-underline disabled:cursor-not-allowed inline-flex items-center gap-2"
+                    disabled={otpExpiresIn <= 0 || otpResendCooldown > 0 || loading || resendingOtp}
+                  >
+                    <RotateCcw className={`w-3.5 h-3.5 ${resendingOtp ? 'animate-spin' : ''}`} />
+                    {resendingOtp
+                      ? 'Resending...'
+                      : otpExpiresIn <= 0
+                        ? 'Expired'
+                        : otpResendCooldown > 0
+                        ? `Resend in ${otpResendCooldown}s`
+                        : 'Resend Code'}
                   </button>
                 </div>
+                {otpExpiresIn <= 0 && (
+                  <p className="text-[11px] text-philsa-red font-bold uppercase tracking-wider mt-4 text-center">
+                    Go back to password to request a new verification code.
+                  </p>
+                )}
               </div>
 
-              <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3">
+              <button disabled={loading || resendingOtp || otpExpiresIn <= 0} className="btn-primary w-full flex items-center justify-center gap-3">
                 {loading ? 'Creating Session...' : 'Establish Session'}
                 <LogIn className="w-5 h-5 text-white/50" />
               </button>
