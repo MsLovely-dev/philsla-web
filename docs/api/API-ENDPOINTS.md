@@ -13,6 +13,7 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented |
 | `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented boundary; pending-token/password verification pending |
 | `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and advance to selfie photo logging | Implemented |
+| `POST` | `/api/v1/auth/login/otp/resend/` | Public with OTP pending-auth token | `AllowAny` | Resend the login email OTP with cooldown and resend limits | Implemented |
 | `POST` | `/api/v1/auth/login/selfie/` | Public with selfie pending-auth token | `AllowAny` | Store the captured login selfie image and complete session issuance | Implemented |
 | `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented boundary; durable revocation pending |
 | `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented boundary; token store pending |
@@ -364,6 +365,36 @@ Successful response:
   "expiresInSeconds": 600
 }
 ```
+
+### `POST /api/v1/auth/login/otp/resend/`
+
+Use this endpoint to request a replacement email OTP for an active Step-3 login challenge.
+
+Request:
+
+```json
+{
+  "otpPendingAuthToken": "opaque-step-2-token"
+}
+```
+
+Successful response:
+
+```json
+{
+  "otpPendingAuthToken": "opaque-step-2-token",
+  "nextStep": "otp",
+  "expiresInSeconds": 300,
+  "resendCooldownSeconds": 60
+}
+```
+
+Validation behavior:
+
+- Missing `otpPendingAuthToken` returns `400 VALIDATION_FAILED`.
+- Invalid or expired pending OTP tokens return `401 AUTHENTICATION_FAILED`.
+- Requests inside the resend cooldown return `429 OTP_COOLDOWN`.
+- The backend enforces the maximum resend count and never returns the OTP code outside local development settings.
 
 ### `POST /api/v1/auth/login/selfie/`
 

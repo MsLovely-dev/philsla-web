@@ -17,6 +17,7 @@ from .serializers import (
     IdentifierLoginSerializer,
     LoginSelfieSerializer,
     OtpLoginSerializer,
+    OtpResendLoginSerializer,
     AdminAccountRecoveryRequestSerializer,
     PasswordLoginSerializer,
     PasswordRecoveryCompletionSerializer,
@@ -28,6 +29,7 @@ from .serializers import (
 )
 from .services import (
     LoginFlowRejected,
+    LoginOtpCooldown,
     activate_student_registration_account,
     create_admin_user_account,
     deactivate_admin_user_account,
@@ -37,6 +39,7 @@ from .services import (
     list_admin_user_accounts,
     request_admin_account_recovery,
     request_password_recovery,
+    resend_login_otp,
     revoke_current_session,
     revoke_tokens,
     rotate_refresh_token,
@@ -171,6 +174,27 @@ class OtpLoginView(APIView):
             record_auth_event(event="auth.otp_submitted", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.otp_submitted", outcome="accepted", request=request)
+        return Response(result, status=202)
+
+
+class OtpResendLoginView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
+
+    def post(self, request) -> Response:
+        serializer = OtpResendLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = resend_login_otp(
+                otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
+            )
+        except (LoginFlowRejected, LoginOtpCooldown):
+            record_auth_event(event="auth.otp_resend_requested", outcome="rejected", request=request)
+            raise
+        record_auth_event(event="auth.otp_resend_requested", outcome="accepted", request=request)
         return Response(result, status=202)
 
 
