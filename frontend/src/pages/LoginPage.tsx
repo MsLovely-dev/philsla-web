@@ -794,13 +794,6 @@ export default function LoginPage() {
                 <ArrowRight className="w-5 h-5 text-white/70" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => setStep('password')}
-                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
-              >
-                ← Back to Password
-              </button>
             </form>
           )}
 
