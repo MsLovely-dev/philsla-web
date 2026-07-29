@@ -1,5 +1,5 @@
 import type { User, UserRole } from '../types';
-import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
 import { sharedApiClient, type ApiClient } from './apiClient';
 import { authorizationError, serviceSuccess } from './serviceResult';
 import type { ServiceFailure, ServiceResult } from './serviceResult';
@@ -148,6 +148,35 @@ export class BackendAuthService implements AuthService {
     if (sessionResult.ok === false) return sessionResult as ServiceFailure;
     if (!sessionResult.data) return authorizationError('The backend session was not created.', 'SESSION_NOT_CREATED');
     return serviceSuccess(sessionResult.data);
+  }
+
+  async requestPasswordRecovery(identifier: string): Promise<ServiceResult<PasswordRecoveryRequestResult>> {
+    return this.apiClient.request<PasswordRecoveryRequestResult>('/api/v1/auth/recovery/password/request/', {
+      method: 'POST',
+      body: JSON.stringify({ identifier }),
+    });
+  }
+
+  async inspectPasswordRecovery(recoveryToken: string): Promise<ServiceResult<PasswordRecoveryInspection>> {
+    return this.apiClient.request<PasswordRecoveryInspection>('/api/v1/auth/recovery/password/inspect/', {
+      method: 'POST',
+      body: JSON.stringify({ recoveryToken }),
+    });
+  }
+
+  async completePasswordRecovery(
+    recoveryToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<null>> {
+    return this.apiClient.request<null>('/api/v1/auth/recovery/password/complete/', {
+      method: 'POST',
+      body: JSON.stringify({
+        recoveryToken,
+        password,
+        confirmPassword,
+      }),
+    });
   }
 
   async logout(): Promise<ServiceResult<null>> {

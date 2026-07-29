@@ -66,6 +66,30 @@ class AuthRefreshSession(models.Model):
         return self.revoked_at is None and self.expires_at > timezone.now()
 
 
+class PasswordRecoveryToken(models.Model):
+    """Single-use password recovery token stored as a digest."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_recovery_tokens")
+    token_hash = models.CharField(max_length=64, unique=True)
+    requested_identifier = models.CharField(max_length=254, blank=True, default="")
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["token_hash"]),
+            models.Index(fields=["user", "used_at", "expires_at"]),
+        ]
+
+    @property
+    def is_active(self) -> bool:
+        from django.utils import timezone
+
+        return self.used_at is None and self.expires_at > timezone.now()
+
+
 class LoginSelfieLog(models.Model):
     """Captured selfie evidence required before issuing a login session."""
 

@@ -326,4 +326,78 @@ describe('BackendAuthService', () => {
       }),
     );
   });
+
+  it('requests password recovery from the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        { detail: 'If the account can be recovered, instructions will be sent to the verified email address.' },
+        { status: 202 },
+      ),
+    );
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.requestPasswordRecovery('student@example.test');
+
+    expect(result).toEqual({
+      ok: true,
+      data: { detail: 'If the account can be recovered, instructions will be sent to the verified email address.' },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/auth/recovery/password/request/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ identifier: 'student@example.test' }),
+      }),
+    );
+  });
+
+  it('submits password recovery completion to the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.completePasswordRecovery('recovery-token', 'Password2!', 'Password2!');
+
+    expect(result).toEqual({ ok: true, data: null });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/auth/recovery/password/complete/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          recoveryToken: 'recovery-token',
+          password: 'Password2!',
+          confirmPassword: 'Password2!',
+        }),
+      }),
+    );
+  });
+
+  it('inspects a password recovery token for safe account display', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          accountLabel: 'cha***@gmail.com',
+          maskedEmail: 'cha***@gmail.com',
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.inspectPasswordRecovery('recovery-token');
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        accountLabel: 'cha***@gmail.com',
+        maskedEmail: 'cha***@gmail.com',
+      },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/auth/recovery/password/inspect/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ recoveryToken: 'recovery-token' }),
+      }),
+    );
+  });
 });

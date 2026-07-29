@@ -56,8 +56,13 @@ Email OTP policy:
 - OTPs are six-digit numeric codes generated with a cryptographically secure random generator.
 - OTPs expire after 5 minutes, are single-use, and are stored only as hashes.
 - A maximum of five OTP verification attempts is allowed per pending-auth session.
-- Resend invalidates the prior OTP, enforces a 30-60 second cooldown, and allows at most three resends per pending-auth session.
-- A maximum of five pending-auth session restarts per identifier per hour is required to limit email-bombing and brute-force abuse.
+- Pending-auth OTP sessions have a 10-minute inactivity expiry and a 15-minute absolute expiry.
+- Resend invalidates the prior OTP, enforces a 60-second cooldown, resets the inactivity timer, and does not extend the absolute expiry.
+- Resend is rejected when less than 90 seconds remain before the absolute pending-auth expiry.
+- OTP expiry after resend is the lesser of 5 minutes or the remaining absolute pending-auth lifetime.
+- Account OTP request limits are 5 per rolling 15 minutes and 20 per rolling 24 hours across initial OTP sends and resends.
+- Account OTP request limit violations escalate backoff to 5 minutes, then 15 minutes, then 1 hour.
+- IP thresholds are monitored at 20 OTP requests per 15 minutes and 80 per 24 hours. IP thresholds log and increase risk, but do not hard-block by default because shared school, university, testing-center, and computer-lab IPs can represent many legitimate users.
 - OTP emails must include the six-digit code, expiry notice, and support warning. They must not include clickable login links.
 
 Password and account recovery:

@@ -21,6 +21,7 @@ from .serializers import (
     AdminAccountRecoveryRequestSerializer,
     PasswordLoginSerializer,
     PasswordRecoveryCompletionSerializer,
+    PasswordRecoveryInspectionSerializer,
     PasswordRecoveryRequestSerializer,
     StaffActivationCompletionSerializer,
     StudentRegistrationActivationSerializer,
@@ -30,12 +31,14 @@ from .serializers import (
 from .services import (
     LoginFlowRejected,
     LoginOtpCooldown,
+    LoginOtpRateLimited,
     activate_student_registration_account,
     create_admin_user_account,
     deactivate_admin_user_account,
     complete_staff_activation,
     complete_password_recovery,
     complete_login_selfie,
+    inspect_password_recovery,
     list_admin_user_accounts,
     request_admin_account_recovery,
     request_password_recovery,
@@ -147,8 +150,9 @@ class PasswordLoginView(APIView):
             result = verify_login_password(
                 pending_auth_token=serializer.validated_data["pendingAuthToken"],
                 password=serializer.validated_data["password"],
+                request=request,
             )
-        except LoginFlowRejected:
+        except (LoginFlowRejected, LoginOtpRateLimited):
             record_auth_event(event="auth.password_submitted", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.password_submitted", outcome="accepted", request=request)
@@ -190,8 +194,9 @@ class OtpResendLoginView(APIView):
         try:
             result = resend_login_otp(
                 otp_pending_auth_token=serializer.validated_data["otpPendingAuthToken"],
+                request=request,
             )
-        except (LoginFlowRejected, LoginOtpCooldown):
+        except (LoginFlowRejected, LoginOtpCooldown, LoginOtpRateLimited):
             record_auth_event(event="auth.otp_resend_requested", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.otp_resend_requested", outcome="accepted", request=request)
@@ -345,6 +350,22 @@ class PasswordRecoveryCompletionView(APIView):
             password=serializer.validated_data["password"],
         )
         return Response(status=204)
+
+
+class PasswordRecoveryInspectionView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
+
+    def post(self, request) -> Response:
+        serializer = PasswordRecoveryInspectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        return Response(
+            inspect_password_recovery(recovery_token=serializer.validated_data["recoveryToken"]),
+            status=200,
+        )
 
 
 class AdminAccountRecoveryRequestView(APIView):
