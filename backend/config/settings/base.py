@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "apps.accounts",
     "apps.applications",
     "apps.configuration",
@@ -158,8 +159,8 @@ AUTH_LOCAL_EXPOSE_OTP = env_bool("AUTH_LOCAL_EXPOSE_OTP", False)
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=AUTH_ACCESS_TOKEN_LIFETIME_MINUTES),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=AUTH_REFRESH_TOKEN_LIFETIME_DAYS),
-    "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
 ACTIVE_EXAM_CYCLE_ID = os.environ.get("ACTIVE_EXAM_CYCLE_ID", "TBD")
