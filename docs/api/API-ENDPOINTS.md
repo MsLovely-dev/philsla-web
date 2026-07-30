@@ -9,15 +9,15 @@ The baseline health and authentication boundaries plus the first student-applica
 | Method | Path | Authentication | Permission | Purpose | Status |
 | --- | --- | --- | --- | --- | --- |
 | `GET` | `/api/v1/health/` | Public; no credentials required | `AllowAny` | Safe service liveness smoke check | Implemented |
-| `GET` | `/api/v1/auth/session/` | Required bearer access token | `IsAuthenticated` | Return server-derived session, role, permission, and scope claims | Implemented boundary; token validation pending |
+| `GET` | `/api/v1/auth/session/` | Required bearer access token | `IsAuthenticated` | Return server-derived session, role, permission, and scope claims | Implemented |
 | `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented |
 | `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented |
 | `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and advance to selfie photo logging | Implemented |
 | `POST` | `/api/v1/auth/login/otp/resend/` | Public with OTP pending-auth token | `AllowAny` | Resend the login email OTP with cooldown and resend limits | Implemented |
 | `POST` | `/api/v1/auth/login/selfie/` | Public with selfie pending-auth token | `AllowAny` | Store the captured login selfie image and complete session issuance | Implemented |
-| `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented boundary; durable revocation pending |
-| `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented boundary; token store pending |
-| `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented boundary; durable revocation pending |
+| `POST` | `/api/v1/auth/logout/` | Required bearer access token | `IsAuthenticated` | Revoke current session and clear refresh cookie | Implemented |
+| `POST` | `/api/v1/auth/token/refresh/` | Refresh cookie | `AllowAny` | Rotate refresh token and issue a new access token | Implemented |
+| `POST` | `/api/v1/auth/token/revoke/` | Required bearer access token | `IsAuthenticated` | Revoke current or all token families for the authenticated account | Implemented |
 | `POST` | `/api/v1/auth/activation/student-registration/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Create or reactivate a Student account for an approved registration | Implemented |
 | `POST` | `/api/v1/auth/activation/staff/complete/` | Public activation link | `AllowAny` | Complete first-time staff/admin activation by setting the user's password | Implemented |
 | `POST` | `/api/v1/auth/recovery/password/request/` | Public; no credentials required | `AllowAny` | Request password recovery instructions without account enumeration | Implemented |
@@ -423,14 +423,14 @@ Successful response:
 
 ```json
 {
-  "accessToken": "opaque-access-token",
+  "accessToken": "jwt-access-token",
   "tokenType": "Bearer",
-  "expiresInSeconds": 900,
+  "expiresInSeconds": 1200,
   "expiresAt": "2026-07-13T10:00:00Z"
 }
 ```
 
-The refresh token must be issued separately as an HttpOnly, Secure, SameSite=Strict cookie.
+The 7-day refresh JWT must be issued separately as an HttpOnly, Secure, SameSite=Strict cookie.
 
 Test coverage:
 
@@ -677,13 +677,13 @@ Future successful response:
 
 ```json
 {
-  "accessToken": "opaque-access-token",
+  "accessToken": "jwt-access-token",
   "tokenType": "Bearer",
-  "expiresInSeconds": 900
+  "expiresInSeconds": 1200
 }
 ```
 
-The rotated refresh token must be issued separately as an HttpOnly, Secure, SameSite=Strict cookie.
+The rotated 7-day refresh JWT must be issued separately as an HttpOnly, Secure, SameSite=Strict cookie.
 
 Test coverage:
 

@@ -12,6 +12,8 @@ django==5.2.3
     #   djangorestframework
 djangorestframework==3.16.0
     # via -r requirements/base.in
+djangorestframework-simplejwt==5.5.1
+    # via -r requirements/base.in
 numpy==2.5.1
     # via opencv-python-headless
 opencv-python-headless==4.13.0.92
@@ -20,6 +22,8 @@ psycopg==3.3.4
     # via -r requirements/base.in
 psycopg-binary==3.3.4
     # via psycopg
+pyjwt==2.10.1
+    # via djangorestframework-simplejwt
 sqlparse==0.5.5
     # via django
 tzdata==2026.3

@@ -21,7 +21,7 @@ Authentication and session approach:
 - The backend is the source of truth for identity, account status, roles, and permissions.
 - Use Django's authentication foundation for backend-managed users and password hashing.
 - Portal users authenticate through the three-step identifier, password, and email OTP flow accepted in [ADR-011](ADR-011-USER-AUTHENTICATION-FLOW.md).
-- A full session uses a short-lived access token and rotating refresh token only after all three authentication steps succeed.
+- A full session uses a JWT access token and rotating refresh JWT only after all three authentication steps succeed.
 - Do not trust frontend local storage, route guards, submitted roles, or client-provided account state for authorization.
 - Supabase Auth is not adopted. Any future external identity provider requires a separate ADR and migration plan.
 

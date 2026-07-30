@@ -88,9 +88,10 @@ Invitation and activation:
 
 Full session:
 
-- After OTP success, issue a selfie-scoped pending-auth token. After the login selfie image is saved for audit evidence, issue a short-lived access token and rotating refresh token.
-- Access token lifetime is approximately 15 minutes.
-- Refresh token is stored in an HttpOnly, Secure, SameSite=Strict cookie with approximately seven-day expiry unless a shorter security-tier policy applies.
+- After OTP success, issue a selfie-scoped pending-auth token. After the login selfie image is saved for audit evidence, issue a JWT access token and rotating refresh JWT.
+- Access token lifetime is 20 minutes.
+- Refresh token lifetime is 7 days.
+- Refresh token is stored in an HttpOnly, Secure, SameSite=Strict cookie with a seven-day expiry unless a shorter security-tier policy applies.
 - Refresh tokens rotate on every use and the previous refresh token is invalidated.
 - Login succeeds only if the account, role assignment, and applicable institution/testing-center/region scope are active.
 - Role deactivation, reassignment, account suspension, or scope revocation must invalidate active sessions and refresh tokens.
