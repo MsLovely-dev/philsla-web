@@ -1,9 +1,12 @@
+import base64
+import hashlib
 import re
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
+from django.core.files.base import ContentFile
 from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
@@ -17,8 +20,10 @@ from apps.applications.models import (
     ApplicationIdentityMedia,
     ApplicationStatus,
     IdentityMediaType,
+    RegistrationSelfieMedia,
     Step2Verification,
     StudentApplication,
+    StudentApplicationAdditionalField,
 )
 
 
@@ -122,6 +127,96 @@ class ApplicationEndpointTests(TestCase):
         )
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.data["version"], 2)
+
+    def test_configurable_extra_fields_are_preserved_in_holding_table(self):
+        created = self.create(
+            {
+                "personal": {"firstName": "Draft", "scholarshipCode": "SCI-2026"},
+                "school": {"campusType": "Public"},
+            }
+        )
+        self.assertEqual(created.status_code, 201)
+
+        application_id = created.data["id"]
+        read = self.client.get(reverse("applications:detail", args=[application_id]))
+
+        self.assertEqual(read.status_code, 200)
+        self.assertEqual(read.data["personal"]["scholarshipCode"], "SCI-2026")
+        self.assertEqual(read.data["school"]["campusType"], "Public")
+        self.assertTrue(
+            StudentApplicationAdditionalField.objects.filter(
+                application_id=application_id,
+                section="personal",
+                field_key="scholarshipCode",
+                field_value="SCI-2026",
+            ).exists()
+        )
+
+    def test_selfie_photo_url_is_stored_as_registration_selfie_media(self):
+        image_bytes = b"\xff\xd8\xff\xe0captured-selfie"
+        selfie_data_url = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode()}"
+
+        created = self.create(
+            {
+                "personal": {
+                    "firstName": "Draft",
+                    "selfiePhotoUrl": selfie_data_url,
+                },
+            }
+        )
+
+        self.assertEqual(created.status_code, 201)
+        application_id = created.data["id"]
+        application = StudentApplication.objects.get(id=application_id)
+        self.assertFalse(
+            StudentApplicationAdditionalField.objects.filter(
+                application=application,
+                section="personal",
+                field_key="selfiePhotoUrl",
+            ).exists()
+        )
+        selfie = RegistrationSelfieMedia.objects.get(verification=application.step2_verification)
+        self.assertEqual(selfie.application, application)
+        self.assertEqual(selfie.content_type, "image/jpeg")
+        self.assertEqual(selfie.size, len(image_bytes))
+        self.assertEqual(selfie.sha256, hashlib.sha256(image_bytes).hexdigest())
+        selfie_path = reverse(
+            "applications:identity-media",
+            args=[application_id, IdentityMediaType.SELFIE],
+        )
+        self.assertEqual(created.data["photoUrl"], f"http://testserver{selfie_path}")
+
+    def test_manual_selfie_photo_url_is_stored_as_registration_selfie_media(self):
+        image_bytes = b"\xff\xd8\xff\xe0manual-captured-selfie"
+        selfie_data_url = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode()}"
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "manual.selfie@example.test"
+        payload["personal"]["selfiePhotoUrl"] = selfie_data_url
+        payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
+
+        created = client.post(reverse("applications:create"), payload, format="json")
+
+        self.assertEqual(created.status_code, 201)
+        application = StudentApplication.objects.get(id=created.data["id"])
+        self.assertFalse(
+            StudentApplicationAdditionalField.objects.filter(
+                application=application,
+                section="personal",
+                field_key="selfiePhotoUrl",
+            ).exists()
+        )
+        selfie = RegistrationSelfieMedia.objects.get(application=application)
+        self.assertIsNone(selfie.verification_id)
+        self.assertEqual(selfie.content_type, "image/jpeg")
+        self.assertEqual(selfie.size, len(image_bytes))
+        self.assertEqual(selfie.sha256, hashlib.sha256(image_bytes).hexdigest())
+        selfie_path = reverse(
+            "applications:identity-media",
+            args=[application.id, IdentityMediaType.SELFIE],
+        )
+        self.assertEqual(created.data["photoUrl"], f"http://testserver{selfie_path}")
 
     def test_duplicate_draft_returns_conflict(self):
         self.assertEqual(self.create().status_code, 201)
@@ -488,10 +583,9 @@ class ApplicationEndpointTests(TestCase):
             configuration_snapshot={},
             expires_at=timezone.now(),
         )
-        ApplicationIdentityMedia.objects.create(
+        RegistrationSelfieMedia.objects.create(
             verification=verification,
-            media_type=IdentityMediaType.SELFIE,
-            file="private/registration-identity/selfie.jpg",
+            file="private/registration-selfies/selfie.jpg",
             content_type="image/jpeg",
             size=12,
             sha256="abc123",
@@ -503,6 +597,86 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         expected_path = reverse("applications:identity-media", args=[submitted.id, IdentityMediaType.SELFIE])
         self.assertEqual(response.data["photoUrl"], f"http://testserver{expected_path}")
+
+    def test_submitted_application_detail_keeps_selfie_url_when_student_id_front_exists(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        verification = Step2Verification.objects.create(
+            application=submitted,
+            token_digest="selfie-with-id-token-digest",
+            lrn="123456789012",
+            lrn_profile={},
+            configuration_snapshot={},
+            expires_at=timezone.now(),
+        )
+        RegistrationSelfieMedia.objects.create(
+            verification=verification,
+            file="private/registration-selfies/selfie.jpg",
+            content_type="image/jpeg",
+            size=12,
+            sha256="abc123",
+        )
+        ApplicationIdentityMedia.objects.create(
+            verification=verification,
+            media_type=IdentityMediaType.STUDENT_ID_FRONT,
+            file="private/registration-identity/student-id-front.jpg",
+            content_type="image/jpeg",
+            size=34,
+            sha256="def456",
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:detail", args=[submitted.id]))
+
+        self.assertEqual(response.status_code, 200)
+        expected_path = reverse("applications:identity-media", args=[submitted.id, IdentityMediaType.SELFIE])
+        self.assertEqual(response.data["photoUrl"], f"http://testserver{expected_path}")
+
+    def test_reviewer_can_open_manual_registration_selfie_media(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        selfie_bytes = b"\xff\xd8\xff\xe0manual-review-selfie"
+        RegistrationSelfieMedia.objects.create(
+            application=submitted,
+            file=ContentFile(selfie_bytes, name="manual-selfie.jpg"),
+            content_type="image/jpeg",
+            size=len(selfie_bytes),
+            sha256=hashlib.sha256(selfie_bytes).hexdigest(),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        detail = self.client.get(reverse("applications:detail", args=[submitted.id]))
+        response = self.client.get(
+            reverse("applications:identity-media", args=[submitted.id, IdentityMediaType.SELFIE])
+        )
+
+        self.assertEqual(detail.status_code, 200)
+        expected_path = reverse("applications:identity-media", args=[submitted.id, IdentityMediaType.SELFIE])
+        self.assertEqual(detail.data["photoUrl"], f"http://testserver{expected_path}")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
 
     def test_admissions_reviewer_cannot_read_draft_application_detail(self):
         draft = StudentApplication.objects.create(owner=self.user, status=ApplicationStatus.DRAFT)

@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.roles import PortalRole
-from apps.applications.models import ApplicationIdentityMedia
+from apps.applications.models import ApplicationIdentityMedia, RegistrationSelfieMedia
 
 
 def principal(user, role):
@@ -26,6 +26,8 @@ class Step2ConfigurationEndpointTests(TestCase):
 
     def tearDown(self):
         for media in ApplicationIdentityMedia.objects.all():
+            media.file.delete(save=False)
+        for media in RegistrationSelfieMedia.objects.all():
             media.file.delete(save=False)
 
     def payload(self):
@@ -132,7 +134,8 @@ class Step2ConfigurationEndpointTests(TestCase):
         second = upload("selfie-second.jpg", b"\xff\xd8\xff\xe0second-image")
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.data["status"], "PASSED")
-        self.assertEqual(ApplicationIdentityMedia.objects.count(), 1)
+        self.assertEqual(ApplicationIdentityMedia.objects.count(), 0)
+        self.assertEqual(RegistrationSelfieMedia.objects.count(), 1)
 
     def test_step1_selfie_only_upload_is_not_blocked_by_step2_attempt_limit(self):
         registration = APIClient()

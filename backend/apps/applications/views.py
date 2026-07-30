@@ -306,7 +306,14 @@ class ApplicationIdentityMediaView(ApplicationDetailView):
     def get(self, request, application_id, media_type) -> FileResponse:
         application = self.get_object(request, application_id)
         verification = getattr(application, "step2_verification", None)
-        media = None if verification is None else verification.media.filter(media_type=media_type).first()
+        if media_type == IdentityMediaType.SELFIE:
+            media = getattr(application, "registration_selfie", None)
+            if media is None and verification is not None:
+                media = getattr(verification, "registration_selfie", None)
+        elif verification is None:
+            media = None
+        else:
+            media = verification.media.filter(media_type=media_type).first()
         if media is None or not media.file.storage.exists(media.file.name):
             raise Http404("Application identity media not found.")
         return FileResponse(media.file.open("rb"), content_type=media.content_type)
