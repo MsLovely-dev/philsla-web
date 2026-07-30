@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from datetime import timedelta
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt",
     "apps.accounts",
     "apps.applications",
     "apps.configuration",
@@ -120,7 +122,7 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 25,
 }
 
-AUTH_ACCESS_TOKEN_LIFETIME_MINUTES = env_int("AUTH_ACCESS_TOKEN_LIFETIME_MINUTES", 15)
+AUTH_ACCESS_TOKEN_LIFETIME_MINUTES = env_int("AUTH_ACCESS_TOKEN_LIFETIME_MINUTES", 20)
 AUTH_REFRESH_TOKEN_LIFETIME_DAYS = env_int("AUTH_REFRESH_TOKEN_LIFETIME_DAYS", 7)
 AUTH_PENDING_TOKEN_TTL_MINUTES = env_int("AUTH_PENDING_TOKEN_TTL_MINUTES", 10)
 AUTH_PENDING_INACTIVITY_TTL_MINUTES = env_int("AUTH_PENDING_INACTIVITY_TTL_MINUTES", 10)
@@ -152,6 +154,13 @@ AUTH_STAFF_IDLE_TIMEOUT_MINUTES = env_int("AUTH_STAFF_IDLE_TIMEOUT_MINUTES", 10)
 AUTH_STUDENT_ABSOLUTE_TIMEOUT_HOURS = env_int("AUTH_STUDENT_ABSOLUTE_TIMEOUT_HOURS", 12)
 AUTH_STAFF_ABSOLUTE_TIMEOUT_HOURS = env_int("AUTH_STAFF_ABSOLUTE_TIMEOUT_HOURS", 8)
 AUTH_LOCAL_EXPOSE_OTP = env_bool("AUTH_LOCAL_EXPOSE_OTP", False)
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=AUTH_ACCESS_TOKEN_LIFETIME_MINUTES),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=AUTH_REFRESH_TOKEN_LIFETIME_DAYS),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+}
 
 ACTIVE_EXAM_CYCLE_ID = os.environ.get("ACTIVE_EXAM_CYCLE_ID", "TBD")
 LRN_REGISTRY_PROVIDER = os.environ.get("LRN_REGISTRY_PROVIDER", "unavailable")

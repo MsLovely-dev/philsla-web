@@ -11,6 +11,13 @@ interface ApiErrorEnvelope {
   };
 }
 
+interface BackendTokenResponse {
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresInSeconds: number;
+  expiresAt: string;
+}
+
 export interface ApiClientOptions {
   baseUrl: string;
   fetcher?: typeof fetch;
@@ -46,7 +53,7 @@ export class ApiClient {
 
     for (const url of urls) {
       try {
-        return await this.send<TData>(url, init);
+        return await this.send<TData>(url, path, init);
       } catch (error) {
         failures.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
         // Try the next local route before reporting a network failure.
@@ -94,18 +101,31 @@ export class ApiClient {
   }
 
   private async send<TData>(url: string, init: RequestInit): Promise<ServiceResult<TData>> {
+  private async send<TData>(url: string, path: string, init: RequestInit): Promise<ServiceResult<TData>> {
+    let response = await this.fetchOnce(url, init);
+
+    if (response.status === 401 && this.shouldAttemptRefresh(path) && await this.refreshBearerToken()) {
+      response = await this.fetchOnce(url, init);
+    }
+
+    return this.responseToResult<TData>(response);
+  }
+
+  private async fetchOnce(url: string, init: RequestInit, includeBearerToken = true): Promise<Response> {
     const isFormData = typeof FormData !== 'undefined' && init.body instanceof FormData;
-    const response = await this.fetcher(url, {
+    return this.fetcher(url, {
       ...init,
       credentials: 'include',
       headers: {
         Accept: 'application/json',
         ...(init.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
-        ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
+        ...(includeBearerToken && this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
         ...init.headers,
       },
     });
+  }
 
+  private async responseToResult<TData>(response: Response): Promise<ServiceResult<TData>> {
     if (response.status === 204) {
       return serviceSuccess(null as TData);
     }
@@ -135,6 +155,43 @@ export class ApiClient {
 
     const payload = await this.readJson<ApiErrorEnvelope>(response).catch(() => ({} as ApiErrorEnvelope));
     return this.mapError(response, payload as ApiErrorEnvelope);
+  private shouldAttemptRefresh(path: string): boolean {
+    return Boolean(this.bearerToken) && !path.startsWith('/api/v1/auth/');
+  }
+
+  private async refreshBearerToken(): Promise<boolean> {
+    const refreshPath = '/api/v1/auth/token/refresh/';
+    const urls = Array.from(
+      new Set(
+        [
+          this.baseUrl ? `${this.baseUrl}${refreshPath}` : refreshPath,
+          refreshPath,
+          `http://127.0.0.1:8000${refreshPath}`,
+          `http://localhost:8000${refreshPath}`,
+        ].filter(Boolean),
+      ),
+    );
+
+    for (const url of urls) {
+      try {
+        const response = await this.fetchOnce(url, { method: 'POST' }, false);
+        if (!response.ok) {
+          this.setBearerToken(null);
+          return false;
+        }
+
+        const payload = await this.readJson<BackendTokenResponse>(response);
+        if (payload?.tokenType === 'Bearer' && payload.accessToken) {
+          this.setBearerToken(payload.accessToken);
+          return true;
+        }
+      } catch {
+        // Try the next configured backend route.
+      }
+    }
+
+    this.setBearerToken(null);
+    return false;
   }
 
   private async readJson<TData>(response: Response): Promise<TData | null> {
