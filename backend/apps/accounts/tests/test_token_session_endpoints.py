@@ -111,6 +111,7 @@ class TokenSessionEndpointTests(TestCase):
         self.assertEqual(refresh_response.status_code, 200)
         self.assertIn("accessToken", refresh_response.json())
         self.assertIn("refreshToken", refresh_response.cookies)
+        self.assertEqual(refresh_response.cookies["refreshToken"]["max-age"], settings.AUTH_REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60)
         self.assertEqual(AuthRefreshSession.objects.filter(revoked_at__isnull=True).count(), 1)
 
         self.client.cookies["refreshToken"] = login_response.cookies["refreshToken"].value
@@ -129,6 +130,12 @@ class TokenSessionEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(AuthRefreshSession.objects.filter(revoked_at__isnull=True).exists())
+
+        session_response = self.client.get(
+            "/api/v1/auth/session/",
+            headers={"Authorization": f"Bearer {login_response.json()['accessToken']}"},
+        )
+        self.assertEqual(session_response.status_code, 401)
 
     def test_token_revoke_requires_authentication(self) -> None:
         response = self.client.post("/api/v1/auth/token/revoke/", data={"scope": "current"}, content_type="application/json")
@@ -163,3 +170,22 @@ class TokenSessionEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "VALIDATION_FAILED")
         self.assertIn("scope", response.json()["error"]["fields"])
+
+    def test_token_revoke_all_rejects_existing_access_token(self) -> None:
+        login_response = self.login_student()
+        access_token = login_response.json()["accessToken"]
+
+        response = self.client.post(
+            "/api/v1/auth/token/revoke/",
+            data={"scope": "all"},
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        session_response = self.client.get(
+            "/api/v1/auth/session/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(AuthRefreshSession.objects.filter(revoked_at__isnull=True).exists())
+        self.assertEqual(session_response.status_code, 401)

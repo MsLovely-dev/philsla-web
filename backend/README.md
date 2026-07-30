@@ -1,6 +1,6 @@
 # PhilSA Backend
 
-> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, Django Admin, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, database-backed auth account profiles, cache-backed local-development login/session handling, Django email-backend OTP delivery, and baseline tests are implemented. Job processing, storage provider, deployment, and production database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
+> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, Django Admin, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, database-backed auth account profiles, JWT-backed login/session handling, Django email-backend OTP delivery, and baseline tests are implemented. Job processing, storage provider, deployment, and production database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
 
 ## Local setup
 
@@ -22,7 +22,7 @@ Production settings read the database connection from `DATABASE_URL`. Do not com
 
 For persistence-backed integration development, use PostgreSQL-compatible storage through `DATABASE_URL`. Keep local, staging, and production databases separate, and use synthetic data outside production. Supabase backup/restore, connection pooling values, migration rollout rules, rollback expectations, seed data rules, and recovery objectives are documented in the [database design notes](../docs/architecture/DATABASE-DESIGN.md).
 
-Authentication configuration follows the accepted three-step portal flow in [ADR-011](../docs/decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). DRF is wired to a Bearer authentication hook for cache-backed local-development tokens. Permission helpers provide deny-by-default role checks and object-level authorization hooks for future business endpoints.
+Authentication configuration follows the accepted three-step portal flow in [ADR-011](../docs/decisions/ADR-011-USER-AUTHENTICATION-FLOW.md). DRF is wired to a Bearer authentication hook for JWT access tokens. Refresh JWTs are stored in an HttpOnly `refreshToken` cookie and backed by the refresh-session table for rotation and replay detection. Permission helpers provide deny-by-default role checks and object-level authorization hooks for future business endpoints.
 
 For local manual login, create the database tables and a real Django Admin superuser:
 
