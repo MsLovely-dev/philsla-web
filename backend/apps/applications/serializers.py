@@ -12,6 +12,9 @@ from .models import (
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
+    personal = serializers.JSONField(required=False)
+    address = serializers.JSONField(required=False)
+    school = serializers.JSONField(required=False)
     coursePreferences = serializers.JSONField(source="course_preferences", required=False)
     reviewStep = serializers.JSONField(source="review_step", required=False)
     lrnProfile = serializers.SerializerMethodField()
@@ -37,18 +40,21 @@ class ApplicationSerializer(serializers.ModelSerializer):
         return verification.lrn_profile or {}
 
     def get_photoUrl(self, obj):
+        if hasattr(obj, "registration_selfie"):
+            media_type = IdentityMediaType.SELFIE
+        else:
+            media_type = ""
         verification = getattr(obj, "step2_verification", None)
-        if verification is None:
-            return ""
-        media = verification.media.filter(media_type=IdentityMediaType.SELFIE).first()
-        if media is None:
-            media = verification.media.filter(media_type=IdentityMediaType.STUDENT_ID_FRONT).first()
-        if media is None:
+        if not media_type and verification is not None and hasattr(verification, "registration_selfie"):
+            media_type = IdentityMediaType.SELFIE
+        elif verification is not None and verification.media.filter(media_type=IdentityMediaType.STUDENT_ID_FRONT).exists():
+            media_type = IdentityMediaType.STUDENT_ID_FRONT
+        if not media_type:
             return ""
 
         url = reverse(
             "applications:identity-media",
-            kwargs={"application_id": obj.id, "media_type": media.media_type},
+            kwargs={"application_id": obj.id, "media_type": media_type},
         )
         request = self.context.get("request")
         return request.build_absolute_uri(url) if request else url

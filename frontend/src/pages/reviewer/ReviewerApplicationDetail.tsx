@@ -169,6 +169,7 @@ export default function ReviewerApplicationDetail() {
   const displayId = currentApp.candidateId || id || currentApp.id;
   const fullName = `${currentApp.firstName} ${currentApp.lastName}`.trim();
   const photoUrl = currentApp.photoUrl?.trim() ?? '';
+  const [photoObjectUrl, setPhotoObjectUrl] = useState('');
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
   const isDecisionFinal = ['ACCEPTED', 'APPROVED', 'REJECTED'].includes(status);
   const rejectionReason = status === 'REJECTED'
@@ -195,6 +196,27 @@ export default function ReviewerApplicationDetail() {
   React.useEffect(() => {
     setPhotoLoadFailed(false);
   }, [photoUrl]);
+
+  React.useEffect(() => {
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend' || !id || !photoUrl) {
+      setPhotoObjectUrl('');
+      return;
+    }
+
+    let cancelled = false;
+    let objectUrl = '';
+
+    void backendApplicationService.getApplicationPhoto(id).then((result) => {
+      if (cancelled || result.ok === false) return;
+      objectUrl = URL.createObjectURL(result.data);
+      setPhotoObjectUrl(objectUrl);
+    });
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [id, photoUrl]);
 
   const filteredLogs = React.useMemo(() => {
     return verificationLogs.filter(log => {
@@ -291,7 +313,7 @@ export default function ReviewerApplicationDetail() {
                {photoUrl && !photoLoadFailed ? (
                  <img
                    referrerPolicy="no-referrer"
-                   src={photoUrl}
+                   src={photoObjectUrl || photoUrl}
                    alt={fullName ? `${fullName} applicant photo` : 'Student applicant photo'}
                    className="w-full h-full object-cover"
                    onError={() => setPhotoLoadFailed(true)}
