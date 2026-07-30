@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 import hashlib
 import re
 import secrets
@@ -19,6 +19,8 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from django.utils.dateparse import parse_datetime
 from rest_framework.exceptions import APIException
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from .audit import record_auth_event
 from .default_permissions import module_access_or_role_default
@@ -72,7 +74,8 @@ PENDING_IDENTIFIER_PREFIX = "auth:pending:identifier:"
 PENDING_OTP_PREFIX = "auth:pending:otp:"
 PENDING_SELFIE_PREFIX = "auth:pending:selfie:"
 PENDING_STAFF_ACTIVATION_PREFIX = "auth:pending:staff-activation:"
-ACCESS_TOKEN_PREFIX = "auth:access:"
+JWT_ACCESS_TOKEN_BLOCKLIST_PREFIX = "auth:jwt:blocklist:access:"
+JWT_USER_REVOKED_AT_PREFIX = "auth:jwt:revoked-at:user:"
 OTP_ACCOUNT_RATE_PREFIX = "auth:otp-rate:account:"
 OTP_IP_RATE_PREFIX = "auth:otp-rate:ip:"
 OTP_IP_CONFIRMED_ABUSE_PREFIX = "auth:otp-ip-confirmed-abuse:"
@@ -81,6 +84,14 @@ PASSWORD_RECOVERY_LINK_PATH = "/reset-password"
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _access_blocklist_key(token: str) -> str:
+    return f"{JWT_ACCESS_TOKEN_BLOCKLIST_PREFIX}{_hash_token(token)}"
+
+
+def _user_revoked_at_key(user_id: object) -> str:
+    return f"{JWT_USER_REVOKED_AT_PREFIX}{user_id}"
 
 
 def _unique_username(UserModel, *, base: str, fallback: str) -> str:
@@ -182,6 +193,40 @@ def _ttl_seconds(minutes: int) -> int:
 
 def _new_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def _json_expiration(token: AccessToken | RefreshToken) -> str:
+    expires_at = datetime.fromtimestamp(token["exp"], tz=UTC)
+    return expires_at.isoformat().replace("+00:00", "Z")
+
+
+def _issue_access_jwt(*, account: dict[str, Any], refresh_session_id: int) -> str:
+    token = AccessToken()
+    token["user_id"] = str(account["user_id"])
+    token["account_id"] = str(account["id"])
+    token["refresh_session_id"] = refresh_session_id
+    return str(token)
+
+
+def _issue_refresh_jwt(*, account: dict[str, Any], refresh_session_id: int) -> str:
+    token = RefreshToken()
+    token["user_id"] = str(account["user_id"])
+    token["refresh_session_id"] = refresh_session_id
+    return str(token)
+
+
+def _decode_access_jwt(access_token: str) -> AccessToken | None:
+    try:
+        return AccessToken(access_token)
+    except TokenError:
+        return None
+
+
+def _decode_refresh_jwt(refresh_token: str) -> RefreshToken | None:
+    try:
+        return RefreshToken(refresh_token)
+    except TokenError:
+        return None
 
 
 def _hash_otp(*, token: str, code: str) -> str:
@@ -523,31 +568,25 @@ def _record_otp_request(*, account: dict[str, Any], request: object | None) -> N
 
 
 def _issue_tokens(account: dict[str, Any]) -> AuthIssue:
-    access_token = _new_token()
-    refresh_token = _new_token()
     expires_in_seconds = _ttl_seconds(settings.AUTH_ACCESS_TOKEN_LIFETIME_MINUTES)
     refresh_ttl = settings.AUTH_REFRESH_TOKEN_LIFETIME_DAYS * 24 * 60 * 60
-    expires_at = timezone.now() + timedelta(seconds=expires_in_seconds)
     refresh_expires_at = timezone.now() + timedelta(seconds=refresh_ttl)
     session_account = _session_account(account)
     refresh_session = AuthRefreshSession.objects.create(
         user_id=session_account["user_id"],
-        token_hash=_hash_token(refresh_token),
+        token_hash=_hash_token(_new_token()),
         account=session_account,
         expires_at=refresh_expires_at,
     )
-
-    token_payload = {
-        "account": session_account,
-        "expires_at": expires_at.isoformat().replace("+00:00", "Z"),
-        "refresh_session_id": refresh_session.id,
-    }
-    cache.set(f"{ACCESS_TOKEN_PREFIX}{access_token}", token_payload, expires_in_seconds)
+    access_token = _issue_access_jwt(account=session_account, refresh_session_id=refresh_session.id)
+    refresh_token = _issue_refresh_jwt(account=session_account, refresh_session_id=refresh_session.id)
+    refresh_session.token_hash = _hash_token(refresh_token)
+    refresh_session.save(update_fields=["token_hash"])
 
     return AuthIssue(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_at=token_payload["expires_at"],
+        expires_at=_json_expiration(AccessToken(access_token)),
         expires_in_seconds=expires_in_seconds,
         user_id=session_account["user_id"],
     )
@@ -925,11 +964,18 @@ def complete_login_selfie(
 
 
 def validate_access_token(*, access_token: str) -> tuple[object, object] | None:
-    token_payload = cache.get(f"{ACCESS_TOKEN_PREFIX}{access_token}")
-    if token_payload is None:
+    token = _decode_access_jwt(access_token)
+    if token is None:
+        return None
+    if cache.get(_access_blocklist_key(access_token)):
+        return None
+    revoked_at = cache.get(_user_revoked_at_key(token["user_id"]))
+    if revoked_at is not None and int(token["iat"]) <= int(revoked_at):
         return None
 
-    account = _resolve_database_account_by_user_id(token_payload["account"]["user_id"]) or token_payload["account"]
+    account = _resolve_database_account_by_user_id(token["user_id"])
+    if account is None:
+        return None
     user = SimpleNamespace(
         id=account["id"],
         email=account["email"],
@@ -941,8 +987,8 @@ def validate_access_token(*, access_token: str) -> tuple[object, object] | None:
     )
     auth = SimpleNamespace(
         token_id=access_token,
-        expires_at=token_payload["expires_at"],
-        refresh_session_id=token_payload.get("refresh_session_id"),
+        expires_at=_json_expiration(token),
+        refresh_session_id=token.get("refresh_session_id"),
     )
     return user, auth
 
@@ -952,6 +998,10 @@ def rotate_refresh_token(*, refresh_token: str | None) -> AuthIssue:
     """Rotate the refresh token and issue a new access token."""
 
     if not refresh_token:
+        raise LoginFlowRejected("Your session has expired. Please log in again.")
+
+    token = _decode_refresh_jwt(refresh_token)
+    if token is None:
         raise LoginFlowRejected("Your session has expired. Please log in again.")
 
     refresh_session = (
@@ -974,7 +1024,7 @@ def revoke_current_session(*, user: object, auth: object) -> None:
 
     token_id = getattr(auth, "token_id", None)
     if token_id:
-        cache.delete(f"{ACCESS_TOKEN_PREFIX}{token_id}")
+        cache.set(_access_blocklist_key(token_id), True, settings.AUTH_ACCESS_TOKEN_LIFETIME_MINUTES * 60)
     refresh_session_id = getattr(auth, "refresh_session_id", None)
     if refresh_session_id:
         AuthRefreshSession.objects.filter(id=refresh_session_id, revoked_at__isnull=True).update(revoked_at=timezone.now())
@@ -987,9 +1037,12 @@ def revoke_tokens(*, user: object, scope: str) -> None:
     if scope != "all":
         return None
 
-    AuthRefreshSession.objects.filter(user_id=getattr(user, "id", None), revoked_at__isnull=True).update(
+    user_id = getattr(user, "id", None)
+    AuthRefreshSession.objects.filter(user_id=user_id, revoked_at__isnull=True).update(
         revoked_at=timezone.now()
     )
+    if user_id:
+        cache.set(_user_revoked_at_key(user_id), int(time.time()), settings.AUTH_ACCESS_TOKEN_LIFETIME_MINUTES * 60)
     return None
 
 

@@ -27,10 +27,10 @@ class AuthenticationConfigurationTests(TestCase):
             ],
         )
 
-    def test_auth_flow_settings_match_adr_011_defaults(self) -> None:
+    def test_auth_flow_settings_match_jwt_defaults(self) -> None:
         auth_settings = get_auth_flow_settings()
 
-        self.assertEqual(auth_settings.access_token_lifetime_minutes, 15)
+        self.assertEqual(auth_settings.access_token_lifetime_minutes, 20)
         self.assertEqual(auth_settings.refresh_token_lifetime_days, 7)
         self.assertEqual(auth_settings.pending_auth_token_ttl_minutes, 10)
         self.assertEqual(auth_settings.pending_auth_inactivity_ttl_minutes, 10)
@@ -91,7 +91,7 @@ class AuthenticationConfigurationTests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "NOT_AUTHENTICATED")
 
     @override_settings(ROOT_URLCONF=__name__)
-    def test_bearer_tokens_are_rejected_until_validation_is_implemented(self) -> None:
+    def test_invalid_bearer_tokens_are_rejected(self) -> None:
         response = self.client.get("/protected/", headers={"Authorization": "Bearer placeholder"})
 
         self.assertEqual(response.status_code, 401)
