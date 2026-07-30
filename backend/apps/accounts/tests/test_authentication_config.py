@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.test import TestCase, override_settings
 from django.urls import path
@@ -27,10 +29,10 @@ class AuthenticationConfigurationTests(TestCase):
             ],
         )
 
-    def test_auth_flow_settings_match_adr_011_defaults(self) -> None:
+    def test_auth_flow_settings_match_jwt_defaults(self) -> None:
         auth_settings = get_auth_flow_settings()
 
-        self.assertEqual(auth_settings.access_token_lifetime_minutes, 15)
+        self.assertEqual(auth_settings.access_token_lifetime_minutes, 20)
         self.assertEqual(auth_settings.refresh_token_lifetime_days, 7)
         self.assertEqual(auth_settings.pending_auth_token_ttl_minutes, 10)
         self.assertEqual(auth_settings.pending_auth_inactivity_ttl_minutes, 10)
@@ -56,6 +58,13 @@ class AuthenticationConfigurationTests(TestCase):
         self.assertEqual(auth_settings.staff_idle_timeout_minutes, 10)
         self.assertEqual(auth_settings.student_absolute_timeout_hours, 12)
         self.assertEqual(auth_settings.staff_absolute_timeout_hours, 8)
+
+    def test_simple_jwt_security_settings_use_timedeltas_and_refresh_rotation(self) -> None:
+        self.assertIn("rest_framework_simplejwt.token_blacklist", settings.INSTALLED_APPS)
+        self.assertEqual(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"], timedelta(minutes=20))
+        self.assertEqual(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"], timedelta(days=7))
+        self.assertTrue(settings.SIMPLE_JWT["ROTATE_REFRESH_TOKENS"])
+        self.assertTrue(settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"])
 
     def test_auth_email_settings_default_to_console_provider(self) -> None:
         email_settings = get_auth_email_settings()
@@ -91,7 +100,7 @@ class AuthenticationConfigurationTests(TestCase):
         self.assertEqual(response.json()["error"]["code"], "NOT_AUTHENTICATED")
 
     @override_settings(ROOT_URLCONF=__name__)
-    def test_bearer_tokens_are_rejected_until_validation_is_implemented(self) -> None:
+    def test_invalid_bearer_tokens_are_rejected(self) -> None:
         response = self.client.get("/protected/", headers={"Authorization": "Bearer placeholder"})
 
         self.assertEqual(response.status_code, 401)
