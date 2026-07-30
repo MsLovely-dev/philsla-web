@@ -320,6 +320,10 @@ export class BackendApplicationService {
     return this.apiClient.request<BackendApplication>(`/api/v1/applications/${applicationId}/`);
   }
 
+  async getApplicationPhoto(applicationId: string): Promise<ServiceResult<Blob>> {
+    return this.apiClient.requestBlob(`/api/v1/applications/${applicationId}/identity-media/SELFIE/`);
+  }
+
   async decideApplication(
     applicationId: string,
     decision: BackendReviewerDecision,
