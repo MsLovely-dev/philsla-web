@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from apps.core.database import database_config_from_url
+
 
 def load_local_env() -> None:
     env_path = Path(__file__).resolve().parents[2] / ".env"
@@ -42,8 +44,11 @@ SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SECURE_SSL_REDIRECT = False
 SECURE_HSTS_SECONDS = 0
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 DATABASES = {
-    "default": {
+    "default": database_config_from_url(DATABASE_URL)
+    if DATABASE_URL
+    else {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",  # noqa: F405
     }
