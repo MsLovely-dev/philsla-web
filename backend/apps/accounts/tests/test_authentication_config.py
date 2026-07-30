@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.test import TestCase, override_settings
 from django.urls import path
@@ -56,6 +58,13 @@ class AuthenticationConfigurationTests(TestCase):
         self.assertEqual(auth_settings.staff_idle_timeout_minutes, 10)
         self.assertEqual(auth_settings.student_absolute_timeout_hours, 12)
         self.assertEqual(auth_settings.staff_absolute_timeout_hours, 8)
+
+    def test_simple_jwt_security_settings_use_timedeltas_and_refresh_rotation(self) -> None:
+        self.assertIn("rest_framework_simplejwt.token_blacklist", settings.INSTALLED_APPS)
+        self.assertEqual(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"], timedelta(minutes=20))
+        self.assertEqual(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"], timedelta(days=7))
+        self.assertTrue(settings.SIMPLE_JWT["ROTATE_REFRESH_TOKENS"])
+        self.assertTrue(settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"])
 
     def test_auth_email_settings_default_to_console_provider(self) -> None:
         email_settings = get_auth_email_settings()
