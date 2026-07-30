@@ -47,7 +47,11 @@ class ApplicationSerializer(serializers.ModelSerializer):
         verification = getattr(obj, "step2_verification", None)
         if not media_type and verification is not None and hasattr(verification, "registration_selfie"):
             media_type = IdentityMediaType.SELFIE
-        elif verification is not None and verification.media.filter(media_type=IdentityMediaType.STUDENT_ID_FRONT).exists():
+        elif (
+            not media_type
+            and verification is not None
+            and verification.media.filter(media_type=IdentityMediaType.STUDENT_ID_FRONT).exists()
+        ):
             media_type = IdentityMediaType.STUDENT_ID_FRONT
         if not media_type:
             return ""
