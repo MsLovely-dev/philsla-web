@@ -100,7 +100,6 @@ export class ApiClient {
     );
   }
 
-  private async send<TData>(url: string, init: RequestInit): Promise<ServiceResult<TData>> {
   private async send<TData>(url: string, path: string, init: RequestInit): Promise<ServiceResult<TData>> {
     let response = await this.fetchOnce(url, init);
 
@@ -155,6 +154,8 @@ export class ApiClient {
 
     const payload = await this.readJson<ApiErrorEnvelope>(response).catch(() => ({} as ApiErrorEnvelope));
     return this.mapError(response, payload as ApiErrorEnvelope);
+  }
+
   private shouldAttemptRefresh(path: string): boolean {
     return Boolean(this.bearerToken) && !path.startsWith('/api/v1/auth/');
   }
