@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePhilSA } from '../PhilSAContext';
 import { 
   Plus, 
@@ -32,6 +33,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { ExamHubTabs, type ExamHubTabKey } from '../components/ExamHubTabs';
 import { examBlueprintService } from '../services/backendExamBlueprintService';
 import { 
   INITIAL_BLUEPRINTS, 
@@ -45,6 +47,7 @@ import {
 
 export default function ExamBlueprints() {
   const { addAuditLog, user } = usePhilSA();
+  const navigate = useNavigate();
 
   // Load and manage Blueprints list in state
   const [blueprints, setBlueprints] = useState<Blueprint[]>(INITIAL_BLUEPRINTS);
@@ -125,6 +128,25 @@ export default function ExamBlueprints() {
 
   // Editor modal section expand/collapse accordion state
   const [editorExpandedSections, setEditorExpandedSections] = useState<Record<string, boolean>>({});
+
+  const handleHubTabChange = (tab: ExamHubTabKey) => {
+    if (tab === 'blueprints') return;
+    if (tab === 'setAssembly') {
+      navigate('/admin/hub/exam-sets#dashboard');
+      return;
+    }
+    if (tab === 'builder') {
+      navigate('/admin/hub/exam-sets#assembly');
+      return;
+    }
+    if (tab === 'published') {
+      navigate('/admin/hub/exam-sets#packages');
+      return;
+    }
+    if (tab === 'audit') {
+      navigate('/admin/hub/exam-sets#audit');
+    }
+  };
 
   // Auto-expand first section when a new blueprint is selected
   useEffect(() => {
@@ -749,38 +771,42 @@ export default function ExamBlueprints() {
 
   return (
     <div className="space-y-6">
-      
       {/* Dynamic Header & Meta Stats */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-        <div>
+      <div className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Exam Management Hub</span>
           <div className="flex items-center gap-3">
             <span className="p-2.5 bg-rose-50 text-philsa-red rounded-xl">
               <Settings className="w-6 h-6 animate-spin-slow" />
             </span>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight font-sans">Exam Blueprinting Module</h1>
-              <p className="text-slate-500 text-xs mt-0.5">Define academic curriculum constraints, validate distribution properties, and assemble automated forms from the Item Bank.</p>
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight font-sans">Exam Blueprints</h1>
+              <p className="text-slate-500 text-xs mt-0.5">Curriculum examination specifications and blueprinting.</p>
             </div>
           </div>
         </div>
-        
-        <div className="flex flex-wrap gap-2 sm:gap-4 shrink-0 w-full xl:w-auto mt-2 xl:mt-0">
-          <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 flex-1 text-center sm:text-left min-w-[120px]">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Active Blueprints</p>
-            <p className="text-lg font-black text-slate-800">{blueprints.filter(b => b.status === 'PUBLISHED').length}</p>
+
+        <ExamHubTabs activeTab="blueprints" onTabChange={handleHubTabChange} />
+
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pt-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Active Blueprints</p>
+              <p className="text-lg font-black text-slate-800">{blueprints.filter(b => b.status === 'PUBLISHED').length}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">In Review Stage</p>
+              <p className="text-lg font-black text-amber-600">{blueprints.filter(b => b.status === 'ACADEMIC_REVIEW' || b.status === 'SUBMITTED').length}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Item Bank Size</p>
+              <p className="text-lg font-black text-blue-600">{itemBank.filter(q => q.status === 'ACTIVE').length} Active</p>
+            </div>
           </div>
-          <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 flex-1 text-center sm:text-left min-w-[120px]">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">In Review Stage</p>
-            <p className="text-lg font-black text-amber-600">{blueprints.filter(b => b.status === 'ACADEMIC_REVIEW' || b.status === 'SUBMITTED').length}</p>
-          </div>
-          <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 flex-1 text-center sm:text-left min-w-[120px]">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Item Bank Size</p>
-            <p className="text-lg font-black text-blue-600">{itemBank.filter(q => q.status === 'ACTIVE').length} Active</p>
-          </div>
-          
-          <button 
+
+          <button
             onClick={handleInitiateCreate}
-            className="btn-primary flex items-center justify-center gap-2 text-xs py-2 px-4 shadow-sm font-extrabold"
+            className="bg-philsa-red hover:bg-philsa-red/90 text-white text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-philsa-red/10"
           >
             <Plus className="w-4 h-4" /> Design Blueprint
           </button>
