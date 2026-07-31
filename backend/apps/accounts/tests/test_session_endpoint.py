@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.accounts.models import AccountProfile
+from apps.accounts.models import AccountPermission, AccountProfile
 from apps.accounts.roles import PortalRole
 
 
@@ -102,3 +102,24 @@ class CurrentSessionEndpointTests(TestCase):
         self.assertEqual(payload["user"]["role"], "ADMISSIONS_REVIEWER")
         self.assertEqual(payload["user"]["permissions"], ["applications:review"])
         self.assertEqual(payload["user"]["scopes"], {"office": "admissions"})
+
+    def test_session_returns_structured_account_permissions(self) -> None:
+        user = get_user_model().objects.create_user(
+            username="admin",
+            email="admin@example.test",
+            password="Password1!",
+        )
+        profile = AccountProfile.objects.create(user=user, role=PortalRole.SYSTEM_ADMIN.value)
+        AccountPermission.objects.create(
+            account_profile=profile,
+            module_id="99",
+            action="READ",
+            effect=AccountPermission.Effect.ALLOW,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/v1/auth/session/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("MOD_31_READ", response.json()["user"]["permissions"])
+        self.assertIn("MOD_99_READ", response.json()["user"]["permissions"])

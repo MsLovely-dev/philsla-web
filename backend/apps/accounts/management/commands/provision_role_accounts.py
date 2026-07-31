@@ -4,6 +4,7 @@ from django.db import transaction
 
 from apps.accounts.default_permissions import default_module_access_for_role
 from apps.accounts.models import AccountProfile
+from apps.accounts.permission_codes import ensure_account_assignment, ensure_role_baseline
 from apps.accounts.roles import PortalRole
 
 
@@ -52,6 +53,7 @@ class Command(BaseCommand):
         updated_count = 0
 
         for role in NON_STUDENT_ROLES:
+            ensure_role_baseline(role.value)
             username = role.value.lower()
             email = f"{ROLE_EMAIL_LOCAL_PARTS[role]}@{email_domain}"
             user, user_created = UserModel.objects.get_or_create(
@@ -112,6 +114,7 @@ class Command(BaseCommand):
                 updated_count += 1
 
             password_state = "usable password set" if password and user_created else "unusable password" if user_created else "existing password unchanged"
+            ensure_account_assignment(profile)
             self.stdout.write(f"{role.value}: {email} ({password_state})")
 
         self.stdout.write(self.style.SUCCESS(f"Provisioned non-student role accounts. Created: {created_count}. Existing/updated: {updated_count}."))

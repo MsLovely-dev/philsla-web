@@ -42,6 +42,101 @@ class AccountProfile(models.Model):
         return f"{identifier} ({self.role})"
 
 
+class PermissionAction(models.TextChoices):
+    READ = "READ", "READ"
+    WRITE = "WRITE", "WRITE"
+    EDIT = "EDIT", "EDIT"
+    DELETE = "DELETE", "DELETE"
+    APPROVE = "APPROVE", "APPROVE"
+    REJECT = "REJECT", "REJECT"
+
+
+class RolePermission(models.Model):
+    """Baseline module permission granted by a portal role."""
+
+    role = models.CharField(max_length=32, choices=[(role.value, role.value) for role in PortalRole])
+    module_id = models.CharField(max_length=16)
+    action = models.CharField(max_length=16, choices=PermissionAction.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["role", "module_id", "action"]
+        constraints = [
+            models.UniqueConstraint(fields=["role", "module_id", "action"], name="uniq_role_permission"),
+        ]
+        indexes = [
+            models.Index(fields=["role", "module_id", "action"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.role}: MOD_{self.module_id}_{self.action}"
+
+
+class AccountRoleAssignment(models.Model):
+    """Permission inheritance mode for an account profile."""
+
+    class PermissionMode(models.TextChoices):
+        INHERIT = "INHERIT", "INHERIT"
+        CUSTOM = "CUSTOM", "CUSTOM"
+
+    account_profile = models.OneToOneField(
+        AccountProfile,
+        on_delete=models.CASCADE,
+        related_name="role_assignment",
+    )
+    role = models.CharField(max_length=32, choices=[(role.value, role.value) for role in PortalRole])
+    permission_mode = models.CharField(
+        max_length=16,
+        choices=PermissionMode.choices,
+        default=PermissionMode.INHERIT,
+    )
+    role_version_at_assignment = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["account_profile__user__email"]
+        indexes = [
+            models.Index(fields=["role", "permission_mode"]),
+        ]
+
+
+class AccountPermission(models.Model):
+    """Account-specific permission difference from the account role baseline."""
+
+    class Effect(models.TextChoices):
+        ALLOW = "ALLOW", "ALLOW"
+        DENY = "DENY", "DENY"
+
+    account_profile = models.ForeignKey(
+        AccountProfile,
+        on_delete=models.CASCADE,
+        related_name="account_permissions",
+    )
+    module_id = models.CharField(max_length=16)
+    action = models.CharField(max_length=16, choices=PermissionAction.choices)
+    effect = models.CharField(max_length=8, choices=Effect.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["account_profile_id", "module_id", "action"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account_profile", "module_id", "action"],
+                name="uniq_account_permission_decision",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["account_profile", "module_id", "action"]),
+            models.Index(fields=["module_id", "action", "effect"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.account_profile_id}: {self.effect} MOD_{self.module_id}_{self.action}"
+
+
 class AuthRefreshSession(models.Model):
     """Persistent refresh-token session boundary for backend auth."""
 

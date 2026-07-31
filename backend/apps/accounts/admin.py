@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog
+from .models import AccountPermission, AccountProfile, AccountRoleAssignment, AuthRefreshSession, LoginSelfieLog, RolePermission
 
 
 class AccountProfileInline(admin.StackedInline):
@@ -19,6 +19,30 @@ class AccountProfileAdmin(admin.ModelAdmin):
     list_filter = ("role",)
     search_fields = ("user__username", "user__email", "lrn")
     readonly_fields = ("security_tier", "created_at", "updated_at")
+
+
+@admin.register(RolePermission)
+class RolePermissionAdmin(admin.ModelAdmin):
+    list_display = ("role", "module_id", "action", "created_at", "updated_at")
+    list_filter = ("role", "action")
+    search_fields = ("role", "module_id", "action")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AccountRoleAssignment)
+class AccountRoleAssignmentAdmin(admin.ModelAdmin):
+    list_display = ("account_profile", "role", "permission_mode", "role_version_at_assignment", "updated_at")
+    list_filter = ("role", "permission_mode")
+    search_fields = ("account_profile__user__username", "account_profile__user__email")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(AccountPermission)
+class AccountPermissionAdmin(admin.ModelAdmin):
+    list_display = ("account_profile", "module_id", "action", "effect", "created_at", "updated_at")
+    list_filter = ("action", "effect")
+    search_fields = ("account_profile__user__username", "account_profile__user__email", "module_id", "action")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(AuthRefreshSession)

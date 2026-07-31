@@ -18,14 +18,21 @@ from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from django.utils.dateparse import parse_datetime
+from rest_framework import serializers
 from rest_framework.exceptions import APIException
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from .audit import record_auth_event
-from .default_permissions import module_access_or_role_default
 from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog, PasswordRecoveryToken
-from .roles import PortalRole, get_security_tier, get_user_role
+from .permission_codes import (
+    default_role_permission_codes,
+    ensure_account_assignment,
+    replace_account_permission_differences,
+    replace_role_permissions,
+    resolve_account_permission_codes,
+)
+from .roles import PortalRole, get_security_tier, get_user_role, normalize_role
 
 
 class LoginFlowRejected(APIException):
@@ -131,7 +138,7 @@ def _account_from_user(user: object, profile: AccountProfile | None = None) -> d
         lrn = ""
     elif profile is not None:
         role = profile.role
-        permissions = list(profile.api_permissions or [])
+        permissions = resolve_account_permission_codes(profile)
         scopes = dict(profile.scopes or {})
         lrn = profile.lrn or ""
     else:
@@ -650,6 +657,66 @@ def list_admin_user_accounts(*, search: str = "", role: str = "") -> list[tuple[
     return [(profile.user, profile) for profile in queryset]
 
 
+def _serialize_admin_role(role: str) -> dict[str, object]:
+    return {
+        "id": role,
+        "name": role,
+        "moduleAccess": default_role_permission_codes(role),
+        "assignedUserCount": AccountProfile.objects.filter(role=role, user__is_active=True).count(),
+    }
+
+
+def list_admin_roles() -> list[dict[str, object]]:
+    """Return staff/admin role baselines managed from System Admin role settings."""
+
+    return [_serialize_admin_role(role.value) for role in PortalRole if role != PortalRole.STUDENT]
+
+
+@transaction.atomic
+def update_admin_role_permissions(
+    *,
+    role: str,
+    module_access: list[str],
+    scope: str,
+    selected_user_ids: list[str] | None = None,
+) -> dict[str, object]:
+    """Update a role baseline or apply role-shaped permissions to assigned users."""
+
+    normalized_role = normalize_role(role)
+    if normalized_role is None or normalized_role == PortalRole.STUDENT.value:
+        raise serializers.ValidationError({"role": "Select a supported staff or administrator role."})
+
+    account_profile_ids: list[int] | None = None
+    if scope == "selected_users":
+        selected_ids = {str(user_id).strip() for user_id in selected_user_ids or [] if str(user_id).strip()}
+        if not selected_ids:
+            raise serializers.ValidationError({"selectedUserIds": "Select at least one user for this role update."})
+
+        try:
+            selected_profiles = list(
+                AccountProfile.objects.select_related("user").filter(
+                    user_id__in=selected_ids,
+                    user__is_active=True,
+                    role=normalized_role,
+                )
+            )
+        except (TypeError, ValueError) as exc:
+            raise serializers.ValidationError({"selectedUserIds": "Select valid users assigned to this role."}) from exc
+
+        matched_user_ids = {str(profile.user_id) for profile in selected_profiles}
+        if matched_user_ids != selected_ids:
+            raise serializers.ValidationError({"selectedUserIds": "Selected users must be active users assigned to this role."})
+        account_profile_ids = [profile.id for profile in selected_profiles]
+
+    replace_role_permissions(
+        normalized_role,
+        module_access,
+        scope=scope,
+        account_profile_ids=account_profile_ids,
+    )
+    return _serialize_admin_role(normalized_role)
+
+
 @transaction.atomic
 def create_admin_user_account(
     *,
@@ -674,11 +741,10 @@ def create_admin_user_account(
     )
     user.set_unusable_password()
     user.save(update_fields=["password"])
-    profile = AccountProfile.objects.create(
-        user=user,
-        role=role,
-        api_permissions=module_access_or_role_default(role, module_access),
-    )
+    profile = AccountProfile.objects.create(user=user, role=role)
+    ensure_account_assignment(profile)
+    if module_access:
+        replace_account_permission_differences(profile, module_access)
     return user, profile
 
 
@@ -711,8 +777,12 @@ def update_admin_user_account(
     user.save(update_fields=["email", "first_name", "last_name", "is_active", "is_staff"])
 
     profile.role = role
-    profile.api_permissions = module_access_or_role_default(role, module_access)
-    profile.save(update_fields=["role", "api_permissions", "updated_at"])
+    profile.save(update_fields=["role", "updated_at"])
+    assignment = ensure_account_assignment(profile)
+    if assignment.role != role:
+        assignment.role = role
+        assignment.save(update_fields=["role", "updated_at"])
+    replace_account_permission_differences(profile, module_access)
     return user, profile
 
 
