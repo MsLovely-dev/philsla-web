@@ -628,6 +628,8 @@ Test coverage:
 
 Use this endpoint to load backend-managed role permission baselines for the User & Role Settings screen. It returns fixed staff/admin `PortalRole` values only; dynamic custom-role persistence remains `TBD`.
 
+Permissions are resolved from structured `RolePermission`, `AccountRoleAssignment`, and `AccountPermission` rows. The former account permission JSONField was removed in the structured permissions Phase 3 cleanup.
+
 Request:
 
 - Body: none.
@@ -656,7 +658,7 @@ Error behavior:
 
 ### `PUT /api/v1/auth/admin/roles/{role}/permissions/`
 
-Use this endpoint when a System Admin changes a role's modular permission set. Permission codes are validated against the structured `MOD_{moduleId}_{action}` format, and selected users must be active users currently assigned to `{role}`.
+Use this endpoint when a System Admin changes a role's modular permission set. Permission codes are validated against the structured `MOD_{moduleId}_{action}` format, supported module IDs `1` through `56`, and supported actions for each module. The permission applicability catalog is backend-owned at `backend/apps/accounts/permission_catalog.json`; the frontend consumes a generated copy that must be refreshed with `python scripts/generate_permission_catalog.py` after catalog changes. Selected users must be active users currently assigned to `{role}`.
 
 Request:
 

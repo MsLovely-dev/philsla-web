@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { AlertTriangle, Check, Edit2, Eye, Filter, Search, Settings2, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { INITIAL_MAINTENANCE_MODULES, usePhilSA, type MaintenanceModule } from '../PhilSAContext';
 import { cn } from '../lib/utils';
+import { permissionCatalog } from '../generated/permissionCatalog';
 import {
   backendAdminUserService,
   type AdminRoleDefinition as BackendRoleDefinition,
@@ -35,6 +36,7 @@ interface RoleDefinition {
   id: string;
   name: string;
   moduleAccess: string[];
+  rawModuleAccess: string[];
   isCustom: boolean;
   assignedUserCount?: number;
 }
@@ -51,63 +53,23 @@ const decide: PermissionActionKey[] = ['READ', 'EDIT', 'APPROVE', 'REJECT'];
 const manage: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE'];
 const fullAccess: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT'];
 
-const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
-  '2': fullAccess,
-  '3': readOnly,
-  '4': readOnly,
-  '5': readOnly,
-  '6': readOnly,
-  '7': readOnly,
-  '8': decide,
-  '9': decide,
-  '10': decide,
-  '11': manageRecords,
-  '12': operate,
-  '13': manageRecords,
-  '14': manageRecords,
-  '15': readOnly,
-  '16': readOnly,
-  '17': manageRecords,
-  '18': manageRecords,
-  '19': manageRecords,
-  '20': decide,
-  '21': manageRecords,
-  '22': readOnly,
-  '23': readOnly,
-  '24': manageRecords,
-  '25': operate,
-  '26': readOnly,
-  '27': operate,
-  '28': operate,
-  '29': readOnly,
-  '30': manageRecords,
-  '31': manageRecords,
-  '32': operate,
-  '33': decide,
-  '34': readOnly,
-  '35': operate,
-  '36': operate,
-  '37': decide,
-  '38': manageRecords,
-  '39': manageRecords,
-  '40': operate,
-  '41': operate,
-  '42': operate,
-  '43': manageRecords,
-  '44': manageRecords,
-  '45': manageRecords,
-  '46': decide,
-  '47': operate,
-  '48': readOnly,
-  '49': manageRecords,
-  '50': readOnly,
-  '51': readOnly,
-  '52': operate,
-  '53': readOnly,
-  '54': operate,
-  '55': manageRecords,
-  '56': readOnly,
+type PermissionCatalog = {
+  defaultRange: { start: number; end: number; actions: readonly PermissionActionKey[] };
+  modules: Record<string, readonly PermissionActionKey[]>;
 };
+
+function buildModulePermissionApplicability(catalog: PermissionCatalog) {
+  const applicability: Record<string, PermissionActionKey[]> = {};
+  for (let moduleId = catalog.defaultRange.start; moduleId <= catalog.defaultRange.end; moduleId += 1) {
+    applicability[String(moduleId)] = Array.from(catalog.defaultRange.actions);
+  }
+  Object.entries(catalog.modules).forEach(([moduleId, actions]) => {
+    applicability[moduleId] = Array.from(actions);
+  });
+  return applicability;
+}
+
+const modulePermissionApplicability = buildModulePermissionApplicability(permissionCatalog as PermissionCatalog);
 
 const permissionMatrixModuleIds = new Set([
   '2', '3', '4',
@@ -252,6 +214,37 @@ function filterApplicableModuleAccess(modules: MaintenanceModule[], moduleAccess
   );
 
   return moduleAccess.filter((permissionKey) => allowedKeys.has(permissionKey));
+}
+
+export function preserveHiddenModuleAccess(
+  modules: MaintenanceModule[],
+  originalModuleAccess: string[],
+  visibleModuleAccess: string[]
+) {
+  const visibleKeys = new Set(
+    modules.flatMap((module) => getApplicablePermissions(module).map((permission) => modulePermissionKey(module, permission)))
+  );
+  const merged = new Set([
+    ...originalModuleAccess.filter((permissionKey) => !visibleKeys.has(permissionKey)),
+    ...visibleModuleAccess,
+  ]);
+  return Array.from(merged);
+}
+
+export function buildRoleDefinition(
+  role: BackendRoleDefinition,
+  modules: MaintenanceModule[],
+  overrideModuleAccess?: string[]
+): RoleDefinition {
+  const rawModuleAccess = overrideModuleAccess ?? role.moduleAccess;
+  return {
+    id: role.id,
+    name: role.name,
+    moduleAccess: filterApplicableModuleAccess(modules, rawModuleAccess),
+    rawModuleAccess,
+    isCustom: false,
+    assignedUserCount: role.assignedUserCount,
+  };
 }
 
 function getDefaultModuleAccessForRole(role: string, modules: MaintenanceModule[]) {
@@ -516,17 +509,12 @@ export default function UserManagement() {
   const roleDefinitions = useMemo<RoleDefinition[]>(
     () => {
       const persistedRoles = backendRoles.length
-        ? backendRoles.map((role) => ({
-          id: role.id,
-          name: role.name,
-          moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role.id] ?? role.moduleAccess),
-          isCustom: false,
-          assignedUserCount: role.assignedUserCount,
-        }))
+        ? backendRoles.map((role) => buildRoleDefinition(role, systemModules, roleAccessOverrides[role.id]))
         : roles.filter((role) => !deletedRoleIds.includes(role)).map((role) => ({
           id: role,
           name: role,
           moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules)),
+          rawModuleAccess: roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules),
           isCustom: false,
         }));
 
@@ -535,6 +523,7 @@ export default function UserManagement() {
         ...customRoles.filter((role) => !deletedRoleIds.includes(role.id)).map((role) => ({
           ...role,
           moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role.id] ?? role.moduleAccess),
+          rawModuleAccess: roleAccessOverrides[role.id] ?? role.moduleAccess,
         })),
       ];
     },
@@ -715,7 +704,7 @@ export default function UserManagement() {
       if (editingRole.isCustom) {
         setCustomRoles((current) => current.map((role) => (
           role.id === editingRole.id
-            ? { ...role, id: normalizedRoleName, name: normalizedRoleName, moduleAccess: normalizedModuleAccess }
+            ? { ...role, id: normalizedRoleName, name: normalizedRoleName, moduleAccess: normalizedModuleAccess, rawModuleAccess: normalizedModuleAccess }
             : role
         )));
         setRoleAccessOverrides((current) => {
@@ -731,7 +720,7 @@ export default function UserManagement() {
 
         setIsRoleSaving(true);
         const result = await backendAdminUserService.updateRolePermissions(editingRole.id, {
-          moduleAccess: normalizedModuleAccess,
+          moduleAccess: preserveHiddenModuleAccess(systemModules, editingRole.rawModuleAccess, normalizedModuleAccess),
           scope: roleUpdateScope,
           selectedUserIds: roleUpdateScope === 'selected_users' ? selectedRoleUserIds : [],
         });
@@ -791,6 +780,7 @@ export default function UserManagement() {
         id: normalizedRoleName,
         name: normalizedRoleName,
         moduleAccess: normalizedModuleAccess,
+        rawModuleAccess: normalizedModuleAccess,
         isCustom: true,
       },
     ]);
@@ -840,9 +830,12 @@ export default function UserManagement() {
     event.preventDefault();
     setIsSaving(true);
     setFormError('');
+    const visibleModuleAccess = filterApplicableModuleAccess(systemModules, form.moduleAccess);
     const normalizedForm = {
       ...form,
-      moduleAccess: filterApplicableModuleAccess(systemModules, form.moduleAccess),
+      moduleAccess: selectedUser
+        ? preserveHiddenModuleAccess(systemModules, selectedUser.moduleAccess, visibleModuleAccess)
+        : visibleModuleAccess,
     };
 
     const result = selectedUser

@@ -37,7 +37,7 @@ class CurrentSessionEndpointTests(TestCase):
             is_active=True,
             email="student@example.test",
             role="STUDENT",
-            api_permissions=("applications:create", "applications:read-own"),
+            permissions=("applications:create", "applications:read-own"),
             scopes={"studentId": "student-123"},
         )
         client.force_authenticate(user=user)
@@ -90,7 +90,6 @@ class CurrentSessionEndpointTests(TestCase):
         AccountProfile.objects.create(
             user=user,
             role=PortalRole.ADMISSIONS_REVIEWER.value,
-            api_permissions=["applications:review"],
             scopes={"office": "admissions"},
         )
         self.client.force_login(user)
@@ -100,7 +99,7 @@ class CurrentSessionEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["user"]["role"], "ADMISSIONS_REVIEWER")
-        self.assertEqual(payload["user"]["permissions"], ["applications:review"])
+        self.assertIn("MOD_1_READ", payload["user"]["permissions"])
         self.assertEqual(payload["user"]["scopes"], {"office": "admissions"})
 
     def test_session_returns_structured_account_permissions(self) -> None:
@@ -112,7 +111,7 @@ class CurrentSessionEndpointTests(TestCase):
         profile = AccountProfile.objects.create(user=user, role=PortalRole.SYSTEM_ADMIN.value)
         AccountPermission.objects.create(
             account_profile=profile,
-            module_id="99",
+            module_id="56",
             action="READ",
             effect=AccountPermission.Effect.ALLOW,
         )
@@ -122,4 +121,4 @@ class CurrentSessionEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("MOD_31_READ", response.json()["user"]["permissions"])
-        self.assertIn("MOD_99_READ", response.json()["user"]["permissions"])
+        self.assertIn("MOD_56_READ", response.json()["user"]["permissions"])

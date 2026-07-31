@@ -1,4 +1,6 @@
+import json
 import re
+from pathlib import Path
 
 from django.db import transaction
 from rest_framework import serializers
@@ -10,6 +12,27 @@ from .roles import normalize_role
 PERMISSION_CODE_PATTERN = re.compile(r"^MOD_([A-Z0-9-]+)_([A-Z]+)$")
 
 
+def _load_permission_catalog() -> dict[str, frozenset[str]]:
+    with _permission_catalog_path().open(encoding="utf-8") as catalog_file:
+        catalog = json.load(catalog_file)
+
+    default_range = catalog["defaultRange"]
+    permissions = {
+        str(module_id): frozenset(default_range["actions"])
+        for module_id in range(int(default_range["start"]), int(default_range["end"]) + 1)
+    }
+    permissions.update({str(module_id): frozenset(actions) for module_id, actions in catalog["modules"].items()})
+    return permissions
+
+
+def _permission_catalog_path() -> Path:
+    return Path(__file__).resolve().parent / "permission_catalog.json"
+
+
+SUPPORTED_PERMISSION_ACTIONS_BY_MODULE = _load_permission_catalog()
+SUPPORTED_MODULE_IDS = set(SUPPORTED_PERMISSION_ACTIONS_BY_MODULE)
+
+
 def parse_permission_code(code: str) -> tuple[str, str]:
     normalized = str(code).strip().upper()
     match = PERMISSION_CODE_PATTERN.fullmatch(normalized)
@@ -17,8 +40,12 @@ def parse_permission_code(code: str) -> tuple[str, str]:
         raise serializers.ValidationError(f"Invalid permission code: {code}")
 
     module_id, action = match.groups()
+    if module_id not in SUPPORTED_MODULE_IDS:
+        raise serializers.ValidationError(f"Unsupported permission module: {module_id}")
     if action not in PermissionAction.values:
         raise serializers.ValidationError(f"Unsupported permission action: {action}")
+    if action not in SUPPORTED_PERMISSION_ACTIONS_BY_MODULE[module_id]:
+        raise serializers.ValidationError(f"Unsupported permission for module: {format_permission_code(module_id, action)}")
     return module_id, action
 
 
@@ -81,12 +108,6 @@ def ensure_account_assignment(profile: AccountProfile) -> AccountRoleAssignment:
 def resolve_account_permission_codes(profile: AccountProfile) -> list[str]:
     assignment = ensure_account_assignment(profile)
     decisions = list(AccountPermission.objects.filter(account_profile=profile))
-    if not decisions and profile.api_permissions:
-        try:
-            return normalize_permission_codes(list(profile.api_permissions))
-        except serializers.ValidationError:
-            return [str(permission) for permission in profile.api_permissions]
-
     resolved = set(default_role_permission_codes(assignment.role))
     for permission in decisions:
         code = format_permission_code(permission.module_id, permission.action)

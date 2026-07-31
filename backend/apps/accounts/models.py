@@ -18,7 +18,6 @@ class AccountProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="account_profile")
     role = models.CharField(max_length=32, choices=[(role.value, role.value) for role in PortalRole])
     lrn = models.CharField("LRN", max_length=12, unique=True, null=True, blank=True)
-    api_permissions = models.JSONField(default=list, blank=True)
     scopes = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

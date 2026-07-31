@@ -9,7 +9,7 @@ class AccountProfileInline(admin.StackedInline):
     model = AccountProfile
     can_delete = False
     extra = 0
-    fields = ("role", "lrn", "api_permissions", "scopes", "security_tier")
+    fields = ("role", "lrn", "scopes", "security_tier")
     readonly_fields = ("security_tier",)
 
 

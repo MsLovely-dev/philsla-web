@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
-from apps.accounts.default_permissions import default_module_access_for_role
 from apps.accounts.models import AccountProfile
 from apps.accounts.permission_codes import ensure_account_assignment, ensure_role_baseline
 from apps.accounts.roles import PortalRole
@@ -91,22 +90,17 @@ class Command(BaseCommand):
                 user=user,
                 defaults={
                     "role": role.value,
-                    "api_permissions": default_module_access_for_role(role.value),
                     "scopes": {},
                 },
             )
 
-            role_default_permissions = default_module_access_for_role(role.value)
             profile_changed = False
             if not profile_created and profile.role != role.value:
                 profile.role = role.value
                 profile_changed = True
-            if not profile.api_permissions:
-                profile.api_permissions = role_default_permissions
-                profile_changed = True
 
             if profile_changed:
-                profile.save(update_fields=["role", "api_permissions", "updated_at"])
+                profile.save(update_fields=["role", "updated_at"])
                 updated_count += 1
             elif user_created or profile_created:
                 created_count += 1

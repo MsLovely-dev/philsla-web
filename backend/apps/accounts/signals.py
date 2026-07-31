@@ -17,7 +17,6 @@ def create_superuser_account_profile(sender, instance, created: bool, **kwargs) 
         user=instance,
         defaults={
             "role": PortalRole.SYSTEM_ADMIN.value,
-            "api_permissions": [],
             "scopes": {},
         },
     )

@@ -628,7 +628,7 @@ def resolve_authenticated_account(user: object) -> dict[str, Any] | None:
         "email": getattr(user, "email", "") or "",
         "role": role,
         "security_tier": get_security_tier(role),
-        "permissions": list(getattr(user, "api_permissions", []) or []),
+        "permissions": list(getattr(user, "permissions", []) or []),
         "scopes": dict(getattr(user, "scopes", {}) or {}),
     }
 
@@ -1050,7 +1050,7 @@ def validate_access_token(*, access_token: str) -> tuple[object, object] | None:
         id=account["id"],
         email=account["email"],
         role=account["role"],
-        api_permissions=account["permissions"],
+        permissions=account["permissions"],
         scopes=account["scopes"],
         is_authenticated=True,
         is_active=True,

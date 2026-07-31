@@ -72,18 +72,18 @@ class AdminUserRoleDefaultPermissionTests(TestCase):
             full_name="Proctor Admin",
             email="proctor.admin@example.test",
             role=PortalRole.PROCTOR_ADMIN.value,
-            module_access=["MOD_99_READ"],
+            module_access=["MOD_56_READ"],
             is_active=True,
         )
 
         self.assertEqual(
             resolve_account_permission_codes(profile),
-            ["MOD_99_READ"],
+            ["MOD_56_READ"],
         )
         self.assertTrue(
             AccountPermission.objects.filter(
                 account_profile=profile,
-                module_id="99",
+                module_id="56",
                 action="READ",
                 effect=AccountPermission.Effect.ALLOW,
             ).exists()

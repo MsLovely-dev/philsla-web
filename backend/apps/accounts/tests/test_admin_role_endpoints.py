@@ -65,7 +65,7 @@ class AdminRoleEndpointTests(TestCase):
         response = self.client.put(
             "/api/v1/auth/admin/roles/SYSTEM_ADMIN/permissions/",
             data={
-                "moduleAccess": ["MOD_31_READ", "MOD_99_READ"],
+                "moduleAccess": ["MOD_31_READ", "MOD_56_READ"],
                 "scope": "selected_users",
                 "selectedUserIds": [str(selected_user.id)],
             },
@@ -73,11 +73,11 @@ class AdminRoleEndpointTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn("MOD_99_READ", response.json()["moduleAccess"])
-        self.assertIn("MOD_99_READ", resolve_account_permission_codes(selected_profile))
-        self.assertNotIn("MOD_99_READ", resolve_account_permission_codes(unselected_profile))
+        self.assertNotIn("MOD_56_READ", response.json()["moduleAccess"])
+        self.assertIn("MOD_56_READ", resolve_account_permission_codes(selected_profile))
+        self.assertNotIn("MOD_56_READ", resolve_account_permission_codes(unselected_profile))
         self.assertFalse(
-            RolePermission.objects.filter(role=PortalRole.SYSTEM_ADMIN.value, module_id="99", action="READ").exists()
+            RolePermission.objects.filter(role=PortalRole.SYSTEM_ADMIN.value, module_id="56", action="READ").exists()
         )
 
     def test_selected_user_update_rejects_users_outside_target_role(self) -> None:
