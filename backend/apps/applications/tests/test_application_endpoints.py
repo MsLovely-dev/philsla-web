@@ -17,7 +17,6 @@ from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 from apps.applications.models import (
     ApplicationAuditLog,
-    ApplicationIdentityMedia,
     ApplicationStatus,
     IdentityMediaType,
     RegistrationSelfieMedia,
