@@ -1,3 +1,5 @@
+import base64
+import binascii
 import hashlib
 import re
 import secrets
@@ -7,6 +9,7 @@ from difflib import SequenceMatcher
 
 from django.conf import settings
 from django.contrib.auth.hashers import make_password
+from django.core.files.base import ContentFile
 from django.core.mail import EmailMultiAlternatives
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
@@ -22,6 +25,7 @@ from .identity_verification import (
     get_student_id_recognizer,
 )
 from .models import (ApplicationIdentityMedia, ApplicationStatus, IdentityMediaType,
+                     RegistrationSelfieMedia,
                      Step2Verification, Step2VerificationConfiguration,
                      Step2VerificationStatus, StudentApplication)
 from .registry import RegistryUnavailable, get_lrn_registry
@@ -41,6 +45,7 @@ LRN_PROOF_PREFIX = "registration:lrn-proof:"
 LRN_VERIFICATION_CATEGORIES = {"email", "birthday", "student_id", "mobile", "mother_name"}
 REGISTRATION_EMAIL_OTP_PREFIX = "registration:email-otp:"
 REGISTRATION_EMAIL_VERIFIED_PREFIX = "registration:email-verified:"
+REGISTRATION_SELFIE_DATA_URL_FIELD = "selfiePhotoUrl"
 
 
 class LrnVerificationRejected(APIException):
@@ -400,6 +405,8 @@ def get_step2_verification(token: str) -> Step2Verification:
 
 def serialize_step2(verification: Step2Verification) -> dict:
     present = list(verification.media.values_list("media_type", flat=True))
+    if hasattr(verification, "registration_selfie"):
+        present.append(IdentityMediaType.SELFIE)
     return {"id": str(verification.id), "status": verification.status, "attempts": verification.attempts,
             "configuration": verification.configuration_snapshot, "uploadedMedia": present,
             "results": verification.results}
@@ -414,6 +421,73 @@ def _validated_image_content_type(uploaded_file) -> str:
     if not content_type:
         raise ValidationError({"file": ["Only valid JPEG and PNG images are accepted."]})
     return content_type
+
+
+def _pop_registration_selfie_data_url(data: dict) -> str:
+    personal = dict(data.get("personal", {}))
+    selfie_data_url = str(personal.pop(REGISTRATION_SELFIE_DATA_URL_FIELD, "") or "")
+    data["personal"] = personal
+    return selfie_data_url
+
+
+def _registration_selfie_for_owner(*, verification: Step2Verification | None, application: StudentApplication | None):
+    if application is not None:
+        existing_selfie = getattr(application, "registration_selfie", None)
+        if existing_selfie is not None:
+            return existing_selfie
+    if verification is not None:
+        return getattr(verification, "registration_selfie", None)
+    return None
+
+
+def _link_registration_selfie_to_application(*, verification: Step2Verification, application: StudentApplication) -> None:
+    existing_selfie = getattr(verification, "registration_selfie", None)
+    if existing_selfie is not None and existing_selfie.application_id != application.id:
+        existing_selfie.application = application
+        existing_selfie.save(update_fields=["application"])
+
+
+def _store_registration_selfie_data_url(
+    *,
+    data_url: str,
+    verification: Step2Verification | None = None,
+    application: StudentApplication | None = None,
+) -> None:
+    if not data_url:
+        return
+    if verification is None and application is None:
+        raise ValidationError({"personal": [f"{REGISTRATION_SELFIE_DATA_URL_FIELD} cannot be stored without an application."]})
+    prefix, separator, encoded = data_url.partition(",")
+    if separator != "," or ";base64" not in prefix:
+        raise ValidationError({"personal": [f"{REGISTRATION_SELFIE_DATA_URL_FIELD} must be a base64 image data URL."]})
+    content_type = prefix.removeprefix("data:").split(";", 1)[0]
+    if content_type not in {"image/jpeg", "image/png"}:
+        raise ValidationError({"personal": [f"{REGISTRATION_SELFIE_DATA_URL_FIELD} must be a JPEG or PNG image."]})
+    try:
+        image_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValidationError({"personal": [f"{REGISTRATION_SELFIE_DATA_URL_FIELD} contains invalid base64 data."]}) from exc
+    if len(image_bytes) > settings.STEP2_MAX_IMAGE_BYTES:
+        raise ValidationError({"personal": [f"{REGISTRATION_SELFIE_DATA_URL_FIELD} must not exceed 5 MB."]})
+    if content_type == "image/png" and not image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValidationError({"personal": [f"{REGISTRATION_SELFIE_DATA_URL_FIELD} must contain a valid PNG image."]})
+    if content_type == "image/jpeg" and not image_bytes.startswith(b"\xff\xd8\xff"):
+        raise ValidationError({"personal": [f"{REGISTRATION_SELFIE_DATA_URL_FIELD} must contain a valid JPEG image."]})
+
+    existing_selfie = _registration_selfie_for_owner(verification=verification, application=application)
+    if existing_selfie is not None:
+        existing_selfie.file.delete(save=False)
+        existing_selfie.delete()
+
+    extension = "png" if content_type == "image/png" else "jpg"
+    RegistrationSelfieMedia.objects.create(
+        verification=verification,
+        application=application,
+        file=ContentFile(image_bytes, name=f"registration-selfie.{extension}"),
+        content_type=content_type,
+        size=len(image_bytes),
+        sha256=hashlib.sha256(image_bytes).hexdigest(),
+    )
 
 
 def _validate_selfie_face_image(*, uploaded_file) -> dict:
@@ -532,11 +606,31 @@ def upload_step2_media(*, token: str, media_type: str, uploaded_file, step1_iden
     digest = hashlib.sha256()
     for chunk in uploaded_file.chunks(): digest.update(chunk)
     uploaded_file.seek(0)
-    for existing_media in ApplicationIdentityMedia.objects.filter(verification=verification, media_type=media_type):
-        existing_media.file.delete(save=False)
-        existing_media.delete()
-    ApplicationIdentityMedia.objects.create(verification=verification, media_type=media_type, file=uploaded_file,
-                                            content_type=content_type, size=uploaded_file.size, sha256=digest.hexdigest())
+    if is_step1_identity_selfie_upload:
+        existing_selfie = getattr(verification, "registration_selfie", None)
+        if existing_selfie is not None:
+            existing_selfie.file.delete(save=False)
+            existing_selfie.delete()
+        RegistrationSelfieMedia.objects.create(
+            verification=verification,
+            application=verification.application,
+            file=uploaded_file,
+            content_type=content_type,
+            size=uploaded_file.size,
+            sha256=digest.hexdigest(),
+        )
+    else:
+        for existing_media in ApplicationIdentityMedia.objects.filter(verification=verification, media_type=media_type):
+            existing_media.file.delete(save=False)
+            existing_media.delete()
+        ApplicationIdentityMedia.objects.create(
+            verification=verification,
+            media_type=media_type,
+            file=uploaded_file,
+            content_type=content_type,
+            size=uploaded_file.size,
+            sha256=digest.hexdigest(),
+        )
     if not is_step1_identity_selfie_upload:
         verification.attempts += 1
     required_id_media = set()
@@ -544,6 +638,8 @@ def upload_step2_media(*, token: str, media_type: str, uploaded_file, step1_iden
         if configuration.get("requireStudentIdFront"): required_id_media.add(IdentityMediaType.STUDENT_ID_FRONT)
         if configuration.get("requireStudentIdBack"): required_id_media.add(IdentityMediaType.STUDENT_ID_BACK)
     present = set(verification.media.values_list("media_type", flat=True))
+    if hasattr(verification, "registration_selfie"):
+        present.add(IdentityMediaType.SELFIE)
     if is_step1_identity_selfie_upload and IdentityMediaType.SELFIE in present:
         verification.status = Step2VerificationStatus.PASSED
         verification.completed_at = timezone.now()
@@ -645,6 +741,7 @@ def _lrn_cooldown_seconds_left(attempt_state: dict) -> int:
 @transaction.atomic
 def create_draft(*, owner=None, verification_token: str = "", email_verification_token: str = "", data: dict, submit_on_create: bool = False) -> StudentApplication:
     password = data.pop("password", "")
+    selfie_data_url = _pop_registration_selfie_data_url(data)
     personal = dict(data.get("personal", {}))
     school = dict(data.get("school", {}))
 
@@ -704,6 +801,10 @@ def create_draft(*, owner=None, verification_token: str = "", email_verification
         if step2 is not None:
             step2.application = application
             step2.save(update_fields=["application", "updated_at"])
+            _link_registration_selfie_to_application(verification=step2, application=application)
+            _store_registration_selfie_data_url(verification=step2, application=application, data_url=selfie_data_url)
+        else:
+            _store_registration_selfie_data_url(application=application, data_url=selfie_data_url)
         if submit_on_create:
             application.status = ApplicationStatus.SUBMITTED
             application.version += 1
@@ -756,10 +857,18 @@ def update_draft(*, application_id, owner, expected_version: int, data: dict) ->
     if application.status not in EDITABLE_STATUSES:
         raise ApplicationConflict("Only draft or correction-requested applications may be edited.")
     _check_version(application, expected_version)
+    selfie_data_url = _pop_registration_selfie_data_url(data) if "personal" in data else ""
     for field, value in data.items():
         setattr(application, field, value)
     application.version += 1
     application.save()
+    if selfie_data_url:
+        verification = getattr(application, "step2_verification", None)
+        _store_registration_selfie_data_url(
+            verification=verification,
+            application=application,
+            data_url=selfie_data_url,
+        )
     return application
 
 
@@ -852,7 +961,7 @@ def decide_application(
     )
     application.review_step = review_step
     application.version += 1
-    application.save(update_fields=["status", "review_step", "version", "updated_at"])
+    application.save(update_fields=["status", "version", "updated_at"])
     if decision == "APPROVE":
         from apps.accounts.services import activate_student_registration_account
 

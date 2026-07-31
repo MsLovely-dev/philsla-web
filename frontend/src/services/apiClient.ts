@@ -107,6 +107,22 @@ export class ApiClient {
     return this.mapError(response, payload as ApiErrorEnvelope);
   }
 
+  private async sendBlob(url: string, init: RequestInit): Promise<ServiceResult<Blob>> {
+    const response = await this.fetcher(url, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
+        ...init.headers,
+      },
+    });
+
+    if (response.ok) {
+      return serviceSuccess(await response.blob());
+    }
+
+    const payload = await this.readJson<ApiErrorEnvelope>(response).catch(() => ({} as ApiErrorEnvelope));
+    return this.mapError(response, payload as ApiErrorEnvelope);
   private shouldAttemptRefresh(path: string): boolean {
     return Boolean(this.bearerToken) && !path.startsWith('/api/v1/auth/');
   }

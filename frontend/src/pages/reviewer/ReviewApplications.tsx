@@ -30,6 +30,7 @@ export default function ReviewApplications() {
   const [queueError, setQueueError] = useState('');
   const [decisionError, setDecisionError] = useState('');
   const [isSavingDecision, setIsSavingDecision] = useState(false);
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
   const [activeModal, setActiveModal] = useState<'APPROVE' | 'REASSIGN' | 'CORRECTION' | 'FRAUD' | null>(null);
   const [selectedApp, setSelectedApp] = useState<any>(null);
@@ -75,6 +76,37 @@ export default function ReviewApplications() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') return;
+
+    let cancelled = false;
+    const objectUrls: string[] = [];
+    const appsWithPhotos = apps.filter(app => app.photoUrl);
+
+    if (appsWithPhotos.length === 0) {
+      setPhotoUrls({});
+      return;
+    }
+
+    void Promise.all(
+      appsWithPhotos.map(async (app) => {
+        const result = await backendApplicationService.getApplicationPhoto(app.id);
+        if (cancelled || result.ok === false) return null;
+        const objectUrl = URL.createObjectURL(result.data);
+        objectUrls.push(objectUrl);
+        return [app.id, objectUrl] as const;
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setPhotoUrls(Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry !== null)));
+    });
+
+    return () => {
+      cancelled = true;
+      objectUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [apps]);
 
   const closeModal = () => {
      setActiveModal(null);
@@ -231,7 +263,13 @@ export default function ReviewApplications() {
                   <td className="px-8 py-5">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-xl overflow-hidden border border-philsa-border shadow-sm shrink-0 bg-philsa-bg relative">
-                        <img referrerPolicy="no-referrer" src={app.photoUrl} alt="" className="w-full h-full object-cover" />
+                        {app.photoUrl ? (
+                          <img referrerPolicy="no-referrer" src={photoUrls[app.id] ?? app.photoUrl} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-slate-300">
+                            <User className="w-5 h-5" />
+                          </div>
+                        )}
                         {app.duplicateScore > 70 && (
                           <div className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-philsa-red rounded-full border-2 border-white flex items-center justify-center">
                             <AlertCircle className="w-2 h-2 text-white" />
@@ -308,7 +346,13 @@ export default function ReviewApplications() {
              <div className="space-y-6 text-philsa-navy">
                 <div className="flex items-center gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl">
                    <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-200 shadow-sm shrink-0 bg-slate-200">
-                      <img referrerPolicy="no-referrer" src={selectedApp.photoUrl} alt="" className="w-full h-full object-cover" />
+                      {selectedApp.photoUrl ? (
+                        <img referrerPolicy="no-referrer" src={photoUrls[selectedApp.id] ?? selectedApp.photoUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-400">
+                          <User className="w-5 h-5" />
+                        </div>
+                      )}
                    </div>
                    <div>
                        <h3 className="text-sm font-bold text-philsa-navy leading-none mb-1">{selectedApp.firstName || selectedApp.name} {selectedApp.lastName || ''}</h3>
