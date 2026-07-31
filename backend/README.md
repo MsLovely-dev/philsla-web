@@ -86,6 +86,16 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/health/
 
 The smoke test returns `{"status":"ok"}`.
 
+## Staging App Service
+
+Staging uses `config.settings.staging` and is intended for synthetic-data integration testing. Use a separate staging database and staging-only secrets. When the deployment package root is the repository root, the backend App Service startup command is:
+
+```bash
+gunicorn --chdir backend config.wsgi:application --bind=0.0.0.0:$PORT
+```
+
+Run migrations as a controlled release step, not on every application startup. See the [staging Azure App Service runbook](../docs/deployment/STAGING-AZURE-APP-SERVICE.md) and [.env.staging.example](.env.staging.example).
+
 ## Frontend connection
 
 The frontend dev server runs on port `3000`. Local backend settings allow `http://localhost:3000` and `http://127.0.0.1:3000` for CSRF/CORS, while retaining `5173` for compatibility with default Vite setups.

@@ -597,6 +597,51 @@ class ApplicationEndpointTests(TestCase):
         expected_path = reverse("applications:identity-media", args=[submitted.id, IdentityMediaType.SELFIE])
         self.assertEqual(response.data["photoUrl"], f"http://testserver{expected_path}")
 
+    def test_submitted_application_detail_keeps_selfie_url_when_student_id_front_exists(self):
+        payload = complete_payload()
+        submitted = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        verification = Step2Verification.objects.create(
+            application=submitted,
+            token_digest="selfie-with-id-token-digest",
+            lrn="123456789012",
+            lrn_profile={},
+            configuration_snapshot={},
+            expires_at=timezone.now(),
+        )
+        RegistrationSelfieMedia.objects.create(
+            verification=verification,
+            file="private/registration-selfies/selfie.jpg",
+            content_type="image/jpeg",
+            size=12,
+            sha256="abc123",
+        )
+        ApplicationIdentityMedia.objects.create(
+            verification=verification,
+            media_type=IdentityMediaType.STUDENT_ID_FRONT,
+            file="private/registration-identity/student-id-front.jpg",
+            content_type="image/jpeg",
+            size=34,
+            sha256="def456",
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:detail", args=[submitted.id]))
+
+        self.assertEqual(response.status_code, 200)
+        expected_path = reverse("applications:identity-media", args=[submitted.id, IdentityMediaType.SELFIE])
+        self.assertEqual(response.data["photoUrl"], f"http://testserver{expected_path}")
+
     def test_reviewer_can_open_manual_registration_selfie_media(self):
         payload = complete_payload()
         submitted = StudentApplication.objects.create(

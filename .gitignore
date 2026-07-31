@@ -4,6 +4,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+artifacts/
 .DS_Store
 *.log
 .env*
@@ -23,3 +24,7 @@ staticfiles/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Claude Code local setup
+.claude/*
+CLAUDE.md
