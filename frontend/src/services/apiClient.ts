@@ -69,6 +69,37 @@ export class ApiClient {
     );
   }
 
+  async requestBlob(path: string, init: RequestInit = {}): Promise<ServiceResult<Blob>> {
+    const urls = Array.from(
+      new Set(
+        [
+          this.baseUrl ? `${this.baseUrl}${path}` : path,
+          path,
+          `http://127.0.0.1:8000${path}`,
+          `http://localhost:8000${path}`,
+        ].filter(Boolean),
+      ),
+    );
+
+    const failures: string[] = [];
+
+    for (const url of urls) {
+      try {
+        return await this.sendBlob(url, init);
+      } catch (error) {
+        failures.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    if (import.meta.env.DEV) {
+      console.error('Backend API blob request failed for all local routes.', failures);
+    }
+
+    return networkError(
+      `The backend API could not be reached through /api, http://127.0.0.1:8000, or http://localhost:8000. Open the app from the local Vite URL and confirm Django is running.`,
+    );
+  }
+
   private async send<TData>(url: string, path: string, init: RequestInit): Promise<ServiceResult<TData>> {
     let response = await this.fetchOnce(url, init);
 
@@ -123,6 +154,8 @@ export class ApiClient {
 
     const payload = await this.readJson<ApiErrorEnvelope>(response).catch(() => ({} as ApiErrorEnvelope));
     return this.mapError(response, payload as ApiErrorEnvelope);
+  }
+
   private shouldAttemptRefresh(path: string): boolean {
     return Boolean(this.bearerToken) && !path.startsWith('/api/v1/auth/');
   }
