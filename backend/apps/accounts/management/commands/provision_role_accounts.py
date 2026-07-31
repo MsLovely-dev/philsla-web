@@ -11,6 +11,8 @@ NON_STUDENT_ROLES = tuple(role for role in PortalRole if role != PortalRole.STUD
 
 ROLE_EMAIL_LOCAL_PARTS = {
     PortalRole.ADMISSIONS_REVIEWER: "admissions.reviewer",
+    PortalRole.ITEM_WRITER: "item.writer",
+    PortalRole.ACADEMIC_REVIEWER: "academic.reviewer",
     PortalRole.PROCTOR: "proctor",
     PortalRole.PROCTOR_ADMIN: "proctor.admin",
     PortalRole.UNIVERSITY_ADMIN: "university.admin",
