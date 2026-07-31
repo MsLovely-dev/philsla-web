@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
 import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './services/contracts';
@@ -122,6 +122,8 @@ interface PhilSAContextType {
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
+  initializeAuth: () => Promise<void>;
+  isAuthInitialized: boolean;
   isLoading: boolean;
   maintenanceModules: any[];
   setMaintenanceModules: (modules: any[]) => void;
@@ -140,7 +142,9 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const [maintenanceModules, setMaintenanceModulesInternal] = useState<any[]>([]);
   const [inputModules, setInputModulesInternal] = useState<InputModuleControl[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const authInitializationRef = useRef<Promise<void> | null>(null);
 
   const setMaintenanceModules = (modules: any[]) => {
     const activeModules = pruneRetiredMaintenanceModules(modules);
@@ -153,19 +157,23 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('philsa_input_modules', JSON.stringify(modules));
   };
 
-  useEffect(() => {
-    let isMounted = true;
+  const initializeAuth = useCallback(() => {
+    if (authInitializationRef.current) return authInitializationRef.current;
 
-    void authService.getCurrentSession().then((result) => {
-      if (isMounted && result.ok) {
+    setIsLoading(true);
+    const initialization = authService.getCurrentSession().then((result) => {
+      if (result.ok) {
         setUser(result.data?.user ?? null);
       }
     }).finally(() => {
-      if (isMounted) {
-        setIsLoading(false);
-      }
+      setIsAuthInitialized(true);
+      setIsLoading(false);
     });
-    
+    authInitializationRef.current = initialization;
+    return initialization;
+  }, []);
+
+  useEffect(() => {
     const savedLogs = localStorage.getItem('philsa_logs');
     if (savedLogs) {
       setAuditLogs(JSON.parse(savedLogs));
@@ -292,9 +300,6 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('philsa_tickets', JSON.stringify(initialTickets));
     }
     
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
@@ -302,6 +307,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
 
     if (result.ok) {
       setUser(result.data.user);
+      setIsAuthInitialized(true);
       addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
       return true;
     }
@@ -369,6 +375,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     const result = await authService.completeLoginSelfie(selfiePendingAuthToken, file);
     if (result.ok) {
       setUser(result.data.user);
+      setIsAuthInitialized(true);
       addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
     }
     return result;
@@ -412,6 +419,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     }
     await authService.logout();
     setUser(null);
+    setIsAuthInitialized(true);
   };
 
   const addAuditLog = (action: string, details: string) => {
@@ -454,7 +462,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery, inspectPasswordRecovery, completePasswordRecovery, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery, inspectPasswordRecovery, completePasswordRecovery, logout, auditLogs, addAuditLog, initializeAuth, isAuthInitialized, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

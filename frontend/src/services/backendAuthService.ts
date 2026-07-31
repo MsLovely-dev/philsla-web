@@ -30,6 +30,15 @@ export class BackendAuthService implements AuthService {
   constructor(private readonly apiClient: ApiClient = sharedApiClient) {}
 
   async getCurrentSession(): Promise<ServiceResult<AuthSession | null>> {
+    if (!this.apiClient.hasBearerToken()) {
+      const refreshResult = await this.refreshSession();
+      if (refreshResult.ok === true) return serviceSuccess(refreshResult.data);
+      if (refreshResult.error.status === 401 || refreshResult.error.code === 'NOT_AUTHENTICATED') {
+        return serviceSuccess(null);
+      }
+      return refreshResult as ServiceFailure;
+    }
+
     const result = await this.requestCurrentSession();
 
     if (result.ok === false && (result.error.status === 401 || result.error.code === 'NOT_AUTHENTICATED')) {

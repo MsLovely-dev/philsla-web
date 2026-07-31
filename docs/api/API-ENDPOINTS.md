@@ -26,6 +26,8 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented |
 | `GET`, `POST` | `/api/v1/auth/admin/users/` | Required bearer access token | `SYSTEM_ADMIN` | List or create non-student staff/admin accounts for User & Role Settings | Implemented |
 | `PUT`, `DELETE` | `/api/v1/auth/admin/users/{userId}/` | Required bearer access token | `SYSTEM_ADMIN` | Update or deactivate a non-student staff/admin account | Implemented |
+| `GET` | `/api/v1/auth/admin/roles/` | Required bearer access token | `SYSTEM_ADMIN` | List staff/admin role permission baselines for Role Settings | Implemented |
+| `PUT` | `/api/v1/auth/admin/roles/{role}/permissions/` | Required bearer access token | `SYSTEM_ADMIN` | Update a role permission baseline or apply role-shaped permissions to assigned users | Implemented |
 | `POST` | `/api/v1/applications/` | Public with LRN verification token; bearer token optional | `AllowAny` for initial registration | Create a registration draft, or create and submit final registration with `submitOnCreate` | Implemented |
 | `GET` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT`, or `ADMISSIONS_REVIEWER`/`SYSTEM_ADMIN` for non-draft applications | Read an application detail record | Implemented |
 | `GET` | `/api/v1/applications/{applicationId}/identity-media/{mediaType}/` | Required bearer access token | Owning `STUDENT`, or `ADMISSIONS_REVIEWER`/`SYSTEM_ADMIN` for non-draft applications | Stream a private application identity image for authorized review/display | Implemented |
@@ -621,6 +623,79 @@ Test coverage:
 
 - Behavior tests: `backend/apps/accounts/tests/test_recovery_endpoints.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+### `GET /api/v1/auth/admin/roles/`
+
+Use this endpoint to load backend-managed role permission baselines for the User & Role Settings screen. It returns fixed staff/admin `PortalRole` values only; dynamic custom-role persistence remains `TBD`.
+
+Permissions are resolved from structured `RolePermission`, `AccountRoleAssignment`, and `AccountPermission` rows. The former account permission JSONField was removed in the structured permissions Phase 3 cleanup.
+
+Request:
+
+- Body: none.
+- Authentication: bearer access token from the backend session flow.
+- Permission: `SYSTEM_ADMIN`.
+
+Successful response:
+
+```json
+{
+  "roles": [
+    {
+      "id": "SYSTEM_ADMIN",
+      "name": "SYSTEM_ADMIN",
+      "moduleAccess": ["MOD_31_READ", "MOD_31_EDIT"],
+      "assignedUserCount": 2
+    }
+  ]
+}
+```
+
+Error behavior:
+
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned for roles other than `SYSTEM_ADMIN`.
+
+### `PUT /api/v1/auth/admin/roles/{role}/permissions/`
+
+Use this endpoint when a System Admin changes a role's modular permission set. Permission codes are validated against the structured `MOD_{moduleId}_{action}` format, supported module IDs `1` through `56`, and supported actions for each module. The permission applicability catalog is backend-owned at `backend/apps/accounts/permission_catalog.json`; the frontend consumes a generated copy that must be refreshed with `python scripts/generate_permission_catalog.py` after catalog changes. Selected users must be active users currently assigned to `{role}`.
+
+Request:
+
+```json
+{
+  "moduleAccess": ["MOD_31_READ", "MOD_31_EDIT"],
+  "scope": "baseline_only",
+  "selectedUserIds": []
+}
+```
+
+Supported `scope` values:
+
+- `baseline_only`: update the role baseline and preserve existing effective permissions for users already assigned to the role.
+- `all_assigned`: update the role baseline and apply the new permission set to every active user assigned to the role.
+- `selected_users`: do not mutate the role baseline; apply the submitted permission set only to `selectedUserIds`.
+
+Successful response:
+
+```json
+{
+  "id": "SYSTEM_ADMIN",
+  "name": "SYSTEM_ADMIN",
+  "moduleAccess": ["MOD_31_READ", "MOD_31_EDIT"],
+  "assignedUserCount": 2
+}
+```
+
+Error behavior:
+
+- `400 VALIDATION_FAILED` is returned for unsupported roles, unsupported permission codes, unsupported scope values, missing selected users for `selected_users`, or selected users outside the target role.
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned for roles other than `SYSTEM_ADMIN`.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_admin_role_endpoints.py`.
 
 ### `POST /api/v1/auth/activation/staff/complete/`
 
