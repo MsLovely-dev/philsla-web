@@ -1,0 +1,923 @@
+//////////////////////////////////////////////////////////
+// ENUMS
+//////////////////////////////////////////////////////////
+
+Enum question_status {
+  draft
+  pending_review
+  approved
+  rejected
+  retired
+  archived
+}
+
+Enum stimulus_status {
+  draft
+  pending_review
+  published
+  retired
+  archived
+}
+
+Enum blueprint_status {
+  draft
+  submitted
+  academic_review
+  revision_required
+  approved
+  published
+  retired
+  archived
+}
+
+Enum exam_set_status {
+  draft
+  academic_review
+  revision_required
+  approved
+  published
+  archived
+}
+
+Enum difficulty_level {
+  easy
+  moderate
+  difficult
+}
+
+Enum exam_type {
+  scholarship
+  admission
+  certification
+  qualifying
+  licensure
+  other
+}
+
+Enum selection_method {
+  manual
+  automatic
+}
+
+Enum validation_result {
+  passed
+  warning
+  failed
+}
+
+Enum upload_status {
+  processing
+  successful
+  failed
+}
+
+//////////////////////////////////////////////////////////
+// SHARED TABLES
+//////////////////////////////////////////////////////////
+
+Table agencies {
+  id integer [pk, increment]
+  code varchar(30) [not null, unique]
+  name varchar(150) [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table users {
+  id integer [pk, increment]
+  agency_id integer
+  first_name varchar(100) [not null]
+  middle_name varchar(100)
+  last_name varchar(100) [not null]
+  email varchar(255) [not null, unique]
+  role varchar(50) [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table academic_years {
+  id integer [pk, increment]
+  name varchar(20) [not null, unique, note: 'Example: 2026-2027']
+  start_date date
+  end_date date
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table subjects {
+  id integer [pk, increment]
+  code varchar(30) [not null, unique]
+  name varchar(150) [not null, unique]
+  description text
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table topics {
+  id integer [pk, increment]
+  subject_id integer [not null]
+  code varchar(50)
+  name varchar(200) [not null]
+  description text
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (subject_id, name) [unique]
+  }
+}
+
+Table competencies {
+  id integer [pk, increment]
+  topic_id integer [not null]
+  code varchar(50)
+  name varchar(255) [not null]
+  description text
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (topic_id, name) [unique]
+  }
+}
+
+Table question_types {
+  id integer [pk, increment]
+  code varchar(30) [not null, unique]
+  name varchar(100) [not null, unique]
+  description text
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table tags {
+  id integer [pk, increment]
+  name varchar(100) [not null, unique]
+  created_at timestamp [not null]
+}
+
+Records question_types(id, code, name, description) {
+  1, 'MCQ', 'Multiple Choice', 'Question containing multiple options'
+  2, 'TRUE_FALSE', 'True or False', 'Question answered using True or False'
+  3, 'IDENTIFICATION', 'Identification', 'Question answered using short text'
+  4, 'ESSAY', 'Essay', 'Long-form question graded manually'
+}
+
+//////////////////////////////////////////////////////////
+// QUESTION BANK
+//////////////////////////////////////////////////////////
+
+Table questions {
+  id integer [pk, increment]
+  question_code varchar(50) [not null, unique]
+
+  question_type_id integer [not null]
+  subject_id integer [not null]
+  topic_id integer
+  competency_id integer
+
+  difficulty difficulty_level [not null]
+  question_text text [not null, note: 'The actual question']
+  explanation text [note: 'Explanation, rationale, or model answer']
+
+  points decimal(8,2) [not null, default: 1]
+
+  status question_status [not null, default: 'draft']
+
+  created_by_user_id integer [not null]
+  reviewed_by_user_id integer
+  approved_by_user_id integer
+
+  reviewed_at timestamp
+  approved_at timestamp
+  retired_at timestamp
+  archived_at timestamp
+
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+/*
+Used for:
+- Multiple Choice
+- True or False
+*/
+Table question_choices {
+  id integer [pk, increment]
+  question_id integer [not null]
+
+  option_label varchar(10)
+  option_text text [not null]
+  is_correct boolean [not null, default: false]
+  display_order integer [not null]
+
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (question_id, display_order) [unique]
+  }
+}
+
+/*
+Used for:
+- Identification accepted answers
+- Optional essay model answers
+*/
+Table question_answers {
+  id integer [pk, increment]
+  question_id integer [not null]
+
+  answer_text text [not null]
+  is_case_sensitive boolean [not null, default: false]
+  is_primary_answer boolean [not null, default: true]
+
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+/*
+Used for essay grading criteria.
+*/
+Table essay_rubrics {
+  id integer [pk, increment]
+  question_id integer [not null]
+
+  criterion varchar(255) [not null]
+  description text
+  maximum_points decimal(8,2) [not null]
+  display_order integer [not null]
+
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (question_id, display_order) [unique]
+  }
+}
+
+Table question_attachments {
+  id integer [pk, increment]
+  question_id integer [not null]
+
+  original_filename varchar(255) [not null]
+  stored_filename varchar(255) [not null]
+  file_path varchar(500) [not null]
+  mime_type varchar(100) [not null]
+  file_size_bytes bigint [not null]
+
+  uploaded_by_user_id integer [not null]
+  created_at timestamp [not null]
+}
+
+Table question_tags {
+  question_id integer [not null]
+  tag_id integer [not null]
+
+  indexes {
+    (question_id, tag_id) [pk]
+  }
+}
+
+Table question_workflow_history {
+  id integer [pk, increment]
+  question_id integer [not null]
+
+  previous_status question_status
+  new_status question_status [not null]
+
+  action varchar(50) [not null]
+  remarks text
+
+  initiated_by_user_id integer [not null]
+  created_at timestamp [not null]
+}
+
+//////////////////////////////////////////////////////////
+// SHARED STIMULI
+//////////////////////////////////////////////////////////
+
+Table shared_stimuli {
+  id integer [pk, increment]
+  stimulus_code varchar(50) [not null, unique]
+
+  subject_id integer [not null]
+  topic_id integer
+  academic_year_id integer
+
+  difficulty difficulty_level
+  stimulus_type varchar(50) [not null]
+  curriculum_alignment varchar(255)
+
+  status stimulus_status [not null, default: 'draft']
+  current_version_number integer [not null, default: 1]
+
+  created_by_user_id integer [not null]
+  published_by_user_id integer
+  retired_by_user_id integer
+
+  published_at timestamp
+  retired_at timestamp
+  archived_at timestamp
+
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table stimulus_versions {
+  id integer [pk, increment]
+  stimulus_id integer [not null]
+  version_number integer [not null]
+
+  title varchar(255) [not null]
+  body_content text [not null]
+
+  created_by_user_id integer [not null]
+  created_at timestamp [not null]
+
+  indexes {
+    (stimulus_id, version_number) [unique]
+  }
+}
+
+Table stimulus_attachments {
+  id integer [pk, increment]
+  stimulus_version_id integer [not null]
+
+  original_filename varchar(255) [not null]
+  stored_filename varchar(255) [not null]
+  file_path varchar(500) [not null]
+  mime_type varchar(100) [not null]
+  file_size_bytes bigint [not null]
+
+  uploaded_by_user_id integer [not null]
+  created_at timestamp [not null]
+}
+
+Table stimulus_tags {
+  stimulus_id integer [not null]
+  tag_id integer [not null]
+
+  indexes {
+    (stimulus_id, tag_id) [pk]
+  }
+}
+
+/*
+Many-to-many relationship between stimuli and questions.
+*/
+Table stimulus_questions {
+  stimulus_id integer [not null]
+  question_id integer [not null]
+
+  display_order integer
+  created_at timestamp [not null]
+
+  indexes {
+    (stimulus_id, question_id) [pk]
+  }
+}
+
+Table stimulus_workflow_history {
+  id integer [pk, increment]
+  stimulus_id integer [not null]
+  stimulus_version_id integer
+
+  previous_status stimulus_status
+  new_status stimulus_status [not null]
+
+  action varchar(50) [not null]
+  remarks text
+
+  initiated_by_user_id integer [not null]
+  created_at timestamp [not null]
+}
+
+//////////////////////////////////////////////////////////
+// BULK QUESTION UPLOAD
+//////////////////////////////////////////////////////////
+
+Table bulk_upload_sessions {
+  id integer [pk, increment]
+
+  original_filename varchar(255) [not null]
+  stored_filename varchar(255)
+  file_path varchar(500)
+  file_type varchar(20) [not null]
+
+  total_records integer [not null, default: 0]
+  successful_records integer [not null, default: 0]
+  failed_records integer [not null, default: 0]
+
+  status upload_status [not null, default: 'processing']
+
+  uploaded_by_user_id integer [not null]
+  uploaded_at timestamp [not null]
+  completed_at timestamp
+}
+
+Table bulk_upload_errors {
+  id integer [pk, increment]
+  upload_session_id integer [not null]
+
+  row_number integer
+  record_identifier varchar(100)
+  field_name varchar(100)
+  error_code varchar(50)
+  error_message text [not null]
+
+  created_at timestamp [not null]
+}
+
+//////////////////////////////////////////////////////////
+// EXAM BLUEPRINTS
+//////////////////////////////////////////////////////////
+
+Table blueprint_categories {
+  id integer [pk, increment]
+  name varchar(100) [not null, unique]
+  description text
+  is_active boolean [not null, default: true]
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table exam_blueprints {
+  id integer [pk, increment]
+  spec_code varchar(50) [not null, unique]
+
+  agency_id integer [not null]
+  category_id integer [not null]
+
+  current_version_number decimal(6,2)
+  cloned_from_blueprint_id integer
+
+  created_by_user_id integer [not null]
+
+  is_archived boolean [not null, default: false]
+  archived_by_user_id integer
+  archived_at timestamp
+
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+Table blueprint_versions {
+  id integer [pk, increment]
+  blueprint_id integer [not null]
+
+  version_number decimal(6,2) [not null]
+  name varchar(255) [not null]
+  description text
+
+  academic_year_id integer [not null]
+  effective_date date
+  expiration_date date
+
+  status blueprint_status [not null, default: 'draft']
+
+  shuffle_questions boolean [not null, default: true]
+  shuffle_choices boolean [not null, default: true]
+  active_items_only boolean [not null, default: true]
+  shared_stimulus_required boolean [not null, default: false]
+
+  max_item_reuse_count integer [not null, default: 0]
+
+  created_by_user_id integer [not null]
+  approved_by_user_id integer
+  published_by_user_id integer
+  retired_by_user_id integer
+
+  submitted_at timestamp
+  approved_at timestamp
+  published_at timestamp
+  retired_at timestamp
+
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (blueprint_id, version_number) [unique]
+  }
+}
+
+Table blueprint_sections {
+  id integer [pk, increment]
+  blueprint_version_id integer [not null]
+
+  section_number integer [not null]
+  section_name varchar(255) [not null]
+  subject_id integer [not null]
+
+  item_count integer [not null]
+  total_marks decimal(8,2) [not null]
+  passing_score decimal(8,2) [not null]
+  time_limit_minutes integer [not null]
+
+  instructions text
+  display_order integer [not null]
+
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (blueprint_version_id, section_number) [unique]
+    (blueprint_version_id, display_order) [unique]
+  }
+}
+
+Table blueprint_section_topics {
+  blueprint_section_id integer [not null]
+  topic_id integer [not null]
+
+  required_item_count integer [not null]
+  created_at timestamp [not null]
+
+  indexes {
+    (blueprint_section_id, topic_id) [pk]
+  }
+}
+
+Table blueprint_difficulty_distributions {
+  id integer [pk, increment]
+  blueprint_section_id integer [not null]
+
+  difficulty difficulty_level [not null]
+  required_item_count integer [not null, default: 0]
+
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (blueprint_section_id, difficulty) [unique]
+  }
+}
+
+/*
+Defines the number of:
+- Multiple Choice
+- True or False
+- Identification
+- Essay
+questions required by a blueprint section.
+*/
+Table blueprint_question_type_distributions {
+  id integer [pk, increment]
+  blueprint_section_id integer [not null]
+  question_type_id integer [not null]
+
+  required_item_count integer [not null, default: 0]
+
+  created_at timestamp [not null]
+  updated_at timestamp
+
+  indexes {
+    (blueprint_section_id, question_type_id) [unique]
+  }
+}
+
+Table blueprint_workflow_history {
+  id integer [pk, increment]
+  blueprint_version_id integer [not null]
+
+  previous_status blueprint_status
+  new_status blueprint_status [not null]
+
+  action varchar(50) [not null]
+  remarks text
+
+  initiated_by_user_id integer [not null]
+  created_at timestamp [not null]
+}
+
+//////////////////////////////////////////////////////////
+// EXAM SETS
+//////////////////////////////////////////////////////////
+
+Table exam_sets {
+  id integer [pk, increment]
+
+  blueprint_version_id integer [not null]
+  academic_year_id integer [not null]
+
+  exam_code varchar(60) [not null, unique]
+  title varchar(255) [not null]
+
+  examination_period varchar(150)
+  exam_type exam_type
+
+  instructions text
+  duration_minutes integer [not null]
+
+  status exam_set_status [not null, default: 'draft']
+
+  cloned_from_exam_set_id integer
+
+  created_by_user_id integer [not null]
+  approved_by_user_id integer
+  published_by_user_id integer
+  archived_by_user_id integer
+
+  approved_at timestamp
+  published_at timestamp
+  archived_at timestamp
+
+  created_at timestamp [not null]
+  updated_at timestamp
+}
+
+/*
+Many-to-many junction table between exam_sets and questions.
+*/
+Table exam_set_questions {
+  id integer [pk, increment]
+
+  exam_set_id integer [not null]
+  question_id integer [not null]
+  blueprint_section_id integer
+
+  display_order integer [not null]
+  points decimal(8,2) [not null]
+
+  selection_method selection_method [not null]
+  selected_by_user_id integer
+  selected_at timestamp [not null]
+
+  indexes {
+    (exam_set_id, question_id) [unique]
+    (exam_set_id, display_order) [unique]
+  }
+}
+
+Table exam_set_question_replacements {
+  id integer [pk, increment]
+
+  exam_set_id integer [not null]
+  exam_set_question_id integer [not null]
+
+  old_question_id integer [not null]
+  new_question_id integer [not null]
+
+  reason text
+  replaced_by_user_id integer [not null]
+  created_at timestamp [not null]
+}
+
+Table exam_set_assembly_runs {
+  id integer [pk, increment]
+  exam_set_id integer [not null]
+
+  algorithm_version varchar(30)
+  status varchar(30) [not null]
+
+  selected_item_count integer [not null, default: 0]
+  rejected_item_count integer [not null, default: 0]
+
+  initiated_by_user_id integer [not null]
+
+  started_at timestamp [not null]
+  completed_at timestamp
+
+  notes text
+}
+
+Table exam_set_assembly_run_items {
+  id integer [pk, increment]
+  assembly_run_id integer [not null]
+  question_id integer [not null]
+
+  was_selected boolean [not null]
+  rejection_reason text
+
+  created_at timestamp [not null]
+
+  indexes {
+    (assembly_run_id, question_id) [unique]
+  }
+}
+
+Table exam_set_validation_results {
+  id integer [pk, increment]
+  exam_set_id integer [not null]
+
+  validation_code varchar(50) [not null]
+  validation_name varchar(150) [not null]
+  result validation_result [not null]
+
+  expected_value varchar(255)
+  actual_value varchar(255)
+  message text
+
+  validated_at timestamp [not null]
+}
+
+Table exam_set_workflow_history {
+  id integer [pk, increment]
+  exam_set_id integer [not null]
+
+  previous_status exam_set_status
+  new_status exam_set_status [not null]
+
+  action varchar(50) [not null]
+  remarks text
+
+  initiated_by_user_id integer [not null]
+  created_at timestamp [not null]
+}
+
+//////////////////////////////////////////////////////////
+// RELATIONSHIPS: SHARED
+//////////////////////////////////////////////////////////
+
+Ref: users.agency_id > agencies.id
+
+Ref: topics.subject_id > subjects.id
+
+Ref: competencies.topic_id > topics.id
+
+//////////////////////////////////////////////////////////
+// RELATIONSHIPS: QUESTION BANK
+//////////////////////////////////////////////////////////
+
+Ref: questions.question_type_id > question_types.id
+
+Ref: questions.subject_id > subjects.id
+
+Ref: questions.topic_id > topics.id
+
+Ref: questions.competency_id > competencies.id
+
+Ref: questions.created_by_user_id > users.id
+
+Ref: questions.reviewed_by_user_id > users.id
+
+Ref: questions.approved_by_user_id > users.id
+
+Ref: question_choices.question_id > questions.id
+
+Ref: question_answers.question_id > questions.id
+
+Ref: essay_rubrics.question_id > questions.id
+
+Ref: question_attachments.question_id > questions.id
+
+Ref: question_attachments.uploaded_by_user_id > users.id
+
+Ref: question_tags.question_id > questions.id
+
+Ref: question_tags.tag_id > tags.id
+
+Ref: question_workflow_history.question_id > questions.id
+
+Ref: question_workflow_history.initiated_by_user_id > users.id
+
+//////////////////////////////////////////////////////////
+// RELATIONSHIPS: SHARED STIMULI
+//////////////////////////////////////////////////////////
+
+Ref: shared_stimuli.subject_id > subjects.id
+
+Ref: shared_stimuli.topic_id > topics.id
+
+Ref: shared_stimuli.academic_year_id > academic_years.id
+
+Ref: shared_stimuli.created_by_user_id > users.id
+
+Ref: shared_stimuli.published_by_user_id > users.id
+
+Ref: shared_stimuli.retired_by_user_id > users.id
+
+Ref: stimulus_versions.stimulus_id > shared_stimuli.id
+
+Ref: stimulus_versions.created_by_user_id > users.id
+
+Ref: stimulus_attachments.stimulus_version_id > stimulus_versions.id
+
+Ref: stimulus_attachments.uploaded_by_user_id > users.id
+
+Ref: stimulus_tags.stimulus_id > shared_stimuli.id
+
+Ref: stimulus_tags.tag_id > tags.id
+
+Ref: stimulus_questions.stimulus_id > shared_stimuli.id
+
+Ref: stimulus_questions.question_id > questions.id
+
+Ref: stimulus_workflow_history.stimulus_id > shared_stimuli.id
+
+Ref: stimulus_workflow_history.stimulus_version_id > stimulus_versions.id
+
+Ref: stimulus_workflow_history.initiated_by_user_id > users.id
+
+//////////////////////////////////////////////////////////
+// RELATIONSHIPS: BULK UPLOAD
+//////////////////////////////////////////////////////////
+
+Ref: bulk_upload_sessions.uploaded_by_user_id > users.id
+
+Ref: bulk_upload_errors.upload_session_id > bulk_upload_sessions.id
+
+//////////////////////////////////////////////////////////
+// RELATIONSHIPS: EXAM BLUEPRINTS
+//////////////////////////////////////////////////////////
+
+Ref: exam_blueprints.agency_id > agencies.id
+
+Ref: exam_blueprints.category_id > blueprint_categories.id
+
+Ref: exam_blueprints.cloned_from_blueprint_id > exam_blueprints.id
+
+Ref: exam_blueprints.created_by_user_id > users.id
+
+Ref: exam_blueprints.archived_by_user_id > users.id
+
+Ref: blueprint_versions.blueprint_id > exam_blueprints.id
+
+Ref: blueprint_versions.academic_year_id > academic_years.id
+
+Ref: blueprint_versions.created_by_user_id > users.id
+
+Ref: blueprint_versions.approved_by_user_id > users.id
+
+Ref: blueprint_versions.published_by_user_id > users.id
+
+Ref: blueprint_versions.retired_by_user_id > users.id
+
+Ref: blueprint_sections.blueprint_version_id > blueprint_versions.id
+
+Ref: blueprint_sections.subject_id > subjects.id
+
+Ref: blueprint_section_topics.blueprint_section_id > blueprint_sections.id
+
+Ref: blueprint_section_topics.topic_id > topics.id
+
+Ref: blueprint_difficulty_distributions.blueprint_section_id > blueprint_sections.id
+
+Ref: blueprint_question_type_distributions.blueprint_section_id > blueprint_sections.id
+
+Ref: blueprint_question_type_distributions.question_type_id > question_types.id
+
+Ref: blueprint_workflow_history.blueprint_version_id > blueprint_versions.id
+
+Ref: blueprint_workflow_history.initiated_by_user_id > users.id
+
+//////////////////////////////////////////////////////////
+// RELATIONSHIPS: EXAM SETS
+//////////////////////////////////////////////////////////
+
+Ref: exam_sets.blueprint_version_id > blueprint_versions.id
+
+Ref: exam_sets.academic_year_id > academic_years.id
+
+Ref: exam_sets.cloned_from_exam_set_id > exam_sets.id
+
+Ref: exam_sets.created_by_user_id > users.id
+
+Ref: exam_sets.approved_by_user_id > users.id
+
+Ref: exam_sets.published_by_user_id > users.id
+
+Ref: exam_sets.archived_by_user_id > users.id
+
+Ref: exam_set_questions.exam_set_id > exam_sets.id
+
+/*
+Prevents a question from being deleted or having its ID changed
+while the question is being used by an exam set.
+*/
+Ref: exam_set_questions.question_id > questions.id [delete: restrict, update: restrict]
+
+Ref: exam_set_questions.blueprint_section_id > blueprint_sections.id
+
+Ref: exam_set_questions.selected_by_user_id > users.id
+
+Ref: exam_set_question_replacements.exam_set_id > exam_sets.id
+
+Ref: exam_set_question_replacements.exam_set_question_id > exam_set_questions.id
+
+Ref: exam_set_question_replacements.old_question_id > questions.id
+
+Ref: exam_set_question_replacements.new_question_id > questions.id
+
+Ref: exam_set_question_replacements.replaced_by_user_id > users.id
+
+Ref: exam_set_assembly_runs.exam_set_id > exam_sets.id
+
+Ref: exam_set_assembly_runs.initiated_by_user_id > users.id
+
+Ref: exam_set_assembly_run_items.assembly_run_id > exam_set_assembly_runs.id
+
+Ref: exam_set_assembly_run_items.question_id > questions.id
+
+Ref: exam_set_validation_results.exam_set_id > exam_sets.id
+
+Ref: exam_set_workflow_history.exam_set_id > exam_sets.id
+
+Ref: exam_set_workflow_history.initiated_by_user_id > users.id
