@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.accounts.roles import PortalRole
 
+from .audit import record_analytics_event
 from .services import national_overview
 
 
@@ -18,4 +19,6 @@ class NationalOverviewView(APIView):
     )
 
     def get(self, request) -> Response:
-        return Response(national_overview())
+        overview = national_overview()
+        record_analytics_event(event="national_overview_read", outcome="success", request=request, user=request.user)
+        return Response(overview)
