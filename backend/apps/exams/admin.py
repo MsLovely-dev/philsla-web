@@ -12,6 +12,16 @@ from .models import (
     BlueprintWorkflowHistory,
     ExamBlueprint,
     QuestionType,
+    Competency,
+    ExamBlueprint,
+    EssayRubric,
+    Question,
+    QuestionAnswer,
+    QuestionAttachment,
+    QuestionChoice,
+    QuestionTag,
+    QuestionType,
+    Tag,
     Subject,
     Topic,
 )
@@ -69,6 +79,39 @@ class QuestionTypeAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
 
 
+@admin.register(Competency)
+class CompetencyAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "topic", "is_active", "created_at")
+    search_fields = ("code", "name", "topic__name")
+    list_filter = ("is_active", "topic__subject")
+
+
+@admin.register(Tag)
+class TagAdmin(admin.ModelAdmin):
+    list_display = ("name", "created_at")
+    search_fields = ("name",)
+
+
+class QuestionChoiceInline(admin.TabularInline):
+    model = QuestionChoice
+    extra = 0
+
+
+class QuestionAnswerInline(admin.TabularInline):
+    model = QuestionAnswer
+    extra = 0
+
+
+class EssayRubricInline(admin.TabularInline):
+    model = EssayRubric
+    extra = 0
+
+
+class QuestionAttachmentInline(admin.TabularInline):
+    model = QuestionAttachment
+    extra = 0
+
+
 @admin.register(ExamBlueprint)
 class ExamBlueprintAdmin(admin.ModelAdmin):
     list_display = ("spec_code", "exam_type", "agency", "category", "current_version_number", "is_archived", "created_at")
@@ -113,4 +156,24 @@ class BlueprintQuestionTypeDistributionAdmin(admin.ModelAdmin):
 @admin.register(BlueprintWorkflowHistory)
 class BlueprintWorkflowHistoryAdmin(admin.ModelAdmin):
     list_display = ("blueprint_version", "previous_status", "new_status", "action", "initiated_by", "created_at")
+    list_filter = ("previous_status", "new_status")
+
+
+@admin.register(Question)
+class QuestionAdmin(admin.ModelAdmin):
+    list_display = ("question_code", "question_type", "subject", "topic", "difficulty", "status", "created_by", "created_at")
+    search_fields = ("question_code", "question_text", "subject__name", "topic__name", "competency__name")
+    list_filter = ("status", "difficulty", "question_type", "subject", "topic")
+    inlines = [QuestionChoiceInline, QuestionAnswerInline, EssayRubricInline, QuestionAttachmentInline]
+
+
+@admin.register(QuestionTag)
+class QuestionTagAdmin(admin.ModelAdmin):
+    list_display = ("question", "tag")
+    search_fields = ("question__question_code", "tag__name")
+
+
+@admin.register(QuestionWorkflowHistory)
+class QuestionWorkflowHistoryAdmin(admin.ModelAdmin):
+    list_display = ("question", "previous_status", "new_status", "action", "initiated_by", "created_at")
     list_filter = ("previous_status", "new_status")

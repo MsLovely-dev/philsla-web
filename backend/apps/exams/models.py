@@ -119,6 +119,191 @@ class QuestionType(models.Model):
         return self.name
 
 
+class QuestionStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    PENDING_REVIEW = "pending_review", "Pending review"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    RETIRED = "retired", "Retired"
+    ARCHIVED = "archived", "Archived"
+
+
+class Competency(models.Model):
+    topic = models.ForeignKey(Topic, on_delete=models.PROTECT, related_name="competencies")
+    code = models.CharField(max_length=50, blank=True, default="")
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "competencies"
+        ordering = ["topic__name", "name"]
+        constraints = [models.UniqueConstraint(fields=("topic", "name"), name="unique_competency_per_topic")]
+
+    def __str__(self) -> str:
+        return f"{self.topic.name}: {self.name}"
+
+
+class Tag(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "tags"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Question(models.Model):
+    question_code = models.CharField(max_length=50, unique=True)
+    question_type = models.ForeignKey(QuestionType, on_delete=models.PROTECT, related_name="questions")
+    subject = models.ForeignKey(Subject, on_delete=models.PROTECT, related_name="questions")
+    topic = models.ForeignKey(Topic, on_delete=models.PROTECT, related_name="questions", null=True, blank=True)
+    competency = models.ForeignKey(Competency, on_delete=models.PROTECT, related_name="questions", null=True, blank=True)
+    difficulty = models.CharField(max_length=20, choices=DifficultyLevel.choices)
+    question_text = models.TextField()
+    explanation = models.TextField(blank=True, default="")
+    points = models.DecimalField(max_digits=8, decimal_places=2, default=Decimal("1.00"))
+    status = models.CharField(max_length=32, choices=QuestionStatus.choices, default=QuestionStatus.DRAFT)
+    created_by = models.ForeignKey("accounts.AccountProfile", on_delete=models.PROTECT, related_name="created_questions")
+    reviewed_by = models.ForeignKey(
+        "accounts.AccountProfile",
+        on_delete=models.PROTECT,
+        related_name="reviewed_questions",
+        null=True,
+        blank=True,
+    )
+    approved_by = models.ForeignKey(
+        "accounts.AccountProfile",
+        on_delete=models.PROTECT,
+        related_name="approved_questions",
+        null=True,
+        blank=True,
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    retired_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    tags = models.ManyToManyField(Tag, related_name="questions", through="QuestionTag", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "questions"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.question_code
+
+
+class QuestionChoice(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="choices")
+    option_label = models.CharField(max_length=10, blank=True, default="")
+    option_text = models.TextField()
+    is_correct = models.BooleanField(default=False)
+    display_order = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "question_choices"
+        ordering = ["display_order", "created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=("question", "display_order"), name="unique_question_choice_display_order"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.question.question_code} / {self.display_order}"
+
+
+class QuestionAnswer(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="answers")
+    answer_text = models.TextField()
+    is_case_sensitive = models.BooleanField(default=False)
+    is_primary_answer = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "question_answers"
+        ordering = ["-is_primary_answer", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.question.question_code} answer"
+
+
+class EssayRubric(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="rubrics")
+    criterion = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    maximum_points = models.DecimalField(max_digits=8, decimal_places=2)
+    display_order = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "essay_rubrics"
+        ordering = ["display_order", "created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=("question", "display_order"), name="unique_question_rubric_display_order"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.question.question_code} / {self.criterion}"
+
+
+class QuestionAttachment(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="attachments")
+    original_filename = models.CharField(max_length=255)
+    stored_filename = models.CharField(max_length=255)
+    file_path = models.CharField(max_length=500)
+    mime_type = models.CharField(max_length=100)
+    file_size_bytes = models.BigIntegerField()
+    uploaded_by = models.ForeignKey("accounts.AccountProfile", on_delete=models.PROTECT, related_name="question_attachments")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "question_attachments"
+
+    def __str__(self) -> str:
+        return self.original_filename
+
+
+class QuestionTag(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE)
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = "question_tags"
+        constraints = [
+            models.UniqueConstraint(fields=("question", "tag"), name="unique_question_tag"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.question.question_code} / {self.tag.name}"
+
+
+class QuestionWorkflowHistory(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="workflow_history")
+    previous_status = models.CharField(max_length=32, choices=QuestionStatus.choices, null=True, blank=True)
+    new_status = models.CharField(max_length=32, choices=QuestionStatus.choices)
+    action = models.CharField(max_length=50)
+    remarks = models.TextField(blank=True, default="")
+    initiated_by = models.ForeignKey("accounts.AccountProfile", on_delete=models.PROTECT, related_name="question_workflow_actions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "question_workflow_history"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.question.question_code}: {self.action}"
+
+
 class ExamBlueprint(models.Model):
     spec_code = models.CharField(max_length=50, unique=True)
     exam_type = models.CharField(max_length=20, choices=ExamType.choices, default=ExamType.ADMISSION)

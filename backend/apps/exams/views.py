@@ -8,9 +8,25 @@ from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from .models import BlueprintStatus, ExamBlueprint
 from .serializers import BlueprintCloneSerializer, BlueprintTransitionSerializer, ExamBlueprintSerializer
 from .services import blueprint_queryset, latest_blueprint_version
+from .models import BlueprintStatus, ExamBlueprint, QuestionStatus
+from .serializers import (
+    BlueprintCloneSerializer,
+    BlueprintTransitionSerializer,
+    ExamBlueprintSerializer,
+    QuestionSerializer,
+    QuestionTransitionSerializer,
+)
+from .services import blueprint_queryset, latest_blueprint_version, question_queryset
 
 
 BLUEPRINT_MANAGEMENT_ROLES = require_roles(
+    "ITEM_WRITER",
+    "ACADEMIC_REVIEWER",
+    "EXAM_ADMINISTRATOR",
+    "SYSTEM_ADMIN",
+)
+
+QUESTION_MANAGEMENT_ROLES = require_roles(
     "ITEM_WRITER",
     "ACADEMIC_REVIEWER",
     "EXAM_ADMINISTRATOR",
@@ -100,3 +116,64 @@ class ExamBlueprintTransitionView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(ExamBlueprintSerializer(blueprint_queryset().get(pk=blueprint.pk)).data)
+
+
+class QuestionListCreateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = QUESTION_MANAGEMENT_ROLES
+
+    def get(self, request) -> Response:
+        serializer = QuestionSerializer(question_queryset(), many=True)
+        return Response(serializer.data)
+
+    def post(self, request) -> Response:
+        serializer = QuestionSerializer(data=request.data, context={"actor_profile": _actor_profile(request)})
+        serializer.is_valid(raise_exception=True)
+        question = serializer.save()
+        return Response(QuestionSerializer(question).data, status=201)
+
+
+class QuestionDetailView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = QUESTION_MANAGEMENT_ROLES
+
+    def get_object(self, question_id: int):
+        return get_object_or_404(question_queryset(), pk=question_id)
+
+    def get(self, request, question_id: int) -> Response:
+        question = self.get_object(question_id)
+        return Response(QuestionSerializer(question).data)
+
+    def put(self, request, question_id: int) -> Response:
+        question = self.get_object(question_id)
+        serializer = QuestionSerializer(
+            question,
+            data=request.data,
+            context={"actor_profile": _actor_profile(request)},
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        updated_question = serializer.save()
+        return Response(QuestionSerializer(updated_question).data)
+
+    def patch(self, request, question_id: int) -> Response:
+        return self.put(request, question_id)
+
+    def delete(self, request, question_id: int) -> Response:
+        question = self.get_object(question_id)
+        if question.status not in {QuestionStatus.DRAFT, QuestionStatus.REJECTED, QuestionStatus.ARCHIVED}:
+            return Response({"detail": "Only draft, rejected, or archived questions can be deleted."}, status=409)
+        question.delete()
+        return Response(status=204)
+
+
+class QuestionTransitionView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = QUESTION_MANAGEMENT_ROLES
+
+    def post(self, request, question_id: int) -> Response:
+        question = get_object_or_404(question_queryset(), pk=question_id)
+        serializer = QuestionTransitionSerializer(data=request.data, context={"actor_profile": _actor_profile(request), "question": question})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(QuestionSerializer(question_queryset().get(pk=question.pk)).data)
