@@ -46,6 +46,7 @@ The baseline health and authentication boundaries plus the first student-applica
 | `PUT`, `PATCH`, `DELETE` | `/api/v1/configuration/admin/fields/{fieldId}/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | Update or delete a configurable field maintenance row | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
+| `GET` | `/api/v1/analytics/national/overview/` | Required bearer access token | `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, or `SYSTEM_ADMIN` | Return aggregated national registration metrics computed from real `StudentApplication` data | Implemented |
 
 ### Student application draft and submission
 
@@ -796,6 +797,50 @@ Error behavior:
 Test coverage:
 
 - Behavior tests: `backend/apps/accounts/tests/test_token_session_endpoints.py`.
+- Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+### `GET /api/v1/analytics/national/overview/`
+
+Use this endpoint to power the National dashboard at `/admin/government` with real, aggregate registration metrics. It is deliberately scoped to what `apps.applications` data can honestly support today: there is no exam/session/incident/testing-center data model yet, and no field anywhere tags a registration as CHED/DEPED/TESDA, so this endpoint does not attempt agency-scoped breakdowns. The CHED/DEPED/TESDA dashboards and the National dashboard's session, incident, and testing-center widgets remain on frontend mock/prototype data (`frontend/src/services/analyticsMockData.ts`) until an approved data model and metric definitions exist for them.
+
+Current implementation status: route, role boundary, aggregation, and audit logging exist.
+
+Request:
+
+- Body: none.
+- Query parameters: none.
+- Authentication: bearer access token from the backend session flow.
+- Permission: `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, or `SYSTEM_ADMIN`.
+
+Successful response:
+
+```json
+{
+  "totalRegisteredExaminees": 1240000,
+  "totalVerifiedExaminees": 1180000,
+  "totalParticipatingSchools": 12402,
+  "totalParticipatingUniversities": 2402,
+  "regionalBreakdown": [
+    { "region": "NCR", "applicationCount": 4500 },
+    { "region": "Region VII", "applicationCount": 2100 }
+  ],
+  "generatedAt": "2026-08-02T08:24:17.868767+00:00"
+}
+```
+
+Response behavior:
+
+- `totalRegisteredExaminees` counts `StudentApplication` rows excluding `DRAFT` status (i.e. anything that has reached `SUBMITTED` at least once, including `REJECTED`). This scope is a reasonable default, not an approved business rule -- official metrics and aggregation rules remain `TBD` per `docs/architecture/DATABASE-DESIGN.md`.
+- `totalVerifiedExaminees` counts applications verified via either `StudentApplicationPersonalInfo.identity_verification_status == "VERIFIED"` or a `Step2Verification.status == PASSED`, without double-counting.
+- `totalParticipatingSchools` / `totalParticipatingUniversities` count distinct, non-blank `school_id` / `university` values across the same non-draft population.
+- `regionalBreakdown` groups non-blank `StudentApplicationAddress.region` values (free text, not a canonical enum -- variant spellings of the same region appear as separate rows).
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned for any role outside the permitted set.
+- Every read is logged via the `philsa.audit` logger (event/outcome/user identifiers only, no payload).
+
+Test coverage:
+
+- Behavior tests: `backend/apps/analytics/tests/test_national_overview.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
 
 ## Candidate endpoint groups
