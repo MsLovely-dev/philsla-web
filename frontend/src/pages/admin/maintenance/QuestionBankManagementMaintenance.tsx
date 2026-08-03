@@ -5,37 +5,13 @@ const CATEGORIES = [
   'Question Status'
 ];
 
-const MOCK_DATA = [
-  { id: 'qs_1', category: 'Question Status', code: 'QS-001', statusName: 'Draft', status: 'Active' },
-  { id: 'qs_2', category: 'Question Status', code: 'QS-002', statusName: 'Under Review', status: 'Active' },
-  { id: 'qs_3', category: 'Question Status', code: 'QS-003', statusName: 'Approved', status: 'Active' },
-  { id: 'qs_4', category: 'Question Status', code: 'QS-004', statusName: 'In Set Review', status: 'Active' },
-  { id: 'qs_5', category: 'Question Status', code: 'QS-005', statusName: 'In Set Approval', status: 'Active' },
-  { id: 'qs_6', category: 'Question Status', code: 'QS-006', statusName: 'Distributed', status: 'Active' },
-];
-
 export default function QuestionBankManagementMaintenance() {
-  const [data, setData] = useState<any[]>(() => {
-    const saved = localStorage.getItem('philsa_qb_management_configs');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    localStorage.setItem('philsa_qb_management_configs', JSON.stringify(MOCK_DATA));
-    return MOCK_DATA;
-  });
+  const [data, setData] = useState<any[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('Question Status');
 
   const saveConfigs = (newData: any[]) => {
     setData(newData);
-    localStorage.setItem('philsa_qb_management_configs', JSON.stringify(newData));
   };
 
   const columns: MaintenanceColumn[] = [

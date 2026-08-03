@@ -1,31 +1,11 @@
 import React, { useState } from 'react';
 import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField } from '../../../components/maintenance/MaintenancePageTemplate';
 
-const MOCK_DATA = [
-  { id: 'rc_1', code: 'RC-001', classification: 'Passed', status: 'Active' },
-  { id: 'rc_2', code: 'RC-002', classification: 'Failed', status: 'Active' },
-];
-
 export default function ExamResultsMaintenance() {
-  const [data, setData] = useState<any[]>(() => {
-    const saved = localStorage.getItem('philsa_exam_results_configs');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    localStorage.setItem('philsa_exam_results_configs', JSON.stringify(MOCK_DATA));
-    return MOCK_DATA;
-  });
+  const [data, setData] = useState<any[]>([]);
 
   const saveConfigs = (newData: any[]) => {
     setData(newData);
-    localStorage.setItem('philsa_exam_results_configs', JSON.stringify(newData));
   };
 
   const columns: MaintenanceColumn[] = [
