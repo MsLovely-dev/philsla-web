@@ -181,8 +181,8 @@ export default function StudentRegistrationMaintenance() {
       type: getFieldTypeFilter(selectedSection),
       search: searchTerm.trim() || undefined,
       status: getStatusFilter(statusFilter),
-      priority: priorityFilter === 'All' ? undefined : priorityFilter,
-      inputType: inputTypeFilter === 'All' ? undefined : inputTypeFilter,
+      priority: selectedSection === 'Registration Methods' || priorityFilter === 'All' ? undefined : priorityFilter,
+      inputType: selectedSection === 'Registration Methods' || inputTypeFilter === 'All' ? undefined : inputTypeFilter,
     });
     setIsLoadingRegistrationFields(false);
     if (result.ok === false) {
@@ -359,15 +359,14 @@ export default function StudentRegistrationMaintenance() {
         { value: 'Step 1 Registration', label: 'Step 1 Registration Fields' },
       ] 
     },
-    { 
-      name: 'type', 
-      label: 'Category / Config Type', 
-      type: 'select', 
-      required: true, 
+    {
+      name: 'type',
+      label: 'Category / Config Type',
+      type: 'select',
+      required: true,
       options: [
-        { value: 'Verification Method', label: 'Registration Method Enable Switch' },
         { value: 'Student Registration Field', label: 'Student Registration Field' },
-      ] 
+      ]
     },
     { name: 'value', label: 'Value / Label', type: 'text', required: true, placeholder: 'e.g. Regular Senior High, First Name Input Field' },
     {
@@ -511,35 +510,39 @@ export default function StudentRegistrationMaintenance() {
           <option value="Inactive">Inactive</option>
         </select>
       </label>
-      <label className="flex min-w-44 flex-col gap-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
-        Priority
-        <select
-          value={priorityFilter}
-          onChange={(event) => handlePriorityFilterChange(event.target.value)}
-          className="rounded-xl border border-philsa-border bg-white px-4 py-3 text-xs font-bold normal-case tracking-normal text-philsa-navy outline-none focus:ring-2 focus:ring-philsa-navy/10"
-        >
-          <option value="All">All Priorities</option>
-          <option value="High Priority">High Priority</option>
-          <option value="Medium Priority">Medium Priority</option>
-          <option value="Low Priority">Low Priority</option>
-        </select>
-      </label>
-      <label className="flex min-w-40 flex-col gap-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
-        Input Type
-        <select
-          value={inputTypeFilter}
-          onChange={(event) => handleInputTypeFilterChange(event.target.value)}
-          className="rounded-xl border border-philsa-border bg-white px-4 py-3 text-xs font-bold normal-case tracking-normal text-philsa-navy outline-none focus:ring-2 focus:ring-philsa-navy/10"
-        >
-          <option value="All">All Types</option>
-          <option value="text">Text</option>
-          <option value="date">Date</option>
-          <option value="dropdown">Dropdown</option>
-          <option value="textarea">Textarea</option>
-          <option value="checkbox">Checkbox</option>
-          <option value="file">File</option>
-        </select>
-      </label>
+      {selectedSection !== 'Registration Methods' && (
+        <label className="flex min-w-44 flex-col gap-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+          Priority
+          <select
+            value={priorityFilter}
+            onChange={(event) => handlePriorityFilterChange(event.target.value)}
+            className="rounded-xl border border-philsa-border bg-white px-4 py-3 text-xs font-bold normal-case tracking-normal text-philsa-navy outline-none focus:ring-2 focus:ring-philsa-navy/10"
+          >
+            <option value="All">All Priorities</option>
+            <option value="High Priority">High Priority</option>
+            <option value="Medium Priority">Medium Priority</option>
+            <option value="Low Priority">Low Priority</option>
+          </select>
+        </label>
+      )}
+      {selectedSection !== 'Registration Methods' && (
+        <label className="flex min-w-40 flex-col gap-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+          Input Type
+          <select
+            value={inputTypeFilter}
+            onChange={(event) => handleInputTypeFilterChange(event.target.value)}
+            className="rounded-xl border border-philsa-border bg-white px-4 py-3 text-xs font-bold normal-case tracking-normal text-philsa-navy outline-none focus:ring-2 focus:ring-philsa-navy/10"
+          >
+            <option value="All">All Types</option>
+            <option value="text">Text</option>
+            <option value="date">Date</option>
+            <option value="dropdown">Dropdown</option>
+            <option value="textarea">Textarea</option>
+            <option value="checkbox">Checkbox</option>
+            <option value="file">File</option>
+          </select>
+        </label>
+      )}
       <button
         type="button"
         onClick={clearAdvancedFilters}
