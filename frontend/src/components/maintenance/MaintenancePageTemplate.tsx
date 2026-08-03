@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Search, 
   Filter, 
@@ -45,19 +45,15 @@ export interface MaintenanceField {
   dependsOn?: string;
   validation?: (val: unknown) => string | null;
   disabled?: boolean;
-<<<<<<< Updated upstream
   onChange?: (val: string, currentData: MaintenanceRecord) => MaintenanceRecord;
-=======
-  onChange?: (val: any, currentData: any) => any;
-  showWhen?: (currentData: any) => boolean;
-  defaultValue?: any | (() => any);
+  showWhen?: (currentData: MaintenanceRecord) => boolean;
+  defaultValue?: unknown;
   /** For type 'combo': the option value that switches the field into free-text entry. */
   othersValue?: string;
   /** For type 'select': omit the blank "Select an option" placeholder entry. */
   hideEmptyOption?: boolean;
   /** Only show this field when editing an existing record, not when creating one. */
   editOnly?: boolean;
->>>>>>> Stashed changes
 }
 
 interface MaintenancePageProps<TRow extends object> {
@@ -81,6 +77,8 @@ interface MaintenancePageProps<TRow extends object> {
   aboveTableContent?: React.ReactNode;
   showApprovalColumn?: boolean;
   auditDetailsLabel?: string;
+  /** Bump this value (e.g. a counter) to programmatically open the Create New Entry modal. */
+  openCreateSignal?: number;
 }
 
 function readField(row: object, key: string): unknown {
@@ -102,15 +100,11 @@ export default function MaintenancePageTemplate<TRow extends object>({
   extraHeaderActions,
   sidePanel,
   isSidePanelOpen,
-<<<<<<< Updated upstream
-  aboveTableContent
-}: MaintenancePageProps<TRow>) {
-=======
   aboveTableContent,
   showApprovalColumn = true,
-  auditDetailsLabel = 'Audit Details'
-}: MaintenancePageProps) {
->>>>>>> Stashed changes
+  auditDetailsLabel = 'Audit Details',
+  openCreateSignal
+}: MaintenancePageProps<TRow>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
@@ -121,10 +115,12 @@ export default function MaintenancePageTemplate<TRow extends object>({
 
   const handleOpenCreate = () => {
     setEditingRow(null);
-    const initial: any = {};
+    const initial: MaintenanceRecord = {};
     fields.forEach(field => {
       if (field.defaultValue !== undefined) {
-        initial[field.name] = typeof field.defaultValue === 'function' ? field.defaultValue() : field.defaultValue;
+        initial[field.name] = typeof field.defaultValue === 'function'
+          ? (field.defaultValue as () => unknown)()
+          : field.defaultValue;
       }
     });
     setFormData(initial);
@@ -133,13 +129,21 @@ export default function MaintenancePageTemplate<TRow extends object>({
     setIsModalOpen(true);
   };
 
+  useEffect(() => {
+    if (openCreateSignal) {
+      handleOpenCreate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCreateSignal]);
+
   const handleOpenEdit = (row: TRow) => {
     setEditingRow(row);
     setFormData(Object.fromEntries(Object.entries(row)));
     setFormErrors({});
     const initialCombo: Record<string, boolean> = {};
     fields.forEach(field => {
-      if (field.type === 'combo' && row[field.name] && !field.options?.some(opt => opt.value === row[field.name])) {
+      const currentValue = readField(row, field.name);
+      if (field.type === 'combo' && currentValue && !field.options?.some(opt => opt.value === currentValue)) {
         initialCombo[field.name] = true;
       }
     });
@@ -259,30 +263,32 @@ export default function MaintenancePageTemplate<TRow extends object>({
                     </td>
                   ))}
                   <td className="px-8 py-6">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
-                        <Users className="w-3 h-3" /> {String(readField(row, 'updatedBy') || 'admin_user')}
+                    {readField(row, 'updatedBy') || readField(row, 'updatedAt') ? (
+                      <div className="flex flex-col gap-1">
+                        {readField(row, 'updatedBy') ? (
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
+                            <Users className="w-3 h-3" /> {String(readField(row, 'updatedBy'))}
+                          </div>
+                        ) : null}
+                        {readField(row, 'updatedAt') ? (
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
+                            <Clock className="w-3 h-3" /> {String(readField(row, 'updatedAt'))}
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
-                        <Clock className="w-3 h-3" /> {String(readField(row, 'updatedAt') || '2026-05-14 08:30')}
-                      </div>
-                    </div>
+                    ) : (
+                      <span className="text-sm font-bold text-philsa-gray/50">—</span>
+                    )}
                   </td>
-<<<<<<< Updated upstream
-                  <td className="px-8 py-6">
-                     <StatusBadge status={String(readField(row, 'approvalStatus') || 'Approved')} isApproval />
-                  </td>
-=======
                   {showApprovalColumn && (
                     <td className="px-8 py-6">
-                      {row.approvalStatus ? (
-                        <StatusBadge status={row.approvalStatus} isApproval />
+                      {readField(row, 'approvalStatus') ? (
+                        <StatusBadge status={String(readField(row, 'approvalStatus'))} isApproval />
                       ) : (
                         <span className="text-sm font-bold text-philsa-gray/50">—</span>
                       )}
                     </td>
                   )}
->>>>>>> Stashed changes
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-1">
                       <button 
@@ -454,7 +460,7 @@ export default function MaintenancePageTemplate<TRow extends object>({
                                   "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all pr-10",
                                   formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                                 )}
-                                value={formData[field.name] || ''}
+                                value={String(formData[field.name] ?? '')}
                                 onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
                                 autoFocus
                               />
@@ -479,7 +485,7 @@ export default function MaintenancePageTemplate<TRow extends object>({
                                   "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all appearance-none pr-10",
                                   formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                                 )}
-                                value={formData[field.name] || ''}
+                                value={String(formData[field.name] ?? '')}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   if (val === field.othersValue) {

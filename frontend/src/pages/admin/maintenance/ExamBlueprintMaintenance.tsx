@@ -1,12 +1,7 @@
-<<<<<<< Updated upstream
-import React, { useState } from 'react';
-import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField, MaintenanceRecord } from '../../../components/maintenance/MaintenancePageTemplate';
-=======
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField } from '../../../components/maintenance/MaintenancePageTemplate';
->>>>>>> Stashed changes
 
 type BlueprintCategory = 'Subject Areas' | 'Difficulty Level' | 'Question Type' | 'Topics';
 
@@ -35,24 +30,6 @@ const CATEGORIES: BlueprintCategory[] = [
   'Topics'
 ];
 
-<<<<<<< Updated upstream
-interface BlueprintConfig extends MaintenanceRecord {
-  id?: string;
-  category?: string;
-  code?: string;
-  subject?: string;
-  level?: string;
-  questionType?: string;
-  autoScored?: string | boolean;
-  topicCode?: string;
-  topic?: string;
-  gradeLevel?: string;
-  status?: string | boolean;
-}
-
-export default function ExamBlueprintMaintenance() {
-  const [data, setData] = useState<BlueprintConfig[]>([]);
-=======
 const CODE_PREFIXES: Record<BlueprintCategory, string> = {
   'Subject Areas': 'SUB',
   'Difficulty Level': 'DIF',
@@ -99,18 +76,18 @@ const QUESTION_TYPE_OPTIONS = [
 
 export default function ExamBlueprintMaintenance() {
   const [data, setData] = useState<BlueprintRecord[]>([]);
->>>>>>> Stashed changes
 
   const [selectedCategory, setSelectedCategory] = useState<BlueprintCategory>('Subject Areas');
   const [viewingRow, setViewingRow] = useState<BlueprintRecord | null>(null);
+  const [pendingTopicSubject, setPendingTopicSubject] = useState<string | undefined>(undefined);
+  const [createTrigger, setCreateTrigger] = useState(0);
 
-<<<<<<< Updated upstream
-  const saveConfigs = (newData: BlueprintConfig[]) => {
-    setData(newData);
+  const goCreateTopicForSubject = (subject?: string) => {
+    setPendingTopicSubject(subject);
+    setSelectedCategory('Topics');
+    setCreateTrigger(t => t + 1);
   };
 
-  const getColumnsForCategory = (category: string): MaintenanceColumn<BlueprintConfig>[] => {
-=======
   const saveConfigs = (newData: BlueprintRecord[]) => {
     setData(newData);
   };
@@ -146,7 +123,7 @@ export default function ExamBlueprintMaintenance() {
     });
   };
 
-  const dateCreatedColumn: MaintenanceColumn = {
+  const dateCreatedColumn: MaintenanceColumn<BlueprintRecord> = {
     key: 'createdAt',
     label: 'Date Created',
     render: (row: BlueprintRecord) => (
@@ -154,13 +131,25 @@ export default function ExamBlueprintMaintenance() {
     )
   };
 
-  const getColumnsForCategory = (category: BlueprintCategory): MaintenanceColumn[] => {
->>>>>>> Stashed changes
+  const getColumnsForCategory = (category: BlueprintCategory): MaintenanceColumn<BlueprintRecord>[] => {
     switch (category) {
       case 'Subject Areas':
         return [
           { key: 'code', label: 'Code' },
-          { key: 'subject', label: 'Subject' },
+          {
+            key: 'subject',
+            label: 'Subject',
+            render: (row: BlueprintRecord) => (
+              <button
+                type="button"
+                title="Create a topic under this subject"
+                onClick={() => goCreateTopicForSubject(row.subject)}
+                className="text-sm font-bold text-philsa-navy underline decoration-dotted underline-offset-4 hover:text-philsa-red transition-colors cursor-pointer"
+              >
+                {row.subject}
+              </button>
+            )
+          },
           dateCreatedColumn
         ];
 
@@ -220,41 +209,6 @@ export default function ExamBlueprintMaintenance() {
     }
   };
 
-<<<<<<< Updated upstream
-  const fields: MaintenanceField[] = [
-    { 
-      name: 'category', 
-      label: 'Category', 
-      type: 'select', 
-      required: true, 
-      options: CATEGORIES.map(c => ({ value: c, label: c }))
-    },
-    { name: 'code', label: 'Code (for Subject, Difficulty, Question Type)', type: 'text', placeholder: 'e.g. SUB-001, DIF-001, QT-001' },
-    { name: 'subject', label: 'Subject Name (for Subject Areas & Topics)', type: 'text', placeholder: 'e.g. Mathematics, English, Science' },
-    { name: 'level', label: 'Difficulty Level (for Difficulty Level)', type: 'text', placeholder: 'e.g. Easy, Medium, Hard' },
-    { name: 'questionType', label: 'Question Type Name (for Question Type)', type: 'text', placeholder: 'e.g. Multiple Choice, Essay' },
-    { 
-      name: 'autoScored', 
-      label: 'Auto Scored (for Question Type)', 
-      type: 'select',
-      options: [
-        { value: 'Yes', label: 'Yes' },
-        { value: 'No', label: 'No' },
-      ]
-    },
-    { name: 'topicCode', label: 'Topic Code (for Topics)', type: 'text', placeholder: 'e.g. TOP-001' },
-    { name: 'topic', label: 'Topic Name (for Topics)', type: 'text', placeholder: 'e.g. General Mathematics' },
-    { name: 'gradeLevel', label: 'Grade Level (for Topics)', type: 'text', placeholder: 'e.g. Grade 11–12' },
-    { name: 'status', label: 'Active Status', type: 'toggle' }
-  ];
-
-  const handleAdd = (newData: BlueprintConfig) => {
-    const item = {
-      ...newData,
-      category: newData.category || selectedCategory,
-      id: Math.random().toString(36).substr(2, 9),
-      status: newData.status === true || newData.status === 'Active' || newData.status === 'Yes' ? 'Active' : 'Inactive'
-=======
   const getFieldsForCategory = (category: BlueprintCategory): MaintenanceField[] => {
     const codeField: MaintenanceField = {
       name: CODE_KEYS[category],
@@ -262,7 +216,6 @@ export default function ExamBlueprintMaintenance() {
       type: 'text',
       disabled: true,
       defaultValue: () => generateCode(category)
->>>>>>> Stashed changes
     };
 
     const statusField: MaintenanceField = {
@@ -297,7 +250,7 @@ export default function ExamBlueprintMaintenance() {
             type: 'select',
             required: true,
             hideEmptyOption: true,
-            defaultValue: 'No',
+            defaultValue: 'Yes',
             options: [
               { value: 'Yes', label: 'Yes' },
               { value: 'No', label: 'No' },
@@ -317,6 +270,8 @@ export default function ExamBlueprintMaintenance() {
             type: 'select',
             required: true,
             options: existingSubjects,
+            hideEmptyOption: existingSubjects.length > 0,
+            defaultValue: pendingTopicSubject || existingSubjects[0]?.value,
             placeholder: existingSubjects.length ? 'Select an option' : 'No subjects created yet — add one in Subject Areas'
           },
           { name: 'topic', label: 'Topic', type: 'text', required: true, placeholder: 'e.g. General Mathematics' },
@@ -348,25 +303,12 @@ export default function ExamBlueprintMaintenance() {
     saveConfigs([item, ...data]);
   };
 
-<<<<<<< Updated upstream
-  const handleEdit = (updatedRow: BlueprintConfig) => {
-    const item = {
-      ...updatedRow,
-      status: updatedRow.status === true || updatedRow.status === 'Active' || updatedRow.status === 'Yes' ? 'Active' : 'Inactive'
-    };
-    saveConfigs(data.map(row => row.id === item.id ? item : row));
-  };
-
-  const handleDelete = (row: BlueprintConfig) => {
-    if (window.confirm(`Are you sure you want to delete ${row.subject || row.topic || row.questionType || row.level || row.code || 'this record'}?`)) {
-=======
   const handleEdit = (updatedRow: BlueprintRecord) => {
     saveConfigs(data.map(row => row.id === updatedRow.id ? updatedRow : row));
   };
 
   const handleDelete = (row: BlueprintRecord) => {
     if (window.confirm(`Are you sure you want to delete ${row.subject || row.topic || row.questionType || row.level || row.code}?`)) {
->>>>>>> Stashed changes
       saveConfigs(data.filter(r => r.id !== row.id));
     }
   };
@@ -413,6 +355,7 @@ export default function ExamBlueprintMaintenance() {
         aboveTableContent={aboveTableContent}
         showApprovalColumn={false}
         auditDetailsLabel="Last Modified"
+        openCreateSignal={createTrigger}
       />
 
       <AnimatePresence>
