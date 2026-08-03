@@ -23,11 +23,8 @@ staticfiles/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-<<<<<<< Updated upstream
 
 # Claude Code local setup
 .claude/*
 CLAUDE.md
-=======
 local/
->>>>>>> Stashed changes
