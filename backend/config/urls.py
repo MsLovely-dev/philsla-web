@@ -6,5 +6,6 @@ urlpatterns = [
     path("api/v1/auth/", include(("apps.accounts.urls", "accounts"), namespace="accounts")),
     path("api/v1/applications/", include(("apps.applications.urls", "applications"), namespace="applications")),
     path("api/v1/configuration/", include(("apps.configuration.urls", "configuration"), namespace="configuration")),
+    path("api/v1/exams/", include(("apps.exams.urls", "exams"), namespace="exams")),
     path("api/v1/", include(("apps.core.urls", "core"), namespace="api-v1")),
 ]
