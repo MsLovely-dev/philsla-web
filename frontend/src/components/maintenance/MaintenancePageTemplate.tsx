@@ -38,14 +38,26 @@ export interface MaintenanceColumn<TRow extends object = MaintenanceDisplayRecor
 export interface MaintenanceField {
   name: string;
   label: string;
-  type: 'text' | 'select' | 'textarea' | 'number' | 'toggle' | 'location';
+  type: 'text' | 'select' | 'textarea' | 'number' | 'toggle' | 'location' | 'combo';
   options?: { value: string; label: string }[];
   required?: boolean;
   placeholder?: string;
   dependsOn?: string;
   validation?: (val: unknown) => string | null;
   disabled?: boolean;
+<<<<<<< Updated upstream
   onChange?: (val: string, currentData: MaintenanceRecord) => MaintenanceRecord;
+=======
+  onChange?: (val: any, currentData: any) => any;
+  showWhen?: (currentData: any) => boolean;
+  defaultValue?: any | (() => any);
+  /** For type 'combo': the option value that switches the field into free-text entry. */
+  othersValue?: string;
+  /** For type 'select': omit the blank "Select an option" placeholder entry. */
+  hideEmptyOption?: boolean;
+  /** Only show this field when editing an existing record, not when creating one. */
+  editOnly?: boolean;
+>>>>>>> Stashed changes
 }
 
 interface MaintenancePageProps<TRow extends object> {
@@ -67,6 +79,8 @@ interface MaintenancePageProps<TRow extends object> {
   sidePanel?: React.ReactNode;
   isSidePanelOpen?: boolean;
   aboveTableContent?: React.ReactNode;
+  showApprovalColumn?: boolean;
+  auditDetailsLabel?: string;
 }
 
 function readField(row: object, key: string): unknown {
@@ -88,19 +102,34 @@ export default function MaintenancePageTemplate<TRow extends object>({
   extraHeaderActions,
   sidePanel,
   isSidePanelOpen,
+<<<<<<< Updated upstream
   aboveTableContent
 }: MaintenancePageProps<TRow>) {
+=======
+  aboveTableContent,
+  showApprovalColumn = true,
+  auditDetailsLabel = 'Audit Details'
+}: MaintenancePageProps) {
+>>>>>>> Stashed changes
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TRow | null>(null);
   const [formData, setFormData] = useState<MaintenanceRecord>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [comboCustomMode, setComboCustomMode] = useState<Record<string, boolean>>({});
 
   const handleOpenCreate = () => {
     setEditingRow(null);
-    setFormData({});
+    const initial: any = {};
+    fields.forEach(field => {
+      if (field.defaultValue !== undefined) {
+        initial[field.name] = typeof field.defaultValue === 'function' ? field.defaultValue() : field.defaultValue;
+      }
+    });
+    setFormData(initial);
     setFormErrors({});
+    setComboCustomMode({});
     setIsModalOpen(true);
   };
 
@@ -108,6 +137,13 @@ export default function MaintenancePageTemplate<TRow extends object>({
     setEditingRow(row);
     setFormData(Object.fromEntries(Object.entries(row)));
     setFormErrors({});
+    const initialCombo: Record<string, boolean> = {};
+    fields.forEach(field => {
+      if (field.type === 'combo' && row[field.name] && !field.options?.some(opt => opt.value === row[field.name])) {
+        initialCombo[field.name] = true;
+      }
+    });
+    setComboCustomMode(initialCombo);
     setIsModalOpen(true);
   };
 
@@ -207,8 +243,8 @@ export default function MaintenancePageTemplate<TRow extends object>({
                 {columns.map(col => (
                   <th key={col.key} className="px-8 py-5">{col.label}</th>
                 ))}
-                <th className="px-8 py-5">Audit Details</th>
-                <th className="px-8 py-5">Approval</th>
+                <th className="px-8 py-5">{auditDetailsLabel}</th>
+                {showApprovalColumn && <th className="px-8 py-5">Approval</th>}
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
             </thead>
@@ -232,9 +268,21 @@ export default function MaintenancePageTemplate<TRow extends object>({
                       </div>
                     </div>
                   </td>
+<<<<<<< Updated upstream
                   <td className="px-8 py-6">
                      <StatusBadge status={String(readField(row, 'approvalStatus') || 'Approved')} isApproval />
                   </td>
+=======
+                  {showApprovalColumn && (
+                    <td className="px-8 py-6">
+                      {row.approvalStatus ? (
+                        <StatusBadge status={row.approvalStatus} isApproval />
+                      ) : (
+                        <span className="text-sm font-bold text-philsa-gray/50">—</span>
+                      )}
+                    </td>
+                  )}
+>>>>>>> Stashed changes
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-1">
                       <button 
@@ -261,7 +309,7 @@ export default function MaintenancePageTemplate<TRow extends object>({
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length + 3} className="px-8 py-20 text-center">
+                  <td colSpan={columns.length + (showApprovalColumn ? 3 : 2)} className="px-8 py-20 text-center">
                     <div className="flex flex-col items-center justify-center grayscale opacity-30">
                        <Database className="w-16 h-16 mb-4" />
                        <p className="text-xl font-bold uppercase tracking-widest">No Records Found</p>
@@ -340,7 +388,7 @@ export default function MaintenancePageTemplate<TRow extends object>({
               <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
                 <div className="p-6 space-y-5 overflow-y-auto max-h-[55vh]">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    {fields.map(field => (
+                    {fields.filter(field => (!field.showWhen || field.showWhen(formData)) && (!field.editOnly || editingRow)).map(field => (
                       <div key={field.name} className={cn("space-y-1.5", field.type === 'textarea' && "md:col-span-2")}>
                         <label className="text-[11px] font-extrabold text-philsa-navy uppercase tracking-wider flex items-center gap-1">
                           {field.label} {field.required && <span className="text-philsa-red">*</span>}
@@ -383,7 +431,9 @@ export default function MaintenancePageTemplate<TRow extends object>({
                                 setFormData(updated);
                               }}
                             >
-                              <option value="">{field.placeholder || "Select an option"}</option>
+                              {!field.hideEmptyOption && (
+                                <option value="">{field.placeholder || "Select an option"}</option>
+                              )}
                               {field.options?.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
                               ))}
@@ -394,6 +444,66 @@ export default function MaintenancePageTemplate<TRow extends object>({
                               </svg>
                             </div>
                           </div>
+                        ) : field.type === 'combo' ? (
+                          comboCustomMode[field.name] ? (
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder={field.placeholder || 'Enter value'}
+                                className={cn(
+                                  "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all pr-10",
+                                  formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
+                                )}
+                                value={formData[field.name] || ''}
+                                onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                title="Choose from list"
+                                onClick={() => {
+                                  setComboCustomMode({ ...comboCustomMode, [field.name]: false });
+                                  setFormData({ ...formData, [field.name]: '' });
+                                }}
+                                className="absolute inset-y-0 right-0 flex items-center px-4 text-philsa-gray hover:text-philsa-navy"
+                              >
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                  <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                                </svg>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="relative">
+                              <select
+                                className={cn(
+                                  "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all appearance-none pr-10",
+                                  formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
+                                )}
+                                value={formData[field.name] || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === field.othersValue) {
+                                    setComboCustomMode({ ...comboCustomMode, [field.name]: true });
+                                    setFormData({ ...formData, [field.name]: '' });
+                                  } else {
+                                    setFormData({ ...formData, [field.name]: val });
+                                  }
+                                }}
+                              >
+                                {!field.hideEmptyOption && (
+                                  <option value="">{field.placeholder || "Select an option"}</option>
+                                )}
+                                {field.options?.map(opt => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-philsa-gray">
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                                  <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+                                </svg>
+                              </div>
+                            </div>
+                          )
                         ) : field.type === 'textarea' ? (
                           <textarea 
                             rows={2}
