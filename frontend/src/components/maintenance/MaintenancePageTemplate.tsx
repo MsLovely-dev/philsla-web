@@ -214,17 +214,29 @@ export default function MaintenancePageTemplate({
                     </td>
                   ))}
                   <td className="px-8 py-6">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
-                        <Users className="w-3 h-3" /> {row.updatedBy || 'admin_user'}
+                    {row.updatedBy || row.updatedAt ? (
+                      <div className="flex flex-col gap-1">
+                        {row.updatedBy && (
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
+                            <Users className="w-3 h-3" /> {row.updatedBy}
+                          </div>
+                        )}
+                        {row.updatedAt && (
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
+                            <Clock className="w-3 h-3" /> {row.updatedAt}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
-                        <Clock className="w-3 h-3" /> {row.updatedAt || '2026-05-14 08:30'}
-                      </div>
-                    </div>
+                    ) : (
+                      <span className="text-sm font-bold text-philsa-gray/50">—</span>
+                    )}
                   </td>
                   <td className="px-8 py-6">
-                     <StatusBadge status={row.approvalStatus || 'Approved'} isApproval />
+                    {row.approvalStatus ? (
+                      <StatusBadge status={row.approvalStatus} isApproval />
+                    ) : (
+                      <span className="text-sm font-bold text-philsa-gray/50">—</span>
+                    )}
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-1">
