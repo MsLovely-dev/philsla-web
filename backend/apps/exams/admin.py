@@ -10,17 +10,24 @@ from .models import (
     BlueprintSectionTopic,
     BlueprintVersion,
     BlueprintWorkflowHistory,
-    ExamBlueprint,
-    QuestionType,
     Competency,
     ExamBlueprint,
+    ExamSet,
+    ExamSetAssemblyRun,
+    ExamSetAssemblyRunItem,
+    ExamSetQuestion,
+    ExamSetQuestionReplacement,
+    ExamSetValidationResult,
+    ExamSetWorkflowHistory,
     EssayRubric,
     Question,
     QuestionAnswer,
     QuestionAttachment,
     QuestionChoice,
     QuestionTag,
+    QuestionWorkflowHistory,
     QuestionType,
+    SelectionMethod,
     Tag,
     Subject,
     Topic,
@@ -176,4 +183,69 @@ class QuestionTagAdmin(admin.ModelAdmin):
 @admin.register(QuestionWorkflowHistory)
 class QuestionWorkflowHistoryAdmin(admin.ModelAdmin):
     list_display = ("question", "previous_status", "new_status", "action", "initiated_by", "created_at")
+    list_filter = ("previous_status", "new_status")
+
+
+class ExamSetQuestionInline(admin.TabularInline):
+    model = ExamSetQuestion
+    extra = 0
+
+
+class ExamSetValidationResultInline(admin.TabularInline):
+    model = ExamSetValidationResult
+    extra = 0
+
+
+class ExamSetWorkflowHistoryInline(admin.TabularInline):
+    model = ExamSetWorkflowHistory
+    extra = 0
+
+
+class ExamSetAssemblyRunInline(admin.TabularInline):
+    model = ExamSetAssemblyRun
+    extra = 0
+
+
+@admin.register(ExamSet)
+class ExamSetAdmin(admin.ModelAdmin):
+    list_display = ("exam_code", "title", "blueprint_version", "academic_year", "exam_type", "status", "created_by", "created_at")
+    search_fields = ("exam_code", "title", "blueprint_version__blueprint__spec_code")
+    list_filter = ("status", "exam_type", "academic_year")
+    inlines = [ExamSetQuestionInline, ExamSetValidationResultInline, ExamSetWorkflowHistoryInline, ExamSetAssemblyRunInline]
+
+
+@admin.register(ExamSetQuestion)
+class ExamSetQuestionAdmin(admin.ModelAdmin):
+    list_display = ("exam_set", "display_order", "question", "selection_method", "selected_by", "selected_at")
+    search_fields = ("exam_set__exam_code", "question__question_code")
+    list_filter = ("selection_method",)
+
+
+@admin.register(ExamSetQuestionReplacement)
+class ExamSetQuestionReplacementAdmin(admin.ModelAdmin):
+    list_display = ("exam_set", "exam_set_question", "old_question", "new_question", "replaced_by", "created_at")
+    search_fields = ("exam_set__exam_code", "old_question__question_code", "new_question__question_code")
+
+
+@admin.register(ExamSetValidationResult)
+class ExamSetValidationResultAdmin(admin.ModelAdmin):
+    list_display = ("exam_set", "validation_code", "validation_name", "result", "validated_at")
+    list_filter = ("result",)
+
+
+@admin.register(ExamSetAssemblyRun)
+class ExamSetAssemblyRunAdmin(admin.ModelAdmin):
+    list_display = ("exam_set", "status", "selected_item_count", "rejected_item_count", "initiated_by", "started_at")
+    list_filter = ("status",)
+
+
+@admin.register(ExamSetAssemblyRunItem)
+class ExamSetAssemblyRunItemAdmin(admin.ModelAdmin):
+    list_display = ("assembly_run", "question", "was_selected", "created_at")
+    list_filter = ("was_selected",)
+
+
+@admin.register(ExamSetWorkflowHistory)
+class ExamSetWorkflowHistoryAdmin(admin.ModelAdmin):
+    list_display = ("exam_set", "previous_status", "new_status", "action", "initiated_by", "created_at")
     list_filter = ("previous_status", "new_status")

@@ -471,6 +471,201 @@ class BlueprintWorkflowHistory(models.Model):
         ordering = ["-created_at"]
 
 
+class ExamSetStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    ACADEMIC_REVIEW = "academic_review", "Academic review"
+    REVISION_REQUIRED = "revision_required", "Revision required"
+    APPROVED = "approved", "Approved"
+    PUBLISHED = "published", "Published"
+    ARCHIVED = "archived", "Archived"
+
+
+class SelectionMethod(models.TextChoices):
+    MANUAL = "manual", "Manual"
+    AUTOMATIC = "automatic", "Automatic"
+
+
+class ValidationResult(models.TextChoices):
+    PASSED = "passed", "Passed"
+    WARNING = "warning", "Warning"
+    FAILED = "failed", "Failed"
+
+
+class ExamSet(models.Model):
+    blueprint_version = models.ForeignKey(BlueprintVersion, on_delete=models.PROTECT, related_name="exam_sets")
+    academic_year = models.ForeignKey(AcademicYear, on_delete=models.PROTECT, related_name="exam_sets")
+    exam_code = models.CharField(max_length=60, unique=True)
+    title = models.CharField(max_length=255)
+    examination_period = models.CharField(max_length=150, blank=True, default="")
+    exam_type = models.CharField(max_length=20, choices=ExamType.choices, blank=True, default=ExamType.ADMISSION)
+    instructions = models.TextField(blank=True, default="")
+    duration_minutes = models.PositiveIntegerField()
+    status = models.CharField(max_length=32, choices=ExamSetStatus.choices, default=ExamSetStatus.DRAFT)
+    cloned_from_exam_set = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="clones",
+        null=True,
+        blank=True,
+    )
+    created_by = models.ForeignKey("accounts.AccountProfile", on_delete=models.PROTECT, related_name="created_exam_sets")
+    approved_by = models.ForeignKey(
+        "accounts.AccountProfile",
+        on_delete=models.PROTECT,
+        related_name="approved_exam_sets",
+        null=True,
+        blank=True,
+    )
+    published_by = models.ForeignKey(
+        "accounts.AccountProfile",
+        on_delete=models.PROTECT,
+        related_name="published_exam_sets",
+        null=True,
+        blank=True,
+    )
+    archived_by = models.ForeignKey(
+        "accounts.AccountProfile",
+        on_delete=models.PROTECT,
+        related_name="archived_exam_sets",
+        null=True,
+        blank=True,
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "exam_sets"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.exam_code
+
+
+class ExamSetQuestion(models.Model):
+    exam_set = models.ForeignKey(ExamSet, on_delete=models.CASCADE, related_name="items")
+    question = models.ForeignKey(Question, on_delete=models.PROTECT, related_name="exam_set_items")
+    blueprint_section = models.ForeignKey(
+        BlueprintSection,
+        on_delete=models.PROTECT,
+        related_name="exam_set_items",
+        null=True,
+        blank=True,
+    )
+    display_order = models.PositiveIntegerField()
+    points = models.DecimalField(max_digits=8, decimal_places=2)
+    selection_method = models.CharField(max_length=20, choices=SelectionMethod.choices, default=SelectionMethod.MANUAL)
+    selected_by = models.ForeignKey(
+        "accounts.AccountProfile",
+        on_delete=models.PROTECT,
+        related_name="selected_exam_set_questions",
+        null=True,
+        blank=True,
+    )
+    selected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "exam_set_questions"
+        ordering = ["display_order", "selected_at"]
+        constraints = [
+            models.UniqueConstraint(fields=("exam_set", "question"), name="unique_exam_set_question"),
+            models.UniqueConstraint(fields=("exam_set", "display_order"), name="unique_exam_set_question_display_order"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.exam_set.exam_code} / {self.display_order}"
+
+
+class ExamSetQuestionReplacement(models.Model):
+    exam_set = models.ForeignKey(ExamSet, on_delete=models.CASCADE, related_name="replacements")
+    exam_set_question = models.ForeignKey(ExamSetQuestion, on_delete=models.CASCADE, related_name="replacements")
+    old_question = models.ForeignKey(Question, on_delete=models.PROTECT, related_name="replaced_in_exam_sets")
+    new_question = models.ForeignKey(Question, on_delete=models.PROTECT, related_name="replacement_questions")
+    reason = models.TextField(blank=True, default="")
+    replaced_by = models.ForeignKey("accounts.AccountProfile", on_delete=models.PROTECT, related_name="exam_set_replacements")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "exam_set_question_replacements"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.exam_set.exam_code}: replacement"
+
+
+class ExamSetAssemblyRun(models.Model):
+    exam_set = models.ForeignKey(ExamSet, on_delete=models.CASCADE, related_name="assembly_runs")
+    algorithm_version = models.CharField(max_length=30, blank=True, default="")
+    status = models.CharField(max_length=30)
+    selected_item_count = models.PositiveIntegerField(default=0)
+    rejected_item_count = models.PositiveIntegerField(default=0)
+    initiated_by = models.ForeignKey("accounts.AccountProfile", on_delete=models.PROTECT, related_name="exam_set_assembly_runs")
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "exam_set_assembly_runs"
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        return f"{self.exam_set.exam_code} assembly run"
+
+
+class ExamSetAssemblyRunItem(models.Model):
+    assembly_run = models.ForeignKey(ExamSetAssemblyRun, on_delete=models.CASCADE, related_name="items")
+    question = models.ForeignKey(Question, on_delete=models.PROTECT, related_name="assembly_run_items")
+    was_selected = models.BooleanField(default=False)
+    rejection_reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "exam_set_assembly_run_items"
+        constraints = [
+            models.UniqueConstraint(fields=("assembly_run", "question"), name="unique_exam_set_assembly_run_item"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.assembly_run.exam_set.exam_code} / {self.question.question_code}"
+
+
+class ExamSetValidationResult(models.Model):
+    exam_set = models.ForeignKey(ExamSet, on_delete=models.CASCADE, related_name="validation_results")
+    validation_code = models.CharField(max_length=50)
+    validation_name = models.CharField(max_length=150)
+    result = models.CharField(max_length=20, choices=ValidationResult.choices)
+    expected_value = models.CharField(max_length=255, blank=True, default="")
+    actual_value = models.CharField(max_length=255, blank=True, default="")
+    message = models.TextField(blank=True, default="")
+    validated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "exam_set_validation_results"
+        ordering = ["-validated_at"]
+
+    def __str__(self) -> str:
+        return f"{self.exam_set.exam_code}: {self.validation_code}"
+
+
+class ExamSetWorkflowHistory(models.Model):
+    exam_set = models.ForeignKey(ExamSet, on_delete=models.CASCADE, related_name="workflow_history")
+    previous_status = models.CharField(max_length=32, choices=ExamSetStatus.choices, null=True, blank=True)
+    new_status = models.CharField(max_length=32, choices=ExamSetStatus.choices)
+    action = models.CharField(max_length=50)
+    remarks = models.TextField(blank=True, default="")
+    initiated_by = models.ForeignKey("accounts.AccountProfile", on_delete=models.PROTECT, related_name="exam_set_workflow_actions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "exam_set_workflow_history"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.exam_set.exam_code}: {self.action}"
+
+
 def blueprint_version_sort_key(version: Decimal) -> tuple[int, int]:
     major, minor = str(version).split(".")
     return int(major), int(minor[:2].ljust(2, "0"))

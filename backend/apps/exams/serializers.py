@@ -6,21 +6,33 @@ from rest_framework import serializers
 
 from apps.accounts.models import AccountProfile
 
-from .models import BlueprintStatus, ExamBlueprint
-from .services import clone_exam_blueprint, create_exam_blueprint, serialize_blueprint, transition_blueprint_version, update_exam_blueprint, latest_blueprint_version
 from .models import (
     BlueprintStatus,
+    BlueprintSection,
     ExamBlueprint,
+    ExamSet,
+    ExamSetAssemblyRun,
+    ExamSetAssemblyRunItem,
+    ExamSetQuestion,
+    ExamSetStatus,
+    ExamSetValidationResult,
+    ExamSetWorkflowHistory,
+    SelectionMethod,
     QuestionStatus,
+    Question,
 )
 from .services import (
     clone_exam_blueprint,
+    clone_exam_set,
     create_exam_blueprint,
+    create_or_update_exam_set,
     create_or_update_question,
     latest_blueprint_version,
     serialize_blueprint,
+    serialize_exam_set,
     serialize_question,
     transition_blueprint_version,
+    transition_exam_set,
     transition_question,
     update_exam_blueprint,
 )
@@ -248,6 +260,127 @@ class QuestionTransitionSerializer(serializers.Serializer):
             raise serializers.ValidationError({"detail": "Question transition requires an authenticated question context."})
         return transition_question(
             question=question,
+            target_status=self.validated_data["status"],
+            actor_profile=actor_profile,
+            remarks=self.validated_data.get("remarks", ""),
+        )
+
+
+class ExamSetQuestionPayloadSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    question_id = serializers.IntegerField(required=False, allow_null=True)
+    question_code = serializers.CharField(required=False, allow_blank=True)
+    blueprint_section_id = serializers.IntegerField(required=False, allow_null=True)
+    display_order = serializers.IntegerField(min_value=0)
+    points = serializers.FloatField(required=False)
+    selection_method = serializers.CharField(required=False, allow_blank=True)
+
+
+class ExamSetValidationResultSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    validation_code = serializers.CharField(read_only=True)
+    validation_name = serializers.CharField(read_only=True)
+    result = serializers.CharField(read_only=True)
+    expected_value = serializers.CharField(read_only=True)
+    actual_value = serializers.CharField(read_only=True)
+    message = serializers.CharField(read_only=True)
+    validated_at = serializers.DateTimeField(read_only=True)
+
+
+class ExamSetWorkflowHistorySerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    previous_status = serializers.CharField(read_only=True, allow_null=True)
+    new_status = serializers.CharField(read_only=True)
+    action = serializers.CharField(read_only=True)
+    remarks = serializers.CharField(read_only=True)
+    initiated_by = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class ExamSetAssemblyRunItemSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    question = serializers.DictField(read_only=True)
+    was_selected = serializers.BooleanField(read_only=True)
+    rejection_reason = serializers.CharField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+
+class ExamSetAssemblyRunSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    algorithm_version = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    selected_item_count = serializers.IntegerField(read_only=True)
+    rejected_item_count = serializers.IntegerField(read_only=True)
+    initiated_by = serializers.CharField(read_only=True)
+    started_at = serializers.DateTimeField(read_only=True)
+    completed_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    notes = serializers.CharField(read_only=True)
+    items = ExamSetAssemblyRunItemSerializer(many=True, read_only=True)
+
+
+class ExamSetSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    exam_code = serializers.CharField(required=False, allow_blank=True)
+    title = serializers.CharField(max_length=255)
+    examination_period = serializers.CharField(required=False, allow_blank=True, default="")
+    exam_type = serializers.CharField(required=False, allow_blank=True, default="admission")
+    instructions = serializers.CharField(required=False, allow_blank=True, default="")
+    duration_minutes = serializers.IntegerField(min_value=1)
+    status = serializers.CharField(required=False, allow_blank=True, default="draft")
+    blueprint_version_id = serializers.IntegerField(required=False, allow_null=True)
+    academic_year_id = serializers.IntegerField(required=False, allow_null=True)
+    academic_year = serializers.CharField(required=False, allow_blank=True, default="")
+    cloned_from_exam_set_id = serializers.IntegerField(required=False, allow_null=True)
+    items = ExamSetQuestionPayloadSerializer(many=True, required=False, default=list)
+    questions = ExamSetQuestionPayloadSerializer(many=True, required=False, default=list)
+    validation_results = ExamSetValidationResultSerializer(many=True, read_only=True)
+    workflow_history = ExamSetWorkflowHistorySerializer(many=True, read_only=True)
+    assembly_runs = ExamSetAssemblyRunSerializer(many=True, read_only=True)
+    created_by = serializers.CharField(read_only=True)
+    approved_by = serializers.CharField(read_only=True, allow_null=True)
+    published_by = serializers.CharField(read_only=True, allow_null=True)
+    archived_by = serializers.CharField(read_only=True, allow_null=True)
+    approved_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    published_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    archived_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    def to_representation(self, instance: ExamSet | dict[str, Any]) -> dict[str, Any]:
+        if isinstance(instance, dict):
+            return instance
+        return serialize_exam_set(instance)
+
+    def create(self, validated_data: dict[str, Any]) -> ExamSet:
+        actor_profile = self.context.get("actor_profile")
+        if not isinstance(actor_profile, AccountProfile):
+            raise serializers.ValidationError({"detail": "An authenticated account profile is required."})
+        return create_or_update_exam_set(payload=validated_data, actor_profile=actor_profile)
+
+    def update(self, instance: ExamSet, validated_data: dict[str, Any]) -> ExamSet:
+        actor_profile = self.context.get("actor_profile")
+        if not isinstance(actor_profile, AccountProfile):
+            raise serializers.ValidationError({"detail": "An authenticated account profile is required."})
+        return create_or_update_exam_set(payload=validated_data, actor_profile=actor_profile, exam_set=instance)
+
+
+class ExamSetTransitionSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    remarks = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_status(self, value: str) -> str:
+        normalized = value.strip().lower().replace(" ", "_")
+        if normalized not in ExamSetStatus.values:
+            raise serializers.ValidationError("Select a valid exam set status.")
+        return normalized
+
+    def save(self, **kwargs):  # type: ignore[override]
+        actor_profile = self.context.get("actor_profile")
+        exam_set = self.context.get("exam_set")
+        if not isinstance(actor_profile, AccountProfile) or not isinstance(exam_set, ExamSet):
+            raise serializers.ValidationError({"detail": "Exam set transition requires an authenticated exam set context."})
+        return transition_exam_set(
+            exam_set=exam_set,
             target_status=self.validated_data["status"],
             actor_profile=actor_profile,
             remarks=self.validated_data.get("remarks", ""),
