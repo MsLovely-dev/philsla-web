@@ -82,6 +82,19 @@ export interface StudentRegistrationFieldConfig {
 
 export type StudentRegistrationFieldInput = Omit<StudentRegistrationFieldConfig, 'id' | 'createdAt' | 'updatedAt'>;
 
+export interface PaginatedResult<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export interface StudentRegistrationFieldListParams {
+  page?: number;
+  pageSize?: number;
+  type?: string;
+}
+
 export interface Step2VerificationResult {
   id: string;
   status: 'IN_PROGRESS' | 'PASSED' | 'MANUAL_REVIEW' | 'REJECTED';
@@ -303,6 +316,19 @@ export class BackendApplicationService {
 
   async listStudentRegistrationFields(): Promise<ServiceResult<StudentRegistrationFieldConfig[]>> {
     return this.apiClient.request<StudentRegistrationFieldConfig[]>('/api/v1/configuration/admin/fields/?module=student_registration');
+  }
+
+  async listStudentRegistrationFieldsPage(
+    params: StudentRegistrationFieldListParams,
+  ): Promise<ServiceResult<PaginatedResult<StudentRegistrationFieldConfig>>> {
+    const searchParams = new URLSearchParams({ module: 'student_registration' });
+    if (params.page) searchParams.set('page', String(params.page));
+    if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
+    if (params.type) searchParams.set('type', params.type);
+
+    return this.apiClient.request<PaginatedResult<StudentRegistrationFieldConfig>>(
+      `/api/v1/configuration/admin/fields/?${searchParams.toString()}`,
+    );
   }
 
   async createStudentRegistrationField(input: StudentRegistrationFieldInput): Promise<ServiceResult<StudentRegistrationFieldConfig>> {

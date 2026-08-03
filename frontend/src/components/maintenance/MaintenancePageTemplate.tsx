@@ -68,6 +68,12 @@ interface MaintenancePageProps {
   showRowActions?: boolean;
   showApprovalColumn?: boolean;
   renderRowActions?: (row: any) => React.ReactNode;
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    onPageChange: (page: number) => void;
+  };
 }
 
 export default function MaintenancePageTemplate({
@@ -90,6 +96,7 @@ export default function MaintenancePageTemplate({
   showRowActions = true,
   showApprovalColumn = true,
   renderRowActions,
+  pagination,
 }: MaintenancePageProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -144,6 +151,17 @@ export default function MaintenancePageTemplate({
       String(val).toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
+  const pageCount = pagination ? Math.max(1, Math.ceil(pagination.totalCount / pagination.pageSize)) : 3;
+  const visiblePages = Array.from({ length: pageCount }, (_, index) => index + 1).slice(
+    Math.max(0, Math.min(pagination ? pagination.page - 3 : 0, Math.max(pageCount - 5, 0))),
+    Math.max(0, Math.min(pagination ? pagination.page - 3 : 0, Math.max(pageCount - 5, 0))) + 5,
+  );
+  const showingStart = pagination
+    ? pagination.totalCount === 0 ? 0 : ((pagination.page - 1) * pagination.pageSize) + 1
+    : filteredData.length;
+  const showingEnd = pagination
+    ? Math.min(pagination.page * pagination.pageSize, pagination.totalCount)
+    : filteredData.length;
 
   return (
     <div className="space-y-8 pb-20">
@@ -279,20 +297,35 @@ export default function MaintenancePageTemplate({
         {/* Pagination */}
         <div className="p-6 bg-philsa-bg/30 border-t border-philsa-border flex items-center justify-between">
            <p className="text-xs font-bold text-philsa-gray">
-             Showing <span className="text-philsa-navy">{filteredData.length}</span> of <span className="text-philsa-navy">{data.length}</span> records
+             Showing <span className="text-philsa-navy">{pagination ? `${showingStart}-${showingEnd}` : filteredData.length}</span> of <span className="text-philsa-navy">{pagination ? pagination.totalCount : data.length}</span> records
            </p>
            <div className="flex items-center gap-3">
-              <button className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30">
+              <button
+                type="button"
+                disabled={pagination ? pagination.page <= 1 : true}
+                onClick={() => pagination?.onPageChange(Math.max(1, pagination.page - 1))}
+                className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div className="flex gap-1">
-                 {[1, 2, 3].map(p => (
-                   <button key={p} className={cn("w-8 h-8 rounded-xl text-xs font-black transition-all", p === 1 ? "bg-philsa-navy text-white shadow-lg" : "bg-white border border-philsa-border text-philsa-gray hover:border-philsa-navy")}>
+                 {visiblePages.map(p => (
+                   <button
+                     key={p}
+                     type="button"
+                     onClick={() => pagination?.onPageChange(p)}
+                     className={cn("w-8 h-8 rounded-xl text-xs font-black transition-all", p === (pagination?.page ?? 1) ? "bg-philsa-navy text-white shadow-lg" : "bg-white border border-philsa-border text-philsa-gray hover:border-philsa-navy")}
+                   >
                      {p}
                    </button>
                  ))}
               </div>
-              <button className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray">
+              <button
+                type="button"
+                disabled={pagination ? pagination.page >= pageCount : true}
+                onClick={() => pagination?.onPageChange(Math.min(pageCount, pagination.page + 1))}
+                className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <ChevronRight className="w-4 h-4" />
               </button>
            </div>

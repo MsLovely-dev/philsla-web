@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.accounts.roles import PortalRole
+from apps.core.pagination import StandardPageNumberPagination
 
 from .audit import record_configuration_event
 from .models import ConfigurableField
@@ -94,8 +95,17 @@ class ConfigurableFieldAdminView(APIView):
     def get(self, request) -> Response:
         fields = ConfigurableField.objects.all()
         module = request.query_params.get("module")
+        field_type = request.query_params.get("type")
         if module:
             fields = fields.filter(module=module)
+        if field_type:
+            fields = fields.filter(field_type=field_type)
+
+        if "page" in request.query_params or "pageSize" in request.query_params:
+            paginator = StandardPageNumberPagination()
+            page = paginator.paginate_queryset(fields, request, view=self)
+            return paginator.get_paginated_response(ConfigurableFieldSerializer(page, many=True).data)
+
         return Response(ConfigurableFieldSerializer(fields, many=True).data)
 
     def post(self, request) -> Response:

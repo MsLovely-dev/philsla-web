@@ -49,6 +49,22 @@ class ConfigurableFieldEndpointTests(TestCase):
         self.assertFalse(methods["PhilSys National ID"]["status"])
         self.assertFalse(methods["Manual Entry"]["status"])
 
+    def test_admin_registration_fields_support_opt_in_pagination_and_type_filter(self):
+        response = self.client.get(
+            reverse("configuration:fields-admin"),
+            {
+                "module": "student_registration",
+                "type": "Student Registration Field",
+                "page": 1,
+                "pageSize": 5,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 18)
+        self.assertEqual(len(response.data["results"]), 5)
+        self.assertTrue(all(item["type"] == "Student Registration Field" for item in response.data["results"]))
+
     def test_admin_can_create_registration_field_and_public_reads_it(self):
         response = self.client.post(
             reverse("configuration:fields-admin"),

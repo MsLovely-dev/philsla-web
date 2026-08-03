@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField } from '../../../components/maintenance/MaintenancePageTemplate';
-import RegistrationPreview from '../../../components/maintenance/RegistrationPreview';
 import {
   backendApplicationService,
   type StudentRegistrationFieldConfig,
@@ -79,6 +78,9 @@ const MOCK_DATA = [
 ];
 
 const REGISTRATION_SECTIONS = ['Step 1 Registration'];
+const PAGE_SIZE = 10;
+type RegistrationSectionFilter = 'All' | 'Step 1 Registration' | 'Registration Methods';
+
 const DEFAULT_FIELD_SECTIONS: Record<string, string> = {
   'LRN': 'Personal Information',
   'Birth Date': 'Personal Information',
@@ -109,6 +111,12 @@ const sanitizeRegistrationConfigRows = (rows: any[]) => rows
 
 const formatOptionValues = (options: string[]) => options.join(', ');
 
+const getFieldTypeFilter = (section: RegistrationSectionFilter) => {
+  if (section === 'Step 1 Registration') return 'Student Registration Field';
+  if (section === 'Registration Methods') return 'Verification Method';
+  return undefined;
+};
+
 export default function StudentRegistrationMaintenance() {
   const [data, setData] = useState<StudentRegistrationFieldConfig[]>(() => {
     const saved = localStorage.getItem('philsa_registration_configs');
@@ -128,29 +136,59 @@ export default function StudentRegistrationMaintenance() {
     return MOCK_DATA;
   });
 
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [selectedSection, setSelectedSection] = useState<'All' | 'Step 1 Registration' | 'Registration Methods'>('All');
+  const [selectedSection, setSelectedSection] = useState<RegistrationSectionFilter>('All');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(data.length);
+  const [tabCounts, setTabCounts] = useState({
+    all: data.length,
+    fields: data.filter(d => d.type === 'Student Registration Field').length,
+    methods: data.filter(d => d.type === 'Verification Method').length,
+  });
   const [isLoadingRegistrationFields, setIsLoadingRegistrationFields] = useState(false);
   const [registrationFieldMessage, setRegistrationFieldMessage] = useState('');
   const [registrationFieldError, setRegistrationFieldError] = useState('');
 
-  const loadRegistrationFields = async () => {
+  const loadTabCounts = async () => {
+    const [allResult, fieldsResult, methodsResult] = await Promise.all([
+      backendApplicationService.listStudentRegistrationFieldsPage({ page: 1, pageSize: 1 }),
+      backendApplicationService.listStudentRegistrationFieldsPage({ page: 1, pageSize: 1, type: 'Student Registration Field' }),
+      backendApplicationService.listStudentRegistrationFieldsPage({ page: 1, pageSize: 1, type: 'Verification Method' }),
+    ]);
+
+    setTabCounts(previousCounts => ({
+      all: allResult.ok === false ? previousCounts.all : allResult.data.count,
+      fields: fieldsResult.ok === false ? previousCounts.fields : fieldsResult.data.count,
+      methods: methodsResult.ok === false ? previousCounts.methods : methodsResult.data.count,
+    }));
+  };
+
+  const loadRegistrationFields = async (page = currentPage) => {
     setIsLoadingRegistrationFields(true);
-    const result = await backendApplicationService.listStudentRegistrationFields();
+    const result = await backendApplicationService.listStudentRegistrationFieldsPage({
+      page,
+      pageSize: PAGE_SIZE,
+      type: getFieldTypeFilter(selectedSection),
+    });
     setIsLoadingRegistrationFields(false);
     if (result.ok === false) {
       setRegistrationFieldError(result.error.message);
       return;
     }
-    const rows = sanitizeRegistrationConfigRows(result.data);
+    const rows = sanitizeRegistrationConfigRows(result.data.results);
     setData(rows);
-    localStorage.setItem('philsa_registration_configs', JSON.stringify(rows));
+    setTotalRecords(result.data.count);
     setRegistrationFieldError('');
+    void loadTabCounts();
   };
 
   useEffect(() => {
     void loadRegistrationFields();
-  }, []);
+  }, [selectedSection, currentPage]);
+
+  const handleSectionChange = (section: RegistrationSectionFilter) => {
+    setSelectedSection(section);
+    setCurrentPage(1);
+  };
 
   const toRegistrationFieldInput = (row: any): StudentRegistrationFieldInput => ({
     module: row.module || 'student_registration',
@@ -346,7 +384,7 @@ export default function StudentRegistrationMaintenance() {
       return;
     }
     setRegistrationFieldMessage('Registration field saved.');
-    await loadRegistrationFields();
+    await loadRegistrationFields(currentPage);
   };
 
   const handleEdit = async (updatedRow: any) => {
@@ -362,7 +400,7 @@ export default function StudentRegistrationMaintenance() {
         ? 'Registration method enabled. Other Step 1 registration methods were disabled automatically.'
         : 'Registration field updated.'
     );
-    await loadRegistrationFields();
+    await loadRegistrationFields(currentPage);
   };
 
   const handleDelete = async (row: any) => {
@@ -375,7 +413,11 @@ export default function StudentRegistrationMaintenance() {
         return;
       }
       setRegistrationFieldMessage('Registration field deleted.');
-      await loadRegistrationFields();
+      if (data.length === 1 && currentPage > 1) {
+        setCurrentPage(currentPage - 1);
+      } else {
+        await loadRegistrationFields(currentPage);
+      }
     }
   };
 
@@ -425,36 +467,36 @@ export default function StudentRegistrationMaintenance() {
       <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 rounded-3xl w-fit">
         <button
           type="button"
-          onClick={() => setSelectedSection('All')}
+          onClick={() => handleSectionChange('All')}
           className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
             selectedSection === 'All'
               ? 'bg-white text-philsa-navy shadow-md'
               : 'text-slate-500 hover:text-philsa-navy'
           }`}
         >
-          All Configs ({data.length})
+          All Configs ({tabCounts.all})
         </button>
         <button
           type="button"
-          onClick={() => setSelectedSection('Step 1 Registration')}
+          onClick={() => handleSectionChange('Step 1 Registration')}
           className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
             selectedSection === 'Step 1 Registration'
               ? 'bg-white text-philsa-navy shadow-md'
               : 'text-slate-500 hover:text-philsa-navy'
           }`}
         >
-          Step 1 Fields ({data.filter(d => d.type === 'Student Registration Field').length})
+          Step 1 Fields ({tabCounts.fields})
         </button>
         <button
           type="button"
-          onClick={() => setSelectedSection('Registration Methods')}
+          onClick={() => handleSectionChange('Registration Methods')}
           className={`px-5 py-2.5 rounded-2xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
             selectedSection === 'Registration Methods'
               ? 'bg-white text-philsa-navy shadow-md'
               : 'text-slate-500 hover:text-philsa-navy'
           }`}
         >
-          Registration Methods ({data.filter(d => d.type === 'Verification Method').length})
+          Registration Methods ({tabCounts.methods})
         </button>
       </div>
       {registrationFieldError && (
@@ -498,26 +540,12 @@ export default function StudentRegistrationMaintenance() {
         templateUrl: '#',
         allowedTypes: ['.xlsx', '.csv']
       }}
-      extraHeaderActions={
-        <button 
-          onClick={() => setIsPreviewOpen(!isPreviewOpen)}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm cursor-pointer border ${
-            isPreviewOpen 
-              ? 'bg-[#8A1538] text-white border-[#8A1538] hover:bg-[#6D102C]' 
-              : 'bg-white text-[#8A1538] border-[#8A1538] hover:bg-red-50'
-          }`}
-        >
-          <Eye className="w-4 h-4" />
-          {isPreviewOpen ? 'Close Preview' : 'Preview Full Page'}
-        </button>
-      }
-      sidePanel={
-        <RegistrationPreview 
-          data={data} 
-          onClose={() => setIsPreviewOpen(false)} 
-        />
-      }
-      isSidePanelOpen={isPreviewOpen}
+      pagination={{
+        page: currentPage,
+        pageSize: PAGE_SIZE,
+        totalCount: totalRecords,
+        onPageChange: setCurrentPage,
+      }}
     />
   );
 }
