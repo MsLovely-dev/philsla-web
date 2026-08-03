@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0005_alter_accountprofile_role'),
+        ('accounts', '0006_remove_accountprofile_api_permissions'),
         ('exams', '0002_question_bank'),
     ]
 
