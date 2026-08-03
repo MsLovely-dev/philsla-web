@@ -14,19 +14,7 @@ function jsonResponse(body: unknown, init: ResponseInit): Response {
 
 describe('BackendAuthService', () => {
   it('maps an unauthenticated session with no valid refresh cookie to a null session', async () => {
-    const fetcher = vi.fn()
-      .mockResolvedValueOnce(jsonResponse(
-        {
-          error: {
-            code: 'NOT_AUTHENTICATED',
-            message: 'Authentication credentials were not provided.',
-            fields: {},
-            correlationId: 'correlation-id',
-          },
-        },
-        { status: 401 },
-      ))
-      .mockResolvedValueOnce(jsonResponse(
+    const fetcher = vi.fn().mockResolvedValueOnce(jsonResponse(
         {
           error: {
             code: 'NOT_AUTHENTICATED',
@@ -43,10 +31,6 @@ describe('BackendAuthService', () => {
 
     expect(result).toEqual({ ok: true, data: null });
     expect(fetcher).toHaveBeenCalledWith(
-      'http://backend.test/api/v1/auth/session/',
-      expect.objectContaining({ credentials: 'include' }),
-    );
-    expect(fetcher).toHaveBeenCalledWith(
       'http://backend.test/api/v1/auth/token/refresh/',
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
@@ -55,10 +39,6 @@ describe('BackendAuthService', () => {
   it('restores a backend session from the refresh cookie after a page reload', async () => {
     const fetcher = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse(
-        { error: { code: 'NOT_AUTHENTICATED', message: 'Authentication required.', fields: {} } },
-        { status: 401 },
-      ))
       .mockResolvedValueOnce(jsonResponse(
         {
           accessToken: 'restored-access-token',
@@ -93,7 +73,7 @@ describe('BackendAuthService', () => {
       expect(result.data?.user).toMatchObject({ id: 'restored-user', role: 'SYSTEM_ADMIN' });
     }
     expect(fetcher).toHaveBeenNthCalledWith(
-      3,
+      2,
       'http://backend.test/api/v1/auth/session/',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer restored-access-token' }),
@@ -120,7 +100,9 @@ describe('BackendAuthService', () => {
         { status: 200 },
       ),
     );
-    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const client = new ApiClient({ baseUrl: 'http://backend.test', fetcher });
+    client.setBearerToken('access-token');
+    const service = new BackendAuthService(client);
 
     const result = await service.getCurrentSession();
 

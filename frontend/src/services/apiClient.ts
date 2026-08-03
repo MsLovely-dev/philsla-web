@@ -37,6 +37,10 @@ export class ApiClient {
     this.bearerToken = token;
   }
 
+  hasBearerToken(): boolean {
+    return Boolean(this.bearerToken);
+  }
+
   async request<TData>(path: string, init: RequestInit = {}): Promise<ServiceResult<TData>> {
     const urls = Array.from(
       new Set(
