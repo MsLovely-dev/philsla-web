@@ -9,11 +9,8 @@ vi.mock('./services', () => ({
   createPrototypeAuthService: () => authService,
 }));
 
-<<<<<<< HEAD
 import { INITIAL_MAINTENANCE_MODULES, PhilSAProvider, usePhilSA } from './PhilSAContext';
-=======
 import { PhilSAProvider, usePhilSA } from './PhilSAContext';
->>>>>>> 1d2d2f9 (Refactor/user role settings (#27))
 
 function AuthStateProbe() {
   const { isAuthInitialized, isLoading } = usePhilSA();
@@ -36,7 +33,6 @@ describe('PhilSAProvider authentication bootstrap', () => {
     expect(authService.getCurrentSession).not.toHaveBeenCalled();
   });
 });
-<<<<<<< HEAD
 
 describe('Maintenance Center catalog', () => {
   it('contains the six modules from the updated Maintenance Center', () => {
@@ -54,5 +50,3 @@ describe('Maintenance Center catalog', () => {
     ]);
   });
 });
-=======
->>>>>>> 1d2d2f9 (Refactor/user role settings (#27))
