@@ -27,3 +27,4 @@ staticfiles/
 # Claude Code local setup
 .claude/*
 CLAUDE.md
+local/

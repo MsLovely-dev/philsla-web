@@ -105,7 +105,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     roles: ['ITEM_WRITER', 'ACADEMIC_REVIEWER', 'SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN'],
     items: [
       { icon: LayoutDashboard, label: 'Overview', href: '/admin/hub/overview' },
-      { icon: ClipboardList, label: 'Exam Blueprints', href: '/admin/blueprints' },
       { icon: BookOpen, label: 'Exam Sets', href: '/admin/hub/exam-sets' },
       { 
         icon: Database, 
@@ -203,6 +202,14 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
 
 function isRouteActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isHubNavigationActive(pathname: string, href: string) {
+  if (href === '/admin/hub/exam-sets') {
+    return isRouteActive(pathname, href) || pathname === '/admin/blueprints';
+  }
+
+  return isRouteActive(pathname, href);
 }
 
 function moduleKey(moduleName: string) {
@@ -408,7 +415,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                       {group.label}
                     </h2>
                     {group.items.map((item) => {
-                      const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
+                      const isActive = isHubNavigationActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                       const hasSubItems = item.subItems && item.subItems.length > 0;
                       
                       return (
@@ -506,7 +513,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 </h2>
               )}
               {group.items.map((item) => {
-                const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
+                const isActive = isHubNavigationActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                 const hasSubItems = item.subItems && item.subItems.length > 0;
                 
                 return (
