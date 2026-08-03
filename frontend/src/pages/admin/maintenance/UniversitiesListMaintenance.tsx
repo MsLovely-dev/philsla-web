@@ -54,61 +54,9 @@ export interface UniversityItem {
   status: 'Active' | 'Inactive';
 }
 
-const INITIAL_UNIVERSITIES: UniversityItem[] = [
-  { id: 'uni-up-dil', code: 'UP-DIL', name: 'University of the Philippines Diliman', classification: 'Public', region: 'NCR - National Capital Region', city: 'Quezon City', presidentRector: 'Dr. Angelo A. Jimenez / Chancellor Edgardo Carlo L. Vistan II', email: 'chancellor.updiliman@up.edu.ph', phone: '(02) 8981-8500', establishedYear: 1908, status: 'Active' },
-  { id: 'uni-ust-mnl', code: 'UST-MNL', name: 'University of Santo Tomas', classification: 'Private', region: 'NCR - National Capital Region', city: 'Manila', presidentRector: 'Very Rev. Fr. Richard G. Ang, O.P.', email: 'ofad@ust.edu.ph', phone: '(02) 8786-1611', establishedYear: 1611, status: 'Active' },
-  { id: 'uni-dlsu-mnl', code: 'DLSU-MNL', name: 'De La Salle University Manila', classification: 'Private', region: 'NCR - National Capital Region', city: 'Manila', presidentRector: 'Br. Bernard S. Oca, FSC', email: 'admissions@dlsu.edu.ph', phone: '(02) 8524-4611', establishedYear: 1911, status: 'Active' },
-  { id: 'uni-admu-qzn', code: 'ADMU-QZN', name: 'Ateneo de Manila University', classification: 'Private', region: 'NCR - National Capital Region', city: 'Quezon City', presidentRector: 'Fr. Roberto C. Yap, SJ', email: 'admissions@ateneo.edu', phone: '(02) 8426-6001', establishedYear: 1859, status: 'Active' },
-  { id: 'uni-pup-sta', code: 'PUP-STA', name: 'Polytechnic University of the Philippines Manila', classification: 'Public', region: 'NCR - National Capital Region', city: 'Manila', presidentRector: 'Dr. Manuel M. Muhi', email: 'inquire@pup.edu.ph', phone: '(02) 5335-1787', establishedYear: 1904, status: 'Active' },
-  { id: 'uni-clsu-mun', code: 'CLSU-MUN', name: 'Central Luzon State University', classification: 'Public', region: 'Region III - Central Luzon', city: 'Muñoz City', presidentRector: 'Dr. Evaristo A. Abella', email: 'clsu@clsu.edu.ph', phone: '(044) 456-0107', establishedYear: 1907, status: 'Active' },
-  { id: 'uni-usc-ceb', code: 'USC-CEB', name: 'University of San Carlos', classification: 'Private', region: 'Region VII - Central Visayas', city: 'Cebu City', presidentRector: 'Fr. Francisco Antonio T. Estepa, SVD', email: 'info@usc.edu.ph', phone: '(032) 230-0100', establishedYear: 1948, status: 'Active' },
-  { id: 'uni-msu-iit', code: 'MSU-IIT', name: 'Mindanao State University - Iligan Institute of Technology', classification: 'Public', region: 'Region X - Northern Mindanao', city: 'Iligan City', presidentRector: 'Prof. Alizedney M. Ditucalan', email: 'oii@g.msuiit.edu.ph', phone: '(063) 221-4050', establishedYear: 1968, status: 'Active' }
-];
-
-const INITIAL_COURSES: CollegeCourse[] = [
-  // UP Diliman
-  { id: 'crs-1', universityId: 'uni-up-dil', universityCode: 'UP-DIL', collegeName: 'College of Engineering', programCode: 'BSCS', programName: 'Bachelor of Science in Computer Science', degreeType: 'Bachelor of Science', majorSpecialization: 'Algorithms & Artificial Intelligence', durationYears: 4, totalUnits: 148, cutoffPercentile: 90.0, status: 'Active' },
-  { id: 'crs-2', universityId: 'uni-up-dil', universityCode: 'UP-DIL', collegeName: 'College of Engineering', programCode: 'BSCE', programName: 'Bachelor of Science in Civil Engineering', degreeType: 'Bachelor of Science', majorSpecialization: 'Structural & Transportation Engineering', durationYears: 4, totalUnits: 156, cutoffPercentile: 88.0, status: 'Active' },
-  { id: 'crs-3', universityId: 'uni-up-dil', universityCode: 'UP-DIL', collegeName: 'Cesar E.A. Virata School of Business', programCode: 'BSBAA', programName: 'Bachelor of Science in Business Administration and Accountancy', degreeType: 'Bachelor of Science', majorSpecialization: 'Financial Accounting & Audit', durationYears: 5, totalUnits: 172, cutoffPercentile: 94.5, status: 'Active' },
-  { id: 'crs-4', universityId: 'uni-up-dil', universityCode: 'UP-DIL', collegeName: 'College of Science', programCode: 'BSMBB', programName: 'Bachelor of Science in Molecular Biology and Biotechnology', degreeType: 'Bachelor of Science', majorSpecialization: 'Genomics & Molecular Medicine', durationYears: 4, totalUnits: 146, cutoffPercentile: 92.0, status: 'Active' },
-
-  // UST Manila
-  { id: 'crs-5', universityId: 'uni-ust-mnl', universityCode: 'UST-MNL', collegeName: 'College of Nursing', programCode: 'BSN', programName: 'Bachelor of Science in Nursing', degreeType: 'Bachelor of Science', majorSpecialization: 'Clinical Health Sciences', durationYears: 4, totalUnits: 168, cutoffPercentile: 86.0, status: 'Active' },
-  { id: 'crs-6', universityId: 'uni-ust-mnl', universityCode: 'UST-MNL', collegeName: 'Faculty of Engineering', programCode: 'BSECE', programName: 'Bachelor of Science in Electronics Engineering', degreeType: 'Bachelor of Science', majorSpecialization: 'Telecommunications & Embedded Systems', durationYears: 4, totalUnits: 160, cutoffPercentile: 83.5, status: 'Active' },
-  { id: 'crs-7', universityId: 'uni-ust-mnl', universityCode: 'UST-MNL', collegeName: 'College of Architecture', programCode: 'BSArch', programName: 'Bachelor of Science in Architecture', degreeType: 'Bachelor of Science', majorSpecialization: 'Urban Design & Heritage Architecture', durationYears: 5, totalUnits: 185, cutoffPercentile: 85.0, status: 'Active' },
-
-  // DLSU Manila
-  { id: 'crs-8', universityId: 'uni-dlsu-mnl', universityCode: 'DLSU-MNL', collegeName: 'College of Computer Studies', programCode: 'BSCS-ST', programName: 'Bachelor of Science in Computer Science - Software Technology', degreeType: 'Bachelor of Science', majorSpecialization: 'Software Technology', durationYears: 4, totalUnits: 152, cutoffPercentile: 87.0, status: 'Active' },
-  { id: 'crs-9', universityId: 'uni-dlsu-mnl', universityCode: 'DLSU-MNL', collegeName: 'Ramon V. del Rosario College of Business', programCode: 'BSA', programName: 'Bachelor of Science in Accountancy', degreeType: 'Bachelor of Science', majorSpecialization: 'Corporate Governance & Auditing', durationYears: 4, totalUnits: 165, cutoffPercentile: 89.0, status: 'Active' },
-
-  // ADMU Quezon City
-  { id: 'crs-10', universityId: 'uni-admu-qzn', universityCode: 'ADMU-QZN', collegeName: 'School of Science and Engineering', programCode: 'BS MIS', programName: 'Bachelor of Science in Management Information Systems', degreeType: 'Bachelor of Science', majorSpecialization: 'Enterprise Systems & Data Science', durationYears: 4, totalUnits: 150, cutoffPercentile: 88.0, status: 'Active' },
-  { id: 'crs-11', universityId: 'uni-admu-qzn', universityCode: 'ADMU-QZN', collegeName: 'John Gokongwei School of Management', programCode: 'BS LM', programName: 'Bachelor of Science in Legal Management', degreeType: 'Bachelor of Science', majorSpecialization: 'Corporate Law & Business Management', durationYears: 4, totalUnits: 154, cutoffPercentile: 87.5, status: 'Active' },
-
-  // PUP Manila
-  { id: 'crs-12', universityId: 'uni-pup-sta', universityCode: 'PUP-STA', collegeName: 'College of Accountancy and Finance', programCode: 'BSA', programName: 'Bachelor of Science in Accountancy', degreeType: 'Bachelor of Science', majorSpecialization: 'Public Accounting', durationYears: 4, totalUnits: 162, cutoffPercentile: 85.0, status: 'Active' },
-  { id: 'crs-13', universityId: 'uni-pup-sta', universityCode: 'PUP-STA', collegeName: 'College of Computer and Information Sciences', programCode: 'BSIT', programName: 'Bachelor of Science in Information Technology', degreeType: 'Bachelor of Science', majorSpecialization: 'Network Administration & Web Engineering', durationYears: 4, totalUnits: 144, cutoffPercentile: 82.0, status: 'Active' },
-
-  // CLSU
-  { id: 'crs-14', universityId: 'uni-clsu-mun', universityCode: 'CLSU-MUN', collegeName: 'College of Agriculture', programCode: 'BS Ag', programName: 'Bachelor of Science in Agriculture', degreeType: 'Bachelor of Science', majorSpecialization: 'Agronomy & Precision Farming', durationYears: 4, totalUnits: 142, cutoffPercentile: 80.0, status: 'Active' },
-
-  // USC Cebu
-  { id: 'crs-15', universityId: 'uni-usc-ceb', universityCode: 'USC-CEB', collegeName: 'School of Arts and Sciences', programCode: 'BSCS', programName: 'Bachelor of Science in Computer Science', degreeType: 'Bachelor of Science', majorSpecialization: 'Cybersecurity & Cloud Computing', durationYears: 4, totalUnits: 148, cutoffPercentile: 84.0, status: 'Active' },
-
-  // MSU-IIT
-  { id: 'crs-16', universityId: 'uni-msu-iit', universityCode: 'MSU-IIT', collegeName: 'College of Engineering and Technology', programCode: 'BSME', programName: 'Bachelor of Science in Mechanical Engineering', degreeType: 'Bachelor of Science', majorSpecialization: 'Mechatronics & Energy Systems', durationYears: 4, totalUnits: 158, cutoffPercentile: 83.0, status: 'Active' }
-];
-
 export default function UniversitiesListMaintenance() {
-  const [universities, setUniversities] = useState<UniversityItem[]>(() => {
-    const saved = localStorage.getItem('philsa_maintenance_universities_list');
-    return saved ? JSON.parse(saved) : INITIAL_UNIVERSITIES;
-  });
-
-  const [courses, setCourses] = useState<CollegeCourse[]>(() => {
-    const saved = localStorage.getItem('philsa_maintenance_college_courses');
-    return saved ? JSON.parse(saved) : INITIAL_COURSES;
-  });
+  const [universities, setUniversities] = useState<UniversityItem[]>([]);
+  const [courses, setCourses] = useState<CollegeCourse[]>([]);
 
   // Selected University State (drill-down into College Courses)
   const [selectedUniversity, setSelectedUniversity] = useState<UniversityItem | null>(null);
@@ -134,12 +82,10 @@ export default function UniversitiesListMaintenance() {
 
   const saveUniversities = (updated: UniversityItem[]) => {
     setUniversities(updated);
-    localStorage.setItem('philsa_maintenance_universities_list', JSON.stringify(updated));
   };
 
   const saveCourses = (updated: CollegeCourse[]) => {
     setCourses(updated);
-    localStorage.setItem('philsa_maintenance_college_courses', JSON.stringify(updated));
   };
 
   // Helper to count courses for each university
@@ -1124,4 +1070,3 @@ export default function UniversitiesListMaintenance() {
     </div>
   );
 }
-

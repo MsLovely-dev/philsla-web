@@ -10,51 +10,14 @@ const CATEGORIES = [
   'Supported IDs'
 ];
 
-const MOCK_DATA = [
-  // Registration requirements
-  { id: 'reg_1', category: 'Registration requirements', code: 'REG-001', name: 'School ID', applicantType: 'All', required: 'Yes', status: 'Active', description: 'Official high school or TVET ID' },
-  { id: 'reg_2', category: 'Registration requirements', code: 'REG-002', name: 'PWD ID', applicantType: 'PWD', required: 'Yes', status: 'Active', description: 'Government issued Persons with Disability ID' },
-  { id: 'reg_3', category: 'Registration requirements', code: 'REG-003', name: 'Medical Certificate', applicantType: 'PWD', required: 'Yes', status: 'Active', description: 'Certified medical certificate for accommodation' },
-
-  // PWD Types
-  { id: 'pwd_1', category: 'PWD Types', code: 'PWD-001', name: 'Visual Impairment', description: 'Blind / Low Vision', status: 'Active' },
-  { id: 'pwd_2', category: 'PWD Types', code: 'PWD-002', name: 'Hearing Impairment', description: 'Deaf / Hard of Hearing', status: 'Active' },
-  { id: 'pwd_3', category: 'PWD Types', code: 'PWD-003', name: 'Physical Disability', description: 'Mobility Impairment', status: 'Active' },
-  { id: 'pwd_4', category: 'PWD Types', code: 'PWD-004', name: 'Autism Spectrum Disorder', description: 'ASD', status: 'Active' },
-
-  // Verification
-  { id: 'ap_1', category: 'Verification', code: 'AP-001', name: 'Grade 12 Student', description: 'Regular SHS', status: 'Active' },
-  { id: 'ap_2', category: 'Verification', code: 'AP-002', name: 'ALS Graduate', description: 'Alternative Learning System', status: 'Active' },
-
-  // Supported IDs
-  { id: 'id_1', category: 'Supported IDs', code: 'ID-001', name: 'PWD ID', status: 'Active', description: 'Official PWD Identification Card' },
-  { id: 'id_2', category: 'Supported IDs', code: 'ID-002', name: 'School ID', status: 'Active', description: 'Valid School ID Card' }
-];
-
 export default function StudentRegistrationMaintenance() {
-  const [data, setData] = useState<any[]>(() => {
-    const saved = localStorage.getItem('philsa_registration_configs');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const hasCleanCategories = parsed.some((item: any) => CATEGORIES.includes(item.category));
-        if (hasCleanCategories) {
-          return parsed.filter((item: any) => item.category !== 'Application Status');
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    localStorage.setItem('philsa_registration_configs', JSON.stringify(MOCK_DATA));
-    return MOCK_DATA;
-  });
+  const [data, setData] = useState<any[]>([]);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('Registration requirements');
 
   const saveConfigs = (newData: any[]) => {
     setData(newData);
-    localStorage.setItem('philsa_registration_configs', JSON.stringify(newData));
   };
 
   const getColumnsForCategory = (category: string): MaintenanceColumn[] => {
@@ -284,5 +247,4 @@ export default function StudentRegistrationMaintenance() {
     />
   );
 }
-
 

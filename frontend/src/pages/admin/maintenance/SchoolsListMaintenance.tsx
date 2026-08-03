@@ -36,26 +36,8 @@ export interface SchoolItem {
   status: 'Active' | 'Inactive';
 }
 
-const INITIAL_SCHOOLS: SchoolItem[] = [
-  { id: 'sch-101', code: 'PSHS-MAIN', name: 'Philippine Science High School - Main Campus', classification: 'Public', schoolType: 'Science High School', region: 'NCR - National Capital Region', city: 'Quezon City', principalAdministrator: 'Dr. Lilia T. Habacon', email: 'main@pshs.edu.ph', phone: '0917-888-1001', capacity: 1200, status: 'Active' },
-  { id: 'sch-102', code: 'UPD-HS', name: 'University of the Philippines Integrated School', classification: 'Public', schoolType: 'Integrated School', region: 'NCR - National Capital Region', city: 'Quezon City', principalAdministrator: 'Prof. Lorna I. Paredes', email: 'upis.diliman@up.edu.ph', phone: '0918-777-2002', capacity: 1500, status: 'Active' },
-  { id: 'sch-103', code: 'ADMU-SHS', name: 'Ateneo de Manila Senior High School', classification: 'Private', schoolType: 'Senior High School', region: 'NCR - National Capital Region', city: 'Quezon City', principalAdministrator: 'Fr. Joaquin Jose Mari S. Sumpaico III, SJ', email: 'shs@ateneo.edu', phone: '0919-666-3003', capacity: 1800, status: 'Active' },
-  { id: 'sch-104', code: 'DLSU-IS', name: 'De La Salle University Senior High School', classification: 'Private', schoolType: 'Senior High School', region: 'NCR - National Capital Region', city: 'Manila', principalAdministrator: 'Br. Bernard S. Oca, FSC', email: 'shs@dlsu.edu.ph', phone: '0920-555-4004', capacity: 2000, status: 'Active' },
-  { id: 'sch-105', code: 'UST-SHS', name: 'University of Santo Tomas Senior High School', classification: 'Private', schoolType: 'Senior High School', region: 'NCR - National Capital Region', city: 'Manila', principalAdministrator: 'Prof. Mary Ann G. Barcarse', email: 'shs@ust.edu.ph', phone: '0921-444-5005', capacity: 2500, status: 'Active' },
-  { id: 'sch-106', code: 'MSHS-MNL', name: 'Manila Science High School', classification: 'Public', schoolType: 'Science High School', region: 'NCR - National Capital Region', city: 'Manila', principalAdministrator: 'Dr. Eva S. Nolasco', email: 'manilascience@deped.gov.ph', phone: '0922-333-6006', capacity: 1100, status: 'Active' },
-  { id: 'sch-107', code: 'PUP-LHS', name: 'Polytechnic University of the Philippines Laboratory High School', classification: 'Public', schoolType: 'Integrated School', region: 'NCR - National Capital Region', city: 'Manila', principalAdministrator: 'Prof. Corazon S. Macayana', email: 'puplhs@pup.edu.ph', phone: '0923-222-7007', capacity: 1300, status: 'Active' },
-  { id: 'sch-108', code: 'SBC-SHS', name: 'San Beda University Senior High School', classification: 'Private', schoolType: 'Senior High School', region: 'NCR - National Capital Region', city: 'Manila', principalAdministrator: 'Fr. Aloysius Ma. A. Maranan, OSB', email: 'shs@sanbeda.edu.ph', phone: '0924-111-8008', capacity: 1400, status: 'Active' },
-  { id: 'sch-109', code: 'CCNSHS-R7', name: 'Cebu City National Science High School', classification: 'Public', schoolType: 'Science High School', region: 'Region VII - Central Visayas', city: 'Cebu City', principalAdministrator: 'Dr. Rustico S. Garcia', email: 'cebuscience@deped.gov.ph', phone: '0917-123-4567', capacity: 950, status: 'Active' },
-  { id: 'sch-110', code: 'DCNSHS-R11', name: 'Davao City National High School', classification: 'Public', schoolType: 'Senior High School', region: 'Region XI - Davao Region', city: 'Davao City', principalAdministrator: 'Dr. Wenefredo E. Cagape', email: 'davaocity.nhs@deped.gov.ph', phone: '0918-234-5678', capacity: 2800, status: 'Active' },
-  { id: 'sch-111', code: 'MMSU-SHS', name: 'Mariano Marcos State University Laboratory SHS', classification: 'Public', schoolType: 'Senior High School', region: 'Region I - Ilocos Region', city: 'Laoag City', principalAdministrator: 'Dr. Shirley C. Agrupis', email: 'shs@mmsu.edu.ph', phone: '0919-345-6789', capacity: 850, status: 'Active' },
-  { id: 'sch-112', code: 'CLSU-SHS', name: 'Central Luzon State University Agricultural High School', classification: 'Public', schoolType: 'Senior High School', region: 'Region III - Central Luzon', city: 'Muñoz City', principalAdministrator: 'Dr. Edgar A. Orden', email: 'ahs@clsu.edu.ph', phone: '0920-456-7890', capacity: 1200, status: 'Active' }
-];
-
 export default function SchoolsListMaintenance() {
-  const [schools, setSchools] = useState<SchoolItem[]>(() => {
-    const saved = localStorage.getItem('philsa_maintenance_schools_list');
-    return saved ? JSON.parse(saved) : INITIAL_SCHOOLS;
-  });
+  const [schools, setSchools] = useState<SchoolItem[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<'ALL' | 'Public' | 'Private'>('ALL');
@@ -82,7 +64,6 @@ export default function SchoolsListMaintenance() {
 
   const saveSchools = (updated: SchoolItem[]) => {
     setSchools(updated);
-    localStorage.setItem('philsa_maintenance_schools_list', JSON.stringify(updated));
   };
 
   const uniqueRegions = useMemo(() => {
@@ -590,5 +571,4 @@ export default function SchoolsListMaintenance() {
     </div>
   );
 }
-
 
