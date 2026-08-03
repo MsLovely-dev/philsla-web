@@ -27,11 +27,9 @@ describe('APP_ROUTES', () => {
 
   it('registers the updated Maintenance Center modules with their intended roles', () => {
     const expectedRoles = new Map([
-      ['/admin/maintenance/review-student-application', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
+      ['/admin/maintenance/schools', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
+      ['/admin/maintenance/universities', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
       ['/admin/maintenance/exam-blueprint', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
-      ['/admin/maintenance/question-bank-management', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR']],
-      ['/admin/maintenance/exam-review', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR']],
-      ['/admin/maintenance/exam-results', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
     ]);
 
     for (const [path, roles] of expectedRoles) {

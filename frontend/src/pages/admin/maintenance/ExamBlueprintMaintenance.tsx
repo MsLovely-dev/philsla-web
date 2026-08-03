@@ -8,13 +8,63 @@ const CATEGORIES = [
   'Topics'
 ];
 
+const MOCK_DATA = [
+  // Subject Areas
+  { id: 'sub_1', category: 'Subject Areas', code: 'SUB-001', subject: 'Mathematics', status: 'Active' },
+  { id: 'sub_2', category: 'Subject Areas', code: 'SUB-002', subject: 'English', status: 'Active' },
+  { id: 'sub_3', category: 'Subject Areas', code: 'SUB-003', subject: 'Science', status: 'Active' },
+  { id: 'sub_4', category: 'Subject Areas', code: 'SUB-004', subject: 'Filipino', status: 'Active' },
+
+  // Difficulty Level
+  { id: 'dif_1', category: 'Difficulty Level', code: 'DIF-001', level: 'Easy', status: 'Active' },
+  { id: 'dif_2', category: 'Difficulty Level', code: 'DIF-002', level: 'Medium', status: 'Active' },
+  { id: 'dif_3', category: 'Difficulty Level', code: 'DIF-003', level: 'Hard', status: 'Active' },
+
+  // Question Type
+  { id: 'qt_1', category: 'Question Type', code: 'QT-001', questionType: 'Multiple Choice', autoScored: 'Yes', status: 'Active' },
+  { id: 'qt_2', category: 'Question Type', code: 'QT-002', questionType: 'True/False', autoScored: 'Yes', status: 'Active' },
+  { id: 'qt_3', category: 'Question Type', code: 'QT-003', questionType: 'Essay', autoScored: 'No', status: 'Active' },
+
+  // Topics
+  { id: 'top_1', category: 'Topics', topicCode: 'TOP-001', subject: 'Mathematics', topic: 'General Mathematics', gradeLevel: 'Grade 11–12', status: 'Active' },
+  { id: 'top_2', category: 'Topics', topicCode: 'TOP-002', subject: 'Mathematics', topic: 'Statistics and Probability', gradeLevel: 'Grade 11–12', status: 'Active' },
+  { id: 'top_3', category: 'Topics', topicCode: 'TOP-003', subject: 'Mathematics', topic: 'Pre-Calculus', gradeLevel: 'Grade 11', status: 'Active' },
+  { id: 'top_4', category: 'Topics', topicCode: 'TOP-004', subject: 'Mathematics', topic: 'Basic Calculus', gradeLevel: 'Grade 12 (STEM)', status: 'Active' },
+  { id: 'top_5', category: 'Topics', topicCode: 'TOP-005', subject: 'English', topic: 'Reading and Writing Skills', gradeLevel: 'Grade 11', status: 'Active' },
+  { id: 'top_6', category: 'Topics', topicCode: 'TOP-006', subject: 'English', topic: 'Oral Communication', gradeLevel: 'Grade 11', status: 'Active' },
+  { id: 'top_7', category: 'Topics', topicCode: 'TOP-007', subject: 'English', topic: '21st Century Literature', gradeLevel: 'Grade 11', status: 'Active' },
+  { id: 'top_8', category: 'Topics', topicCode: 'TOP-008', subject: 'Science', topic: 'Earth and Life Science', gradeLevel: 'Grade 11', status: 'Active' },
+  { id: 'top_9', category: 'Topics', topicCode: 'TOP-009', subject: 'Science', topic: 'Physical Science', gradeLevel: 'Grade 11', status: 'Active' },
+  { id: 'top_10', category: 'Topics', topicCode: 'TOP-010', subject: 'Science', topic: 'General Biology 1 & 2', gradeLevel: 'Grade 11–12 (STEM)', status: 'Active' },
+  { id: 'top_11', category: 'Topics', topicCode: 'TOP-011', subject: 'Science', topic: 'General Chemistry 1 & 2', gradeLevel: 'Grade 11–12 (STEM)', status: 'Active' },
+  { id: 'top_12', category: 'Topics', topicCode: 'TOP-012', subject: 'Science', topic: 'General Physics 1 & 2', gradeLevel: 'Grade 12 (STEM)', status: 'Active' },
+  { id: 'top_13', category: 'Topics', topicCode: 'TOP-013', subject: 'Abstract Reasoning', topic: 'Pattern Recognition', gradeLevel: 'CET Standard', status: 'Active' },
+  { id: 'top_14', category: 'Topics', topicCode: 'TOP-014', subject: 'Abstract Reasoning', topic: 'Logical Reasoning', gradeLevel: 'CET Standard', status: 'Active' },
+  { id: 'top_15', category: 'Topics', topicCode: 'TOP-015', subject: 'Abstract Reasoning', topic: 'Spatial Reasoning', gradeLevel: 'CET Standard', status: 'Active' },
+];
+
 export default function ExamBlueprintMaintenance() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<any[]>(() => {
+    const saved = localStorage.getItem('philsa_exam_blueprint_configs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    localStorage.setItem('philsa_exam_blueprint_configs', JSON.stringify(MOCK_DATA));
+    return MOCK_DATA;
+  });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('Subject Areas');
 
   const saveConfigs = (newData: any[]) => {
     setData(newData);
+    localStorage.setItem('philsa_exam_blueprint_configs', JSON.stringify(newData));
   };
 
   const getColumnsForCategory = (category: string): MaintenanceColumn[] => {
@@ -208,3 +258,5 @@ export default function ExamBlueprintMaintenance() {
     />
   );
 }
+
+

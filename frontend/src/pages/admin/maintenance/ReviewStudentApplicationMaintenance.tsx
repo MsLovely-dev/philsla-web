@@ -1,24 +1,46 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField } from '../../../components/maintenance/MaintenancePageTemplate';
-
-const LEGACY_STORAGE_KEY = 'philsa_review_student_app_configs';
 
 const CATEGORIES = [
   'Application Status',
   'Rejection Reasons'
 ];
 
-export default function ReviewStudentApplicationMaintenance() {
-  const [data, setData] = useState<any[]>([]);
+const MOCK_DATA = [
+  // Application Status
+  { id: 'app_st_1', category: 'Application Status', code: 'APP-002', name: 'Pending', status: 'Active' },
+  { id: 'app_st_2', category: 'Application Status', code: 'APP-004', name: 'Approved', status: 'Active' },
+  { id: 'app_st_3', category: 'Application Status', code: 'APP-005', name: 'Rejected', status: 'Active' },
 
-  useEffect(() => {
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-  }, []);
+  // Rejection Reasons
+  { id: 'rr_1', category: 'Rejection Reasons', code: 'RR-001', reason: 'Invalid LRN', reasonCategory: 'Identity', status: 'Active' },
+  { id: 'rr_2', category: 'Rejection Reasons', code: 'RR-002', reason: 'Duplicate Registration', reasonCategory: 'Duplicate', status: 'Active' },
+  { id: 'rr_3', category: 'Rejection Reasons', code: 'RR-003', reason: 'Incomplete Documents', reasonCategory: 'Documentation', status: 'Active' },
+  { id: 'rr_4', category: 'Rejection Reasons', code: 'RR-004', reason: 'Applicant Not Eligible', reasonCategory: 'Eligibility', status: 'Active' },
+];
+
+export default function ReviewStudentApplicationMaintenance() {
+  const [data, setData] = useState<any[]>(() => {
+    const saved = localStorage.getItem('philsa_review_student_app_configs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    localStorage.setItem('philsa_review_student_app_configs', JSON.stringify(MOCK_DATA));
+    return MOCK_DATA;
+  });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('Application Status');
 
   const saveConfigs = (newData: any[]) => {
     setData(newData);
+    localStorage.setItem('philsa_review_student_app_configs', JSON.stringify(newData));
   };
 
   const getColumnsForCategory = (category: string): MaintenanceColumn[] => {
@@ -146,3 +168,5 @@ export default function ReviewStudentApplicationMaintenance() {
     />
   );
 }
+
+

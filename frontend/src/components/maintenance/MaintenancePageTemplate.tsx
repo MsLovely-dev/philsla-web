@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import {
-  Search,
-  Filter,
-  Plus,
-  MoreVertical,
-  Edit2,
-  Trash2,
-  Eye,
-  CheckCircle2,
-  Clock,
+import { 
+  Search, 
+  Filter, 
+  Plus, 
+  MoreVertical, 
+  Edit2, 
+  Trash2, 
+  Eye, 
+  CheckCircle2, 
+  Clock, 
   AlertCircle,
   ChevronLeft,
   ChevronRight,
@@ -130,8 +130,8 @@ export default function MaintenancePageTemplate({
     setIsModalOpen(false);
   };
 
-  const filteredData = data.filter(row =>
-    Object.values(row).some(val =>
+  const filteredData = data.filter(row => 
+    Object.values(row).some(val => 
       String(val).toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
@@ -147,14 +147,14 @@ export default function MaintenancePageTemplate({
         <div className="flex gap-3">
           {extraHeaderActions}
           {bulkUpload && (
-            <button
+            <button 
               onClick={() => setIsBulkUploadOpen(true)}
               className="btn-secondary py-2.5 px-6 text-sm flex items-center gap-2"
             >
               <Upload className="w-4 h-4" /> Bulk Import
             </button>
           )}
-          <button
+          <button 
             onClick={handleOpenCreate}
             className="bg-philsa-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-philsa-navy/10 hover:bg-philsa-navy/90 transition-all flex items-center gap-2"
           >
@@ -171,9 +171,9 @@ export default function MaintenancePageTemplate({
           <div className="bg-white border border-philsa-border rounded-3xl p-6 flex flex-wrap gap-4 items-center justify-between shadow-sm">
         <div className="relative flex-1 min-w-[300px]">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray" />
-          <input
-            type="text"
-            placeholder="Search records..."
+          <input 
+            type="text" 
+            placeholder="Search records..." 
             className="w-full bg-philsa-bg border-none rounded-2xl pl-14 pr-6 py-3.5 text-sm font-bold text-philsa-navy shadow-inner outline-none focus:ring-2 focus:ring-philsa-navy/5 transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -214,45 +214,33 @@ export default function MaintenancePageTemplate({
                     </td>
                   ))}
                   <td className="px-8 py-6">
-                    {row.updatedBy || row.updatedAt ? (
-                      <div className="flex flex-col gap-1">
-                        {row.updatedBy && (
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
-                            <Users className="w-3 h-3" /> {row.updatedBy}
-                          </div>
-                        )}
-                        {row.updatedAt && (
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
-                            <Clock className="w-3 h-3" /> {row.updatedAt}
-                          </div>
-                        )}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
+                        <Users className="w-3 h-3" /> {row.updatedBy || 'admin_user'}
                       </div>
-                    ) : (
-                      <span className="text-sm font-bold text-philsa-gray/50">—</span>
-                    )}
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
+                        <Clock className="w-3 h-3" /> {row.updatedAt || '2026-05-14 08:30'}
+                      </div>
+                    </div>
                   </td>
                   <td className="px-8 py-6">
-                    {row.approvalStatus ? (
-                      <StatusBadge status={row.approvalStatus} isApproval />
-                    ) : (
-                      <span className="text-sm font-bold text-philsa-gray/50">—</span>
-                    )}
+                     <StatusBadge status={row.approvalStatus || 'Approved'} isApproval />
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-1">
-                      <button
+                      <button 
                         onClick={() => onView?.(row)}
                         className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button
+                      <button 
                         onClick={() => handleOpenEdit(row)}
                         className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button
+                      <button 
                         onClick={() => onDelete?.(row)}
                         className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
                       >
@@ -312,7 +300,7 @@ export default function MaintenancePageTemplate({
       <AnimatePresence>
         {isModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div
+            <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -332,7 +320,7 @@ export default function MaintenancePageTemplate({
                     {editingRow ? 'Edit Record' : 'Create New Entry'}
                   </h2>
                 </div>
-                <button
+                <button 
                   onClick={() => setIsModalOpen(false)}
                   className="p-2.5 bg-philsa-bg rounded-xl text-philsa-gray hover:text-philsa-navy transition-all"
                 >
@@ -348,9 +336,9 @@ export default function MaintenancePageTemplate({
                         <label className="text-[11px] font-extrabold text-philsa-navy uppercase tracking-wider flex items-center gap-1">
                           {field.label} {field.required && <span className="text-philsa-red">*</span>}
                         </label>
-
+                        
                         {field.type === 'text' || field.type === 'number' ? (
-                          <input
+                          <input 
                             type={field.type}
                             placeholder={field.placeholder}
                             disabled={field.disabled}
@@ -370,7 +358,7 @@ export default function MaintenancePageTemplate({
                           />
                         ) : field.type === 'select' ? (
                           <div className="relative">
-                            <select
+                            <select 
                               disabled={field.disabled}
                               className={cn(
                                 "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all appearance-none pr-10 disabled:opacity-65 disabled:bg-gray-100/80 disabled:cursor-not-allowed",
@@ -398,7 +386,7 @@ export default function MaintenancePageTemplate({
                             </div>
                           </div>
                         ) : field.type === 'textarea' ? (
-                          <textarea
+                          <textarea 
                             rows={2}
                             placeholder={field.placeholder}
                             className={cn(
@@ -410,7 +398,7 @@ export default function MaintenancePageTemplate({
                           />
                         ) : field.type === 'toggle' ? (
                           <div className="flex items-center gap-3 py-1 animate-fadeIn">
-                             <button
+                             <button 
                                type="button"
                                onClick={() => setFormData({ ...formData, [field.name]: !formData[field.name] })}
                                className={cn("w-10 h-5.5 rounded-full transition-all relative outline-none", formData[field.name] ? "bg-green-500" : "bg-slate-200")}
@@ -420,7 +408,7 @@ export default function MaintenancePageTemplate({
                              <span className="text-xs font-bold text-philsa-navy">{formData[field.name] ? 'Active' : 'Inactive'}</span>
                           </div>
                         ) : null}
-
+                        
                         {formErrors[field.name] && (
                           <p className="text-[10px] font-extrabold text-philsa-red">{formErrors[field.name]}</p>
                         )}
@@ -442,14 +430,14 @@ export default function MaintenancePageTemplate({
                 </div>
 
                 <div className="p-4 bg-slate-50 border-t border-philsa-border/60 flex gap-3 justify-end items-center">
-                  <button
+                  <button 
                     type="button"
                     onClick={() => setIsModalOpen(false)}
                     className="px-5 py-2.5 bg-white border border-philsa-border rounded-xl text-xs font-bold text-philsa-navy hover:bg-slate-100 transition-all uppercase tracking-wider"
                   >
                     Cancel
                   </button>
-                  <button
+                  <button 
                     type="submit"
                     className="px-5 py-2.5 bg-philsa-navy text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-philsa-navy/10 hover:bg-slate-900 transition-all"
                   >
@@ -466,7 +454,7 @@ export default function MaintenancePageTemplate({
       <AnimatePresence>
         {isBulkUploadOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
-            <motion.div
+            <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -514,7 +502,7 @@ export default function MaintenancePageTemplate({
                 </div>
 
                 <div className="pt-4">
-                   <button
+                   <button 
                      disabled
                      className="w-full py-4 bg-philsa-navy text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-philsa-navy/20 disabled:opacity-50"
                    >
@@ -552,3 +540,5 @@ function StatusBadge({ status, isApproval }: { status: string; isApproval?: bool
     </span>
   );
 }
+
+

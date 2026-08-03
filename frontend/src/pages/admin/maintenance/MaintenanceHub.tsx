@@ -6,9 +6,12 @@ import {
   HelpCircle,
   CheckSquare,
   Award,
-  ShieldAlert,
+  Settings,
   ChevronRight,
-  CheckCircle2
+  CheckCircle2,
+  ShieldAlert,
+  School,
+  GraduationCap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -26,12 +29,21 @@ const MAINTENANCE_MODULES = [
     allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
   },
   {
-    id: 'review-student-application',
-    title: 'Review Student Application',
-    description: 'Configure evaluation status codes and standardized rejection reasons.',
-    icon: ClipboardCheck,
-    href: '/admin/maintenance/review-student-application',
-    stats: '2 Lookup Tables',
+    id: 'schools',
+    title: 'List of Schools',
+    description: 'Directory and management of accredited secondary schools and examination testing venue partners.',
+    icon: School,
+    href: '/admin/maintenance/schools',
+    stats: 'Nationwide Directory',
+    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
+  },
+  {
+    id: 'universities',
+    title: 'List of Universities',
+    description: 'Registry of Higher Education Institutions (HEIs) and their offered College Courses & Degree Programs.',
+    icon: GraduationCap,
+    href: '/admin/maintenance/universities',
+    stats: 'Interactive Courses',
     allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
   },
   {
@@ -41,33 +53,6 @@ const MAINTENANCE_MODULES = [
     icon: FileText,
     href: '/admin/maintenance/exam-blueprint',
     stats: '4 Lookup Tables',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
-  },
-  {
-    id: 'question-bank-management',
-    title: 'Question Bank Management',
-    description: 'Lookup tables for question authoring, review, and set approval status codes.',
-    icon: HelpCircle,
-    href: '/admin/maintenance/question-bank-management',
-    stats: '1 Lookup Table',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR']
-  },
-  {
-    id: 'exam-review',
-    title: 'Exam Review',
-    description: 'Configure examination review and evaluation status codes.',
-    icon: CheckSquare,
-    href: '/admin/maintenance/exam-review',
-    stats: '1 Lookup Table',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR']
-  },
-  {
-    id: 'exam-results',
-    title: 'Exam Results',
-    description: 'Configure examination result classification lookup codes.',
-    icon: Award,
-    href: '/admin/maintenance/exam-results',
-    stats: '1 Lookup Table',
     allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
   }
 ];
@@ -173,3 +158,5 @@ export default function MaintenanceHub() {
     </div>
   );
 }
+
+
