@@ -9,7 +9,7 @@ vi.mock('./services', () => ({
   createPrototypeAuthService: () => authService,
 }));
 
-import { PhilSAProvider, usePhilSA } from './PhilSAContext';
+import { INITIAL_MAINTENANCE_MODULES, PhilSAProvider, usePhilSA } from './PhilSAContext';
 
 function AuthStateProbe() {
   const { isAuthInitialized, isLoading } = usePhilSA();
@@ -30,5 +30,22 @@ describe('PhilSAProvider authentication bootstrap', () => {
 
     expect(screen.getByText('false:false')).toBeInTheDocument();
     expect(authService.getCurrentSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('Maintenance Center catalog', () => {
+  it('contains the six modules from the updated Maintenance Center', () => {
+    const maintenancePaths = INITIAL_MAINTENANCE_MODULES
+      .filter((module) => module.category === 'Maintenance & Protocols' && module.path !== '/admin/maintenance')
+      .map((module) => module.path);
+
+    expect(maintenancePaths).toEqual([
+      '/admin/maintenance/registration',
+      '/admin/maintenance/review-student-application',
+      '/admin/maintenance/exam-blueprint',
+      '/admin/maintenance/question-bank-management',
+      '/admin/maintenance/exam-review',
+      '/admin/maintenance/exam-results',
+    ]);
   });
 });

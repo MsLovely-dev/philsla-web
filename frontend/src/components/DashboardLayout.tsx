@@ -181,15 +181,11 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
         href: '/admin/maintenance',
         subItems: [
           { label: 'Student Registration', href: '/admin/maintenance/registration', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Application Status', href: '/admin/maintenance/application-status', roles: ['SYSTEM_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Testing Centers', href: '/admin/maintenance/testing-center', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Batch Config', href: '/admin/maintenance/batch', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Device Validation', href: '/admin/maintenance/device', roles: ['SYSTEM_ADMIN', 'PROCTOR', 'PROCTOR_ADMIN'] },
-          { label: 'Attendance Rules', href: '/admin/maintenance/attendance', roles: ['SYSTEM_ADMIN', 'PROCTOR', 'PROCTOR_ADMIN'] },
-          { label: 'Exam Integrity', href: '/admin/maintenance/integrity', roles: ['SYSTEM_ADMIN', 'PROCTOR', 'PROCTOR_ADMIN'] },
-          { label: 'Question Config', href: '/admin/maintenance/question-bank', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR'] },
-          { label: 'Proctor Roles', href: '/admin/maintenance/proctor', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
-          { label: 'Degree Programs', href: '/admin/maintenance/degree-programs', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
+          { label: 'Review Student Application', href: '/admin/maintenance/review-student-application', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'Exam Blueprint', href: '/admin/maintenance/exam-blueprint', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'Question Bank Management', href: '/admin/maintenance/question-bank-management', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR'] },
+          { label: 'Exam Review', href: '/admin/maintenance/exam-review', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR'] },
+          { label: 'Exam Results', href: '/admin/maintenance/exam-results', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
         ]
       },
     ]
