@@ -2,7 +2,13 @@
 
 ## Status
 
-There is no implemented database schema. PostgreSQL-compatible storage is the accepted application database engine in [ADR-006](../decisions/ADR-006-DATABASE-ENGINE-AND-LOCAL-DEVELOPMENT.md), Supabase Postgres is the accepted database provider in [ADR-007](../decisions/ADR-007-SUPABASE-POSTGRES-DATABASE-PROVIDER.md), and private S3-compatible object storage is the accepted file/evidence storage approach in [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md). Django production settings read the database connection from `DATABASE_URL` without committed credentials. Ownership model, schemas, and persistence boundaries remain `TBD`.
+Django migrations now implement initial account, student-application, configurable-field, and university-registry slices. This is not a complete platform schema. PostgreSQL-compatible storage is the accepted application database engine in [ADR-006](../decisions/ADR-006-DATABASE-ENGINE-AND-LOCAL-DEVELOPMENT.md), Supabase Postgres is the accepted database provider in [ADR-007](../decisions/ADR-007-SUPABASE-POSTGRES-DATABASE-PROVIDER.md), and private S3-compatible object storage is the accepted file/evidence storage approach in [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md). Django production settings read the database connection from `DATABASE_URL` without committed credentials. The complete ownership model, remaining schemas, and persistence boundaries remain `TBD`.
+
+## Implemented university registry slice
+
+The `configuration` capability owns `University` and `CollegeCourse`. Both use opaque UUID primary keys, mutable-record timestamps, creator references, status choices, and integer versions for optimistic API concurrency. A university owns zero or more college courses through `CollegeCourse.university`; deleting the university cascades to those child rows. University code is globally unique, and program code is unique within a university. The migration, index definitions, constraints, and reversible table creation are in `backend/apps/configuration/migrations/0007_university_collegecourse_and_more.py`. No production seed data is included.
+
+The current `UNIVERSITY_ADMIN` object boundary uses server-owned `AccountProfile.scopes.universityIds` UUID values for writes. The broader tenant/institution assignment workflow and provisioning UI remain `TBD`.
 
 ## Candidate domain data
 

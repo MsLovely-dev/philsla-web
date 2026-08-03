@@ -2,7 +2,7 @@
 
 ## Current state
 
-The baseline health and authentication boundaries plus the first student-application slice are implemented. The frontend currently uses mock/local services. Unimplemented business paths below remain a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
+The baseline health and authentication boundaries, the first student-application slice, and university registry maintenance are implemented. Most frontend modules still use mock/local services; the universities maintenance page uses the backend university registry adapter. Unimplemented business paths below remain a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
 
 ## Implemented baseline endpoints
 
@@ -44,8 +44,54 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/applications/registration/identity/manual-selfie-face/` | Public; device/network throttled | `AllowAny` | Validate a manual-registration captured selfie server-side without storing media | Implemented |
 | `GET`, `POST` | `/api/v1/configuration/admin/fields/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List or create configurable field maintenance rows; supports `?module=...` filtering | Implemented |
 | `PUT`, `PATCH`, `DELETE` | `/api/v1/configuration/admin/fields/{fieldId}/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | Update or delete a configurable field maintenance row | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/` | Required bearer access token | Module 38 `READ` for an allowed registry role | Return a paginated, filterable university registry with course counts | Implemented |
+| `POST` | `/api/v1/configuration/admin/universities/` | Required bearer access token | Module 38 `WRITE`; assigned `UNIVERSITY_ADMIN` accounts cannot create institutions | Create a university registry record | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/{universityId}/` | Required bearer access token | Module 38 `READ` for an allowed registry role | Read one university registry record | Implemented |
+| `PUT`, `PATCH` | `/api/v1/configuration/admin/universities/{universityId}/` | Required bearer access token | Module 38 `EDIT`; university scope enforced for `UNIVERSITY_ADMIN` | Update a university using optimistic concurrency | Implemented |
+| `DELETE` | `/api/v1/configuration/admin/universities/{universityId}/` | Required bearer access token | Module 38 `DELETE`; university scope enforced for `UNIVERSITY_ADMIN` | Delete a university and cascade-delete its college courses | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/{universityId}/courses/` | Required bearer access token | Module 38 `READ` for an allowed registry role | Return the university's paginated, filterable college courses | Implemented |
+| `POST` | `/api/v1/configuration/admin/universities/{universityId}/courses/` | Required bearer access token | Module 38 `WRITE`; university scope enforced for `UNIVERSITY_ADMIN` | Create a college course under the path university | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/` | Required bearer access token | Module 38 `READ` for an allowed registry role | Read one college course under the path university | Implemented |
+| `PUT`, `PATCH` | `/api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/` | Required bearer access token | Module 38 `EDIT`; university scope enforced for `UNIVERSITY_ADMIN` | Update a college course using optimistic concurrency | Implemented |
+| `DELETE` | `/api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/` | Required bearer access token | Module 38 `DELETE`; university scope enforced for `UNIVERSITY_ADMIN` | Delete one college course | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
+
+### `GET /api/v1/configuration/admin/universities/`
+
+Returns the standard DRF page-number shape. It accepts `page`, `pageSize` (maximum 100), optional `search` across code/name/city, exact `classification`, `region`, and `status` filters, and `ordering` values `code`, `name`, `region`, `city`, `createdAt`, or `-createdAt`. Default ordering is stable by `name`, then opaque `id`.
+
+Each result contains `{id, code, name, classification, region, city, presidentRector, email, phone, establishedYear, status, courseCount, version, createdAt, updatedAt}`. Identifiers are opaque UUID strings. This endpoint returns institutional directory data only; it does not return student, applicant, account, or assessment data.
+
+### `POST /api/v1/configuration/admin/universities/`
+
+Creates a university from `{code, name, classification, region, city, presidentRector, email, phone, establishedYear, status}`. The backend trims text, uppercases `code`, validates email and choice values, rejects future establishment years, and enforces a unique code. The successful response is the persisted university with `201 Created` and `version: 1`.
+
+### `GET /api/v1/configuration/admin/universities/{universityId}/`
+
+Returns one university in the same shape as a collection result, including the current `courseCount` and `version`. An unknown opaque identifier returns `404 NOT_FOUND`.
+
+`PUT` sends the complete create fields plus `expectedVersion`; `PATCH` sends changed fields plus `expectedVersion`. A stale version returns `409 CONFLICT` without overwriting newer data, and a successful update increments `version`. `DELETE` supplies the last observed version as `?version={version}` and returns `204 No Content`; deletion cascades to the university's college courses inside the same database transaction.
+
+### `GET /api/v1/configuration/admin/universities/{universityId}/courses/`
+
+Returns the standard paginated shape for the path university. It accepts optional `search` across program code/name/college, exact `collegeName` and `status` filters, and `ordering` values `programCode`, `programName`, `collegeName`, `createdAt`, or `-createdAt`. Default ordering is stable by `programCode`, then opaque `id`.
+
+Each result contains `{id, universityId, universityCode, collegeName, programCode, programName, degreeType, majorSpecialization, durationYears, totalUnits, cutoffPercentile, status, version, createdAt, updatedAt}`.
+
+### `POST /api/v1/configuration/admin/universities/{universityId}/courses/`
+
+Creates a course from `{collegeName, programCode, programName, degreeType, majorSpecialization, durationYears, totalUnits, cutoffPercentile, status}`. The path supplies the authoritative university; a client cannot move a course by submitting another university identifier. Program code is uppercased and must be unique within the university. Duration is 1–6 years, total units is 1–500, and cutoff percentile is 0–100. The successful response has `201 Created` and `version: 1`.
+
+### `GET /api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/`
+
+Returns one course only when it belongs to the path university. `PUT` and `PATCH` require `expectedVersion` and increment the version on success. `DELETE` requires `?version={version}` and returns `204 No Content`. A stale version returns `409 CONFLICT`.
+
+All university registry endpoints require an authenticated `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` account and the corresponding structured `MOD_38_{ACTION}` permission. `UNIVERSITY_ADMIN` writes are additionally limited to UUIDs in the server-owned `scopes.universityIds` list and cannot create a university. The default role catalog grants `DELETE` only to `SYSTEM_ADMIN`; account-specific permission differences remain authoritative. Mutation events are written to the safe configuration audit logger without request/response bodies or institutional contact values. Create operations do not accept an idempotency key; unique university and per-university program codes prevent duplicate logical records. Updates and deletes use the version controls described above. No endpoint-specific throttle is configured beyond authenticated API and deployment controls; a production maintenance-write rate remains `TBD`.
+
+The data migration is `backend/apps/configuration/migrations/0007_university_collegecourse_and_more.py`. Forward migration creates both empty registry tables and their indexes/constraints. Rolling back to `configuration.0006` drops both tables and all registry data, so export or database backup is required before rollback in an environment containing records.
+
+Test coverage: `backend/apps/configuration/tests/test_university_registry_endpoints.py`. Frontend adapter and page behavior coverage: `frontend/src/services/backendUniversityService.test.ts` and `frontend/src/pages/admin/maintenance/UniversitiesListMaintenance.test.tsx`.
 
 ### Student application draft and submission
 

@@ -145,6 +145,41 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/applications/tests/test_registration_email_otp.py",
         "route_namespace": "applications",
     },
+    {
+        "method": "GET",
+        "path": "/api/v1/configuration/admin/universities/",
+        "response": None,
+        "doc_heading": "### `GET /api/v1/configuration/admin/universities/`",
+        "doc_test_reference": "backend/apps/configuration/tests/test_university_registry_endpoints.py",
+        "route_namespace": "configuration",
+    },
+    {
+        "method": "GET",
+        "path": "/api/v1/configuration/admin/universities/00000000-0000-0000-0000-000000000001/",
+        "response": None,
+        "doc_heading": "### `GET /api/v1/configuration/admin/universities/{universityId}/`",
+        "doc_test_reference": "backend/apps/configuration/tests/test_university_registry_endpoints.py",
+        "doc_path": "/api/v1/configuration/admin/universities/{universityId}/",
+        "route_namespace": "configuration",
+    },
+    {
+        "method": "GET",
+        "path": "/api/v1/configuration/admin/universities/00000000-0000-0000-0000-000000000001/courses/",
+        "response": None,
+        "doc_heading": "### `GET /api/v1/configuration/admin/universities/{universityId}/courses/`",
+        "doc_test_reference": "backend/apps/configuration/tests/test_university_registry_endpoints.py",
+        "doc_path": "/api/v1/configuration/admin/universities/{universityId}/courses/",
+        "route_namespace": "configuration",
+    },
+    {
+        "method": "GET",
+        "path": "/api/v1/configuration/admin/universities/00000000-0000-0000-0000-000000000001/courses/00000000-0000-0000-0000-000000000002/",
+        "response": None,
+        "doc_heading": "### `GET /api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/`",
+        "doc_test_reference": "backend/apps/configuration/tests/test_university_registry_endpoints.py",
+        "doc_path": "/api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/",
+        "route_namespace": "configuration",
+    },
 )
 
 
@@ -154,7 +189,7 @@ class ApiContractTests(TestCase):
         endpoint_docs = API_ENDPOINTS_DOC.read_text(encoding="utf-8")
 
         for contract in IMPLEMENTED_ENDPOINT_CONTRACTS:
-            table_path = f"| `{contract['method']}` | `{contract['path']}` |"
+            table_path = f"| `{contract['method']}` | `{contract.get('doc_path', contract['path'])}` |"
 
             self.assertIn(table_path, endpoint_docs)
             self.assertIn(contract["doc_heading"], endpoint_docs)
