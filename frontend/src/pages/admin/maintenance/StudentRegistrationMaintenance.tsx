@@ -80,6 +80,7 @@ const MOCK_DATA = [
 const REGISTRATION_SECTIONS = ['Step 1 Registration'];
 const PAGE_SIZE = 10;
 type RegistrationSectionFilter = 'All' | 'Step 1 Registration' | 'Registration Methods';
+type RegistrationStatusFilter = 'All' | 'Active' | 'Inactive';
 
 const DEFAULT_FIELD_SECTIONS: Record<string, string> = {
   'LRN': 'Personal Information',
@@ -117,6 +118,12 @@ const getFieldTypeFilter = (section: RegistrationSectionFilter) => {
   return undefined;
 };
 
+const getStatusFilter = (status: RegistrationStatusFilter) => {
+  if (status === 'Active') return true;
+  if (status === 'Inactive') return false;
+  return undefined;
+};
+
 export default function StudentRegistrationMaintenance() {
   const [data, setData] = useState<StudentRegistrationFieldConfig[]>(() => {
     const saved = localStorage.getItem('philsa_registration_configs');
@@ -138,6 +145,10 @@ export default function StudentRegistrationMaintenance() {
 
   const [selectedSection, setSelectedSection] = useState<RegistrationSectionFilter>('All');
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<RegistrationStatusFilter>('All');
+  const [priorityFilter, setPriorityFilter] = useState('All');
+  const [inputTypeFilter, setInputTypeFilter] = useState('All');
   const [totalRecords, setTotalRecords] = useState(data.length);
   const [tabCounts, setTabCounts] = useState({
     all: data.length,
@@ -168,6 +179,10 @@ export default function StudentRegistrationMaintenance() {
       page,
       pageSize: PAGE_SIZE,
       type: getFieldTypeFilter(selectedSection),
+      search: searchTerm.trim() || undefined,
+      status: getStatusFilter(statusFilter),
+      priority: priorityFilter === 'All' ? undefined : priorityFilter,
+      inputType: inputTypeFilter === 'All' ? undefined : inputTypeFilter,
     });
     setIsLoadingRegistrationFields(false);
     if (result.ok === false) {
@@ -183,10 +198,37 @@ export default function StudentRegistrationMaintenance() {
 
   useEffect(() => {
     void loadRegistrationFields();
-  }, [selectedSection, currentPage]);
+  }, [selectedSection, currentPage, searchTerm, statusFilter, priorityFilter, inputTypeFilter]);
 
   const handleSectionChange = (section: RegistrationSectionFilter) => {
     setSelectedSection(section);
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term);
+    setCurrentPage(1);
+  };
+
+  const handleStatusFilterChange = (status: RegistrationStatusFilter) => {
+    setStatusFilter(status);
+    setCurrentPage(1);
+  };
+
+  const handlePriorityFilterChange = (priority: string) => {
+    setPriorityFilter(priority);
+    setCurrentPage(1);
+  };
+
+  const handleInputTypeFilterChange = (inputType: string) => {
+    setInputTypeFilter(inputType);
+    setCurrentPage(1);
+  };
+
+  const clearAdvancedFilters = () => {
+    setStatusFilter('All');
+    setPriorityFilter('All');
+    setInputTypeFilter('All');
     setCurrentPage(1);
   };
 
@@ -455,6 +497,59 @@ export default function StudentRegistrationMaintenance() {
     );
   };
 
+  const advancedFilters = (
+    <div className="flex flex-wrap items-end gap-3">
+      <label className="flex min-w-40 flex-col gap-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+        Status
+        <select
+          value={statusFilter}
+          onChange={(event) => handleStatusFilterChange(event.target.value as RegistrationStatusFilter)}
+          className="rounded-xl border border-philsa-border bg-white px-4 py-3 text-xs font-bold normal-case tracking-normal text-philsa-navy outline-none focus:ring-2 focus:ring-philsa-navy/10"
+        >
+          <option value="All">All Statuses</option>
+          <option value="Active">Active</option>
+          <option value="Inactive">Inactive</option>
+        </select>
+      </label>
+      <label className="flex min-w-44 flex-col gap-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+        Priority
+        <select
+          value={priorityFilter}
+          onChange={(event) => handlePriorityFilterChange(event.target.value)}
+          className="rounded-xl border border-philsa-border bg-white px-4 py-3 text-xs font-bold normal-case tracking-normal text-philsa-navy outline-none focus:ring-2 focus:ring-philsa-navy/10"
+        >
+          <option value="All">All Priorities</option>
+          <option value="High Priority">High Priority</option>
+          <option value="Medium Priority">Medium Priority</option>
+          <option value="Low Priority">Low Priority</option>
+        </select>
+      </label>
+      <label className="flex min-w-40 flex-col gap-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+        Input Type
+        <select
+          value={inputTypeFilter}
+          onChange={(event) => handleInputTypeFilterChange(event.target.value)}
+          className="rounded-xl border border-philsa-border bg-white px-4 py-3 text-xs font-bold normal-case tracking-normal text-philsa-navy outline-none focus:ring-2 focus:ring-philsa-navy/10"
+        >
+          <option value="All">All Types</option>
+          <option value="text">Text</option>
+          <option value="date">Date</option>
+          <option value="dropdown">Dropdown</option>
+          <option value="textarea">Textarea</option>
+          <option value="checkbox">Checkbox</option>
+          <option value="file">File</option>
+        </select>
+      </label>
+      <button
+        type="button"
+        onClick={clearAdvancedFilters}
+        className="rounded-xl border border-philsa-border bg-white px-5 py-3 text-xs font-black uppercase tracking-wider text-philsa-gray transition-all hover:border-philsa-navy hover:text-philsa-navy"
+      >
+        Clear Filters
+      </button>
+    </div>
+  );
+
   // Section Filter Tab Bar rendered above the table
   const aboveTableContent = (
     <div className="flex flex-col gap-3 animate-fadeIn">
@@ -536,6 +631,10 @@ export default function StudentRegistrationMaintenance() {
       showApprovalColumn={selectedSection !== 'Registration Methods'}
       renderRowActions={selectedSection === 'Registration Methods' ? renderVerificationMethodAction : undefined}
       aboveTableContent={aboveTableContent}
+      searchTerm={searchTerm}
+      onSearchTermChange={handleSearchChange}
+      advancedFilters={advancedFilters}
+      isBackendFiltered
       bulkUpload={selectedSection === 'Registration Methods' ? undefined : {
         templateUrl: '#',
         allowedTypes: ['.xlsx', '.csv']

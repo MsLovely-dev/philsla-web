@@ -65,6 +65,28 @@ class ConfigurableFieldEndpointTests(TestCase):
         self.assertEqual(len(response.data["results"]), 5)
         self.assertTrue(all(item["type"] == "Student Registration Field" for item in response.data["results"]))
 
+    def test_admin_registration_fields_support_search_and_filters(self):
+        response = self.client.get(
+            reverse("configuration:fields-admin"),
+            {
+                "module": "student_registration",
+                "type": "Student Registration Field",
+                "search": "school",
+                "status": "true",
+                "priority": "High Priority",
+                "inputType": "text",
+                "page": 1,
+                "pageSize": 10,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        values = {item["value"] for item in response.data["results"]}
+        self.assertEqual(values, {"School ID", "School Name", "School Year"})
+        self.assertTrue(all(item["status"] for item in response.data["results"]))
+        self.assertTrue(all(item["priority"] == "High Priority" for item in response.data["results"]))
+        self.assertTrue(all(item["inputType"] == "text" for item in response.data["results"]))
+
     def test_admin_can_create_registration_field_and_public_reads_it(self):
         response = self.client.post(
             reverse("configuration:fields-admin"),

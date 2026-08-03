@@ -93,6 +93,10 @@ export interface StudentRegistrationFieldListParams {
   page?: number;
   pageSize?: number;
   type?: string;
+  search?: string;
+  status?: boolean;
+  priority?: string;
+  inputType?: string;
 }
 
 export interface Step2VerificationResult {
@@ -325,6 +329,10 @@ export class BackendApplicationService {
     if (params.page) searchParams.set('page', String(params.page));
     if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
     if (params.type) searchParams.set('type', params.type);
+    if (params.search) searchParams.set('search', params.search);
+    if (typeof params.status === 'boolean') searchParams.set('status', String(params.status));
+    if (params.priority) searchParams.set('priority', params.priority);
+    if (params.inputType) searchParams.set('inputType', params.inputType);
 
     return this.apiClient.request<PaginatedResult<StudentRegistrationFieldConfig>>(
       `/api/v1/configuration/admin/fields/?${searchParams.toString()}`,

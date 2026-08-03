@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
@@ -96,10 +97,29 @@ class ConfigurableFieldAdminView(APIView):
         fields = ConfigurableField.objects.all()
         module = request.query_params.get("module")
         field_type = request.query_params.get("type")
+        search = request.query_params.get("search")
+        status_filter = request.query_params.get("status")
+        priority = request.query_params.get("priority")
+        input_type = request.query_params.get("inputType")
         if module:
             fields = fields.filter(module=module)
         if field_type:
             fields = fields.filter(field_type=field_type)
+        if search:
+            fields = fields.filter(
+                Q(field_name__icontains=search)
+                | Q(field_type__icontains=search)
+                | Q(field_section__icontains=search)
+                | Q(input_type__icontains=search)
+                | Q(priority__icontains=search)
+                | Q(remarks__icontains=search)
+            )
+        if status_filter in {"true", "false"}:
+            fields = fields.filter(is_enabled=status_filter == "true")
+        if priority:
+            fields = fields.filter(priority=priority)
+        if input_type:
+            fields = fields.filter(input_type=input_type)
 
         if "page" in request.query_params or "pageSize" in request.query_params:
             paginator = StandardPageNumberPagination()

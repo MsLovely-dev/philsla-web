@@ -68,6 +68,10 @@ interface MaintenancePageProps {
   showRowActions?: boolean;
   showApprovalColumn?: boolean;
   renderRowActions?: (row: any) => React.ReactNode;
+  searchTerm?: string;
+  onSearchTermChange?: (term: string) => void;
+  advancedFilters?: React.ReactNode;
+  isBackendFiltered?: boolean;
   pagination?: {
     page: number;
     pageSize: number;
@@ -96,11 +100,17 @@ export default function MaintenancePageTemplate({
   showRowActions = true,
   showApprovalColumn = true,
   renderRowActions,
+  searchTerm: controlledSearchTerm,
+  onSearchTermChange,
+  advancedFilters,
+  isBackendFiltered = false,
   pagination,
 }: MaintenancePageProps) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const searchTerm = controlledSearchTerm ?? localSearchTerm;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -146,7 +156,7 @@ export default function MaintenancePageTemplate({
     setIsModalOpen(false);
   };
 
-  const filteredData = data.filter(row => 
+  const filteredData = isBackendFiltered ? data : data.filter(row => 
     Object.values(row).some(val => 
       String(val).toLowerCase().includes(searchTerm.toLowerCase())
     )
@@ -203,17 +213,32 @@ export default function MaintenancePageTemplate({
             placeholder="Search records..." 
             className="w-full bg-philsa-bg border-none rounded-2xl pl-14 pr-6 py-3.5 text-sm font-bold text-philsa-navy shadow-inner outline-none focus:ring-2 focus:ring-philsa-navy/5 transition-all"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              if (onSearchTermChange) {
+                onSearchTermChange(e.target.value);
+              } else {
+                setLocalSearchTerm(e.target.value);
+              }
+            }}
           />
         </div>
         <div className="flex gap-3">
-           <button className="btn-secondary py-3.5 px-6 text-sm flex items-center gap-2">
+           <button
+             type="button"
+             onClick={() => setIsAdvancedFiltersOpen(isOpen => !isOpen)}
+             className="btn-secondary py-3.5 px-6 text-sm flex items-center gap-2"
+           >
              <Filter className="w-4 h-4" /> Advanced Filters
            </button>
            <button className="btn-secondary py-3.5 px-4 text-sm">
              <Download className="w-4 h-4" />
            </button>
         </div>
+        {advancedFilters && isAdvancedFiltersOpen && (
+          <div className="w-full border-t border-philsa-border pt-4">
+            {advancedFilters}
+          </div>
+        )}
       </div>
 
       {/* Main Table */}
