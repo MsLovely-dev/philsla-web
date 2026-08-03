@@ -46,6 +46,106 @@ The baseline health and authentication boundaries plus the first student-applica
 | `PUT`, `PATCH`, `DELETE` | `/api/v1/configuration/admin/fields/{fieldId}/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | Update or delete a configurable field maintenance row | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | List examination sessions with score-processing status and candidate counts | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Return paginated computed ranks and percentiles for approved candidate scores | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Release already processed examination results | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/export/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Stream processed approved score results as CSV | Implemented |
+
+### Score Management
+
+Score Management is backend-owned. The frontend may trigger processing and release, but it must not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
+
+`GET /api/v1/results/score-management/batches/` returns persisted examination sessions:
+
+```json
+{
+  "count": 1,
+  "results": [
+    {
+      "id": "SESSION-2027-REGULAR",
+      "name": "PhilSA Regular Examination 2027",
+      "status": "READY_FOR_PROCESSING",
+      "isClosed": true,
+      "totalCandidates": 200000,
+      "approvedScores": 188394,
+      "excludedScores": 11606,
+      "processingBatchId": "SCORE-PROC-ABC123DEF456",
+      "processedAt": "2026-08-03T08:00:00+00:00",
+      "processedBy": "42",
+      "processedCount": 188394,
+      "processingProgress": 100
+    }
+  ]
+}
+```
+
+`POST /api/v1/results/score-management/batches/{sessionId}/process/` accepts:
+
+```json
+{
+  "allowReprocessing": false
+}
+```
+
+The backend validates that `allowReprocessing` is a boolean, the session exists, the session is closed, approved scores are present, and the session has not already been processed unless `allowReprocessing` is true. Processing uses approved records only, groups by ranking population, applies competition ranking, computes percentile as the percent of approved candidates in the same population with lower final scores, writes `overallRank`, `percentile`, processing timestamp, processing batch, and leaves release status as `NOT_RELEASED`.
+
+Successful response:
+
+```json
+{
+  "id": "SESSION-2027-REGULAR",
+  "status": "SCORING_PROCESSED",
+  "processingBatchId": "SCORE-PROC-ABC123DEF456",
+  "processedBy": "42",
+  "processedCount": 188394,
+  "excludedCount": 11606
+}
+```
+
+`GET /api/v1/results/score-management/batches/{sessionId}/results/?page=1&pageSize=25&sortKey=rank&sortDirection=asc` returns processed approved scores only. `page` must be a positive integer and `pageSize` must be between 1 and 100. `sortKey` supports `candidateId`, `candidateName`, `examName`, `finalScore`, `percentile`, `rank`, and `releaseStatus`; `sortDirection` supports `asc` or `desc`. Optional `search` filters by candidate name and by candidate ID or LRN prefix. Optional `releaseStatus` filters to `NOT_RELEASED` or `RELEASED`.
+
+```json
+{
+  "count": 188394,
+  "page": 1,
+  "pageSize": 25,
+  "results": [
+    {
+      "id": "SCORE-PHL-2027-000001",
+      "candidateId": "PHL-2027-000001",
+      "lrn": "109000000001",
+      "candidateName": "Alon Reyes",
+      "sessionId": "SESSION-2027-REGULAR",
+      "rankingPopulationId": "POP-REGULAR-2027",
+      "examSetId": "ES-BP0001",
+      "rawScore": 193,
+      "maxScore": 200,
+      "finalScore": 96.5,
+      "overallRank": 1,
+      "percentile": 99.1234,
+      "releaseStatus": "NOT_RELEASED",
+      "processingBatchId": "SCORE-PROC-ABC123DEF456"
+    }
+  ]
+}
+```
+
+`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, and records a release audit row. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+
+`GET /api/v1/results/score-management/batches/{sessionId}/export/` streams processed approved scores as `text/csv`. The CSV includes candidate ID, candidate name, exam set, raw score, maximum score, final score, percentile, overall rank, and release status. Text cells that could be interpreted as spreadsheet formulas are prefixed before streaming.
+
+Synthetic local/demo data can be loaded with:
+
+```bash
+python manage.py seed_score_management --count 200000 --seed 2027 --reset
+```
+
+Test coverage:
+
+- Domain tests: `backend/apps/results/tests/test_score_processing.py`.
+- API tests: `backend/apps/results/tests/test_score_management_api.py`.
+- Seed command tests: `backend/apps/results/tests/test_score_management_seed_command.py`.
 
 ### Student application draft and submission
 

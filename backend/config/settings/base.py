@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.applications",
     "apps.configuration",
+    "apps.results",
     "apps.core",
 ]
 
