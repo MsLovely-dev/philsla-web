@@ -107,6 +107,8 @@ const sanitizeRegistrationConfigRows = (rows: any[]) => rows
     optionValuesText: Array.isArray(row.optionValues) ? row.optionValues.join('\n') : row.optionValuesText || '',
   }));
 
+const formatOptionValues = (options: string[]) => options.join(', ');
+
 export default function StudentRegistrationMaintenance() {
   const [data, setData] = useState<StudentRegistrationFieldConfig[]>(() => {
     const saved = localStorage.getItem('philsa_registration_configs');
@@ -192,13 +194,23 @@ export default function StudentRegistrationMaintenance() {
     {
       key: 'optionValues',
       label: 'Options',
-      render: (row) => Array.isArray(row.optionValues) && row.optionValues.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {row.optionValues.map((option: string) => (
-            <span key={option} className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600">{option}</span>
-          ))}
-        </div>
-      ) : <span className="text-slate-400">-</span>,
+      render: (row) => {
+        if (!Array.isArray(row.optionValues) || row.optionValues.length === 0) {
+          return <span className="text-slate-400">-</span>;
+        }
+
+        const optionSummary = formatOptionValues(row.optionValues);
+
+        return (
+          <span
+            className="inline-block w-fit max-w-64 truncate rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600"
+            title={optionSummary}
+            aria-label={optionSummary}
+          >
+            {optionSummary}
+          </span>
+        );
+      },
     },
     {
       key: 'priority',
