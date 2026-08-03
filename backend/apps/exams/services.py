@@ -39,6 +39,16 @@ from .models import (
     QuestionStatus,
     QuestionTag,
     QuestionWorkflowHistory,
+    ExamSet,
+    ExamSetAssemblyRun,
+    ExamSetAssemblyRunItem,
+    ExamSetQuestion,
+    ExamSetQuestionReplacement,
+    ExamSetStatus,
+    ExamSetValidationResult,
+    ExamSetWorkflowHistory,
+    SelectionMethod,
+    ValidationResult,
     QuestionType,
     Tag,
     Subject,
@@ -1004,3 +1014,399 @@ def transition_question(
         initiated_by=actor_profile,
     )
     return question
+
+
+def exam_set_queryset():
+    return (
+        ExamSet.objects.select_related(
+            "blueprint_version__blueprint",
+            "blueprint_version__academic_year",
+            "academic_year",
+            "created_by__user",
+            "approved_by__user",
+            "published_by__user",
+            "archived_by__user",
+            "cloned_from_exam_set",
+        )
+        .prefetch_related(
+            Prefetch(
+                "items",
+                queryset=ExamSetQuestion.objects.select_related(
+                    "question__question_type",
+                    "question__subject",
+                    "question__topic",
+                    "question__competency",
+                    "blueprint_section",
+                    "selected_by__user",
+                ),
+            ),
+            Prefetch("validation_results", queryset=ExamSetValidationResult.objects.all()),
+            Prefetch(
+                "workflow_history",
+                queryset=ExamSetWorkflowHistory.objects.select_related("initiated_by__user"),
+            ),
+            Prefetch(
+                "assembly_runs",
+                queryset=ExamSetAssemblyRun.objects.select_related("initiated_by__user").prefetch_related(
+                    Prefetch("items", queryset=ExamSetAssemblyRunItem.objects.select_related("question"))
+                ),
+            ),
+        )
+    )
+
+
+def _normalize_exam_set_status(value: Any) -> str:
+    if not value:
+        return ExamSetStatus.DRAFT
+    normalized = str(value).strip().lower().replace(" ", "_")
+    return normalized if normalized in ExamSetStatus.values else ExamSetStatus.DRAFT
+
+
+def _normalize_selection_method(value: Any) -> str:
+    if not value:
+        return SelectionMethod.MANUAL
+    normalized = str(value).strip().lower().replace(" ", "_")
+    return normalized if normalized in SelectionMethod.values else SelectionMethod.MANUAL
+
+
+def _normalize_validation_result(value: Any) -> str:
+    if not value:
+        return ValidationResult.PASSED
+    normalized = str(value).strip().lower().replace(" ", "_")
+    return normalized if normalized in ValidationResult.values else ValidationResult.PASSED
+
+
+def _generate_exam_set_code(blueprint_version: BlueprintVersion, academic_year: AcademicYear, title: str) -> str:
+    year_fragment = str(academic_year.name).strip()[:4] or "0000"
+    base = f"EXAM-{blueprint_version.blueprint.spec_code}-{year_fragment}"
+    return _ensure_unique_code(ExamSet, base[:60], code_field="exam_code")
+
+
+def _display_exam_set_user(profile: AccountProfile | None) -> str:
+    return _profile_display_name(profile)
+
+
+def serialize_exam_set_question(item: ExamSetQuestion) -> dict[str, Any]:
+    question = item.question
+    return {
+        "id": str(item.pk),
+        "display_order": item.display_order,
+        "points": float(item.points),
+        "selection_method": item.selection_method,
+        "selected_by": _display_exam_set_user(item.selected_by),
+        "selected_at": item.selected_at.isoformat(),
+        "blueprint_section": str(item.blueprint_section.pk) if item.blueprint_section else None,
+        "question": {
+            "id": str(question.pk),
+            "question_code": question.question_code,
+            "question_type": question.question_type.name,
+            "question_type_code": question.question_type.code,
+            "subject": question.subject.name,
+            "topic": question.topic.name if question.topic else "",
+            "difficulty": question.difficulty,
+            "status": question.status,
+            "points": float(question.points),
+        },
+    }
+
+
+def serialize_exam_set_validation_result(result: ExamSetValidationResult) -> dict[str, Any]:
+    return {
+        "id": str(result.pk),
+        "validation_code": result.validation_code,
+        "validation_name": result.validation_name,
+        "result": result.result,
+        "expected_value": result.expected_value,
+        "actual_value": result.actual_value,
+        "message": result.message,
+        "validated_at": result.validated_at.isoformat(),
+    }
+
+
+def serialize_exam_set_history(entry: ExamSetWorkflowHistory) -> dict[str, Any]:
+    return {
+        "id": str(entry.pk),
+        "previous_status": entry.previous_status.upper() if entry.previous_status else None,
+        "new_status": entry.new_status.upper(),
+        "action": entry.action,
+        "remarks": entry.remarks,
+        "initiated_by": _display_exam_set_user(entry.initiated_by),
+        "created_at": entry.created_at.isoformat(),
+    }
+
+
+def serialize_exam_set_assembly_run_item(item: ExamSetAssemblyRunItem) -> dict[str, Any]:
+    return {
+        "id": str(item.pk),
+        "question": {
+            "id": str(item.question.pk),
+            "question_code": item.question.question_code,
+            "question_text": item.question.question_text,
+        },
+        "was_selected": item.was_selected,
+        "rejection_reason": item.rejection_reason,
+        "created_at": item.created_at.isoformat(),
+    }
+
+
+def serialize_exam_set_assembly_run(run: ExamSetAssemblyRun) -> dict[str, Any]:
+    return {
+        "id": str(run.pk),
+        "algorithm_version": run.algorithm_version,
+        "status": run.status,
+        "selected_item_count": run.selected_item_count,
+        "rejected_item_count": run.rejected_item_count,
+        "initiated_by": _display_exam_set_user(run.initiated_by),
+        "started_at": run.started_at.isoformat(),
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+        "notes": run.notes,
+        "items": [serialize_exam_set_assembly_run_item(item) for item in run.items.all().order_by("created_at")],
+    }
+
+
+def serialize_exam_set(exam_set: ExamSet) -> dict[str, Any]:
+    return {
+        "id": str(exam_set.pk),
+        "exam_code": exam_set.exam_code,
+        "title": exam_set.title,
+        "examination_period": exam_set.examination_period,
+        "exam_type": exam_set.exam_type,
+        "instructions": exam_set.instructions,
+        "duration_minutes": exam_set.duration_minutes,
+        "status": exam_set.status.upper(),
+        "blueprint_version": {
+            "id": str(exam_set.blueprint_version.pk),
+            "spec_code": exam_set.blueprint_version.blueprint.spec_code,
+            "name": exam_set.blueprint_version.name,
+            "version_number": str(exam_set.blueprint_version.version_number),
+            "status": exam_set.blueprint_version.status.upper(),
+        },
+        "academic_year": exam_set.academic_year.name,
+        "cloned_from_exam_set": str(exam_set.cloned_from_exam_set.pk) if exam_set.cloned_from_exam_set else None,
+        "created_by": _display_exam_set_user(exam_set.created_by),
+        "approved_by": _display_exam_set_user(exam_set.approved_by),
+        "published_by": _display_exam_set_user(exam_set.published_by),
+        "archived_by": _display_exam_set_user(exam_set.archived_by),
+        "approved_at": exam_set.approved_at.isoformat() if exam_set.approved_at else None,
+        "published_at": exam_set.published_at.isoformat() if exam_set.published_at else None,
+        "archived_at": exam_set.archived_at.isoformat() if exam_set.archived_at else None,
+        "items": [serialize_exam_set_question(item) for item in exam_set.items.all().order_by("display_order", "selected_at")],
+        "validation_results": [
+            serialize_exam_set_validation_result(result)
+            for result in exam_set.validation_results.all().order_by("-validated_at")
+        ],
+        "assembly_runs": [serialize_exam_set_assembly_run(run) for run in exam_set.assembly_runs.all().order_by("-started_at")],
+        "workflow_history": [serialize_exam_set_history(entry) for entry in exam_set.workflow_history.all().order_by("-created_at")],
+        "created_at": exam_set.created_at.isoformat(),
+        "updated_at": exam_set.updated_at.isoformat(),
+    }
+
+
+def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], actor_profile: AccountProfile) -> None:
+    exam_set.items.all().delete()
+    for index, item_payload in enumerate(items, start=1):
+        question_id = _payload_value(item_payload, "question_id", "questionId")
+        question_code = _payload_value(item_payload, "question_code", "questionCode")
+        question = None
+        if question_id not in (None, ""):
+            question = Question.objects.filter(pk=question_id).first()
+        if question is None and question_code not in (None, ""):
+            question = Question.objects.filter(question_code=str(question_code)).first()
+        if question is None:
+            continue
+        blueprint_section = None
+        blueprint_section_id = _payload_value(item_payload, "blueprint_section_id", "blueprintSectionId")
+        if blueprint_section_id not in (None, ""):
+            blueprint_section = BlueprintSection.objects.filter(pk=blueprint_section_id).first()
+        ExamSetQuestion.objects.create(
+            exam_set=exam_set,
+            question=question,
+            blueprint_section=blueprint_section,
+            display_order=int(_payload_value(item_payload, "display_order", "displayOrder", index) or index),
+            points=_parse_decimal(_payload_value(item_payload, "points", default=str(question.points)), str(question.points)),
+            selection_method=_normalize_selection_method(_payload_value(item_payload, "selection_method", "selectionMethod", SelectionMethod.MANUAL)),
+            selected_by=actor_profile,
+        )
+
+
+def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
+    exam_set.validation_results.all().delete()
+    items = list(exam_set.items.all().select_related("question"))
+    blueprint_status = exam_set.blueprint_version.status
+    blueprint_ready = blueprint_status in {BlueprintStatus.APPROVED, BlueprintStatus.PUBLISHED}
+    ExamSetValidationResult.objects.create(
+        exam_set=exam_set,
+        validation_code="blueprint_status",
+        validation_name="Blueprint readiness",
+        result=ValidationResult.PASSED if blueprint_ready else ValidationResult.WARNING,
+        expected_value="APPROVED/PUBLISHED",
+        actual_value=blueprint_status.upper(),
+        message="Blueprint version is ready for assembly." if blueprint_ready else "Blueprint version is not yet approved or published.",
+    )
+    ExamSetValidationResult.objects.create(
+        exam_set=exam_set,
+        validation_code="item_count",
+        validation_name="Item count",
+        result=ValidationResult.PASSED if items else ValidationResult.FAILED,
+        expected_value="At least 1 item",
+        actual_value=str(len(items)),
+        message="Exam set contains items." if items else "Exam set has no items.",
+    )
+    non_approved_count = sum(1 for item in items if item.question.status != QuestionStatus.APPROVED)
+    ExamSetValidationResult.objects.create(
+        exam_set=exam_set,
+        validation_code="approved_items",
+        validation_name="Approved question pool",
+        result=ValidationResult.PASSED if non_approved_count == 0 else ValidationResult.WARNING,
+        expected_value="All questions approved",
+        actual_value=str(non_approved_count),
+        message="All questions are approved." if non_approved_count == 0 else "One or more questions are not yet approved.",
+    )
+
+
+@transaction.atomic
+def create_or_update_exam_set(
+    *,
+    payload: dict[str, Any],
+    actor_profile: AccountProfile,
+    exam_set: ExamSet | None = None,
+) -> ExamSet:
+    blueprint_version_id = _payload_value(payload, "blueprint_version_id", "blueprintVersionId")
+    blueprint_version = BlueprintVersion.objects.filter(pk=blueprint_version_id).select_related("blueprint").first() if blueprint_version_id not in (None, "") else None
+    if blueprint_version is None:
+        raise ValueError("A valid blueprint version is required.")
+
+    academic_year_value = _payload_value(payload, "academic_year_id", "academicYearId")
+    academic_year_name = _payload_value(payload, "academic_year", "academicYear")
+    academic_year = None
+    if academic_year_value not in (None, ""):
+        academic_year = AcademicYear.objects.filter(pk=academic_year_value).first()
+    if academic_year is None and academic_year_name not in (None, ""):
+        academic_year = AcademicYear.objects.filter(name=str(academic_year_name).strip()).first()
+    if academic_year is None:
+        raise ValueError("A valid academic year is required.")
+
+    title = str(_payload_value(payload, "title", default=exam_set.title if exam_set else "") or "").strip()
+    if not title:
+        title = blueprint_version.name
+
+    exam_code = str(_payload_value(payload, "exam_code", "examCode", default=exam_set.exam_code if exam_set else "") or "").strip()
+    if not exam_code:
+        exam_code = _generate_exam_set_code(blueprint_version, academic_year, title)
+
+    defaults = {
+        "blueprint_version": blueprint_version,
+        "academic_year": academic_year,
+        "exam_code": exam_code,
+        "title": title,
+        "examination_period": str(_payload_value(payload, "examination_period", "examinationPeriod", default=exam_set.examination_period if exam_set else "") or ""),
+        "exam_type": _normalize_exam_type(_payload_value(payload, "exam_type", "examType", default=exam_set.exam_type if exam_set else ExamType.ADMISSION)),
+        "instructions": str(_payload_value(payload, "instructions", default=exam_set.instructions if exam_set else "") or ""),
+        "duration_minutes": int(_payload_value(payload, "duration_minutes", "durationMinutes", default=exam_set.duration_minutes if exam_set else 0) or 0),
+        "status": _normalize_exam_set_status(_payload_value(payload, "status", default=exam_set.status if exam_set else ExamSetStatus.DRAFT)),
+        "cloned_from_exam_set": exam_set.cloned_from_exam_set if exam_set and exam_set.cloned_from_exam_set else None,
+        "created_by": exam_set.created_by if exam_set else actor_profile,
+        "approved_by": exam_set.approved_by if exam_set else None,
+        "published_by": exam_set.published_by if exam_set else None,
+        "archived_by": exam_set.archived_by if exam_set else None,
+        "approved_at": exam_set.approved_at if exam_set else None,
+        "published_at": exam_set.published_at if exam_set else None,
+        "archived_at": exam_set.archived_at if exam_set else None,
+    }
+
+    if exam_set is None:
+        exam_set = ExamSet.objects.create(**defaults)
+        action = "Created exam set"
+        previous_status = None
+    else:
+        previous_status = exam_set.status
+        for field_name, field_value in defaults.items():
+            setattr(exam_set, field_name, field_value)
+        exam_set.save()
+        action = "Updated exam set"
+
+    if "items" in payload or "questions" in payload:
+        items_payload = list(_payload_value(payload, "items", default=_payload_value(payload, "questions", default=[])) or [])
+        _replace_exam_set_items(exam_set, items_payload, actor_profile)
+
+    _record_exam_set_validation_results(exam_set)
+    ExamSetWorkflowHistory.objects.create(
+        exam_set=exam_set,
+        previous_status=previous_status,
+        new_status=exam_set.status,
+        action=action,
+        remarks=str(_payload_value(payload, "remarks", default="") or ""),
+        initiated_by=actor_profile,
+    )
+    return exam_set
+
+
+@transaction.atomic
+def transition_exam_set(
+    *,
+    exam_set: ExamSet,
+    target_status: str,
+    actor_profile: AccountProfile,
+    remarks: str = "",
+) -> ExamSet:
+    normalized_status = _normalize_exam_set_status(target_status)
+    previous_status = exam_set.status
+    exam_set.status = normalized_status
+    now = timezone.now()
+    if normalized_status == ExamSetStatus.APPROVED:
+        exam_set.approved_at = now
+        exam_set.approved_by = actor_profile
+    elif normalized_status == ExamSetStatus.PUBLISHED:
+        exam_set.published_at = now
+        exam_set.published_by = actor_profile
+    elif normalized_status == ExamSetStatus.ARCHIVED:
+        exam_set.archived_at = now
+        exam_set.archived_by = actor_profile
+    exam_set.save(update_fields=["status", "approved_at", "approved_by", "published_at", "published_by", "archived_at", "archived_by", "updated_at"])
+    ExamSetWorkflowHistory.objects.create(
+        exam_set=exam_set,
+        previous_status=previous_status,
+        new_status=normalized_status,
+        action=f"Transitioned to {normalized_status.replace('_', ' ').title()}",
+        remarks=remarks,
+        initiated_by=actor_profile,
+    )
+    _record_exam_set_validation_results(exam_set)
+    return exam_set
+
+
+@transaction.atomic
+def clone_exam_set(*, exam_set: ExamSet, actor_profile: AccountProfile) -> ExamSet:
+    cloned = ExamSet.objects.create(
+        blueprint_version=exam_set.blueprint_version,
+        academic_year=exam_set.academic_year,
+        exam_code=_ensure_unique_code(ExamSet, f"{exam_set.exam_code}_CLONE", code_field="exam_code"),
+        title=f"{exam_set.title} (Clone)",
+        examination_period=exam_set.examination_period,
+        exam_type=exam_set.exam_type,
+        instructions=exam_set.instructions,
+        duration_minutes=exam_set.duration_minutes,
+        status=ExamSetStatus.DRAFT,
+        cloned_from_exam_set=exam_set,
+        created_by=actor_profile,
+    )
+    for item in exam_set.items.all().order_by("display_order", "selected_at"):
+        ExamSetQuestion.objects.create(
+            exam_set=cloned,
+            question=item.question,
+            blueprint_section=item.blueprint_section,
+            display_order=item.display_order,
+            points=item.points,
+            selection_method=item.selection_method,
+            selected_by=actor_profile,
+        )
+    _record_exam_set_validation_results(cloned)
+    ExamSetWorkflowHistory.objects.create(
+        exam_set=cloned,
+        previous_status=None,
+        new_status=cloned.status,
+        action="Cloned exam set",
+        remarks="",
+        initiated_by=actor_profile,
+    )
+    return cloned
