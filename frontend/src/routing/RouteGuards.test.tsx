@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePhilSA } from '../PhilSAContext';
@@ -56,18 +56,41 @@ beforeEach(() => {
   mockUsePhilSA.mockReturnValue({
     user: student,
     isLoading: false,
+    isAuthInitialized: true,
+    initializeAuth: vi.fn(),
     maintenanceModules: [],
-  } as ReturnType<typeof usePhilSA>);
+  } as unknown as ReturnType<typeof usePhilSA>);
   mockUseMockData.mockReturnValue({ applications: [] } as ReturnType<typeof useMockData>);
 });
 
 describe('ProtectedRoute', () => {
+  it('initializes authentication before deciding whether to redirect', async () => {
+    const initializeAuth = vi.fn().mockResolvedValue(undefined);
+    mockUsePhilSA.mockReturnValue({
+      user: null,
+      isLoading: false,
+      isAuthInitialized: false,
+      initializeAuth,
+      maintenanceModules: [],
+    } as unknown as ReturnType<typeof usePhilSA>);
+
+    renderAtTarget((children) => (
+      <ProtectedRoute allowedRoles={['STUDENT']} layout="standalone">{children}</ProtectedRoute>
+    ));
+
+    expect(screen.getByText('Preparing your secure prototype session.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Login page' })).not.toBeInTheDocument();
+    await waitFor(() => expect(initializeAuth).toHaveBeenCalledTimes(1));
+  });
+
   it('redirects an unauthenticated visitor to login', () => {
     mockUsePhilSA.mockReturnValue({
       user: null,
       isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
       maintenanceModules: [],
-    } as ReturnType<typeof usePhilSA>);
+    } as unknown as ReturnType<typeof usePhilSA>);
 
     renderAtTarget((children) => (
       <ProtectedRoute allowedRoles={['STUDENT']} layout="standalone">{children}</ProtectedRoute>
@@ -89,8 +112,10 @@ describe('ProtectedRoute', () => {
     mockUsePhilSA.mockReturnValue({
       user: admin,
       isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
       maintenanceModules: [],
-    } as ReturnType<typeof usePhilSA>);
+    } as unknown as ReturnType<typeof usePhilSA>);
 
     renderAtTarget((children) => (
       <ProtectedRoute allowedRoles={['STUDENT']} layout="standalone">{children}</ProtectedRoute>
@@ -104,8 +129,10 @@ describe('ProtectedRoute', () => {
     mockUsePhilSA.mockReturnValue({
       user: { ...admin, permissions: ['MOD_31_EDIT'] },
       isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
       maintenanceModules: [],
-    } as ReturnType<typeof usePhilSA>);
+    } as unknown as ReturnType<typeof usePhilSA>);
 
     render(
       <MemoryRouter initialEntries={['/admin/users']}>
@@ -127,8 +154,10 @@ describe('ProtectedRoute', () => {
     mockUsePhilSA.mockReturnValue({
       user: { ...admin, permissions: ['MOD_31_READ'] },
       isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
       maintenanceModules: [],
-    } as ReturnType<typeof usePhilSA>);
+    } as unknown as ReturnType<typeof usePhilSA>);
 
     render(
       <MemoryRouter initialEntries={['/admin/users']}>
@@ -151,8 +180,10 @@ describe('PublicRoute', () => {
     mockUsePhilSA.mockReturnValue({
       user: admin,
       isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
       maintenanceModules: [],
-    } as ReturnType<typeof usePhilSA>);
+    } as unknown as ReturnType<typeof usePhilSA>);
 
     render(
       <MemoryRouter initialEntries={['/login']}>
@@ -209,8 +240,10 @@ describe('ExamRoute', () => {
     mockUsePhilSA.mockReturnValue({
       user: admin,
       isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
       maintenanceModules: [],
-    } as ReturnType<typeof usePhilSA>);
+    } as unknown as ReturnType<typeof usePhilSA>);
 
     renderAtTarget((children) => <ExamRoute>{children}</ExamRoute>);
 
