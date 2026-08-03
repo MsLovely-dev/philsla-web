@@ -9,7 +9,10 @@ vi.mock('./services', () => ({
   createPrototypeAuthService: () => authService,
 }));
 
+<<<<<<< HEAD
 import { INITIAL_MAINTENANCE_MODULES, PhilSAProvider, usePhilSA } from './PhilSAContext';
+=======
+>>>>>>> 1d2d2f9 (Refactor/user role settings (#27))
 import { PhilSAProvider, usePhilSA } from './PhilSAContext';
 
 function AuthStateProbe() {
