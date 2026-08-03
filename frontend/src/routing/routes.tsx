@@ -27,8 +27,10 @@ import ProctorMaintenance from '../pages/admin/maintenance/ProctorMaintenance';
 import QuestionBankConfigMaintenance from '../pages/admin/maintenance/QuestionBankConfigMaintenance';
 import QuestionBankManagementMaintenance from '../pages/admin/maintenance/QuestionBankManagementMaintenance';
 import ReviewStudentApplicationMaintenance from '../pages/admin/maintenance/ReviewStudentApplicationMaintenance';
+import SchoolsListMaintenance from '../pages/admin/maintenance/SchoolsListMaintenance';
 import StudentRegistrationMaintenance from '../pages/admin/maintenance/StudentRegistrationMaintenance';
 import TestingCenterMaintenance from '../pages/admin/maintenance/TestingCenterMaintenance';
+import UniversitiesListMaintenance from '../pages/admin/maintenance/UniversitiesListMaintenance';
 import ApplicationDetail from '../pages/admin/university/ApplicationDetail';
 import ApplicationsList from '../pages/admin/university/ApplicationsList';
 import ExamSchedules from '../pages/admin/university/ExamSchedules';
@@ -148,6 +150,8 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
 
   { path: '/admin/maintenance', element: <MaintenanceHub />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN') },
   { path: '/admin/maintenance/registration', element: <StudentRegistrationMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/schools', element: <SchoolsListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/universities', element: <UniversitiesListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/review-student-application', element: <ReviewStudentApplicationMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/exam-blueprint', element: <ExamBlueprintMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/question-bank-management', element: <QuestionBankManagementMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR') },

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { X, AlertCircle, ShieldCheck, Eye, Sparkles, Check, ArrowRight, ArrowLeft, Camera, Shield, Laptop, Monitor, FileText } from 'lucide-react';
+import type { MaintenanceRecord } from './MaintenancePageTemplate';
 
 interface RegistrationPreviewProps {
-  data: any[];
+  data: MaintenanceRecord[];
   onClose: () => void;
 }
 
@@ -46,13 +47,13 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
 
   // Helper to check if a configuration item is active
   const isFieldActive = (fieldName: string) => {
-    const item = data.find(i => i.value?.toLowerCase() === fieldName.toLowerCase());
+    const item = data.find(i => typeof i.value === 'string' && i.value.toLowerCase() === fieldName.toLowerCase());
     if (!item) return true; // Default to active if config doesn't exist
     return item.status === 'Active' || item.status === true;
   };
 
   const isMethodActive = (methodName: string) => {
-    const item = data.find(i => i.type === 'Verification Method' && i.value?.toLowerCase().includes(methodName.toLowerCase()));
+    const item = data.find(i => i.type === 'Verification Method' && typeof i.value === 'string' && i.value.toLowerCase().includes(methodName.toLowerCase()));
     if (!item) return true; // Default to active
     return item.status === 'Active' || item.status === true;
   };
@@ -187,7 +188,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
                   onClick={() => method.active && handleInputChange('verificationMethod', method.key)}
                   disabled={!method.active}
                   className={`py-2.5 px-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
-                    !method.active
+                    !method.active 
                       ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed opacity-50'
                       : formState.verificationMethod === method.key
                       ? 'bg-red-50 border-[#8A1538] text-[#8A1538] shadow-inner'
@@ -576,7 +577,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
               {/* Automatic System Checks (High Priority) */}
               <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2.5">
                 <span className="text-[9px] font-black text-philsa-gray uppercase tracking-widest block">System Diagnostics (High Priority)</span>
-
+                
                 <div className="space-y-1.5">
                   {showFaceMatch && (
                     <div className="flex justify-between items-center text-[10px] font-bold">
@@ -715,7 +716,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
           {/* Simulation Content Body */}
           <div className="flex-1 overflow-y-auto p-8 md:p-12 flex justify-center items-start">
             <div className="w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 flex flex-col">
-
+              
               {/* Fake Browser Toolbar */}
               <div className="bg-slate-50 px-6 py-3 border-b border-slate-100 flex items-center gap-3 text-slate-400 select-none">
                 <div className="flex gap-1.5">

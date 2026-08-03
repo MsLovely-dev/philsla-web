@@ -23,7 +23,7 @@ export interface MaintenanceModule {
   status: string;
 }
 
-const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1', '42', '43', '44', '45']);
+const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1', '40', '41', '42', '43', '44', '45']);
 
 export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   // Student Portal
@@ -86,11 +86,9 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
 
   // Sub-modules of Maintenance & Protocols
   { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '37', name: 'Review Student Application', path: '/admin/maintenance/review-student-application', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '38', name: 'Exam Blueprint', path: '/admin/maintenance/exam-blueprint', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '39', name: 'Question Bank Management', path: '/admin/maintenance/question-bank-management', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '40', name: 'Exam Review', path: '/admin/maintenance/exam-review', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '41', name: 'Exam Results', path: '/admin/maintenance/exam-results', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '37', name: 'List of Schools', path: '/admin/maintenance/schools', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '38', name: 'List of Universities', path: '/admin/maintenance/universities', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '39', name: 'Exam Blueprint', path: '/admin/maintenance/exam-blueprint', category: 'Maintenance & Protocols', status: 'ACTIVE' },
 
   // Testing Center Logistics
   { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },

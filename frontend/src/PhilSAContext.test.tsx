@@ -35,18 +35,16 @@ describe('PhilSAProvider authentication bootstrap', () => {
 });
 
 describe('Maintenance Center catalog', () => {
-  it('contains the six modules from the updated Maintenance Center', () => {
+  it('contains the four modules from the updated Maintenance Center', () => {
     const maintenancePaths = INITIAL_MAINTENANCE_MODULES
       .filter((module) => module.category === 'Maintenance & Protocols' && module.path !== '/admin/maintenance')
       .map((module) => module.path);
 
     expect(maintenancePaths).toEqual([
       '/admin/maintenance/registration',
-      '/admin/maintenance/review-student-application',
+      '/admin/maintenance/schools',
+      '/admin/maintenance/universities',
       '/admin/maintenance/exam-blueprint',
-      '/admin/maintenance/question-bank-management',
-      '/admin/maintenance/exam-review',
-      '/admin/maintenance/exam-results',
     ]);
   });
 });

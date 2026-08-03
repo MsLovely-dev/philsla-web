@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField } from '../../../components/maintenance/MaintenancePageTemplate';
+import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField, MaintenanceRecord } from '../../../components/maintenance/MaintenancePageTemplate';
 
 const CATEGORIES = [
   'Subject Areas',
@@ -8,16 +8,30 @@ const CATEGORIES = [
   'Topics'
 ];
 
+interface BlueprintConfig extends MaintenanceRecord {
+  id?: string;
+  category?: string;
+  code?: string;
+  subject?: string;
+  level?: string;
+  questionType?: string;
+  autoScored?: string | boolean;
+  topicCode?: string;
+  topic?: string;
+  gradeLevel?: string;
+  status?: string | boolean;
+}
+
 export default function ExamBlueprintMaintenance() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<BlueprintConfig[]>([]);
 
   const [selectedCategory, setSelectedCategory] = useState<string>('Subject Areas');
 
-  const saveConfigs = (newData: any[]) => {
+  const saveConfigs = (newData: BlueprintConfig[]) => {
     setData(newData);
   };
 
-  const getColumnsForCategory = (category: string): MaintenanceColumn[] => {
+  const getColumnsForCategory = (category: string): MaintenanceColumn<BlueprintConfig>[] => {
     switch (category) {
       case 'Subject Areas':
         return [
@@ -140,7 +154,7 @@ export default function ExamBlueprintMaintenance() {
     { name: 'status', label: 'Active Status', type: 'toggle' }
   ];
 
-  const handleAdd = (newData: any) => {
+  const handleAdd = (newData: BlueprintConfig) => {
     const item = {
       ...newData,
       category: newData.category || selectedCategory,
@@ -150,7 +164,7 @@ export default function ExamBlueprintMaintenance() {
     saveConfigs([item, ...data]);
   };
 
-  const handleEdit = (updatedRow: any) => {
+  const handleEdit = (updatedRow: BlueprintConfig) => {
     const item = {
       ...updatedRow,
       status: updatedRow.status === true || updatedRow.status === 'Active' || updatedRow.status === 'Yes' ? 'Active' : 'Inactive'
@@ -158,8 +172,8 @@ export default function ExamBlueprintMaintenance() {
     saveConfigs(data.map(row => row.id === item.id ? item : row));
   };
 
-  const handleDelete = (row: any) => {
-    if (window.confirm(`Are you sure you want to delete ${row.subject || row.topic || row.questionType || row.level || row.code}?`)) {
+  const handleDelete = (row: BlueprintConfig) => {
+    if (window.confirm(`Are you sure you want to delete ${row.subject || row.topic || row.questionType || row.level || row.code || 'this record'}?`)) {
       saveConfigs(data.filter(r => r.id !== row.id));
     }
   };

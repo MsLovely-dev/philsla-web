@@ -180,11 +180,9 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
         href: '/admin/maintenance',
         subItems: [
           { label: 'Student Registration', href: '/admin/maintenance/registration', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Review Student Application', href: '/admin/maintenance/review-student-application', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'List of Schools', href: '/admin/maintenance/schools', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'List of Universities', href: '/admin/maintenance/universities', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
           { label: 'Exam Blueprint', href: '/admin/maintenance/exam-blueprint', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Question Bank Management', href: '/admin/maintenance/question-bank-management', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR'] },
-          { label: 'Exam Review', href: '/admin/maintenance/exam-review', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR'] },
-          { label: 'Exam Results', href: '/admin/maintenance/exam-results', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
         ]
       },
     ]

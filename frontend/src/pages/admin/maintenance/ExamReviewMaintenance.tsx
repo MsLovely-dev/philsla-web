@@ -5,13 +5,34 @@ const CATEGORIES = [
   'Review Status'
 ];
 
+const MOCK_DATA = [
+  { id: 'rev_1', category: 'Review Status', code: 'REV-001', statusName: 'Pending Review', status: 'Active' },
+  { id: 'rev_2', category: 'Review Status', code: 'REV-003', statusName: 'Approved', status: 'Active' },
+  { id: 'rev_3', category: 'Review Status', code: 'REV-004', statusName: 'Reject', status: 'Active' },
+];
+
 export default function ExamReviewMaintenance() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<any[]>(() => {
+    const saved = localStorage.getItem('philsa_exam_review_configs');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    localStorage.setItem('philsa_exam_review_configs', JSON.stringify(MOCK_DATA));
+    return MOCK_DATA;
+  });
 
   const [selectedCategory, setSelectedCategory] = useState<string>('Review Status');
 
   const saveConfigs = (newData: any[]) => {
     setData(newData);
+    localStorage.setItem('philsa_exam_review_configs', JSON.stringify(newData));
   };
 
   const columns: MaintenanceColumn[] = [
@@ -104,3 +125,5 @@ export default function ExamReviewMaintenance() {
     />
   );
 }
+
+
