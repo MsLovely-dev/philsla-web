@@ -97,6 +97,28 @@ class ConfigurableFieldEndpointTests(TestCase):
         self.assertEqual(response.data["inputType"], "dropdown")
         self.assertEqual(response.data["optionValues"], ["Grade 11", "Grade 12"])
 
+    def test_admin_can_create_file_registration_field(self):
+        response = self.client.post(
+            reverse("configuration:fields-admin"),
+            {
+                "module": "student_registration",
+                "section": "Step 1 Registration",
+                "type": "Student Registration Field",
+                "value": "Guardian Consent Attachment",
+                "fieldSection": "Additional Information",
+                "inputType": "file",
+                "optionValues": [],
+                "priority": "High Priority",
+                "remarks": "",
+                "status": True,
+                "display_order": 132,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["inputType"], "file")
+
     def test_admin_cannot_create_custom_verification_method(self):
         response = self.client.post(
             reverse("configuration:fields-admin"),

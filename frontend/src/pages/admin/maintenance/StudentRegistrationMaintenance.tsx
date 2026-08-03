@@ -299,7 +299,6 @@ export default function StudentRegistrationMaintenance() {
         { value: 'text', label: 'Text Input' },
         { value: 'date', label: 'Date Picker' },
         { value: 'dropdown', label: 'Dropdown' },
-        { value: 'checkbox', label: 'Checkbox' },
         { value: 'file', label: 'File Upload' },
         { value: 'textarea', label: 'Long Text' },
       ],

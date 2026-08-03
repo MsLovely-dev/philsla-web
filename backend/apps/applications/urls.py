@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     ApplicationCreateView,
+    ApplicationAdditionalAttachmentView,
     ApplicationDetailView,
     ApplicationIdentityMediaView,
     ApplicationReviewerDecisionView,
@@ -12,6 +13,7 @@ from .views import (
     PublicStep2ConfigurationView,
     RegistrationEmailOtpRequestView,
     RegistrationEmailOtpVerifyView,
+    RegistrationAttachmentUploadView,
     RegistrationIdentitySelfieFaceValidationView,
     RegistrationManualIdentitySelfieFaceValidationView,
     RegistrationIdentitySelfieView,
@@ -24,6 +26,7 @@ urlpatterns = [
     path("registration/lrn/verify/", LrnVerificationView.as_view(), name="verify-lrn"),
     path("registration/email-otp/request/", RegistrationEmailOtpRequestView.as_view(), name="registration-email-otp-request"),
     path("registration/email-otp/verify/", RegistrationEmailOtpVerifyView.as_view(), name="registration-email-otp-verify"),
+    path("registration/attachments/", RegistrationAttachmentUploadView.as_view(), name="registration-attachment-upload"),
     path("registration/identity/selfie/", RegistrationIdentitySelfieView.as_view(), name="registration-identity-selfie"),
     path("registration/identity/selfie-face/", RegistrationIdentitySelfieFaceValidationView.as_view(), name="registration-identity-selfie-face"),
     path("registration/identity/manual-selfie-face/", RegistrationManualIdentitySelfieFaceValidationView.as_view(), name="registration-manual-identity-selfie-face"),
@@ -36,6 +39,7 @@ urlpatterns = [
     path("", ApplicationCreateView.as_view(), name="create"),
     path("<uuid:application_id>/review-decision/", ApplicationReviewerDecisionView.as_view(), name="review-decision"),
     path("<uuid:application_id>/identity-media/<str:media_type>/", ApplicationIdentityMediaView.as_view(), name="identity-media"),
+    path("<uuid:application_id>/attachments/<uuid:attachment_id>/", ApplicationAdditionalAttachmentView.as_view(), name="additional-attachment"),
     path("<uuid:application_id>/", ApplicationDetailView.as_view(), name="detail"),
     path("<uuid:application_id>/submit/", ApplicationSubmitView.as_view(), name="submit"),
 ]

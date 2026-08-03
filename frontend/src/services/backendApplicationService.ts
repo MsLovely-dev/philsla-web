@@ -110,11 +110,22 @@ export interface BackendApplication {
   reviewStep: Record<string, unknown>;
   lrnProfile?: Record<string, unknown>;
   photoUrl?: string;
+  additionalAttachments?: RegistrationAttachment[];
   examCycleId: string;
   version: number;
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RegistrationAttachment {
+  id: string;
+  section: string;
+  fieldKey: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  url?: string;
 }
 
 export interface BackendApplicationDraftInput {
@@ -255,6 +266,23 @@ export class BackendApplicationService {
     body.append('file', file);
     return this.apiClient.request<RegistrationSelfieFaceValidationResult>('/api/v1/applications/registration/identity/manual-selfie-face/', {
       method: 'POST',
+      body,
+    });
+  }
+
+  async uploadRegistrationAttachment(
+    fieldName: string,
+    file: File,
+    options: ApplicationRequestOptions = {},
+  ): Promise<ServiceResult<RegistrationAttachment>> {
+    const body = new FormData();
+    body.append('fieldName', fieldName);
+    body.append('file', file);
+    return this.apiClient.request<RegistrationAttachment>('/api/v1/applications/registration/attachments/', {
+      method: 'POST',
+      headers: {
+        ...(options.registrationSessionId ? { 'X-Registration-Session-Id': options.registrationSessionId } : {}),
+      },
       body,
     });
   }
@@ -449,7 +477,11 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
   const school = application.school;
   const preferences = application.coursePreferences;
   const lrnProfile = application.lrnProfile ?? {};
-  const additionalHighPriorityFields = normalizeStringRecord(personal.additionalHighPriorityFields);
+  const additionalHighPriorityFields = {
+    ...extractAdditionalStep1Fields(personal, PERSONAL_APPLICATION_KEYS),
+    ...extractAdditionalStep1Fields(school, SCHOOL_APPLICATION_KEYS),
+    ...normalizeStringRecord(personal.additionalHighPriorityFields),
+  };
   const firstNonEmpty = (...values: unknown[]) => {
     for (const value of values) {
       if (value === null || value === undefined) continue;
@@ -516,6 +548,61 @@ function normalizeStringRecord(value: unknown): Record<string, string> {
   return Object.entries(value).reduce<Record<string, string>>((record, [key, entry]) => {
     if (entry === null || entry === undefined) return record;
     const stringValue = String(entry).trim();
+    if (stringValue) record[key] = stringValue;
+    return record;
+  }, {});
+}
+
+const PERSONAL_APPLICATION_KEYS = new Set([
+  'firstName',
+  'middleName',
+  'lastName',
+  'suffix',
+  'extensionName',
+  'dateOfBirth',
+  'dob',
+  'sex',
+  'gender',
+  'email',
+  'emailAddress',
+  'mobile',
+  'mobileNumber',
+  'phoneNumber',
+  'identityVerificationStatus',
+  'photoUrl',
+  'selfiePhotoUrl',
+  'studentIdPhotoUrl',
+  'birthPlace',
+  'placeOfBirth',
+  'nationality',
+  'nationalId',
+  'philSysId',
+  'additionalHighPriorityFields',
+]);
+
+const SCHOOL_APPLICATION_KEYS = new Set([
+  'lrn',
+  'schoolId',
+  'name',
+  'schoolName',
+  'highSchoolName',
+  'address',
+  'schoolAddress',
+  'highSchoolAddress',
+  'academicTrack',
+  'track',
+  'gradeLevel',
+  'enrollmentStatus',
+  'schoolYear',
+  'gwa',
+  'generalWeightedAverage',
+  'average',
+]);
+
+function extractAdditionalStep1Fields(source: Record<string, unknown>, knownKeys: Set<string>): Record<string, string> {
+  return Object.entries(source).reduce<Record<string, string>>((record, [key, value]) => {
+    if (knownKeys.has(key) || value === null || value === undefined) return record;
+    const stringValue = String(value).trim();
     if (stringValue) record[key] = stringValue;
     return record;
   }, {});

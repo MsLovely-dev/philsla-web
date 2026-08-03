@@ -17,6 +17,8 @@ from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
 
+from apps.configuration.models import ConfigurableField, ConfigurableFieldPriority
+
 from .identity_verification import (
     DocumentRecognitionUnavailable,
     SelfieFaceValidationFailed,
@@ -27,7 +29,8 @@ from .identity_verification import (
 from .models import (ApplicationIdentityMedia, ApplicationStatus, IdentityMediaType,
                      RegistrationSelfieMedia,
                      Step2Verification, Step2VerificationConfiguration,
-                     Step2VerificationStatus, StudentApplication)
+                     Step2VerificationStatus, StudentApplication,
+                     StudentApplicationAdditionalAttachment)
 from .registry import RegistryUnavailable, get_lrn_registry
 
 
@@ -46,6 +49,37 @@ LRN_VERIFICATION_CATEGORIES = {"email", "birthday", "student_id", "mobile", "mot
 REGISTRATION_EMAIL_OTP_PREFIX = "registration:email-otp:"
 REGISTRATION_EMAIL_VERIFIED_PREFIX = "registration:email-verified:"
 REGISTRATION_SELFIE_DATA_URL_FIELD = "selfiePhotoUrl"
+REGISTRATION_ATTACHMENT_ALLOWED_TYPES = {
+    "application/pdf": b"%PDF",
+    "image/png": b"\x89PNG\r\n\x1a\n",
+    "image/jpeg": b"\xff\xd8\xff",
+}
+STUDENT_REGISTRATION_MODULE = "student_registration"
+STEP_1_REGISTRATION_SECTION = "Step 1 Registration"
+STUDENT_REGISTRATION_FIELD_TYPE = "Student Registration Field"
+ADDITIONAL_HIGH_PRIORITY_FIELDS_KEY = "additionalHighPriorityFields"
+PWD_FIELD_NAMES = {"PWD Type", "Condition", "PWD ID Number", "PWD ID Attachment", "Accommodation Needed"}
+OPTIONAL_IDENTITY_FIELD_NAMES = {"Middle Name", "Extension Name"}
+STEP1_CONFIG_FIELD_PAYLOAD_KEYS = {
+    "LRN": ("school", "lrn"),
+    "Birth Date": ("personal", "dateOfBirth"),
+    "First Name": ("personal", "firstName"),
+    "Middle Name": ("personal", "middleName"),
+    "Last Name": ("personal", "lastName"),
+    "Extension Name": ("personal", "suffix"),
+    "Sex": ("personal", "sex"),
+    "School ID": ("school", "schoolId"),
+    "School Name": ("school", "name"),
+    "Grade Level": ("school", "gradeLevel"),
+    "Enrollment Status": ("school", "enrollmentStatus"),
+    "School Year": ("school", "schoolYear"),
+    "PWD": ("personal", "isPwd"),
+    "PWD Type": ("personal", "pwdType"),
+    "Condition": ("personal", "pwdCondition"),
+    "PWD ID Number": ("personal", "pwdIdNumber"),
+    "PWD ID Attachment": ("personal", "pwdIdFilename"),
+    "Accommodation Needed": ("personal", "pwdAccommodation"),
+}
 
 
 class LrnVerificationRejected(APIException):
@@ -739,7 +773,15 @@ def _lrn_cooldown_seconds_left(attempt_state: dict) -> int:
 
 
 @transaction.atomic
-def create_draft(*, owner=None, verification_token: str = "", email_verification_token: str = "", data: dict, submit_on_create: bool = False) -> StudentApplication:
+def create_draft(
+    *,
+    owner=None,
+    verification_token: str = "",
+    email_verification_token: str = "",
+    data: dict,
+    submit_on_create: bool = False,
+    registration_session_id: str = "",
+) -> StudentApplication:
     password = data.pop("password", "")
     selfie_data_url = _pop_registration_selfie_data_url(data)
     personal = dict(data.get("personal", {}))
@@ -785,10 +827,16 @@ def create_draft(*, owner=None, verification_token: str = "", email_verification
         personal.setdefault("identityVerificationStatus", "MANUAL_PENDING")
 
     data.update(personal=personal, school=school)
+    _flatten_step1_dynamic_fields(data)
     try:
         if submit_on_create:
             _validate_registration_email_verification(email_verification_token=email_verification_token, email=str(personal.get("email", "")))
-            _validate_registration_account_creation(data, password, require_valid_lrn=bool(verification_token))
+            _validate_registration_account_creation(
+                data,
+                password,
+                require_valid_lrn=bool(verification_token),
+                registration_session_id=registration_session_id,
+            )
         owner_id = None if owner is None else getattr(owner, "user_id", owner.id)
         indexed_lrn = str(school.get("lrn", "")) if verification_token else ""
         application = StudentApplication.objects.create(
@@ -805,6 +853,11 @@ def create_draft(*, owner=None, verification_token: str = "", email_verification
             _store_registration_selfie_data_url(verification=step2, application=application, data_url=selfie_data_url)
         else:
             _store_registration_selfie_data_url(application=application, data_url=selfie_data_url)
+        if registration_session_id:
+            _link_registration_attachments_to_application(
+                registration_session_id=registration_session_id,
+                application=application,
+            )
         if submit_on_create:
             application.status = ApplicationStatus.SUBMITTED
             application.version += 1
@@ -829,7 +882,13 @@ def _validate_registration_email_verification(*, email_verification_token: str, 
         raise ValidationError({"emailVerificationToken": ["Email OTP verification has expired. Please verify your email again."]})
 
 
-def _validate_registration_account_creation(data: dict, password: str, *, require_valid_lrn: bool = True) -> None:
+def _validate_registration_account_creation(
+    data: dict,
+    password: str,
+    *,
+    require_valid_lrn: bool = True,
+    registration_session_id: str = "",
+) -> None:
     personal = data.get("personal", {})
     school = data.get("school", {})
     required = {
@@ -847,8 +906,95 @@ def _validate_registration_account_creation(data: dict, password: str, *, requir
         errors.setdefault("school", []).append("LRN must be exactly 12 numeric digits.")
     if not password:
         errors["password"] = ["Password is required before account creation."]
+    _validate_step1_configured_fields(
+        data,
+        errors,
+        require_lrn=require_valid_lrn,
+        registration_session_id=registration_session_id,
+    )
     if errors:
         raise ValidationError(errors)
+
+
+def _flatten_step1_dynamic_fields(data: dict) -> None:
+    personal = dict(data.get("personal", {}))
+    additional_fields = personal.pop(ADDITIONAL_HIGH_PRIORITY_FIELDS_KEY, {})
+    if isinstance(additional_fields, dict):
+        for key, value in additional_fields.items():
+            if key not in personal:
+                personal[key] = value
+    data["personal"] = personal
+
+
+def _validate_step1_configured_fields(
+    data: dict,
+    errors: dict,
+    *,
+    require_lrn: bool = True,
+    registration_session_id: str = "",
+    application: StudentApplication | None = None,
+) -> None:
+    for field in _active_step1_registration_fields():
+        section, key = _payload_location_for_config_field(field)
+        payload = data.get(section, {})
+        value = payload.get(key)
+        if field.field_name not in STEP1_CONFIG_FIELD_PAYLOAD_KEYS and _is_blank_step1_value(value):
+            alternate_section = "school" if section == "personal" else "personal"
+            value = data.get(alternate_section, {}).get(key)
+        if field.field_name in OPTIONAL_IDENTITY_FIELD_NAMES:
+            continue
+        if field.field_name == "LRN" and not require_lrn:
+            continue
+        if _is_pwd_dependent_field(field) and not _truthy_step1_value(data.get("personal", {}).get("isPwd")):
+            continue
+        if field.input_type == "file":
+            if field.priority == ConfigurableFieldPriority.HIGH and not _registration_attachment_exists(
+                field=field,
+                registration_session_id=registration_session_id,
+                application=application,
+            ):
+                errors.setdefault(section, []).append(f"Missing required attachment: {field.field_name}.")
+            continue
+        if field.priority == ConfigurableFieldPriority.HIGH and _is_blank_step1_value(value):
+            errors.setdefault(section, []).append(f"Missing required field: {field.field_name}.")
+            continue
+        if field.input_type == "dropdown" and not _is_blank_step1_value(value) and str(value) not in field.option_values:
+            errors.setdefault(section, []).append(f"Invalid value for {field.field_name}.")
+
+
+def _active_step1_registration_fields():
+    return ConfigurableField.objects.filter(
+        module=STUDENT_REGISTRATION_MODULE,
+        section=STEP_1_REGISTRATION_SECTION,
+        field_type=STUDENT_REGISTRATION_FIELD_TYPE,
+        is_enabled=True,
+    )
+
+
+def _payload_location_for_config_field(field: ConfigurableField) -> tuple[str, str]:
+    if field.field_name in STEP1_CONFIG_FIELD_PAYLOAD_KEYS:
+        return STEP1_CONFIG_FIELD_PAYLOAD_KEYS[field.field_name]
+    return "personal", field.field_name
+
+
+def _is_pwd_dependent_field(field: ConfigurableField) -> bool:
+    return field.field_section == "PWD Information" and field.field_name in PWD_FIELD_NAMES
+
+
+def _is_blank_step1_value(value) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, dict):
+        return not value
+    return value == ""
+
+
+def _truthy_step1_value(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"yes", "true", "1", "on"}
 
 
 @transaction.atomic
@@ -858,6 +1004,8 @@ def update_draft(*, application_id, owner, expected_version: int, data: dict) ->
         raise ApplicationConflict("Only draft or correction-requested applications may be edited.")
     _check_version(application, expected_version)
     selfie_data_url = _pop_registration_selfie_data_url(data) if "personal" in data else ""
+    if "personal" in data:
+        _flatten_step1_dynamic_fields(data)
     for field, value in data.items():
         setattr(application, field, value)
     application.version += 1
@@ -914,6 +1062,11 @@ def _validate_complete(application: StudentApplication) -> None:
         missing = [field for field in fields if payload.get(field) in (None, "")]
         if missing:
             errors[section] = [f"Missing required field: {field}." for field in missing]
+    _validate_step1_configured_fields(
+        {"personal": application.personal, "school": application.school},
+        errors,
+        application=application,
+    )
     lrn = str(application.school.get("lrn", ""))
     if lrn and (len(lrn) != 12 or not lrn.isdigit()):
         errors.setdefault("school", []).append("LRN must be exactly 12 numeric digits.")
@@ -925,6 +1078,94 @@ def _validate_complete(application: StudentApplication) -> None:
         errors["reviewStep"] = ["Privacy consent and declaration acceptance are required."]
     if errors:
         raise ValidationError(errors)
+
+
+def _registration_attachment_exists(
+    *,
+    field: ConfigurableField,
+    registration_session_id: str = "",
+    application: StudentApplication | None = None,
+) -> bool:
+    query = StudentApplicationAdditionalAttachment.objects.filter(
+        section=field.field_section,
+        field_key=field.field_name,
+    )
+    if application is not None:
+        return query.filter(application=application).exists()
+    if registration_session_id:
+        return query.filter(registration_session_id=registration_session_id).exists()
+    return False
+
+
+def upload_registration_attachment(*, registration_session_id: str, field_name: str, uploaded_file) -> StudentApplicationAdditionalAttachment:
+    if not registration_session_id:
+        raise ValidationError({"registrationSessionId": ["Registration session is required before uploading an attachment."]})
+    field = ConfigurableField.objects.filter(
+        module=STUDENT_REGISTRATION_MODULE,
+        section=STEP_1_REGISTRATION_SECTION,
+        field_type=STUDENT_REGISTRATION_FIELD_TYPE,
+        field_name=field_name,
+        input_type="file",
+        is_enabled=True,
+    ).first()
+    if field is None:
+        raise ValidationError({"fieldName": ["This attachment field is not configured or is inactive."]})
+
+    content_type = _validated_registration_attachment_content_type(uploaded_file)
+    digest = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        digest.update(chunk)
+    uploaded_file.seek(0)
+
+    existing = StudentApplicationAdditionalAttachment.objects.filter(
+        registration_session_id=registration_session_id,
+        application__isnull=True,
+        section=field.field_section,
+        field_key=field.field_name,
+    ).first()
+    if existing is not None:
+        existing.file.delete(save=False)
+        existing.delete()
+
+    return StudentApplicationAdditionalAttachment.objects.create(
+        registration_session_id=registration_session_id,
+        section=field.field_section,
+        field_key=field.field_name,
+        file=uploaded_file,
+        original_filename=getattr(uploaded_file, "name", "")[:255] or field.field_name,
+        content_type=content_type,
+        size=uploaded_file.size,
+        sha256=digest.hexdigest(),
+    )
+
+
+def _validated_registration_attachment_content_type(uploaded_file) -> str:
+    if uploaded_file.size > settings.REGISTRATION_ATTACHMENT_MAX_BYTES:
+        raise ValidationError({"file": ["Attachment must not exceed 5 MB."]})
+    header = uploaded_file.read(16)
+    uploaded_file.seek(0)
+    content_type = str(getattr(uploaded_file, "content_type", "") or "")
+    expected_signature = REGISTRATION_ATTACHMENT_ALLOWED_TYPES.get(content_type)
+    if expected_signature is None or not header.startswith(expected_signature):
+        raise ValidationError({"file": ["Only valid PDF, JPEG, and PNG attachments are accepted."]})
+    return content_type
+
+
+def _link_registration_attachments_to_application(*, registration_session_id: str, application: StudentApplication) -> None:
+    for attachment in StudentApplicationAdditionalAttachment.objects.filter(
+        registration_session_id=registration_session_id,
+        application__isnull=True,
+    ):
+        existing = StudentApplicationAdditionalAttachment.objects.filter(
+            application=application,
+            section=attachment.section,
+            field_key=attachment.field_key,
+        ).first()
+        if existing is not None:
+            existing.file.delete(save=False)
+            existing.delete()
+        attachment.application = application
+        attachment.save(update_fields=["application"])
 
 
 @transaction.atomic

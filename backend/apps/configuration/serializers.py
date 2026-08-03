@@ -3,6 +3,9 @@ from rest_framework import serializers
 from .models import ConfigurableField
 
 
+SUPPORTED_INPUT_TYPES = {"text", "date", "dropdown", "textarea", "checkbox", "file"}
+
+
 class ConfigurableFieldSerializer(serializers.ModelSerializer):
     type = serializers.CharField(source="field_type", required=False)
     value = serializers.CharField(source="field_name")
@@ -37,6 +40,8 @@ class ConfigurableFieldSerializer(serializers.ModelSerializer):
         attrs = super().validate(attrs)
         input_type = attrs.get("input_type", getattr(self.instance, "input_type", "text"))
         option_values = attrs.get("option_values", getattr(self.instance, "option_values", []))
+        if input_type not in SUPPORTED_INPUT_TYPES:
+            raise serializers.ValidationError({"inputType": ["Unsupported input type."]})
         if not isinstance(option_values, list) or any(not isinstance(option, str) for option in option_values):
             raise serializers.ValidationError({"optionValues": ["Options must be a list of text values."]})
         cleaned_options = [option.strip() for option in option_values if option.strip()]
