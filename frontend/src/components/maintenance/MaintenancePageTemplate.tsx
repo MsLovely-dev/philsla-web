@@ -22,12 +22,16 @@ import {
   Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-export interface MaintenanceColumn {
+export type MaintenanceRecord = Record<string, unknown>;
+type MaintenanceDisplayRecord = Record<string, string | number | boolean | null | undefined>;
+
+export interface MaintenanceColumn<TRow extends object = MaintenanceDisplayRecord> {
   key: string;
   label: string;
-  render?: (row: any) => React.ReactNode;
+  render?: (row: TRow) => React.ReactNode;
   sortable?: boolean;
 }
 
@@ -39,21 +43,21 @@ export interface MaintenanceField {
   required?: boolean;
   placeholder?: string;
   dependsOn?: string;
-  validation?: (val: any) => string | null;
+  validation?: (val: unknown) => string | null;
   disabled?: boolean;
-  onChange?: (val: any, currentData: any) => any;
+  onChange?: (val: string, currentData: MaintenanceRecord) => MaintenanceRecord;
 }
 
-interface MaintenancePageProps {
+interface MaintenancePageProps<TRow extends object> {
   title: string;
   subtitle: string;
   breadcrumb?: string[];
-  columns: MaintenanceColumn[];
-  data: any[];
-  onAdd?: (data: any) => void;
-  onEdit?: (row: any) => void;
-  onDelete?: (row: any) => void;
-  onView?: (row: any) => void;
+  columns: MaintenanceColumn<NoInfer<TRow>>[];
+  data: TRow[];
+  onAdd?: (data: TRow) => void;
+  onEdit?: (row: TRow) => void;
+  onDelete?: (row: TRow) => void;
+  onView?: (row: TRow) => void;
   fields: MaintenanceField[];
   bulkUpload?: {
     templateUrl: string;
@@ -65,7 +69,11 @@ interface MaintenancePageProps {
   aboveTableContent?: React.ReactNode;
 }
 
-export default function MaintenancePageTemplate({
+function readField(row: object, key: string): unknown {
+  return Reflect.get(row, key);
+}
+
+export default function MaintenancePageTemplate<TRow extends object>({
   title,
   subtitle,
   breadcrumb = ['Maintenance'],
@@ -81,12 +89,12 @@ export default function MaintenancePageTemplate({
   sidePanel,
   isSidePanelOpen,
   aboveTableContent
-}: MaintenancePageProps) {
+}: MaintenancePageProps<TRow>) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
-  const [editingRow, setEditingRow] = useState<any>(null);
-  const [formData, setFormData] = useState<any>({});
+  const [editingRow, setEditingRow] = useState<TRow | null>(null);
+  const [formData, setFormData] = useState<MaintenanceRecord>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const handleOpenCreate = () => {
@@ -96,9 +104,9 @@ export default function MaintenancePageTemplate({
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (row: any) => {
+  const handleOpenEdit = (row: TRow) => {
     setEditingRow(row);
-    setFormData({ ...row });
+    setFormData(Object.fromEntries(Object.entries(row)));
     setFormErrors({});
     setIsModalOpen(true);
   };
@@ -122,10 +130,11 @@ export default function MaintenancePageTemplate({
     e.preventDefault();
     if (!validateForm()) return;
 
+    const submittedRow = { ...editingRow, ...formData } as unknown as TRow;
     if (editingRow) {
-      onEdit?.(formData);
+      onEdit?.(submittedRow);
     } else {
-      onAdd?.(formData);
+      onAdd?.(submittedRow);
     }
     setIsModalOpen(false);
   };
@@ -209,22 +218,22 @@ export default function MaintenancePageTemplate({
                   {columns.map(col => (
                     <td key={col.key} className="px-8 py-6">
                       {col.render ? col.render(row) : (
-                        <span className="text-sm font-bold text-philsa-navy">{row[col.key]}</span>
+                        <span className="text-sm font-bold text-philsa-navy">{String(readField(row, col.key) ?? '')}</span>
                       )}
                     </td>
                   ))}
                   <td className="px-8 py-6">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
-                        <Users className="w-3 h-3" /> {row.updatedBy || 'admin_user'}
+                        <Users className="w-3 h-3" /> {String(readField(row, 'updatedBy') || 'admin_user')}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
-                        <Clock className="w-3 h-3" /> {row.updatedAt || '2026-05-14 08:30'}
+                        <Clock className="w-3 h-3" /> {String(readField(row, 'updatedAt') || '2026-05-14 08:30')}
                       </div>
                     </div>
                   </td>
                   <td className="px-8 py-6">
-                     <StatusBadge status={row.approvalStatus || 'Approved'} isApproval />
+                     <StatusBadge status={String(readField(row, 'approvalStatus') || 'Approved')} isApproval />
                   </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-1">
@@ -346,7 +355,7 @@ export default function MaintenancePageTemplate({
                               "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all disabled:opacity-65 disabled:bg-gray-100/80 disabled:cursor-not-allowed",
                               formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                             )}
-                            value={formData[field.name] || ''}
+                            value={String(formData[field.name] ?? '')}
                             onChange={(e) => {
                               const val = e.target.value;
                               let updated = { ...formData, [field.name]: val };
@@ -364,7 +373,7 @@ export default function MaintenancePageTemplate({
                                 "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all appearance-none pr-10 disabled:opacity-65 disabled:bg-gray-100/80 disabled:cursor-not-allowed",
                                 formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                               )}
-                              value={formData[field.name] || ''}
+                              value={String(formData[field.name] ?? '')}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 let updated = { ...formData, [field.name]: val };
@@ -393,7 +402,7 @@ export default function MaintenancePageTemplate({
                               "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all resize-none",
                               formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                             )}
-                            value={formData[field.name] || ''}
+                            value={String(formData[field.name] ?? '')}
                             onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
                           />
                         ) : field.type === 'toggle' ? (
@@ -519,7 +528,7 @@ export default function MaintenancePageTemplate({
 }
 
 function StatusBadge({ status, isApproval }: { status: string; isApproval?: boolean }) {
-  const configs: Record<string, { bg: string; text: string; border: string; icon: any }> = {
+  const configs: Record<string, { bg: string; text: string; border: string; icon: LucideIcon }> = {
     'Active': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-100', icon: CheckCircle2 },
     'Inactive': { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-100', icon: AlertCircle },
     'Approved': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', icon: CheckCircle2 },
@@ -540,5 +549,3 @@ function StatusBadge({ status, isApproval }: { status: string; isApproval?: bool
     </span>
   );
 }
-
-

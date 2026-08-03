@@ -54,6 +54,14 @@ export interface UniversityItem {
   status: 'Active' | 'Inactive';
 }
 
+function isUniversityClassification(value: string): value is UniversityItem['classification'] {
+  return value === 'Public' || value === 'Private';
+}
+
+function isDegreeType(value: string): value is CollegeCourse['degreeType'] {
+  return ['Bachelor of Science', 'Bachelor of Arts', 'Bachelor of Fine Arts', 'Associate'].includes(value);
+}
+
 export default function UniversitiesListMaintenance() {
   const [universities, setUniversities] = useState<UniversityItem[]>([]);
   const [courses, setCourses] = useState<CollegeCourse[]>([]);
@@ -830,7 +838,11 @@ export default function UniversitiesListMaintenance() {
                   <label className="font-bold text-slate-700">Classification *</label>
                   <select
                     value={uniFormData.classification || 'Public'}
-                    onChange={e => setUniFormData({ ...uniFormData, classification: e.target.value as any })}
+                    onChange={e => {
+                      if (isUniversityClassification(e.target.value)) {
+                        setUniFormData({ ...uniFormData, classification: e.target.value });
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Public">Public</option>
@@ -964,7 +976,11 @@ export default function UniversitiesListMaintenance() {
                   <label className="font-bold text-slate-700">Degree Type</label>
                   <select
                     value={courseFormData.degreeType || 'Bachelor of Science'}
-                    onChange={e => setCourseFormData({ ...courseFormData, degreeType: e.target.value as any })}
+                    onChange={e => {
+                      if (isDegreeType(e.target.value)) {
+                        setCourseFormData({ ...courseFormData, degreeType: e.target.value });
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Bachelor of Science">Bachelor of Science</option>

@@ -36,6 +36,14 @@ export interface SchoolItem {
   status: 'Active' | 'Inactive';
 }
 
+function isSchoolClassification(value: string): value is SchoolItem['classification'] {
+  return value === 'Public' || value === 'Private';
+}
+
+function isSchoolType(value: string): value is SchoolItem['schoolType'] {
+  return ['Senior High School', 'Science High School', 'Integrated School', 'Testing Venue Partner'].includes(value);
+}
+
 export default function SchoolsListMaintenance() {
   const [schools, setSchools] = useState<SchoolItem[]>([]);
 
@@ -272,7 +280,10 @@ export default function SchoolsListMaintenance() {
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
             <select
               value={classificationFilter}
-              onChange={e => setClassificationFilter(e.target.value as any)}
+              onChange={e => {
+                const value = e.target.value;
+                if (value === 'ALL' || isSchoolClassification(value)) setClassificationFilter(value);
+              }}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
             >
               <option value="ALL">All Classifications</option>
@@ -442,7 +453,11 @@ export default function SchoolsListMaintenance() {
                   <label className="font-bold text-slate-700">Classification *</label>
                   <select
                     value={formData.classification || 'Public'}
-                    onChange={e => setFormData({ ...formData, classification: e.target.value as any })}
+                    onChange={e => {
+                      if (isSchoolClassification(e.target.value)) {
+                        setFormData({ ...formData, classification: e.target.value });
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Public">Public (Government / State)</option>
@@ -468,7 +483,11 @@ export default function SchoolsListMaintenance() {
                   <label className="font-bold text-slate-700">School Type</label>
                   <select
                     value={formData.schoolType || 'Senior High School'}
-                    onChange={e => setFormData({ ...formData, schoolType: e.target.value as any })}
+                    onChange={e => {
+                      if (isSchoolType(e.target.value)) {
+                        setFormData({ ...formData, schoolType: e.target.value });
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Senior High School">Senior High School</option>
@@ -571,4 +590,3 @@ export default function SchoolsListMaintenance() {
     </div>
   );
 }
-

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { X, AlertCircle, ShieldCheck, Eye, Sparkles, Check, ArrowRight, ArrowLeft, Camera, Shield, Laptop, Monitor, FileText } from 'lucide-react';
+import type { MaintenanceRecord } from './MaintenancePageTemplate';
 
 interface RegistrationPreviewProps {
-  data: any[];
+  data: MaintenanceRecord[];
   onClose: () => void;
 }
 
@@ -46,13 +47,13 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
 
   // Helper to check if a configuration item is active
   const isFieldActive = (fieldName: string) => {
-    const item = data.find(i => i.value?.toLowerCase() === fieldName.toLowerCase());
+    const item = data.find(i => typeof i.value === 'string' && i.value.toLowerCase() === fieldName.toLowerCase());
     if (!item) return true; // Default to active if config doesn't exist
     return item.status === 'Active' || item.status === true;
   };
 
   const isMethodActive = (methodName: string) => {
-    const item = data.find(i => i.type === 'Verification Method' && i.value?.toLowerCase().includes(methodName.toLowerCase()));
+    const item = data.find(i => i.type === 'Verification Method' && typeof i.value === 'string' && i.value.toLowerCase().includes(methodName.toLowerCase()));
     if (!item) return true; // Default to active
     return item.status === 'Active' || item.status === true;
   };
@@ -786,4 +787,3 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
     </>
   );
 }
-

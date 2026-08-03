@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Eye } from 'lucide-react';
-import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField } from '../../../components/maintenance/MaintenancePageTemplate';
+import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField, MaintenanceRecord } from '../../../components/maintenance/MaintenancePageTemplate';
 import RegistrationPreview from '../../../components/maintenance/RegistrationPreview';
 
 const CATEGORIES = [
@@ -10,17 +10,29 @@ const CATEGORIES = [
   'Supported IDs'
 ];
 
+interface RegistrationConfig extends MaintenanceRecord {
+  id?: string;
+  category?: string;
+  code?: string;
+  name?: string;
+  description?: string;
+  applicantType?: string;
+  required?: string;
+  visibleToStudent?: string;
+  status?: string | boolean;
+}
+
 export default function StudentRegistrationMaintenance() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<RegistrationConfig[]>([]);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('Registration requirements');
 
-  const saveConfigs = (newData: any[]) => {
+  const saveConfigs = (newData: RegistrationConfig[]) => {
     setData(newData);
   };
 
-  const getColumnsForCategory = (category: string): MaintenanceColumn[] => {
+  const getColumnsForCategory = (category: string): MaintenanceColumn<RegistrationConfig>[] => {
     switch (category) {
       case 'Registration requirements':
         return [
@@ -159,7 +171,7 @@ export default function StudentRegistrationMaintenance() {
     { name: 'status', label: 'Active Status', type: 'toggle' }
   ];
 
-  const handleAdd = (newData: any) => {
+  const handleAdd = (newData: RegistrationConfig) => {
     const item = {
       ...newData,
       category: newData.category || selectedCategory,
@@ -169,7 +181,7 @@ export default function StudentRegistrationMaintenance() {
     saveConfigs([item, ...data]);
   };
 
-  const handleEdit = (updatedRow: any) => {
+  const handleEdit = (updatedRow: RegistrationConfig) => {
     const item = {
       ...updatedRow,
       status: updatedRow.status === true || updatedRow.status === 'Active' || updatedRow.status === 'Yes' ? 'Active' : 'Inactive'
@@ -177,8 +189,8 @@ export default function StudentRegistrationMaintenance() {
     saveConfigs(data.map(row => row.id === item.id ? item : row));
   };
 
-  const handleDelete = (row: any) => {
-    if (window.confirm(`Are you sure you want to delete ${row.name || row.code}?`)) {
+  const handleDelete = (row: RegistrationConfig) => {
+    if (window.confirm(`Are you sure you want to delete ${row.name || row.code || 'this record'}?`)) {
       saveConfigs(data.filter(r => r.id !== row.id));
     }
   };
@@ -247,4 +259,3 @@ export default function StudentRegistrationMaintenance() {
     />
   );
 }
-
