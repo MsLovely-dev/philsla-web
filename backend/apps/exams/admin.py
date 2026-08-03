@@ -20,6 +20,8 @@ from .models import (
     QuestionAttachment,
     QuestionChoice,
     QuestionTag,
+    QuestionWorkflowHistory,
+    ReferenceYear,
     QuestionType,
     Tag,
     Subject,
