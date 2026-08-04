@@ -39,3 +39,15 @@ VITE_BACKEND_API_BASE_URL="http://localhost:8000"
 ```
 
 Backend mode calls the current implemented auth boundary endpoints. Full backend login is still incomplete until account storage, token issuance, OTP delivery, and session validation are implemented.
+
+## Staging App Service
+
+For Azure App Service staging, build the app and run the static production server:
+
+```bash
+npm ci
+npm run build
+npm start
+```
+
+`npm start` serves `dist/` and falls back to `index.html` for React Router routes. Build staging with `VITE_AUTH_SERVICE_MODE="backend"` and `VITE_BACKEND_API_BASE_URL` set to the staging backend URL. See [.env.staging.example](.env.staging.example) and the [staging Azure App Service runbook](../docs/deployment/STAGING-AZURE-APP-SERVICE.md).
