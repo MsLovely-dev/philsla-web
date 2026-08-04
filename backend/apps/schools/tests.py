@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
@@ -81,3 +83,17 @@ class SchoolApiTests(APITestCase):
 
         response = self.client.get(reverse("schools:school_list"))
         self.assertEqual(response.status_code, 403)
+
+
+class SeedSchoolsCommandTests(TestCase):
+    def test_seed_command_is_idempotent_and_generates_sequential_codes(self) -> None:
+        call_command("seed_schools")
+
+        self.assertEqual(School.objects.count(), 15)
+        codes = list(School.objects.order_by("id").values_list("code", flat=True))
+        self.assertEqual(codes[0], "SCH-00001")
+        self.assertEqual(codes[-1], "SCH-00015")
+
+        # Running again must not create duplicates.
+        call_command("seed_schools")
+        self.assertEqual(School.objects.count(), 15)
