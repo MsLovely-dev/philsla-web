@@ -1,29 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  AlertTriangle,
   Award,
   BookOpen,
   Camera,
-  Check,
-  CheckCircle,
-  ChevronDown,
   ChevronLeft,
   Fingerprint,
-  MapPin,
   MessageSquare,
   Search,
   ShieldAlert,
   ShieldCheck,
   User,
-  X,
   XCircle,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import type { Application } from '../../types';
-import { usePhilSA } from '../../PhilSAContext';
-import SuccessModal from '../../components/SuccessModal';
 import {
   backendApplicationService,
   mapBackendApplicationToFrontend,
@@ -71,16 +62,10 @@ interface AuditEventSpec {
   data: string;
 }
 
-const REASSIGNMENT_CENTERS = [
-  'PUP ICT Center — 142 Seats Avail (Operational)',
-  'UP Manila CMS — 12 Seats Avail (Near Full)',
-];
-
 export default function ScoreCandidateDetail() {
   const { batchId, candidateId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { addAuditLog } = usePhilSA();
 
   const stateResult = (location.state as { result?: ScoreManagementResult } | null)?.result ?? null;
   const [result, setResult] = useState<ScoreManagementResult | null>(stateResult);
@@ -89,21 +74,7 @@ export default function ScoreCandidateDetail() {
 
   const [application, setApplication] = useState<Application | null>(null);
   const [isLoadingApplication, setIsLoadingApplication] = useState(false);
-
-  const [remarks, setRemarks] = useState('');
-  const [decisionStatus, setDecisionStatus] = useState<Application['status']>('PENDING');
-  const [reviewActionTaken, setReviewActionTaken] = useState<'APPROVE' | 'REJECT' | 'CORRECTION' | null>(null);
-  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
-  const [correctionReason, setCorrectionReason] = useState('');
-  const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
-  const [selectedCenter, setSelectedCenter] = useState(REASSIGNMENT_CENTERS[0]);
-  const [toastMessage, setToastMessage] = useState('');
-  const [successConfig, setSuccessConfig] = useState<{
-    isOpen: boolean;
-    type: 'ACCEPTED' | 'REJECTED' | 'FOR_CORRECTION';
-    title: string;
-    message: string;
-  }>({ isOpen: false, type: 'ACCEPTED', title: '', message: '' });
+  const [reviewerNotes, setReviewerNotes] = useState('');
 
   const [logSearch, setLogSearch] = useState('');
   const [logFilterType, setLogFilterType] = useState<'ALL' | 'LRN_VERIFICATION' | 'FACIAL_RECOGNITION' | 'SELFIE_VERIFICATION'>('ALL');
@@ -139,7 +110,7 @@ export default function ScoreCandidateDetail() {
   useEffect(() => {
     if (!result?.lrn) {
       setApplication(null);
-      setRemarks('');
+      setReviewerNotes('');
       return;
     }
 
@@ -151,71 +122,20 @@ export default function ScoreCandidateDetail() {
       setIsLoadingApplication(false);
       if (response.ok === false) {
         setApplication(null);
-        setRemarks('');
+        setReviewerNotes('');
         return;
       }
       const data: BackendApplication = response.data;
       const mapped = mapBackendApplicationToFrontend(data, data.id);
       setApplication(mapped);
-      setDecisionStatus(mapped.status);
-      setReviewActionTaken(null);
       const reviewStep = data.reviewStep ?? {};
-      setRemarks(firstNonEmptyString(reviewStep.reviewerReason, reviewStep.reason, reviewStep.reviewNotes));
+      setReviewerNotes(firstNonEmptyString(reviewStep.reviewerReason, reviewStep.reason, reviewStep.reviewNotes));
     });
 
     return () => {
       cancelled = true;
     };
   }, [result?.lrn]);
-
-  const isDecisionFinal = reviewActionTaken !== null;
-
-  const handleDecision = (action: 'APPROVE' | 'REJECT') => {
-    if (isDecisionFinal || !application) return;
-    const newStatus = action === 'APPROVE' ? 'ACCEPTED' : 'REJECTED';
-    setDecisionStatus(newStatus);
-    setReviewActionTaken(action);
-    addAuditLog('SCORE_MANAGEMENT_CANDIDATE_REVIEW', JSON.stringify({
-      candidateId: application.candidateId,
-      applicationId: application.id,
-      status: newStatus,
-      remarks: remarks.trim(),
-      timestamp: new Date().toISOString(),
-    }));
-    setSuccessConfig({
-      isOpen: true,
-      type: newStatus,
-      title: `Application ${action === 'APPROVE' ? 'Approved' : 'Rejected'}`,
-      message: `${application.firstName} ${application.lastName}'s application has been marked ${action === 'APPROVE' ? 'ACCEPTED' : 'REJECTED'} and logged in the audit trail.`,
-    });
-  };
-
-  const submitCorrection = () => {
-    if (!application) return;
-    setIsCorrectionModalOpen(false);
-    setDecisionStatus('FOR_CORRECTION');
-    setReviewActionTaken('CORRECTION');
-    addAuditLog('SCORE_MANAGEMENT_CANDIDATE_REVIEW', JSON.stringify({
-      candidateId: application.candidateId,
-      applicationId: application.id,
-      status: 'FOR_CORRECTION',
-      remarks: correctionReason.trim(),
-      timestamp: new Date().toISOString(),
-    }));
-    setSuccessConfig({
-      isOpen: true,
-      type: 'FOR_CORRECTION',
-      title: 'Sent for Correction',
-      message: 'The student has been notified to revise their application based on your feedback.',
-    });
-    setCorrectionReason('');
-  };
-
-  const confirmReassignment = () => {
-    setIsReassignModalOpen(false);
-    setToastMessage(`Candidate reassigned to ${selectedCenter.split(' — ')[0]}.`);
-    window.setTimeout(() => setToastMessage(''), 3500);
-  };
 
   const [verificationLogs, setVerificationLogs] = useState<VerificationLog[]>([]);
   const [auditEventSpecs, setAuditEventSpecs] = useState<AuditEventSpec[]>([]);
@@ -604,59 +524,16 @@ export default function ScoreCandidateDetail() {
                   <MessageSquare className="w-5 h-5 text-philsa-red" /> Official Reviewer Directives
                 </h3>
                 <textarea
-                  className={cn(
-                    'w-full bg-philsa-bg border-none rounded-2xl p-6 text-sm font-medium focus:ring-2 focus:ring-philsa-red/10 outline-none min-h-[160px] resize-none shadow-inner',
-                    isDecisionFinal && 'cursor-not-allowed text-philsa-gray',
-                  )}
-                  placeholder={isDecisionFinal ? 'Application decision is final. Reviewer directives are read-only.' : 'Provide detailed compliance notes or remediation instructions...'}
-                  value={remarks}
-                  onChange={(event) => setRemarks(event.target.value)}
-                  readOnly={isDecisionFinal}
-                  aria-readonly={isDecisionFinal}
+                  className="w-full bg-philsa-bg border-none rounded-2xl p-6 text-sm font-medium focus:ring-2 focus:ring-philsa-red/10 outline-none min-h-[160px] resize-none shadow-inner text-philsa-navy"
+                  placeholder="Provide detailed compliance notes or remediation instructions..."
+                  value={reviewerNotes}
+                  onChange={(event) => setReviewerNotes(event.target.value)}
                 />
 
-                <div className="mt-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-8 bg-philsa-bg/30 rounded-3xl border border-philsa-border border-dashed">
+                <div className="mt-10 p-8 bg-philsa-bg/30 rounded-3xl border border-philsa-border border-dashed">
                   <p className="flex items-center gap-2 text-xs font-bold italic text-philsa-navy">
                     <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" /> All personal data cross-referenced with PhilSys registry.
                   </p>
-                  {!isDecisionFinal && (
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setIsReassignModalOpen(true)}
-                        className="bg-white border border-philsa-border text-philsa-navy font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-bg active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
-                      >
-                        <MapPin className="w-3.5 h-3.5" /> Reassign Center
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsCorrectionModalOpen(true)}
-                        className="bg-amber-50 border border-amber-200 text-amber-700 font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-amber-100 active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5" /> Correction
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDecision('REJECT')}
-                        className="bg-white border border-philsa-red/20 text-philsa-red font-black py-3 px-5 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-red hover:text-white active:scale-[0.98] shadow-sm transition-all flex items-center gap-2"
-                      >
-                        <X className="w-3.5 h-3.5" /> Reject
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDecision('APPROVE')}
-                        className="bg-philsa-red text-white font-black py-3 px-7 rounded-xl text-[10px] uppercase tracking-widest hover:bg-philsa-red/90 active:scale-[0.98] shadow-lg shadow-philsa-red/20 transition-all flex items-center gap-2"
-                      >
-                        <CheckCircle className="w-3.5 h-3.5" /> Approve
-                      </button>
-                    </div>
-                  )}
-                  {decisionStatus === 'REJECTED' && (
-                    <div className="w-full rounded-2xl border border-philsa-red/20 bg-philsa-red/5 px-5 py-4 text-left">
-                      <p className="text-[9px] font-black uppercase tracking-widest text-philsa-red mb-1">Rejection Reason</p>
-                      <p className="text-xs font-bold text-philsa-navy leading-relaxed">{remarks.trim() || 'No rejection reason recorded.'}</p>
-                    </div>
-                  )}
                 </div>
               </div>
             </>
@@ -664,129 +541,6 @@ export default function ScoreCandidateDetail() {
         </div>
       )}
 
-      <AnimatePresence>
-        {isCorrectionModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-philsa-navy/60 backdrop-blur-md">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden"
-            >
-              <div className="p-8 border-b border-philsa-border bg-philsa-bg/30">
-                <h3 className="text-xl font-black text-philsa-navy uppercase tracking-tight">Return for <span className="text-philsa-red">Correction</span></h3>
-                <p className="text-[10px] text-philsa-gray font-black mt-1 uppercase tracking-widest">Flagging application for student revisions</p>
-              </div>
-
-              <div className="p-8 space-y-6">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-philsa-red uppercase tracking-widest px-1">Specific Correction Directives *</label>
-                  <textarea
-                    rows={6}
-                    value={correctionReason}
-                    onChange={(event) => setCorrectionReason(event.target.value)}
-                    placeholder="Please specify exactly what the student needs to update (e.g., Blurred Birth Certificate, Invalid LRN, Missing Transcripts)..."
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-3xl p-6 text-xs font-bold text-philsa-navy focus:ring-4 focus:ring-philsa-red/5 outline-none shadow-inner"
-                  />
-                  <p className="text-[9px] text-philsa-gray font-medium italic">* This message will be sent directly to the student via email and portal dashboard.</p>
-                </div>
-              </div>
-
-              <div className="p-8 bg-philsa-bg/30 border-t border-philsa-border flex gap-3">
-                <button type="button" onClick={() => setIsCorrectionModalOpen(false)} className="flex-1 py-4 bg-white border border-philsa-border text-philsa-navy text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-philsa-bg transition-all">Cancel</button>
-                <button
-                  type="button"
-                  onClick={submitCorrection}
-                  disabled={!correctionReason.trim()}
-                  className="flex-[2] py-4 bg-philsa-red text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-philsa-red/20 hover:bg-philsa-red/90 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  Send Resolution Request
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {isReassignModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-philsa-navy/60 backdrop-blur-md">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden"
-            >
-              <div className="p-8 border-b border-philsa-border bg-philsa-bg/30">
-                <h3 className="text-xl font-black text-philsa-navy uppercase tracking-tight">Relocation Protocol — <span className="text-philsa-red">Reassign Center</span></h3>
-                <p className="text-[10px] text-philsa-gray font-black mt-1 uppercase tracking-widest">Redistribute candidate to a different testing facility</p>
-              </div>
-
-              <div className="p-8 space-y-6">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-philsa-gray px-1">System-Targeted Centers</label>
-                  <div className="relative">
-                    <select
-                      value={selectedCenter}
-                      onChange={(event) => setSelectedCenter(event.target.value)}
-                      className="w-full bg-philsa-bg border border-philsa-border rounded-2xl pl-4 pr-10 py-4 text-xs font-black uppercase tracking-tight outline-none focus:ring-2 focus:ring-philsa-navy/5 appearance-none"
-                    >
-                      {REASSIGNMENT_CENTERS.map((center) => (
-                        <option key={center} value={center}>{center}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="p-6 bg-amber-50 border border-amber-100 rounded-3xl flex items-start gap-4">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <div>
-                    <p className="text-[11px] font-black uppercase tracking-tight text-amber-900 mb-1">Institutional Redistribution Triggered</p>
-                    <p className="text-xs font-medium text-amber-800 leading-relaxed">
-                      Reassigning this candidate will automatically invalidate their current physical permit and trigger an immediate notification dispatch.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-8 bg-philsa-bg/30 border-t border-philsa-border flex gap-3">
-                <button type="button" onClick={() => setIsReassignModalOpen(false)} className="flex-1 py-4 bg-white border border-philsa-border text-philsa-navy text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-philsa-bg transition-all">Cancel</button>
-                <button
-                  type="button"
-                  onClick={confirmReassignment}
-                  className="flex-[2] py-4 bg-philsa-navy text-white text-[10px] font-black uppercase tracking-widest rounded-2xl shadow-xl hover:bg-philsa-navy/90 transition-all flex items-center justify-center gap-2"
-                >
-                  <Check className="w-3.5 h-3.5" /> Confirm Reassignment
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {toastMessage && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-[#00563F]/10 bg-[#00563F] px-6 py-4 text-xs font-bold text-white shadow-2xl"
-          >
-            <CheckCircle className="h-5 w-5 shrink-0 text-white" />
-            <span>{toastMessage}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <SuccessModal
-        isOpen={successConfig.isOpen}
-        onClose={() => setSuccessConfig((prev) => ({ ...prev, isOpen: false }))}
-        type={successConfig.type}
-        title={successConfig.title}
-        message={successConfig.message}
-        actionLabel="Okay"
-      />
     </div>
   );
 }
