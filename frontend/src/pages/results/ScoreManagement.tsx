@@ -246,8 +246,10 @@ export default function ScoreManagement() {
     }
   };
 
-  const handleViewCandidate = (candidateId: string) => {
-    navigate(`/admin/reviewer/applications/${candidateId}`);
+  const handleViewCandidate = (result: ScoreManagementResult) => {
+    navigate(`/admin/results/scores/${encodeURIComponent(selectedBatchId)}/${encodeURIComponent(result.candidateId)}`, {
+      state: { result },
+    });
   };
 
   const handleExport = async () => {
@@ -652,7 +654,7 @@ function ScoreResultsTable({
   sortKey: SortKey;
   sortDirection: SortDirection;
   onSort: (sortKey: SortKey) => void;
-  onViewCandidate: (candidateId: string) => void;
+  onViewCandidate: (result: ScoreManagementResult) => void;
 }) {
   return (
     <div className="card-philsa !p-0 overflow-hidden border border-philsa-border shadow-xs">
@@ -714,7 +716,7 @@ function ScoreResultsTable({
                   <td className="px-6 py-4">
                     <button
                       type="button"
-                      onClick={() => onViewCandidate(row.candidateId)}
+                      onClick={() => onViewCandidate(row)}
                       className="cursor-pointer text-xs font-bold text-philsa-navy hover:text-philsa-red"
                     >
                       View

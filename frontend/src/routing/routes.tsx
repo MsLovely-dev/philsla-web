@@ -46,6 +46,7 @@ import ResultsManagement from '../pages/ResultsManagement';
 import ResultsPage from '../pages/ResultsPage';
 import ResetPasswordPage from '../pages/ResetPasswordPage';
 import ScoreManagement from '../pages/results/ScoreManagement';
+import ScoreCandidateDetail from '../pages/results/ScoreCandidateDetail';
 import ReportingMatrix from '../pages/results/ReportingMatrix';
 import ReviewerApplicationDetail from '../pages/reviewer/ReviewerApplicationDetail';
 import ReviewApplicationAuditLogs from '../pages/reviewer/ReviewApplicationAuditLogs';
@@ -128,6 +129,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/hub/results-release', element: <ResultsRelease />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
 
   { path: '/admin/results/scores', element: <ScoreManagement />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN') },
+  { path: '/admin/results/scores/:batchId/:candidateId', element: <ScoreCandidateDetail />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN') },
   { path: '/admin/results/matrix', element: <ReportingMatrix />, access: 'protected', allowedRoles: withSystemAdmin('EXECUTIVE', 'GOVERNMENT', 'UNIVERSITY_ADMIN') },
   { path: '/admin/questions', element: <HubQuestionBank />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/blueprints', element: <ExamBlueprints />, access: 'protected', allowedRoles: HUB },

@@ -87,6 +87,7 @@ describe('ScoreManagement', () => {
         {
           id: 'SCORE-PHL-2027-000123',
           candidateId: 'PHL-2027-000123',
+          lrn: '123456789012',
           candidateName: 'Maria Santos',
           examName: 'PhilSA NAT',
           examSetId: 'ES-BP0001',

@@ -18,6 +18,7 @@ export interface ScoreManagementBatch {
 export interface ScoreManagementResult {
   id: string;
   candidateId: string;
+  lrn: string;
   candidateName: string;
   examName: string;
   examSetId: string;
@@ -249,6 +250,7 @@ function mapResult(row: BackendScoreResult, batchId: string): ScoreManagementRes
   return {
     id: row.id,
     candidateId: row.candidateId,
+    lrn: row.lrn,
     candidateName: row.candidateName,
     examName: batchId,
     examSetId: row.examSetId,

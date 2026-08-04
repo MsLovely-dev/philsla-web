@@ -148,7 +148,11 @@ def process_score_batch(
     )
 
 
-def generate_score_seed_data(candidate_count: int = 500, seed: int = 2027) -> ScoreSeedData:
+def generate_score_seed_data(
+    candidate_count: int = 500,
+    seed: int = 2027,
+    application_lrns: Sequence[str] = (),
+) -> ScoreSeedData:
     if candidate_count < 0:
         raise ValueError("candidate_count must be non-negative")
 
@@ -162,7 +166,7 @@ def generate_score_seed_data(candidate_count: int = 500, seed: int = 2027) -> Sc
         first_name = FIRST_NAMES[index % len(FIRST_NAMES)]
         last_name = LAST_NAMES[(index // len(FIRST_NAMES)) % len(LAST_NAMES)]
         candidate_name = f"{first_name} {last_name}"
-        lrn = f"109{sequence:09d}"
+        lrn = application_lrns[index] if index < len(application_lrns) else f"109{sequence:09d}"
         uses_pwd_population = sequence % 50 == 0
         ranking_population_id = PWD_POPULATION_ID if uses_pwd_population else REGULAR_POPULATION_ID
         exam_set_ids = PWD_EXAM_SETS if uses_pwd_population else REGULAR_EXAM_SETS
@@ -222,7 +226,16 @@ def generate_score_seed_data(candidate_count: int = 500, seed: int = 2027) -> Sc
 
 @transaction.atomic
 def seed_score_management_data(candidate_count: int = 500, seed: int = 2027, *, reset: bool = False) -> ScoreSeedData:
-    seed_data = generate_score_seed_data(candidate_count=candidate_count, seed=seed)
+    from apps.applications.models import StudentApplication
+
+    application_lrns = list(
+        StudentApplication.objects.exclude(status="DRAFT")
+        .exclude(lrn="")
+        .values_list("lrn", flat=True)
+        .distinct()
+        .order_by("lrn"),
+    )
+    seed_data = generate_score_seed_data(candidate_count=candidate_count, seed=seed, application_lrns=application_lrns)
 
     if reset:
         ScoreReleaseAuditLog.objects.filter(session_id=REGULAR_SESSION_ID).delete()

@@ -243,6 +243,27 @@ class ApplicationReviewQueueView(APIView):
         return Response(ApplicationSerializer(applications, many=True, context={"request": request}).data)
 
 
+class ApplicationByLrnView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(
+        PortalRole.ADMISSIONS_REVIEWER,
+        PortalRole.SYSTEM_ADMIN,
+        PortalRole.UNIVERSITY_ADMIN,
+        PortalRole.EXAM_ADMINISTRATOR,
+    )
+
+    def get(self, request, lrn) -> Response:
+        application = (
+            StudentApplication.objects.filter(lrn=lrn)
+            .exclude(status="DRAFT")
+            .order_by("-submitted_at", "-created_at")
+            .first()
+        )
+        if application is None:
+            raise Http404("No application found for this LRN.")
+        return Response(ApplicationSerializer(application, context={"request": request}).data)
+
+
 class ApplicationReviewerDecisionView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)

@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    ApplicationByLrnView,
     ApplicationCreateView,
     ApplicationDetailView,
     ApplicationIdentityMediaView,
@@ -33,6 +34,7 @@ urlpatterns = [
     path("registration/step-2/<uuid:verification_id>/manual-decision/", Step2ManualDecisionView.as_view(), name="step2-manual-decision"),
     path("audit/registration-submitted/", ApplicationSubmittedAuditLogView.as_view(), name="registration-submitted-audit"),
     path("review-queue/", ApplicationReviewQueueView.as_view(), name="review-queue"),
+    path("by-lrn/<str:lrn>/", ApplicationByLrnView.as_view(), name="by-lrn"),
     path("", ApplicationCreateView.as_view(), name="create"),
     path("<uuid:application_id>/review-decision/", ApplicationReviewerDecisionView.as_view(), name="review-decision"),
     path("<uuid:application_id>/identity-media/<str:media_type>/", ApplicationIdentityMediaView.as_view(), name="identity-media"),
