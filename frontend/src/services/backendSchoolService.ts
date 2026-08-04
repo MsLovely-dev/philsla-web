@@ -1,5 +1,6 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
 import { serviceSuccess, type ServiceResult } from './serviceResult';
+import { PHILIPPINE_SCHOOL_SEED, type SchoolSeedEntry } from '../data/philippineSchools';
 
 export type SchoolClassification = 'Public' | 'Private';
 
@@ -107,12 +108,27 @@ export class BackendSchoolService implements SchoolService {
 
 /**
  * In-memory prototype implementation used when no backend is configured.
- * Starts empty and never persists to storage, matching the prototype
- * behaviour of the other Maintenance Center tables.
+ * Seeds real Philippine schools by default (pass `[]` for an empty instance)
+ * and never persists to storage.
  */
 export class MockSchoolService implements SchoolService {
-  private schools: SchoolRecord[] = [];
-  private sequence = 0;
+  private schools: SchoolRecord[];
+  private sequence: number;
+
+  constructor(seed: SchoolSeedEntry[] = PHILIPPINE_SCHOOL_SEED) {
+    const now = new Date().toISOString();
+    this.schools = seed.map((entry, index) => ({
+      id: `sch-${index + 1}`,
+      code: `SCH-${String(index + 1).padStart(5, '0')}`,
+      classification: entry.classification,
+      name: entry.name,
+      examineeCapacity: entry.examineeCapacity,
+      region: entry.region,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    this.sequence = this.schools.length;
+  }
 
   async listSchools(): Promise<ServiceResult<SchoolRecord[]>> {
     return serviceSuccess(this.schools.map((school) => ({ ...school })));

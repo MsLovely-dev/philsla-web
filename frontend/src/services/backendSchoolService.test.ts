@@ -67,8 +67,18 @@ describe('BackendSchoolService', () => {
 });
 
 describe('MockSchoolService', () => {
-  it('generates sequential SCH codes and supports delete', async () => {
+  it('seeds 15 real Philippine schools by default', async () => {
     const service = new MockSchoolService();
+
+    const list = await service.listSchools();
+
+    expect(list.ok && list.data).toHaveLength(15);
+    expect(list.ok && list.data[0].code).toBe('SCH-00001');
+    expect(list.ok && list.data.map((s) => s.name)).toContain('Manila Science High School');
+  });
+
+  it('generates sequential SCH codes and supports delete', async () => {
+    const service = new MockSchoolService([]);
 
     const first = await service.createSchool({ classification: 'Public', name: 'Alpha', examineeCapacity: 500, region: 'NCR' });
     const second = await service.createSchool({ classification: 'Private', name: 'Beta', examineeCapacity: 300, region: 'Region III' });
