@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('accounts', '0005_alter_accountprofile_role'),
+        ('accounts', '0004_passwordrecoverytoken'),
     ]
 
     operations = [

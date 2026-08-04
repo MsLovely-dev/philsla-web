@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("accounts", "0005_alter_accountprofile_role"),
+        ("accounts", "0004_passwordrecoverytoken"),
         ("exams", "0001_initial"),
     ]
 

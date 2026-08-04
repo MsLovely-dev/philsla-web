@@ -21,7 +21,6 @@ from .models import (
     QuestionChoice,
     QuestionTag,
     QuestionWorkflowHistory,
-    ReferenceYear,
     QuestionType,
     Tag,
     Subject,
