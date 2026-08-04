@@ -1,4 +1,5 @@
 import { ReactElement } from 'react';
+import { Navigate } from 'react-router-dom';
 import AdminAppeals from '../pages/admin/AdminAppeals';
 import CommandCenter from '../pages/admin/CommandCenter';
 import ProctorManagement from '../pages/admin/ProctorManagement';
@@ -12,18 +13,24 @@ import HubOverview from '../pages/admin/hub/Overview';
 import HubQuestionBank from '../pages/admin/hub/QuestionBank';
 import ResultsRelease from '../pages/admin/hub/ResultsRelease';
 import StimulusManagement from '../pages/admin/hub/StimulusManagement';
-import ApplicationStatusMaintenance from '../pages/admin/maintenance/ApplicationStatusMaintenance';
 import AttendanceRulesMaintenance from '../pages/admin/maintenance/AttendanceRulesMaintenance';
 import BatchConfigurationMaintenance from '../pages/admin/maintenance/BatchConfigurationMaintenance';
 import DegreeProgramsMaintenance from '../pages/admin/maintenance/DegreeProgramsMaintenance';
 import DeviceValidationMaintenance from '../pages/admin/maintenance/DeviceValidationMaintenance';
+import ExamBlueprintMaintenance from '../pages/admin/maintenance/ExamBlueprintMaintenance';
 import ExamIntegrityMaintenance from '../pages/admin/maintenance/ExamIntegrityMaintenance';
+import ExamResultsMaintenance from '../pages/admin/maintenance/ExamResultsMaintenance';
+import ExamReviewMaintenance from '../pages/admin/maintenance/ExamReviewMaintenance';
 import MaintenanceHub from '../pages/admin/maintenance/MaintenanceHub';
 import ProctorDeviceVerification from '../pages/admin/maintenance/ProctorDeviceVerification';
 import ProctorMaintenance from '../pages/admin/maintenance/ProctorMaintenance';
 import QuestionBankConfigMaintenance from '../pages/admin/maintenance/QuestionBankConfigMaintenance';
+import QuestionBankManagementMaintenance from '../pages/admin/maintenance/QuestionBankManagementMaintenance';
+import ReviewStudentApplicationMaintenance from '../pages/admin/maintenance/ReviewStudentApplicationMaintenance';
+import SchoolsListMaintenance from '../pages/admin/maintenance/SchoolsListMaintenance';
 import StudentRegistrationMaintenance from '../pages/admin/maintenance/StudentRegistrationMaintenance';
 import TestingCenterMaintenance from '../pages/admin/maintenance/TestingCenterMaintenance';
+import UniversitiesListMaintenance from '../pages/admin/maintenance/UniversitiesListMaintenance';
 import ApplicationDetail from '../pages/admin/university/ApplicationDetail';
 import ApplicationsList from '../pages/admin/university/ApplicationsList';
 import ExamSchedules from '../pages/admin/university/ExamSchedules';
@@ -143,7 +150,14 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
 
   { path: '/admin/maintenance', element: <MaintenanceHub />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN') },
   { path: '/admin/maintenance/registration', element: <StudentRegistrationMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
-  { path: '/admin/maintenance/application-status', element: <ApplicationStatusMaintenance />, access: 'protected', allowedRoles: REVIEWER },
+  { path: '/admin/maintenance/schools', element: <SchoolsListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/universities', element: <UniversitiesListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/review-student-application', element: <ReviewStudentApplicationMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/exam-blueprint', element: <ExamBlueprintMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/question-bank-management', element: <QuestionBankManagementMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR') },
+  { path: '/admin/maintenance/exam-review', element: <ExamReviewMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR') },
+  { path: '/admin/maintenance/exam-results', element: <ExamResultsMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/application-status', element: <Navigate to="/admin/maintenance/registration" replace />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/testing-center', element: <TestingCenterMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/batch', element: <BatchConfigurationMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/device', element: <DeviceValidationMaintenance />, access: 'protected', allowedRoles: PROCTOR },

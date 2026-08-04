@@ -23,7 +23,7 @@ export interface MaintenanceModule {
   status: string;
 }
 
-const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1']);
+const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1', '40', '41', '42', '43', '44', '45']);
 
 export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   // Student Portal
@@ -86,15 +86,9 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
 
   // Sub-modules of Maintenance & Protocols
   { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '37', name: 'List of Schools', path: '/admin/maintenance/schools', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '38', name: 'List of Universities', path: '/admin/maintenance/universities', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '39', name: 'Exam Blueprint', path: '/admin/maintenance/exam-blueprint', category: 'Maintenance & Protocols', status: 'ACTIVE' },
 
   // Testing Center Logistics
   { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },
@@ -104,6 +98,19 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
 
 function pruneRetiredMaintenanceModules(modules: MaintenanceModule[]) {
   return modules.filter((module) => !RETIRED_MAINTENANCE_MODULE_IDS.has(module.id));
+}
+
+function reconcileMaintenanceModules(modules: MaintenanceModule[]) {
+  const initialModulesById = new Map(INITIAL_MAINTENANCE_MODULES.map((module) => [module.id, module]));
+  const reconciled = pruneRetiredMaintenanceModules(modules).map((module) => {
+    const initialModule = initialModulesById.get(module.id);
+    return initialModule ? { ...module, ...initialModule, status: module.status } : module;
+  });
+  const reconciledIds = new Set(reconciled.map((module) => module.id));
+  return [
+    ...reconciled,
+    ...INITIAL_MAINTENANCE_MODULES.filter((module) => !reconciledIds.has(module.id)),
+  ];
 }
 
 interface PhilSAContextType {
@@ -147,7 +154,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const authInitializationRef = useRef<Promise<void> | null>(null);
 
   const setMaintenanceModules = (modules: any[]) => {
-    const activeModules = pruneRetiredMaintenanceModules(modules);
+    const activeModules = reconcileMaintenanceModules(modules);
     setMaintenanceModulesInternal(activeModules);
     localStorage.setItem('philsa_maintenance_modules', JSON.stringify(activeModules));
   };
@@ -184,20 +191,14 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
 
     if (savedMaintenance) {
       try {
-        const parsed = pruneRetiredMaintenanceModules(JSON.parse(savedMaintenance));
+        const parsed = reconcileMaintenanceModules(JSON.parse(savedMaintenance));
         if (parsed.length < 25) {
           // Force override if old schema is found
           setMaintenanceModulesInternal(initialModules);
           localStorage.setItem('philsa_maintenance_modules', JSON.stringify(initialModules));
         } else {
-          // Dynamic merge of any missing ones
-          const ids = parsed.map((item: any) => item.id);
-          const merged = [
-            ...parsed,
-            ...initialModules.filter(item => !ids.includes(item.id))
-          ];
-          setMaintenanceModulesInternal(merged);
-          localStorage.setItem('philsa_maintenance_modules', JSON.stringify(merged));
+          setMaintenanceModulesInternal(parsed);
+          localStorage.setItem('philsa_maintenance_modules', JSON.stringify(parsed));
         }
       } catch (e) {
         setMaintenanceModulesInternal(initialModules);

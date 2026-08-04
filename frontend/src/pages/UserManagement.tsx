@@ -80,7 +80,7 @@ const permissionMatrixModuleIds = new Set([
   '24',
   '25', '26', '27', '28', '29', '52', '30',
   '31', '32', '33', '47', '53',
-  '34', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45',
+  '34', '36', '37', '38', '39', '40', '41',
   '35', '54', '55',
 ]);
 
@@ -97,10 +97,6 @@ const permissionSubmoduleParentIds: Record<string, string> = {
   '39': '34',
   '40': '34',
   '41': '34',
-  '42': '34',
-  '43': '34',
-  '44': '34',
-  '45': '34',
 };
 
 const permissionModuleDisplayNames: Record<string, string> = {
@@ -111,20 +107,20 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
   ADMISSIONS_REVIEWER: [
     { moduleIds: ['1', '12', '48'], actions: readOnly },
     { moduleIds: ['9', '37'], actions: decide },
-    { moduleIds: ['36', '38', '39'], actions: operate },
+    { moduleIds: ['36', '38', '41'], actions: operate },
   ],
   PROCTOR: [
     { moduleIds: ['26'], actions: readOnly },
-    { moduleIds: ['25', '27', '28', '29', '52', '40', '41', '42'], actions: operate },
+    { moduleIds: ['25', '27', '28', '29', '52'], actions: operate },
   ],
   PROCTOR_ADMIN: [
     { moduleIds: ['26'], actions: readOnly },
-    { moduleIds: ['25', '27', '28', '29', '52', '40', '41', '42'], actions: operate },
+    { moduleIds: ['25', '27', '28', '29', '52'], actions: operate },
     { moduleIds: ['30', '55'], actions: manage },
   ],
   UNIVERSITY_ADMIN: [
     { moduleIds: ['1', '10', '15'], actions: readOnly },
-    { moduleIds: ['11', '12', '13', '14', '36', '38', '39', '43', '44', '45'], actions: operate },
+    { moduleIds: ['11', '12', '13', '14', '36', '37', '38', '39', '40', '41'], actions: operate },
     { moduleIds: ['20'], actions: decide },
   ],
   TESTING_CENTER_ADMIN: [
@@ -132,7 +128,7 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
   ],
   EXAM_ADMINISTRATOR: [
     { moduleIds: ['16', '22', '49', '15', '7', '6', '56'], actions: readOnly },
-    { moduleIds: ['17', '18', '19', '21', '43'], actions: manage },
+    { moduleIds: ['17', '18', '19', '21', '39', '40'], actions: manage },
     { moduleIds: ['20', '46'], actions: decide },
   ],
   SYSTEM_ADMIN: [
