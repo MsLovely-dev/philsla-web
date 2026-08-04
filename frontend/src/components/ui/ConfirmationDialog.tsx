@@ -26,13 +26,15 @@ const TONE_STYLES = {
   default: {
     eyebrow: 'Confirm Action',
     badgeClass: 'badge-pending',
-    iconWrapClass: 'bg-slate-50 text-philsa-navy ring-1 ring-slate-200',
+    spineClass: 'bg-philsa-navy',
+    iconClass: 'text-philsa-navy',
     confirmButtonClass: 'bg-philsa-navy shadow-philsa-navy/10 hover:bg-philsa-navy/90',
   },
   danger: {
     eyebrow: 'Destructive Action',
     badgeClass: 'badge-rejected',
-    iconWrapClass: 'bg-red-50 text-philsa-red ring-1 ring-red-200',
+    spineClass: 'bg-philsa-red',
+    iconClass: 'text-philsa-red',
     confirmButtonClass: 'bg-philsa-red shadow-philsa-red/20 hover:bg-philsa-red-hover',
   },
 } as const;
@@ -123,37 +125,40 @@ export function ConfirmationDialog({
             aria-describedby={messageId}
             className="relative w-full max-w-md overflow-hidden rounded-3xl border border-philsa-border bg-white shadow-2xl"
           >
-            <div className="flex items-start gap-4 p-8 pb-6">
-              <div className={cn('flex-shrink-0 rounded-2xl p-3', toneStyles.iconWrapClass)}>
-                <Icon className="h-6 w-6" aria-hidden="true" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className={cn('badge-status', toneStyles.badgeClass)}>{eyebrow ?? toneStyles.eyebrow}</span>
-                <h2 id={titleId} className="mt-2 text-xl font-black text-philsa-navy">{title}</h2>
-                <p id={messageId} className="mt-2 text-sm leading-relaxed text-philsa-gray">{message}</p>
-                {details && (
-                  <div className="mt-4 rounded-xl border border-philsa-border bg-slate-50 px-4 py-3 text-xs font-medium text-philsa-navy">
-                    {details}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={onCancel}
-                disabled={isConfirming}
-                aria-label="Close dialog"
-                className="flex-shrink-0 rounded-lg p-2 text-philsa-gray hover:bg-slate-100 disabled:opacity-50"
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
+            <div aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-1.5', toneStyles.spineClass)} />
+
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isConfirming}
+              aria-label="Close dialog"
+              className="absolute right-4 top-4 rounded-lg p-2 text-philsa-gray hover:bg-slate-100 disabled:opacity-50"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+
+            <div className="pl-8 pr-12 pt-7">
+              <span className={cn('badge-status', toneStyles.badgeClass)}>{eyebrow ?? toneStyles.eyebrow}</span>
+              <h2 id={titleId} className="mt-2.5 flex items-center gap-2 text-xl font-black text-philsa-navy">
+                <Icon className={cn('h-5 w-5 flex-shrink-0', toneStyles.iconClass)} aria-hidden="true" />
+                {title}
+              </h2>
+              <p id={messageId} className="mt-2 text-sm leading-relaxed text-philsa-gray">{message}</p>
+              {details && (
+                <div className="mt-4 border-t border-dashed border-philsa-border pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Affected Record</p>
+                  <p className="mt-1 font-mono text-xs font-bold text-philsa-navy">{details}</p>
+                </div>
+              )}
             </div>
-            <div className="flex flex-col-reverse gap-3 border-t border-philsa-border bg-slate-50/60 px-8 py-5 sm:flex-row sm:justify-end">
+
+            <div className="mt-7 flex flex-col-reverse gap-2 border-t border-philsa-border bg-slate-50/60 py-4 pl-8 pr-6 sm:flex-row sm:justify-end">
               <button
                 ref={cancelButtonRef}
                 type="button"
                 onClick={onCancel}
                 disabled={isConfirming}
-                className="rounded-xl border border-philsa-border bg-white px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-philsa-navy transition-all hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-philsa-gray transition-colors hover:bg-slate-100 hover:text-philsa-navy disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {cancelLabel}
               </button>
