@@ -24,13 +24,13 @@ describe('active Maintenance Center tables', () => {
     setItem.mockRestore();
   });
 
-  it('loads the seeded schools from the service and ignores saved browser data', async () => {
+  it('starts the schools table empty and ignores saved browser data', async () => {
     localStorage.setItem('philsa_maintenance_schools_list', JSON.stringify([{ name: 'Saved Mock School' }]));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
 
     render(<MemoryRouter><SchoolsListMaintenance /></MemoryRouter>);
 
-    expect(await screen.findByText('Manila Science High School')).toBeInTheDocument();
+    expect(await screen.findByText('No schools match your search and filter criteria.')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock School')).not.toBeInTheDocument();
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
