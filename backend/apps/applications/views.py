@@ -19,6 +19,8 @@ from .serializers import (
     ApplicationSubmitSerializer,
     ApplicationUpdateSerializer,
     LrnVerificationSerializer,
+    RegistrationAttachmentSerializer,
+    RegistrationAttachmentUploadSerializer,
     RegistrationEmailOtpRequestSerializer,
     RegistrationEmailOtpVerifySerializer,
     RegistrationIdentitySelfieFaceValidationSerializer,
@@ -32,7 +34,7 @@ from .services import (active_step2_configuration, create_draft, decide_applicat
                        decide_step2_manual_review, get_step2_verification, serialize_step2, submit_application,
                        update_draft, upload_step2_media, validate_manual_registration_selfie_face,
                        validate_registration_selfie_face, request_registration_email_otp,
-                       verify_registration_email_otp, verify_lrn)
+                       upload_registration_attachment, verify_registration_email_otp, verify_lrn)
 from .models import IdentityMediaType, Step2VerificationConfiguration
 from .throttling import DeviceScopedRateThrottle
 
@@ -84,6 +86,23 @@ class RegistrationEmailOtpVerifyView(APIView):
             code=serializer.validated_data["code"],
         )
         return Response(result)
+
+
+class RegistrationAttachmentUploadView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request) -> Response:
+        serializer = RegistrationAttachmentUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        attachment = upload_registration_attachment(
+            registration_session_id=request.headers.get("X-Registration-Session-Id", ""),
+            field_name=serializer.validated_data["fieldName"],
+            uploaded_file=serializer.validated_data["file"],
+        )
+        record_application_event(event="registration_attachment_uploaded", outcome="success", request=request)
+        return Response(RegistrationAttachmentSerializer(attachment).data, status=status.HTTP_201_CREATED)
 
 
 class PublicStep2ConfigurationView(APIView):
@@ -210,6 +229,7 @@ class ApplicationCreateView(APIView):
             email_verification_token=email_verification_token,
             data=serializer.validated_data,
             submit_on_create=submit_on_create,
+            registration_session_id=request.headers.get("X-Registration-Session-Id", ""),
         )
         event = "application_submitted" if submit_on_create else "application_draft_created"
         record_application_event(event=event, outcome="success", request=request, user=owner, application=application)
@@ -317,6 +337,18 @@ class ApplicationIdentityMediaView(ApplicationDetailView):
         if media is None or not media.file.storage.exists(media.file.name):
             raise Http404("Application identity media not found.")
         return FileResponse(media.file.open("rb"), content_type=media.content_type)
+
+
+class ApplicationAdditionalAttachmentView(ApplicationDetailView):
+    def get(self, request, application_id, attachment_id) -> FileResponse:
+        application = self.get_object(request, application_id)
+        attachment = application.additional_attachments.filter(id=attachment_id).first()
+        if attachment is None or not attachment.file.storage.exists(attachment.file.name):
+            raise Http404("Application attachment not found.")
+        response = FileResponse(attachment.file.open("rb"), content_type=attachment.content_type)
+        safe_filename = attachment.original_filename.replace('"', "")
+        response["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+        return response
 
 
 class ApplicationSubmitView(APIView):

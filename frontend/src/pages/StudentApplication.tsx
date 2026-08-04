@@ -839,6 +839,25 @@ export default function StudentApplication() {
       : formData.customStep1Fields[field.value] || '';
   };
 
+  const uploadRegistrationAttachmentFile = async (fieldName: string, file: File): Promise<string> => {
+    if (!PWD_ID_ALLOWED_TYPES.has(file.type)) {
+      throw new Error('Attachment must be a JPEG, PNG, or PDF file.');
+    }
+    if (file.size > PWD_ID_MAX_BYTES) {
+      throw new Error('Attachment must not exceed 5 MB.');
+    }
+    if (!usesBackendServiceMode) {
+      return file.name;
+    }
+    const result = await backendApplicationService.uploadRegistrationAttachment(fieldName, file, {
+      registrationSessionId: registrationSessionIdRef.current,
+    });
+    if (result.ok === false) {
+      throw new Error(result.error.message);
+    }
+    return result.data.filename || file.name;
+  };
+
   const getManualReviewFields = (section: string) =>
     activeStep1ManualFields.filter(field => getStep1FieldSection(field.value) === section);
 
@@ -973,7 +992,32 @@ export default function StudentApplication() {
         <label className={cn("label-philsa", errors[errorKey] ? "text-philsa-red" : "text-philsa-gray")}>
           {field.value}{required ? ' *' : ''}
         </label>
-        {field.inputType === 'dropdown' && options.length > 0 ? (
+        {field.inputType === 'file' ? (
+          <label className={cn(
+            "flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3 text-sm font-bold text-philsa-navy shadow-sm transition-colors hover:border-philsa-red/40",
+            (errors[errorKey] || existingValueMessage) && "border-philsa-red bg-philsa-red/5"
+          )}>
+            <span className="min-w-0 truncate">{value || 'Choose file'}</span>
+            <Upload className="h-4 w-4 shrink-0 text-philsa-red" />
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const filename = await uploadRegistrationAttachmentFile(field.value, file);
+                  updateValue(filename);
+                } catch (error) {
+                  e.target.value = '';
+                  updateValue('');
+                  setErrors(prev => ({ ...prev, [errorKey]: error instanceof Error ? error.message : 'Attachment upload failed.' }));
+                }
+              }}
+            />
+          </label>
+        ) : field.inputType === 'dropdown' && options.length > 0 ? (
           <select
             className={cn("input-philsa bg-white", (errors[errorKey] || existingValueMessage) && "border-philsa-red bg-philsa-red/5")}
             value={value}
@@ -1005,7 +1049,49 @@ export default function StudentApplication() {
     return (
       <div key={field.id || field.value} className="space-y-2">
         <label className="label-philsa">{field.value} *</label>
-        {field.inputType === 'dropdown' && Array.isArray(field.optionValues) && field.optionValues.length > 0 ? (
+        {field.inputType === 'file' ? (
+          <label className={cn(
+            "flex min-h-[48px] cursor-pointer items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3 text-sm font-bold text-philsa-navy shadow-sm transition-colors hover:border-philsa-red/40",
+            errors[errorKey] && "border-philsa-red bg-philsa-red/5"
+          )}>
+            <span className="min-w-0 truncate">{formData.customStep1Fields[field.value] || 'Choose file'}</span>
+            <Upload className="h-4 w-4 shrink-0 text-philsa-red" />
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const filename = await uploadRegistrationAttachmentFile(field.value, file);
+                  setFormData(prev => ({
+                    ...prev,
+                    customStep1Fields: {
+                      ...prev.customStep1Fields,
+                      [field.value]: filename,
+                    },
+                  }));
+                  setErrors(prev => {
+                    const next = { ...prev };
+                    delete next[errorKey];
+                    return next;
+                  });
+                } catch (error) {
+                  e.target.value = '';
+                  setFormData(prev => ({
+                    ...prev,
+                    customStep1Fields: {
+                      ...prev.customStep1Fields,
+                      [field.value]: '',
+                    },
+                  }));
+                  setErrors(prev => ({ ...prev, [errorKey]: error instanceof Error ? error.message : 'Attachment upload failed.' }));
+                }
+              }}
+            />
+          </label>
+        ) : field.inputType === 'dropdown' && Array.isArray(field.optionValues) && field.optionValues.length > 0 ? (
           <select
             className="input-philsa"
             value={formData.customStep1Fields[field.value] || ''}
@@ -3410,7 +3496,7 @@ export default function StudentApplication() {
                                       type="file"
                                       accept=".jpg,.jpeg,.png,.pdf"
                                       className="hidden"
-                                      onChange={(e) => {
+                                      onChange={async (e) => {
                                         const file = e.target.files?.[0];
                                         if (pwdIdPreviewUrlRef.current) {
                                           URL.revokeObjectURL(pwdIdPreviewUrlRef.current);
@@ -3427,6 +3513,16 @@ export default function StudentApplication() {
                                           setFormData(prev => ({ ...prev, pwdIdFilename: '', pwdIdPreviewUrl: '' }));
                                           setErrors(prev => ({ ...prev, pwdIdFilename: 'PWD ID upload must not exceed 5 MB.' }));
                                           return;
+                                        }
+                                        if (file) {
+                                          try {
+                                            await uploadRegistrationAttachmentFile('PWD ID Attachment', file);
+                                          } catch (error) {
+                                            e.target.value = '';
+                                            setFormData(prev => ({ ...prev, pwdIdFilename: '', pwdIdPreviewUrl: '' }));
+                                            setErrors(prev => ({ ...prev, pwdIdFilename: error instanceof Error ? error.message : 'PWD ID upload failed.' }));
+                                            return;
+                                          }
                                         }
                                         const previewUrl = file ? URL.createObjectURL(file) : '';
                                         pwdIdPreviewUrlRef.current = previewUrl;
