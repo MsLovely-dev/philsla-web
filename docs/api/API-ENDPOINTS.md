@@ -26,6 +26,8 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/auth/recovery/admin/request/` | Required bearer access token | `SYSTEM_ADMIN` | Initiate staff/admin account recovery without setting a password for the user | Implemented |
 | `GET`, `POST` | `/api/v1/auth/admin/users/` | Required bearer access token | `SYSTEM_ADMIN` | List or create non-student staff/admin accounts for User & Role Settings | Implemented |
 | `PUT`, `DELETE` | `/api/v1/auth/admin/users/{userId}/` | Required bearer access token | `SYSTEM_ADMIN` | Update or deactivate a non-student staff/admin account | Implemented |
+| `GET` | `/api/v1/auth/admin/roles/` | Required bearer access token | `SYSTEM_ADMIN` | List staff/admin role permission baselines for Role Settings | Implemented |
+| `PUT` | `/api/v1/auth/admin/roles/{role}/permissions/` | Required bearer access token | `SYSTEM_ADMIN` | Update a role permission baseline or apply role-shaped permissions to assigned users | Implemented |
 | `POST` | `/api/v1/applications/` | Public with LRN verification token; bearer token optional | `AllowAny` for initial registration | Create a registration draft, or create and submit final registration with `submitOnCreate` | Implemented |
 | `GET` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT`, or `ADMISSIONS_REVIEWER`/`SYSTEM_ADMIN` for non-draft applications | Read an application detail record | Implemented |
 | `GET` | `/api/v1/applications/{applicationId}/identity-media/{mediaType}/` | Required bearer access token | Owning `STUDENT`, or `ADMISSIONS_REVIEWER`/`SYSTEM_ADMIN` for non-draft applications | Stream a private application identity image for authorized review/display | Implemented |
@@ -36,14 +38,16 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
 | `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
 | `POST` | `/api/v1/applications/registration/email-otp/verify/` | Public; device/network throttled | `AllowAny` | Verify a registration email OTP and issue a short-lived email verification token | Implemented |
+| `POST` | `/api/v1/applications/registration/attachments/` | Public with `X-Registration-Session-Id` | `AllowAny` | Upload one private PDF/JPEG/PNG file for a configured Step 1 file field | Implemented |
 | `GET` | `/api/v1/configuration/fields/?module=student_registration` | Public | `AllowAny` | Return enabled configurable field rows used by Step 1 | Implemented |
 | `GET` | `/api/v1/applications/registration/step-2/configuration/` | Public | `AllowAny` | Return the currently effective Step 2 requirements | Implemented |
 | `GET`, `POST` | `/api/v1/applications/registration/step-2/` | Public with registration token | `AllowAny` | Read progress or upload one private JPEG/PNG identity image | Implemented |
 | `POST` | `/api/v1/applications/registration/identity/manual-selfie-face/` | Public; device/network throttled | `AllowAny` | Validate a manual-registration captured selfie server-side without storing media | Implemented |
-| `GET`, `POST` | `/api/v1/configuration/admin/fields/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List or create configurable field maintenance rows; supports `?module=...` filtering | Implemented |
+| `GET`, `POST` | `/api/v1/configuration/admin/fields/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List or create configurable field maintenance rows; supports `?module=...`, `?type=...`, `?search=...`, `?status=true\|false`, `?priority=...`, `?inputType=...`, and opt-in pagination with `?page=...&pageSize=...` | Implemented |
 | `PUT`, `PATCH`, `DELETE` | `/api/v1/configuration/admin/fields/{fieldId}/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | Update or delete a configurable field maintenance row | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
+| `GET` | `/api/v1/applications/{applicationId}/attachments/{attachmentId}/` | Bearer token | Application owner for editable own records, or `SYSTEM_ADMIN`/`ADMISSIONS_REVIEWER` for non-draft review records | Stream a private dynamic registration attachment | Implemented |
 
 ### Student application draft and submission
 
@@ -70,7 +74,7 @@ Step 1 Identity & Biometrics uses two token-protected selfie endpoints:
 
 The LRN-protected selfie endpoints require `X-Registration-Token` from successful LRN verification. Files are private, limited to 5 MB, and accepted only when their bytes have a JPEG or PNG signature. The OpenCV provider enforces exactly one face, minimum 480 x 360 px resolution in either portrait or landscape orientation, face size between 20% and 70% of the image, face-crop Laplacian blur variance above 20, acceptable brightness between 60 and 200, and centered framing. Landmark visibility, eye-open, and yaw/pitch/roll checks are returned as provider-dependent when the selected detector cannot evaluate them. Local development uses `STEP1_SELFIE_FACE_PROVIDER=opencv`, tests use a deterministic mock, and production refuses `mock` or `unavailable`. Registration selfie metadata is stored in `RegistrationSelfieMedia`; Student ID front/back metadata remains in `ApplicationIdentityMedia`. Manual-registration selfies are stored for admissions reviewer inspection only and do not mark identity as verified. File retention and production object storage remain `TBD`. Application payloads and images are excluded from audit and request logging.
 
-Step 1 field visibility and priority are driven by the shared configurable field maintenance table. Public registration reads enabled rows from `GET /api/v1/configuration/fields/?module=student_registration`. The maintenance row shape is `{id, module, section, type, value, fieldSection, inputType, optionValues, priority, remarks, status, display_order}`. Student registration rows use `module: "student_registration"` and `section: "Step 1 Registration"`. `fieldSection` controls the panel where the field appears on the Step 1 form, such as `Personal Information`, `School Information`, or `Additional Information`. Rows with `type: "Student Registration Field"`, `priority: "High Priority"`, and enabled `status` are required during registration. `inputType` controls rendering, such as `text`, `date`, or `dropdown`; dropdown rows must include `optionValues`, for example `["Grade 11", "Grade 12"]`. Known fields returned by LRN are autopopulated when available; enabled high-priority fields that are not present in the LRN response remain visible and must be manually entered by the student. Low-priority rows are not required for account creation, but they still belong to the Step 1 registration configuration rather than a separate post-login section.
+Step 1 field visibility and priority are driven by the shared configurable field maintenance table. Public registration reads enabled rows from `GET /api/v1/configuration/fields/?module=student_registration`. The maintenance row shape is `{id, module, section, type, value, fieldSection, inputType, optionValues, priority, remarks, status, display_order}`. Student registration rows use `module: "student_registration"` and `section: "Step 1 Registration"`. `fieldSection` controls the panel where the field appears on the Step 1 form, such as `Personal Information`, `School Information`, or `Additional Information`. Rows with `type: "Student Registration Field"`, `priority: "High Priority"`, and enabled `status` are required during registration. `inputType` controls rendering, such as `text`, `date`, `dropdown`, `textarea`, or `file`; dropdown rows must include `optionValues`, for example `["Grade 11", "Grade 12"]`. File rows must be uploaded with `POST /api/v1/applications/registration/attachments/` using multipart fields `{fieldName, file}` and the same `X-Registration-Session-Id` used for email OTP and final submission. Dynamic attachments are private, limited to 5 MB, and accepted only when their bytes match PDF, JPEG, or PNG signatures. On final create/submit, pending session attachments are linked to the submitted application and returned under `additionalAttachments`; authorized reviewers/admins can stream them through `/api/v1/applications/{applicationId}/attachments/{attachmentId}/`. Known fields returned by LRN are autopopulated when available; enabled high-priority fields that are not present in the LRN response remain visible and must be manually entered by the student. Low-priority rows are not required for account creation, but they still belong to the Step 1 registration configuration rather than a separate post-login section.
 
 Student registration verification methods are also maintained as configurable rows with `type: "Verification Method"`. Exactly one enabled Step 1 verification method is allowed. Enabling LRN or Manual Entry automatically disables the other verification methods, and the API rejects attempts to disable or delete the last enabled verification method. PhilSys is predefined but locked until future feature development is complete; attempts to enable it return `400 BAD REQUEST`. Ordinary `Student Registration Field` rows keep independent enable/disable behavior.
 
@@ -621,6 +625,79 @@ Test coverage:
 
 - Behavior tests: `backend/apps/accounts/tests/test_recovery_endpoints.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+### `GET /api/v1/auth/admin/roles/`
+
+Use this endpoint to load backend-managed role permission baselines for the User & Role Settings screen. It returns fixed staff/admin `PortalRole` values only; dynamic custom-role persistence remains `TBD`.
+
+Permissions are resolved from structured `RolePermission`, `AccountRoleAssignment`, and `AccountPermission` rows. The former account permission JSONField was removed in the structured permissions Phase 3 cleanup.
+
+Request:
+
+- Body: none.
+- Authentication: bearer access token from the backend session flow.
+- Permission: `SYSTEM_ADMIN`.
+
+Successful response:
+
+```json
+{
+  "roles": [
+    {
+      "id": "SYSTEM_ADMIN",
+      "name": "SYSTEM_ADMIN",
+      "moduleAccess": ["MOD_31_READ", "MOD_31_EDIT"],
+      "assignedUserCount": 2
+    }
+  ]
+}
+```
+
+Error behavior:
+
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned for roles other than `SYSTEM_ADMIN`.
+
+### `PUT /api/v1/auth/admin/roles/{role}/permissions/`
+
+Use this endpoint when a System Admin changes a role's modular permission set. Permission codes are validated against the structured `MOD_{moduleId}_{action}` format, supported module IDs `1` through `56`, and supported actions for each module. The permission applicability catalog is backend-owned at `backend/apps/accounts/permission_catalog.json`; the frontend consumes a generated copy that must be refreshed with `python scripts/generate_permission_catalog.py` after catalog changes. Selected users must be active users currently assigned to `{role}`.
+
+Request:
+
+```json
+{
+  "moduleAccess": ["MOD_31_READ", "MOD_31_EDIT"],
+  "scope": "baseline_only",
+  "selectedUserIds": []
+}
+```
+
+Supported `scope` values:
+
+- `baseline_only`: update the role baseline and preserve existing effective permissions for users already assigned to the role.
+- `all_assigned`: update the role baseline and apply the new permission set to every active user assigned to the role.
+- `selected_users`: do not mutate the role baseline; apply the submitted permission set only to `selectedUserIds`.
+
+Successful response:
+
+```json
+{
+  "id": "SYSTEM_ADMIN",
+  "name": "SYSTEM_ADMIN",
+  "moduleAccess": ["MOD_31_READ", "MOD_31_EDIT"],
+  "assignedUserCount": 2
+}
+```
+
+Error behavior:
+
+- `400 VALIDATION_FAILED` is returned for unsupported roles, unsupported permission codes, unsupported scope values, missing selected users for `selected_users`, or selected users outside the target role.
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned for roles other than `SYSTEM_ADMIN`.
+
+Test coverage:
+
+- Behavior tests: `backend/apps/accounts/tests/test_admin_role_endpoints.py`.
 
 ### `POST /api/v1/auth/activation/staff/complete/`
 

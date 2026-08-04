@@ -105,7 +105,6 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     roles: ['ITEM_WRITER', 'ACADEMIC_REVIEWER', 'SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN'],
     items: [
       { icon: LayoutDashboard, label: 'Overview', href: '/admin/hub/overview' },
-      { icon: ClipboardList, label: 'Exam Blueprints', href: '/admin/blueprints' },
       { icon: BookOpen, label: 'Exam Sets', href: '/admin/hub/exam-sets' },
       { 
         icon: Database, 
@@ -181,15 +180,9 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
         href: '/admin/maintenance',
         subItems: [
           { label: 'Student Registration', href: '/admin/maintenance/registration', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Application Status', href: '/admin/maintenance/application-status', roles: ['SYSTEM_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Testing Centers', href: '/admin/maintenance/testing-center', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Batch Config', href: '/admin/maintenance/batch', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Device Validation', href: '/admin/maintenance/device', roles: ['SYSTEM_ADMIN', 'PROCTOR', 'PROCTOR_ADMIN'] },
-          { label: 'Attendance Rules', href: '/admin/maintenance/attendance', roles: ['SYSTEM_ADMIN', 'PROCTOR', 'PROCTOR_ADMIN'] },
-          { label: 'Exam Integrity', href: '/admin/maintenance/integrity', roles: ['SYSTEM_ADMIN', 'PROCTOR', 'PROCTOR_ADMIN'] },
-          { label: 'Question Config', href: '/admin/maintenance/question-bank', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR'] },
-          { label: 'Proctor Roles', href: '/admin/maintenance/proctor', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
-          { label: 'Degree Programs', href: '/admin/maintenance/degree-programs', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
+          { label: 'List of Schools', href: '/admin/maintenance/schools', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'List of Universities', href: '/admin/maintenance/universities', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'Exam Blueprint', href: '/admin/maintenance/exam-blueprint', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
         ]
       },
     ]
@@ -207,6 +200,14 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
 
 function isRouteActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function isHubNavigationActive(pathname: string, href: string) {
+  if (href === '/admin/hub/exam-sets') {
+    return isRouteActive(pathname, href) || pathname === '/admin/blueprints';
+  }
+
+  return isRouteActive(pathname, href);
 }
 
 function moduleKey(moduleName: string) {
@@ -412,7 +413,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                       {group.label}
                     </h2>
                     {group.items.map((item) => {
-                      const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
+                      const isActive = isHubNavigationActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                       const hasSubItems = item.subItems && item.subItems.length > 0;
                       
                       return (
@@ -510,7 +511,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 </h2>
               )}
               {group.items.map((item) => {
-                const isActive = isRouteActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
+                const isActive = isHubNavigationActive(location.pathname, item.href) || item.subItems?.some(sub => isRouteActive(location.pathname, sub.href));
                 const hasSubItems = item.subItems && item.subItems.length > 0;
                 
                 return (

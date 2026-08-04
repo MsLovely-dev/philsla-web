@@ -8,6 +8,7 @@ from .models import (
     IdentityMediaType,
     Step2VerificationConfiguration,
     StudentApplication,
+    StudentApplicationAdditionalAttachment,
 )
 
 
@@ -19,6 +20,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     reviewStep = serializers.JSONField(source="review_step", required=False)
     lrnProfile = serializers.SerializerMethodField()
     photoUrl = serializers.SerializerMethodField()
+    additionalAttachments = serializers.SerializerMethodField()
     submittedAt = serializers.DateTimeField(source="submitted_at", read_only=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
@@ -29,9 +31,9 @@ class ApplicationSerializer(serializers.ModelSerializer):
         model = StudentApplication
         fields = (
             "id", "candidateId", "status", "personal", "address", "school", "coursePreferences",
-            "reviewStep", "lrnProfile", "photoUrl", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
+            "reviewStep", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
         )
-        read_only_fields = ("id", "candidateId", "status", "lrnProfile", "photoUrl", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
+        read_only_fields = ("id", "candidateId", "status", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
 
     def get_lrnProfile(self, obj):
         verification = getattr(obj, "step2_verification", None)
@@ -61,6 +63,29 @@ class ApplicationSerializer(serializers.ModelSerializer):
             kwargs={"application_id": obj.id, "media_type": media_type},
         )
         request = self.context.get("request")
+        return request.build_absolute_uri(url) if request else url
+
+    def get_additionalAttachments(self, obj):
+        request = self.context.get("request")
+        attachments = obj.additional_attachments.all()
+        return [
+            {
+                "id": str(attachment.id),
+                "section": attachment.section,
+                "fieldKey": attachment.field_key,
+                "filename": attachment.original_filename,
+                "contentType": attachment.content_type,
+                "size": attachment.size,
+                "url": self._attachment_url(obj, attachment, request),
+            }
+            for attachment in attachments
+        ]
+
+    def _attachment_url(self, application, attachment, request):
+        url = reverse(
+            "applications:additional-attachment",
+            kwargs={"application_id": application.id, "attachment_id": attachment.id},
+        )
         return request.build_absolute_uri(url) if request else url
 
     def validate_personal(self, value):
@@ -282,6 +307,22 @@ class Step2ConfigurationSerializer(serializers.ModelSerializer):
 class Step2MediaUploadSerializer(serializers.Serializer):
     mediaType = serializers.ChoiceField(choices=(IdentityMediaType.STUDENT_ID_FRONT, IdentityMediaType.STUDENT_ID_BACK))
     file = serializers.FileField()
+
+
+class RegistrationAttachmentUploadSerializer(serializers.Serializer):
+    fieldName = serializers.CharField(max_length=120)
+    file = serializers.FileField()
+
+
+class RegistrationAttachmentSerializer(serializers.ModelSerializer):
+    fieldKey = serializers.CharField(source="field_key", read_only=True)
+    filename = serializers.CharField(source="original_filename", read_only=True)
+    contentType = serializers.CharField(source="content_type", read_only=True)
+
+    class Meta:
+        model = StudentApplicationAdditionalAttachment
+        fields = ("id", "section", "fieldKey", "filename", "contentType", "size", "created_at")
+        read_only_fields = fields
 
 
 class RegistrationIdentitySelfieUploadSerializer(serializers.Serializer):

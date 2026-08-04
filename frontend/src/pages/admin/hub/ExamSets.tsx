@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -41,6 +42,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { ExamHubTabs, type ExamHubTabKey } from '../../../components/ExamHubTabs';
 import { MOCK_CENTRAL_ITEM_BANK, INITIAL_BLUEPRINTS, Blueprint, BankQuestion, BlueprintSection } from './blueprintMockData';
 
 // Security and role persona states
@@ -215,6 +217,7 @@ export default function ExamSets() {
   // Global States
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assembly' | 'packages' | 'audit'>('dashboard');
   const [currentRole, setCurrentRole] = useState<UserRole>('EXAM_ADMINISTRATOR');
+  const navigate = useNavigate();
 
   // Upload to Testing Centers States
   const [uploadTargetPackage, setUploadTargetPackage] = useState<any | null>(null);
@@ -374,6 +377,19 @@ export default function ExamSets() {
   // Collapsible pre-validation rules details state
   const [showPreValidationDetails, setShowPreValidationDetails] = useState(false);
 
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash === 'assembly') {
+      setActiveTab('assembly');
+    } else if (hash === 'packages') {
+      setActiveTab('packages');
+    } else if (hash === 'audit') {
+      setActiveTab('audit');
+    } else {
+      setActiveTab('dashboard');
+    }
+  }, []);
+
   // Auto-expand the first question when an assembly is selected
   useEffect(() => {
     if (selectedAssembly && selectedAssembly.questions && selectedAssembly.questions.length > 0) {
@@ -386,6 +402,40 @@ export default function ExamSets() {
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const hubActiveTab: ExamHubTabKey =
+    activeTab === 'dashboard' ? 'setAssembly' :
+    activeTab === 'assembly' ? 'builder' :
+    activeTab === 'packages' ? 'published' :
+    'audit';
+
+  const handleHubTabChange = (tab: ExamHubTabKey) => {
+    if (tab === 'blueprints') {
+      navigate('/admin/blueprints');
+      return;
+    }
+
+    if (tab === 'setAssembly') {
+      setActiveTab('dashboard');
+      navigate('/admin/hub/exam-sets#dashboard');
+      return;
+    }
+
+    if (tab === 'builder') {
+      setActiveTab('assembly');
+      navigate('/admin/hub/exam-sets#assembly');
+      return;
+    }
+
+    if (tab === 'published') {
+      setActiveTab('packages');
+      navigate('/admin/hub/exam-sets#packages');
+      return;
+    }
+
+    setActiveTab('audit');
+    navigate('/admin/hub/exam-sets#audit');
   };
 
   // Log an audit entry helper
@@ -887,7 +937,7 @@ export default function ExamSets() {
   };
 
   return (
-    <div className="space-y-6 text-philsa-navy max-w-7xl mx-auto px-4 md:px-0">
+    <div className="space-y-6 text-philsa-navy">
       
       {/* Toast Alert Banner */}
       {toast && (
@@ -936,37 +986,7 @@ export default function ExamSets() {
         </div>
       </div>
 
-      {/* Global Tab Navigation */}
-      <div className="flex flex-wrap gap-1 border-b border-philsa-border pb-1 select-none">
-        {[
-          { id: 'dashboard', label: 'Overview', icon: ClipboardList },
-          { id: 'assembly', label: 'Exam Builder', icon: Layers },
-          { id: 'packages', label: 'Published Exams', icon: Shield },
-          { id: 'audit', label: 'Audit Logs', icon: FileText },
-        ].map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id as any);
-                if (tab.id === 'assembly' && !selectedAssembly && assemblies.length > 0) {
-                  setSelectedAssembly(assemblies[0]);
-                }
-              }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                isActive 
-                  ? 'bg-slate-100 text-philsa-navy font-bold' 
-                  : 'text-philsa-gray hover:text-philsa-navy hover:bg-slate-50'
-              }`}
-            >
-              <Icon className="w-4 h-4 text-slate-500" />
-              {tab.label}
-            </button>
-          )
-        })}
-      </div>
+      <ExamHubTabs activeTab={hubActiveTab} onTabChange={handleHubTabChange} />
 
       {/* TAB CONTENT: DASHBOARD */}
       {activeTab === 'dashboard' && (

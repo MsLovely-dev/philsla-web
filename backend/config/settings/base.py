@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "apps.applications",
     "apps.configuration",
     "apps.core",
+    "apps.exams",
 ]
 
 MIDDLEWARE = [
@@ -100,6 +101,7 @@ STORAGES = {
     },
 }
 STEP2_MAX_IMAGE_BYTES = env_int("STEP2_MAX_IMAGE_BYTES", 5 * 1024 * 1024)
+REGISTRATION_ATTACHMENT_MAX_BYTES = env_int("REGISTRATION_ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024)
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = os.environ.get("STEP2_DOCUMENT_RECOGNITION_PROVIDER", "unavailable")
 STEP1_SELFIE_FACE_PROVIDER = os.environ.get("STEP1_SELFIE_FACE_PROVIDER", "unavailable")
 STEP1_SELFIE_MIN_IMAGE_WIDTH = env_int("STEP1_SELFIE_MIN_IMAGE_WIDTH", 480)

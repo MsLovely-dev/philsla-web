@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, Check, Edit2, Eye, Filter, Plus, Search, Settings2, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
+import { AlertTriangle, Check, Edit2, Eye, Filter, Search, Settings2, Shield, Trash2, UserPlus, Users, X } from 'lucide-react';
 import { INITIAL_MAINTENANCE_MODULES, usePhilSA, type MaintenanceModule } from '../PhilSAContext';
 import { cn } from '../lib/utils';
+import { permissionCatalog } from '../generated/permissionCatalog';
 import {
   backendAdminUserService,
+  type AdminRoleDefinition as BackendRoleDefinition,
+  type AdminRolePermissionScope,
   type AdminUserAccount,
   type AdminUserAccountInput,
 } from '../services/backendAdminUserService';
@@ -33,7 +36,9 @@ interface RoleDefinition {
   id: string;
   name: string;
   moduleAccess: string[];
+  rawModuleAccess: string[];
   isCustom: boolean;
+  assignedUserCount?: number;
 }
 
 interface RoleForm {
@@ -48,63 +53,23 @@ const decide: PermissionActionKey[] = ['READ', 'EDIT', 'APPROVE', 'REJECT'];
 const manage: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE'];
 const fullAccess: PermissionActionKey[] = ['READ', 'WRITE', 'EDIT', 'DELETE', 'APPROVE', 'REJECT'];
 
-const modulePermissionApplicability: Record<string, PermissionActionKey[]> = {
-  '2': fullAccess,
-  '3': readOnly,
-  '4': readOnly,
-  '5': readOnly,
-  '6': readOnly,
-  '7': readOnly,
-  '8': decide,
-  '9': decide,
-  '10': decide,
-  '11': manageRecords,
-  '12': operate,
-  '13': manageRecords,
-  '14': manageRecords,
-  '15': readOnly,
-  '16': readOnly,
-  '17': manageRecords,
-  '18': manageRecords,
-  '19': manageRecords,
-  '20': decide,
-  '21': manageRecords,
-  '22': readOnly,
-  '23': readOnly,
-  '24': manageRecords,
-  '25': operate,
-  '26': readOnly,
-  '27': operate,
-  '28': operate,
-  '29': readOnly,
-  '30': manageRecords,
-  '31': manageRecords,
-  '32': operate,
-  '33': decide,
-  '34': readOnly,
-  '35': operate,
-  '36': operate,
-  '37': decide,
-  '38': manageRecords,
-  '39': manageRecords,
-  '40': operate,
-  '41': operate,
-  '42': operate,
-  '43': manageRecords,
-  '44': manageRecords,
-  '45': manageRecords,
-  '46': decide,
-  '47': operate,
-  '48': readOnly,
-  '49': manageRecords,
-  '50': readOnly,
-  '51': readOnly,
-  '52': operate,
-  '53': readOnly,
-  '54': operate,
-  '55': manageRecords,
-  '56': readOnly,
+type PermissionCatalog = {
+  defaultRange: { start: number; end: number; actions: readonly PermissionActionKey[] };
+  modules: Record<string, readonly PermissionActionKey[]>;
 };
+
+function buildModulePermissionApplicability(catalog: PermissionCatalog) {
+  const applicability: Record<string, PermissionActionKey[]> = {};
+  for (let moduleId = catalog.defaultRange.start; moduleId <= catalog.defaultRange.end; moduleId += 1) {
+    applicability[String(moduleId)] = Array.from(catalog.defaultRange.actions);
+  }
+  Object.entries(catalog.modules).forEach(([moduleId, actions]) => {
+    applicability[moduleId] = Array.from(actions);
+  });
+  return applicability;
+}
+
+const modulePermissionApplicability = buildModulePermissionApplicability(permissionCatalog as PermissionCatalog);
 
 const permissionMatrixModuleIds = new Set([
   '2', '3', '4',
@@ -115,7 +80,7 @@ const permissionMatrixModuleIds = new Set([
   '24',
   '25', '26', '27', '28', '29', '52', '30',
   '31', '32', '33', '47', '53',
-  '34', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45',
+  '34', '36', '37', '38', '39', '40', '41',
   '35', '54', '55',
 ]);
 
@@ -132,10 +97,6 @@ const permissionSubmoduleParentIds: Record<string, string> = {
   '39': '34',
   '40': '34',
   '41': '34',
-  '42': '34',
-  '43': '34',
-  '44': '34',
-  '45': '34',
 };
 
 const permissionModuleDisplayNames: Record<string, string> = {
@@ -146,20 +107,20 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
   ADMISSIONS_REVIEWER: [
     { moduleIds: ['1', '12', '48'], actions: readOnly },
     { moduleIds: ['9', '37'], actions: decide },
-    { moduleIds: ['36', '38', '39'], actions: operate },
+    { moduleIds: ['36', '38', '41'], actions: operate },
   ],
   PROCTOR: [
     { moduleIds: ['26'], actions: readOnly },
-    { moduleIds: ['25', '27', '28', '29', '52', '40', '41', '42'], actions: operate },
+    { moduleIds: ['25', '27', '28', '29', '52'], actions: operate },
   ],
   PROCTOR_ADMIN: [
     { moduleIds: ['26'], actions: readOnly },
-    { moduleIds: ['25', '27', '28', '29', '52', '40', '41', '42'], actions: operate },
+    { moduleIds: ['25', '27', '28', '29', '52'], actions: operate },
     { moduleIds: ['30', '55'], actions: manage },
   ],
   UNIVERSITY_ADMIN: [
     { moduleIds: ['1', '10', '15'], actions: readOnly },
-    { moduleIds: ['11', '12', '13', '14', '36', '38', '39', '43', '44', '45'], actions: operate },
+    { moduleIds: ['11', '12', '13', '14', '36', '37', '38', '39', '40', '41'], actions: operate },
     { moduleIds: ['20'], actions: decide },
   ],
   TESTING_CENTER_ADMIN: [
@@ -167,7 +128,7 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
   ],
   EXAM_ADMINISTRATOR: [
     { moduleIds: ['16', '22', '49', '15', '7', '6', '56'], actions: readOnly },
-    { moduleIds: ['17', '18', '19', '21', '43'], actions: manage },
+    { moduleIds: ['17', '18', '19', '21', '39', '40'], actions: manage },
     { moduleIds: ['20', '46'], actions: decide },
   ],
   SYSTEM_ADMIN: [
@@ -249,6 +210,37 @@ function filterApplicableModuleAccess(modules: MaintenanceModule[], moduleAccess
   );
 
   return moduleAccess.filter((permissionKey) => allowedKeys.has(permissionKey));
+}
+
+export function preserveHiddenModuleAccess(
+  modules: MaintenanceModule[],
+  originalModuleAccess: string[],
+  visibleModuleAccess: string[]
+) {
+  const visibleKeys = new Set(
+    modules.flatMap((module) => getApplicablePermissions(module).map((permission) => modulePermissionKey(module, permission)))
+  );
+  const merged = new Set([
+    ...originalModuleAccess.filter((permissionKey) => !visibleKeys.has(permissionKey)),
+    ...visibleModuleAccess,
+  ]);
+  return Array.from(merged);
+}
+
+export function buildRoleDefinition(
+  role: BackendRoleDefinition,
+  modules: MaintenanceModule[],
+  overrideModuleAccess?: string[]
+): RoleDefinition {
+  const rawModuleAccess = overrideModuleAccess ?? role.moduleAccess;
+  return {
+    id: role.id,
+    name: role.name,
+    moduleAccess: filterApplicableModuleAccess(modules, rawModuleAccess),
+    rawModuleAccess,
+    isCustom: false,
+    assignedUserCount: role.assignedUserCount,
+  };
 }
 
 function getDefaultModuleAccessForRole(role: string, modules: MaintenanceModule[]) {
@@ -438,6 +430,9 @@ export default function UserManagement() {
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [backendRoles, setBackendRoles] = useState<BackendRoleDefinition[]>([]);
+  const [isRoleLoading, setIsRoleLoading] = useState(true);
+  const [roleError, setRoleError] = useState('');
   const [customRoles, setCustomRoles] = useState<RoleDefinition[]>([]);
   const [roleAccessOverrides, setRoleAccessOverrides] = useState<Record<string, string[]>>({});
   const [deletedRoleIds, setDeletedRoleIds] = useState<string[]>([]);
@@ -447,6 +442,9 @@ export default function UserManagement() {
   const [viewingRoleId, setViewingRoleId] = useState<string | null>(null);
   const [roleForm, setRoleForm] = useState<RoleForm>(emptyRoleForm);
   const [roleFormError, setRoleFormError] = useState('');
+  const [roleUpdateScope, setRoleUpdateScope] = useState<AdminRolePermissionScope>('baseline_only');
+  const [selectedRoleUserIds, setSelectedRoleUserIds] = useState<string[]>([]);
+  const [isRoleSaving, setIsRoleSaving] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -468,6 +466,26 @@ export default function UserManagement() {
     };
   }, [search, roleFilter]);
 
+  useEffect(() => {
+    let isMounted = true;
+    setIsRoleLoading(true);
+    setRoleError('');
+
+    backendAdminUserService.listRoles().then((result) => {
+      if (!isMounted) return;
+      if (result.ok === true) {
+        setBackendRoles(result.data);
+      } else {
+        setRoleError(result.error.message);
+      }
+      setIsRoleLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const modalTitle = isAdding ? 'Add New Account' : 'Edit User Account';
   const hasUsers = users.length > 0;
   const systemModules = useMemo(() => {
@@ -484,27 +502,32 @@ export default function UserManagement() {
   }, [maintenanceModules]);
 
   const selectedModuleAccess = useMemo(() => new Set(form.moduleAccess), [form.moduleAccess]);
-  const allRoles = useMemo(
-    () => Array.from(new Set([
-      ...roles.filter((role) => !deletedRoleIds.includes(role)),
-      ...customRoles.filter((role) => !deletedRoleIds.includes(role.id)).map((role) => role.name),
-    ])),
-    [customRoles, deletedRoleIds]
-  );
   const roleDefinitions = useMemo<RoleDefinition[]>(
-    () => [
-      ...roles.filter((role) => !deletedRoleIds.includes(role)).map((role) => ({
-        id: role,
-        name: role,
-        moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules)),
-        isCustom: false,
-      })),
-      ...customRoles.filter((role) => !deletedRoleIds.includes(role.id)).map((role) => ({
-        ...role,
-        moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role.id] ?? role.moduleAccess),
-      })),
-    ],
-    [customRoles, deletedRoleIds, roleAccessOverrides, systemModules]
+    () => {
+      const persistedRoles = backendRoles.length
+        ? backendRoles.map((role) => buildRoleDefinition(role, systemModules, roleAccessOverrides[role.id]))
+        : roles.filter((role) => !deletedRoleIds.includes(role)).map((role) => ({
+          id: role,
+          name: role,
+          moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules)),
+          rawModuleAccess: roleAccessOverrides[role] ?? getDefaultModuleAccessForRole(role, systemModules),
+          isCustom: false,
+        }));
+
+      return [
+        ...persistedRoles,
+        ...customRoles.filter((role) => !deletedRoleIds.includes(role.id)).map((role) => ({
+          ...role,
+          moduleAccess: filterApplicableModuleAccess(systemModules, roleAccessOverrides[role.id] ?? role.moduleAccess),
+          rawModuleAccess: roleAccessOverrides[role.id] ?? role.moduleAccess,
+        })),
+      ];
+    },
+    [backendRoles, customRoles, deletedRoleIds, roleAccessOverrides, systemModules]
+  );
+  const allRoles = useMemo(
+    () => roleDefinitions.map((role) => role.name),
+    [roleDefinitions]
   );
   const viewingRoleDefinition = useMemo(
     () => roleDefinitions.find((role) => role.id === viewingRoleId) ?? null,
@@ -515,6 +538,12 @@ export default function UserManagement() {
     [viewingRoleDefinition]
   );
   const selectedRoleModuleAccess = useMemo(() => new Set(roleForm.moduleAccess), [roleForm.moduleAccess]);
+  const assignedUsersForEditingRole = useMemo(
+    () => editingRole
+      ? users.filter((user) => normalizeRoleKey(user.role) === normalizeRoleKey(editingRole.name))
+      : [],
+    [editingRole, users]
+  );
 
   function getRoleDefinition(role: string) {
     const normalizedRole = normalizeRoleKey(role);
@@ -526,6 +555,16 @@ export default function UserManagement() {
       systemModules,
       getRoleDefinition(role)?.moduleAccess ?? getDefaultModuleAccessForRole(role, systemModules)
     );
+  }
+
+  function permissionSetsMatch(left: string[], right: string[]) {
+    const leftSet = new Set(filterApplicableModuleAccess(systemModules, left));
+    const rightSet = new Set(filterApplicableModuleAccess(systemModules, right));
+    return leftSet.size === rightSet.size && Array.from(leftSet).every((permission) => rightSet.has(permission));
+  }
+
+  function getUserPermissionMode(user: AdminUserAccount) {
+    return permissionSetsMatch(user.moduleAccess, getModuleAccessForRole(user.role)) ? 'Inherited' : 'Custom';
   }
 
   function openAddModal() {
@@ -563,6 +602,8 @@ export default function UserManagement() {
   function openAddRoleModal() {
     setRoleForm(emptyRoleForm);
     setRoleFormError('');
+    setRoleUpdateScope('baseline_only');
+    setSelectedRoleUserIds([]);
     setEditingRole(null);
     setIsAddingRole(true);
   }
@@ -574,6 +615,8 @@ export default function UserManagement() {
       moduleAccess: role.moduleAccess,
     });
     setRoleFormError('');
+    setRoleUpdateScope('baseline_only');
+    setSelectedRoleUserIds([]);
     setEditingRole(role);
     setIsAddingRole(true);
   }
@@ -588,6 +631,9 @@ export default function UserManagement() {
     setEditingRole(null);
     setRoleForm(emptyRoleForm);
     setRoleFormError('');
+    setRoleUpdateScope('baseline_only');
+    setSelectedRoleUserIds([]);
+    setIsRoleSaving(false);
   }
 
   function togglePermission(module: MaintenanceModule, permission: PermissionActionKey) {
@@ -626,7 +672,15 @@ export default function UserManagement() {
     }));
   }
 
-  function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
+  function toggleSelectedRoleUser(userId: string) {
+    setSelectedRoleUserIds((current) => (
+      current.includes(userId)
+        ? current.filter((id) => id !== userId)
+        : [...current, userId]
+    ));
+  }
+
+  async function handleRoleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedRoleName = editingRole?.isCustom === false ? editingRole.name : normalizeRoleKey(roleForm.name);
     const normalizedModuleAccess = filterApplicableModuleAccess(systemModules, roleForm.moduleAccess);
@@ -646,7 +700,7 @@ export default function UserManagement() {
       if (editingRole.isCustom) {
         setCustomRoles((current) => current.map((role) => (
           role.id === editingRole.id
-            ? { ...role, id: normalizedRoleName, name: normalizedRoleName, moduleAccess: normalizedModuleAccess }
+            ? { ...role, id: normalizedRoleName, name: normalizedRoleName, moduleAccess: normalizedModuleAccess, rawModuleAccess: normalizedModuleAccess }
             : role
         )));
         setRoleAccessOverrides((current) => {
@@ -655,10 +709,44 @@ export default function UserManagement() {
           return { ...next, [normalizedRoleName]: normalizedModuleAccess };
         });
       } else {
-        setRoleAccessOverrides((current) => ({
-          ...current,
-          [editingRole.id]: normalizedModuleAccess,
-        }));
+        if (roleUpdateScope === 'selected_users' && selectedRoleUserIds.length === 0) {
+          setRoleFormError('Select at least one user assigned to this role.');
+          return;
+        }
+
+        setIsRoleSaving(true);
+        const result = await backendAdminUserService.updateRolePermissions(editingRole.id, {
+          moduleAccess: preserveHiddenModuleAccess(systemModules, editingRole.rawModuleAccess, normalizedModuleAccess),
+          scope: roleUpdateScope,
+          selectedUserIds: roleUpdateScope === 'selected_users' ? selectedRoleUserIds : [],
+        });
+
+        if (result.ok === true) {
+          setBackendRoles((current) => current.map((role) => (
+            role.id === result.data.id ? result.data : role
+          )));
+          setRoleAccessOverrides((current) => {
+            const next = { ...current };
+            delete next[editingRole.id];
+            return next;
+          });
+
+          const refreshedUsers = await backendAdminUserService.listUsers({ search, role: roleFilter });
+          if (refreshedUsers.ok === true) {
+            setUsers(refreshedUsers.data);
+          } else {
+            setError(refreshedUsers.error.message);
+          }
+
+          setSelectedRoleId(result.data.id);
+          setViewingRoleId(result.data.id);
+          addAuditLog('ROLE_PROVISIONING', `Updated role ${result.data.name}`);
+          closeRoleModal();
+        } else {
+          setRoleFormError(result.error.message);
+        }
+        setIsRoleSaving(false);
+        return;
       }
       if (editingRole.isCustom && normalizeRoleKey(previousRoleName) !== normalizedRoleName) {
         setUsers((current) => current.map((user) => (
@@ -688,6 +776,7 @@ export default function UserManagement() {
         id: normalizedRoleName,
         name: normalizedRoleName,
         moduleAccess: normalizedModuleAccess,
+        rawModuleAccess: normalizedModuleAccess,
         isCustom: true,
       },
     ]);
@@ -737,9 +826,12 @@ export default function UserManagement() {
     event.preventDefault();
     setIsSaving(true);
     setFormError('');
+    const visibleModuleAccess = filterApplicableModuleAccess(systemModules, form.moduleAccess);
     const normalizedForm = {
       ...form,
-      moduleAccess: filterApplicableModuleAccess(systemModules, form.moduleAccess),
+      moduleAccess: selectedUser
+        ? preserveHiddenModuleAccess(systemModules, selectedUser.moduleAccess, visibleModuleAccess)
+        : visibleModuleAccess,
     };
 
     const result = selectedUser
@@ -786,11 +878,7 @@ export default function UserManagement() {
           <button onClick={openAddModal} className="btn-primary flex items-center gap-2">
             <UserPlus className="w-5 h-5" /> Add User
           </button>
-        ) : (
-          <button onClick={openAddRoleModal} className="btn-primary flex items-center gap-2">
-            <Plus className="w-5 h-5" /> Add Role
-          </button>
-        )}
+        ) : null}
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -912,9 +1000,19 @@ export default function UserManagement() {
                     </div>
                   </td>
                   <td className="px-8 py-6">
-                    <div className="flex items-center gap-2 px-3 py-1 bg-philsa-bg border border-philsa-border rounded-lg w-fit">
-                      <Shield className="w-3 h-3 text-philsa-red" />
-                      <span className="text-[10px] font-bold text-philsa-navy uppercase tracking-wider">{formatLabel(user.role)}</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 px-3 py-1 bg-philsa-bg border border-philsa-border rounded-lg w-fit">
+                        <Shield className="w-3 h-3 text-philsa-red" />
+                        <span className="text-[10px] font-bold text-philsa-navy uppercase tracking-wider">{formatLabel(user.role)}</span>
+                      </div>
+                      <span className={cn(
+                        'inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest',
+                        getUserPermissionMode(user) === 'Inherited'
+                          ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                          : 'border-amber-100 bg-amber-50 text-amber-700'
+                      )}>
+                        {getUserPermissionMode(user)}
+                      </span>
                     </div>
                   </td>
                   <td className="px-8 py-6 text-right">
@@ -944,14 +1042,23 @@ export default function UserManagement() {
           <div className="p-6 border-b border-philsa-border flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-extrabold text-philsa-navy">Role Settings</h2>
-              <p className="text-xs text-philsa-gray">Create roles and assign default modular permissions.</p>
+              <p className="text-xs text-philsa-gray">Manage default role access and apply permission changes to assigned users.</p>
             </div>
-            <button onClick={openAddRoleModal} className="btn-secondary flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Add Role
-            </button>
           </div>
 
+          {roleError && (
+            <div className="m-6 flex items-center gap-3 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-philsa-red">
+              <AlertTriangle className="w-4 h-4" />
+              {roleError}
+            </div>
+          )}
+
           <div className="divide-y divide-philsa-border">
+            {isRoleLoading && (
+              <div className="p-8 text-center text-sm font-semibold text-philsa-gray">
+                Loading backend roles...
+              </div>
+            )}
             {roleDefinitions.map((role) => (
               <div
                 key={role.id}
@@ -975,7 +1082,10 @@ export default function UserManagement() {
                         {role.isCustom ? 'Custom' : 'Default'}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-philsa-gray">{role.moduleAccess.length} permissions selected</p>
+                    <p className="mt-1 text-xs text-philsa-gray">
+                      {role.moduleAccess.length} permissions selected
+                      {typeof role.assignedUserCount === 'number' ? ` - ${role.assignedUserCount} assigned users` : ''}
+                    </p>
                   </div>
                 </button>
                 <div className="flex items-center gap-2">
@@ -997,15 +1107,17 @@ export default function UserManagement() {
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleRoleDelete(role)}
-                    className="p-2 text-philsa-gray hover:text-philsa-red hover:bg-white rounded-lg border border-transparent hover:border-philsa-border transition-all"
-                    aria-label={`Delete ${formatLabel(role.name)}`}
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {role.isCustom && (
+                    <button
+                      type="button"
+                      onClick={() => handleRoleDelete(role)}
+                      className="p-2 text-philsa-gray hover:text-philsa-red hover:bg-white rounded-lg border border-transparent hover:border-philsa-border transition-all"
+                      aria-label={`Delete ${formatLabel(role.name)}`}
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -1154,6 +1266,67 @@ export default function UserManagement() {
                       placeholder="e.g. Regional Admin"
                     />
                   </label>
+                  {editingRole && !editingRole.isCustom && (
+                    <div className="space-y-3 rounded-2xl border border-philsa-border bg-philsa-bg/50 p-4">
+                      <p className="text-[10px] font-bold text-philsa-gray uppercase tracking-widest">Apply Changes</p>
+                      <label className="flex items-start gap-3 rounded-xl bg-white p-3 text-sm">
+                        <input
+                          type="radio"
+                          className="mt-1"
+                          checked={roleUpdateScope === 'baseline_only'}
+                          onChange={() => setRoleUpdateScope('baseline_only')}
+                        />
+                        <span>
+                          <span className="block font-extrabold text-philsa-navy">Role default only</span>
+                          <span className="block text-xs text-philsa-gray">Existing custom user permissions stay unchanged.</span>
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-3 rounded-xl bg-white p-3 text-sm">
+                        <input
+                          type="radio"
+                          className="mt-1"
+                          checked={roleUpdateScope === 'all_assigned'}
+                          onChange={() => setRoleUpdateScope('all_assigned')}
+                        />
+                        <span>
+                          <span className="block font-extrabold text-philsa-navy">All assigned users</span>
+                          <span className="block text-xs text-philsa-gray">Every active user assigned to this role receives this permission set.</span>
+                        </span>
+                      </label>
+                      <label className="flex items-start gap-3 rounded-xl bg-white p-3 text-sm">
+                        <input
+                          type="radio"
+                          className="mt-1"
+                          checked={roleUpdateScope === 'selected_users'}
+                          onChange={() => setRoleUpdateScope('selected_users')}
+                        />
+                        <span>
+                          <span className="block font-extrabold text-philsa-navy">Selected users</span>
+                          <span className="block text-xs text-philsa-gray">Only chosen users receive this permission set.</span>
+                        </span>
+                      </label>
+                      {roleUpdateScope === 'selected_users' && (
+                        <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-philsa-border bg-white p-3">
+                          {assignedUsersForEditingRole.length === 0 && (
+                            <p className="text-xs font-semibold text-philsa-gray">No active users are assigned to this role.</p>
+                          )}
+                          {assignedUsersForEditingRole.map((user) => (
+                            <label key={user.id} className="flex items-center gap-3 rounded-lg px-2 py-2 text-sm hover:bg-philsa-bg">
+                              <input
+                                type="checkbox"
+                                checked={selectedRoleUserIds.includes(user.id)}
+                                onChange={() => toggleSelectedRoleUser(user.id)}
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate font-bold text-philsa-navy">{user.fullName}</span>
+                                <span className="block truncate text-xs text-philsa-gray">{user.email}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-4">
@@ -1165,8 +1338,8 @@ export default function UserManagement() {
 
             <div className="p-8 border-t border-philsa-border bg-philsa-bg/30 flex justify-end gap-4">
               <button type="button" onClick={closeRoleModal} className="btn-secondary px-8">Discard</button>
-              <button className="btn-primary px-12 flex items-center gap-2">
-                <Check className="w-5 h-5" /> {editingRole ? 'Save Role' : 'Create Role'}
+              <button disabled={isRoleSaving} className={cn('btn-primary px-12 flex items-center gap-2', isRoleSaving && 'opacity-70')}>
+                <Check className="w-5 h-5" /> {isRoleSaving ? 'Saving...' : editingRole ? 'Save Role' : 'Create Role'}
               </button>
             </div>
           </motion.form>

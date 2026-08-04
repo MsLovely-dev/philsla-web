@@ -1,19 +1,17 @@
 import React from 'react';
 import { 
   Users, 
-  ClipboardList, 
-  MapPin, 
-  Calendar, 
-  Monitor, 
-  UserCheck, 
-  ShieldAlert, 
-  Database, 
+  ClipboardCheck,
+  FileText,
+  HelpCircle,
+  CheckSquare,
+  Award,
   Settings,
   ChevronRight,
-  ShieldIcon,
-  ShieldCheck,
   CheckCircle2,
-  FileText
+  ShieldAlert,
+  School,
+  GraduationCap
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -31,94 +29,31 @@ const MAINTENANCE_MODULES = [
     allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
   },
   {
-    id: 'app-status',
-    title: 'Application Status',
-    description: 'Configure registration and processing status workflows.',
-    icon: ClipboardList,
-    href: '/admin/maintenance/application-status',
-    stats: '4 Workflows',
-    allowedRoles: ['SYSTEM_ADMIN', 'ADMISSIONS_REVIEWER']
-  },
-  {
-    id: 'testing-center',
-    title: 'Testing Centers',
-    description: 'Facility management, status control, and capacity rules.',
-    icon: MapPin,
-    href: '/admin/maintenance/testing-center',
-    stats: '8 Active Protocols',
+    id: 'schools',
+    title: 'List of Schools',
+    description: 'Directory and management of accredited secondary schools and examination testing venue partners.',
+    icon: School,
+    href: '/admin/maintenance/schools',
+    stats: 'Nationwide Directory',
     allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
   },
   {
-    id: 'batch',
-    title: 'Batch Configuration',
-    description: 'Examination batch rules and scheduling status management.',
-    icon: Calendar,
-    href: '/admin/maintenance/batch',
-    stats: '2 Core Tables',
+    id: 'universities',
+    title: 'List of Universities',
+    description: 'Registry of Higher Education Institutions (HEIs) and their offered College Courses & Degree Programs.',
+    icon: GraduationCap,
+    href: '/admin/maintenance/universities',
+    stats: 'Interactive Courses',
     allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
   },
   {
-    id: 'device',
-    title: 'Device Validation',
-    description: 'Specify OS, RAM, browser, and hardware requirements.',
-    icon: Monitor,
-    href: '/admin/maintenance/device',
-    stats: '12 Rules Configured',
-    allowedRoles: ['SYSTEM_ADMIN', 'PROCTOR']
-  },
-  {
-    id: 'attendance',
-    title: 'Attendance Rules',
-    description: 'Attendance status codes and reporting criteria.',
-    icon: UserCheck,
-    href: '/admin/maintenance/attendance',
-    stats: 'Active Mapping',
-    allowedRoles: ['SYSTEM_ADMIN', 'PROCTOR']
-  },
-  {
-    id: 'integrity',
-    title: 'Exam Integrity',
-    description: 'Violation types, warning protocols, and penalty actions.',
-    icon: ShieldAlert,
-    href: '/admin/maintenance/integrity',
-    stats: 'Security Framework',
-    allowedRoles: ['SYSTEM_ADMIN', 'PROCTOR']
-  },
-  {
-    id: 'question-bank',
-    title: 'Question Config',
-    description: 'Subject areas, question types, and essay validation rules.',
-    icon: Database,
-    href: '/admin/maintenance/question-bank',
-    stats: '6 Schema Groups',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR']
-  },
-  {
-    id: 'proctor-device',
-    title: 'Proctor Device Verification',
-    description: 'Audit and authorize hardware profiles submitted by proctors.',
-    icon: ShieldCheck,
-    href: '/admin/maintenance/proctor-device',
-    stats: 'Hardware Guard',
-    allowedRoles: ['SYSTEM_ADMIN']
-  },
-  {
-    id: 'proctor',
-    title: 'Proctoring',
-    description: 'Proctor roles, status codes, and authorization levels.',
-    icon: ShieldIcon,
-    href: '/admin/maintenance/proctor',
-    stats: 'Role Definitions',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN']
-  },
-  {
-    id: 'degree-programs',
-    title: 'Degree Programs',
-    description: 'Manage university codes, course layouts, curriculum years, and degree pathways.',
+    id: 'exam-blueprint',
+    title: 'Exam Blueprint',
+    description: 'Lookup tables for subject areas, difficulty levels, question types, and topics.',
     icon: FileText,
-    href: '/admin/maintenance/degree-programs',
-    stats: '6 Registered Programs',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN']
+    href: '/admin/maintenance/exam-blueprint',
+    stats: '4 Lookup Tables',
+    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
   }
 ];
 
@@ -223,3 +158,5 @@ export default function MaintenanceHub() {
     </div>
   );
 }
+
+

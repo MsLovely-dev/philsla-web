@@ -18,8 +18,27 @@ export interface AdminUserAccountInput {
   isActive?: boolean;
 }
 
+export type AdminRolePermissionScope = 'baseline_only' | 'all_assigned' | 'selected_users';
+
+export interface AdminRoleDefinition {
+  id: string;
+  name: string;
+  moduleAccess: string[];
+  assignedUserCount: number;
+}
+
+export interface AdminRolePermissionUpdateInput {
+  moduleAccess: string[];
+  scope: AdminRolePermissionScope;
+  selectedUserIds?: string[];
+}
+
 interface AdminUserListResponse {
   users: AdminUserAccount[];
+}
+
+interface AdminRoleListResponse {
+  roles: AdminRoleDefinition[];
 }
 
 export class BackendAdminUserService {
@@ -34,6 +53,22 @@ export class BackendAdminUserService {
     const result = await this.apiClient.request<AdminUserListResponse>(`/api/v1/auth/admin/users/${suffix}`);
     if (result.ok === false) return result;
     return { ok: true, data: result.data.users };
+  }
+
+  async listRoles(): Promise<ServiceResult<AdminRoleDefinition[]>> {
+    const result = await this.apiClient.request<AdminRoleListResponse>('/api/v1/auth/admin/roles/');
+    if (result.ok === false) return result;
+    return { ok: true, data: result.data.roles };
+  }
+
+  async updateRolePermissions(
+    roleId: string,
+    input: AdminRolePermissionUpdateInput,
+  ): Promise<ServiceResult<AdminRoleDefinition>> {
+    return this.apiClient.request<AdminRoleDefinition>(`/api/v1/auth/admin/roles/${roleId}/permissions/`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    });
   }
 
   async createUser(input: AdminUserAccountInput): Promise<ServiceResult<AdminUserAccount>> {

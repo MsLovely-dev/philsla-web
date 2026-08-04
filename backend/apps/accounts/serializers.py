@@ -6,6 +6,7 @@ from django.core.validators import validate_email
 from rest_framework import serializers
 
 from .models import AccountProfile
+from .permission_codes import normalize_permission_codes, resolve_account_permission_codes
 from .roles import PortalRole
 
 LRN_PATTERN = re.compile(r"^\d{12}$")
@@ -237,6 +238,34 @@ class AdminUserAccountSerializer(serializers.Serializer):
     updatedAt = serializers.DateTimeField(read_only=True)
 
 
+class AdminRoleSerializer(serializers.Serializer):
+    id = serializers.ChoiceField(choices=ADMIN_MANAGED_ROLES, read_only=True)
+    name = serializers.ChoiceField(choices=ADMIN_MANAGED_ROLES, read_only=True)
+    moduleAccess = serializers.ListField(child=serializers.CharField(), read_only=True)
+    assignedUserCount = serializers.IntegerField(read_only=True)
+
+
+class AdminRolePermissionUpdateSerializer(serializers.Serializer):
+    moduleAccess = serializers.ListField(
+        child=serializers.CharField(trim_whitespace=True, max_length=80),
+        allow_empty=True,
+    )
+    scope = serializers.ChoiceField(choices=("baseline_only", "all_assigned", "selected_users"))
+    selectedUserIds = serializers.ListField(
+        child=serializers.CharField(trim_whitespace=True, max_length=80),
+        required=False,
+        allow_empty=True,
+    )
+
+    def validate_moduleAccess(self, value: list[str]) -> list[str]:
+        return normalize_permission_codes(value)
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        if attrs["scope"] == "selected_users" and not attrs.get("selectedUserIds"):
+            raise serializers.ValidationError({"selectedUserIds": "Select at least one user for this role update."})
+        return attrs
+
+
 class AdminUserAccountWriteSerializer(serializers.Serializer):
     fullName = serializers.CharField(
         trim_whitespace=True,
@@ -278,15 +307,7 @@ class AdminUserAccountWriteSerializer(serializers.Serializer):
         return normalized
 
     def validate_moduleAccess(self, value: list[str]) -> list[str]:
-        modules: list[str] = []
-        seen: set[str] = set()
-        for item in value:
-            normalized = re.sub(r"\s+", "_", item.strip().upper())
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            modules.append(normalized)
-        return modules
+        return normalize_permission_codes(value)
 
 
 def serialize_admin_user_account(user: object, profile: AccountProfile | None = None) -> dict[str, object]:
@@ -299,7 +320,7 @@ def serialize_admin_user_account(user: object, profile: AccountProfile | None = 
         "fullName": full_name or getattr(user, "username", ""),
         "email": getattr(user, "email", "") or "",
         "role": profile.role,
-        "moduleAccess": list(profile.api_permissions or []),
+        "moduleAccess": resolve_account_permission_codes(profile),
         "isActive": bool(getattr(user, "is_active", False)),
         "createdAt": getattr(user, "date_joined", None),
         "updatedAt": profile.updated_at,

@@ -12,6 +12,8 @@ from .audit import record_auth_event
 from .permissions import RoleRequiredPermission, require_roles
 from .roles import PortalRole
 from .serializers import (
+    AdminRolePermissionUpdateSerializer,
+    AdminRoleSerializer,
     AdminUserAccountSerializer,
     AdminUserAccountWriteSerializer,
     IdentifierLoginSerializer,
@@ -39,6 +41,7 @@ from .services import (
     complete_password_recovery,
     complete_login_selfie,
     inspect_password_recovery,
+    list_admin_roles,
     list_admin_user_accounts,
     request_admin_account_recovery,
     request_password_recovery,
@@ -49,6 +52,7 @@ from .services import (
     resolve_authenticated_account,
     start_identifier_login,
     update_admin_user_account,
+    update_admin_role_permissions,
     verify_login_otp,
     verify_login_password,
 )
@@ -440,3 +444,29 @@ class AdminUserAccountDetailView(APIView):
             return get_user_model().objects.get(id=user_id)
         except (get_user_model().DoesNotExist, ValueError):
             return None
+
+
+class AdminRoleListView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request) -> Response:
+        roles = AdminRoleSerializer(list_admin_roles(), many=True).data
+        return Response({"roles": roles})
+
+
+class AdminRolePermissionView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
+
+    def put(self, request, role: str) -> Response:
+        serializer = AdminRolePermissionUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        updated_role = update_admin_role_permissions(
+            role=role,
+            module_access=serializer.validated_data["moduleAccess"],
+            scope=serializer.validated_data["scope"],
+            selected_user_ids=serializer.validated_data.get("selectedUserIds", []),
+        )
+        return Response(AdminRoleSerializer(updated_role).data)

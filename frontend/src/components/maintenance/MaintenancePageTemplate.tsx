@@ -22,12 +22,16 @@ import {
   Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-export interface MaintenanceColumn {
+export type MaintenanceRecord = Record<string, unknown>;
+type MaintenanceDisplayRecord = Record<string, string | number | boolean | null | undefined>;
+
+export interface MaintenanceColumn<TRow extends object = MaintenanceDisplayRecord> {
   key: string;
   label: string;
-  render?: (row: any) => React.ReactNode;
+  render?: (row: TRow) => React.ReactNode;
   sortable?: boolean;
 }
 
@@ -40,21 +44,21 @@ export interface MaintenanceField {
   placeholder?: string;
   dependsOn?: string;
   dependsOnValue?: string;
-  validation?: (val: any) => string | null;
+  validation?: (val: unknown) => string | null;
   disabled?: boolean;
-  onChange?: (val: any, currentData: any) => any;
+  onChange?: (val: string, currentData: MaintenanceRecord) => MaintenanceRecord;
 }
 
-interface MaintenancePageProps {
+interface MaintenancePageProps<TRow extends object> {
   title: string;
   subtitle: string;
   breadcrumb?: string[];
-  columns: MaintenanceColumn[];
-  data: any[];
-  onAdd?: (data: any) => void;
-  onEdit?: (row: any) => void;
-  onDelete?: (row: any) => void;
-  onView?: (row: any) => void;
+  columns: MaintenanceColumn<NoInfer<TRow>>[];
+  data: TRow[];
+  onAdd?: (data: TRow) => void;
+  onEdit?: (row: TRow) => void;
+  onDelete?: (row: TRow) => void;
+  onView?: (row: TRow) => void;
   fields: MaintenanceField[];
   bulkUpload?: {
     templateUrl: string;
@@ -67,10 +71,24 @@ interface MaintenancePageProps {
   showCreateAction?: boolean;
   showRowActions?: boolean;
   showApprovalColumn?: boolean;
-  renderRowActions?: (row: any) => React.ReactNode;
+  renderRowActions?: (row: TRow) => React.ReactNode;
+  searchTerm?: string;
+  onSearchTermChange?: (term: string) => void;
+  advancedFilters?: React.ReactNode;
+  isBackendFiltered?: boolean;
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    onPageChange: (page: number) => void;
+  };
 }
 
-export default function MaintenancePageTemplate({
+function readField(row: object, key: string): unknown {
+  return Reflect.get(row, key);
+}
+
+export default function MaintenancePageTemplate<TRow extends object>({
   title,
   subtitle,
   breadcrumb = ['Maintenance'],
@@ -90,12 +108,19 @@ export default function MaintenancePageTemplate({
   showRowActions = true,
   showApprovalColumn = true,
   renderRowActions,
-}: MaintenancePageProps) {
-  const [searchTerm, setSearchTerm] = useState('');
+  searchTerm: controlledSearchTerm,
+  onSearchTermChange,
+  advancedFilters,
+  isBackendFiltered = false,
+  pagination,
+}: MaintenancePageProps<TRow>) {
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const searchTerm = controlledSearchTerm ?? localSearchTerm;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
-  const [editingRow, setEditingRow] = useState<any>(null);
-  const [formData, setFormData] = useState<any>({});
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<TRow | null>(null);
+  const [formData, setFormData] = useState<MaintenanceRecord>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const handleOpenCreate = () => {
@@ -105,9 +130,9 @@ export default function MaintenancePageTemplate({
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (row: any) => {
+  const handleOpenEdit = (row: TRow) => {
     setEditingRow(row);
-    setFormData({ ...row });
+    setFormData(Object.fromEntries(Object.entries(row)));
     setFormErrors({});
     setIsModalOpen(true);
   };
@@ -131,19 +156,31 @@ export default function MaintenancePageTemplate({
     e.preventDefault();
     if (!validateForm()) return;
 
+    const submittedRow = { ...editingRow, ...formData } as unknown as TRow;
     if (editingRow) {
-      onEdit?.(formData);
+      onEdit?.(submittedRow);
     } else {
-      onAdd?.(formData);
+      onAdd?.(submittedRow);
     }
     setIsModalOpen(false);
   };
 
-  const filteredData = data.filter(row => 
+  const filteredData = isBackendFiltered ? data : data.filter(row => 
     Object.values(row).some(val => 
       String(val).toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
+  const pageCount = pagination ? Math.max(1, Math.ceil(pagination.totalCount / pagination.pageSize)) : 3;
+  const visiblePages = Array.from({ length: pageCount }, (_, index) => index + 1).slice(
+    Math.max(0, Math.min(pagination ? pagination.page - 3 : 0, Math.max(pageCount - 5, 0))),
+    Math.max(0, Math.min(pagination ? pagination.page - 3 : 0, Math.max(pageCount - 5, 0))) + 5,
+  );
+  const showingStart = pagination
+    ? pagination.totalCount === 0 ? 0 : ((pagination.page - 1) * pagination.pageSize) + 1
+    : filteredData.length;
+  const showingEnd = pagination
+    ? Math.min(pagination.page * pagination.pageSize, pagination.totalCount)
+    : filteredData.length;
 
   return (
     <div className="space-y-8 pb-20">
@@ -163,12 +200,14 @@ export default function MaintenancePageTemplate({
               <Upload className="w-4 h-4" /> Bulk Import
             </button>
           )}
-          {showCreateAction && <button
-            onClick={handleOpenCreate}
-            className="bg-philsa-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-philsa-navy/10 hover:bg-philsa-navy/90 transition-all flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" /> Create New Entry
-          </button>}
+          {showCreateAction && (
+            <button
+              onClick={handleOpenCreate}
+              className="bg-philsa-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-philsa-navy/10 hover:bg-philsa-navy/90 transition-all flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Create New Entry
+            </button>
+          )}
         </div>
       </div>
 
@@ -185,17 +224,32 @@ export default function MaintenancePageTemplate({
             placeholder="Search records..." 
             className="w-full bg-philsa-bg border-none rounded-2xl pl-14 pr-6 py-3.5 text-sm font-bold text-philsa-navy shadow-inner outline-none focus:ring-2 focus:ring-philsa-navy/5 transition-all"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              if (onSearchTermChange) {
+                onSearchTermChange(e.target.value);
+              } else {
+                setLocalSearchTerm(e.target.value);
+              }
+            }}
           />
         </div>
         <div className="flex gap-3">
-           <button className="btn-secondary py-3.5 px-6 text-sm flex items-center gap-2">
+           <button
+             type="button"
+             onClick={() => setIsAdvancedFiltersOpen(isOpen => !isOpen)}
+             className="btn-secondary py-3.5 px-6 text-sm flex items-center gap-2"
+           >
              <Filter className="w-4 h-4" /> Advanced Filters
            </button>
            <button className="btn-secondary py-3.5 px-4 text-sm">
              <Download className="w-4 h-4" />
            </button>
         </div>
+        {advancedFilters && isAdvancedFiltersOpen && (
+          <div className="w-full border-t border-philsa-border pt-4">
+            {advancedFilters}
+          </div>
+        )}
       </div>
 
       {/* Main Table */}
@@ -218,47 +272,51 @@ export default function MaintenancePageTemplate({
                   {columns.map(col => (
                     <td key={col.key} className="px-8 py-6">
                       {col.render ? col.render(row) : (
-                        <span className="text-sm font-bold text-philsa-navy">{row[col.key]}</span>
+                        <span className="text-sm font-bold text-philsa-navy">{String(readField(row, col.key) ?? '')}</span>
                       )}
                     </td>
                   ))}
                   <td className="px-8 py-6">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray">
-                        <Users className="w-3 h-3" /> {row.updatedBy || 'admin_user'}
+                        <Users className="w-3 h-3" /> {String(readField(row, 'updatedBy') || 'admin_user')}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] font-bold text-philsa-gray/60">
-                        <Clock className="w-3 h-3" /> {row.updatedAt || '2026-05-14 08:30'}
+                        <Clock className="w-3 h-3" /> {String(readField(row, 'updatedAt') || '2026-05-14 08:30')}
                       </div>
                     </div>
                   </td>
-                  {showApprovalColumn && <td className="px-8 py-6">
-                    <StatusBadge status={row.approvalStatus || 'Approved'} isApproval />
-                  </td>}
-                  {showRowActions && <td className="px-8 py-6 text-right">
-                    {renderRowActions ? renderRowActions(row) : (
-                      <div className="flex justify-end gap-1">
-                        <button
-                          onClick={() => onView?.(row)}
-                          className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleOpenEdit(row)}
-                          className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => onDelete?.(row)}
-                          className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </td>}
+                  {showApprovalColumn && (
+                    <td className="px-8 py-6">
+                       <StatusBadge status={String(readField(row, 'approvalStatus') || 'Approved')} isApproval />
+                    </td>
+                  )}
+                  {showRowActions && (
+                    <td className="px-8 py-6 text-right">
+                      {renderRowActions ? renderRowActions(row) : (
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => onView?.(row)}
+                            className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEdit(row)}
+                            className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => onDelete?.(row)}
+                            className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {filteredData.length === 0 && (
@@ -279,20 +337,35 @@ export default function MaintenancePageTemplate({
         {/* Pagination */}
         <div className="p-6 bg-philsa-bg/30 border-t border-philsa-border flex items-center justify-between">
            <p className="text-xs font-bold text-philsa-gray">
-             Showing <span className="text-philsa-navy">{filteredData.length}</span> of <span className="text-philsa-navy">{data.length}</span> records
+             Showing <span className="text-philsa-navy">{pagination ? `${showingStart}-${showingEnd}` : filteredData.length}</span> of <span className="text-philsa-navy">{pagination ? pagination.totalCount : data.length}</span> records
            </p>
            <div className="flex items-center gap-3">
-              <button className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30">
+              <button
+                type="button"
+                disabled={pagination ? pagination.page <= 1 : true}
+                onClick={() => pagination?.onPageChange(Math.max(1, pagination.page - 1))}
+                className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div className="flex gap-1">
-                 {[1, 2, 3].map(p => (
-                   <button key={p} className={cn("w-8 h-8 rounded-xl text-xs font-black transition-all", p === 1 ? "bg-philsa-navy text-white shadow-lg" : "bg-white border border-philsa-border text-philsa-gray hover:border-philsa-navy")}>
+                 {visiblePages.map(p => (
+                   <button
+                     key={p}
+                     type="button"
+                     onClick={() => pagination?.onPageChange(p)}
+                     className={cn("w-8 h-8 rounded-xl text-xs font-black transition-all", p === (pagination?.page ?? 1) ? "bg-philsa-navy text-white shadow-lg" : "bg-white border border-philsa-border text-philsa-gray hover:border-philsa-navy")}
+                   >
                      {p}
                    </button>
                  ))}
               </div>
-              <button className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray">
+              <button
+                type="button"
+                disabled={pagination ? pagination.page >= pageCount : true}
+                onClick={() => pagination?.onPageChange(Math.min(pageCount, pagination.page + 1))}
+                className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <ChevronRight className="w-4 h-4" />
               </button>
            </div>
@@ -357,7 +430,7 @@ export default function MaintenancePageTemplate({
                               "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all disabled:opacity-65 disabled:bg-gray-100/80 disabled:cursor-not-allowed",
                               formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                             )}
-                            value={formData[field.name] || ''}
+                            value={String(formData[field.name] ?? '')}
                             onChange={(e) => {
                               const val = e.target.value;
                               let updated = { ...formData, [field.name]: val };
@@ -375,7 +448,7 @@ export default function MaintenancePageTemplate({
                                 "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all appearance-none pr-10 disabled:opacity-65 disabled:bg-gray-100/80 disabled:cursor-not-allowed",
                                 formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                               )}
-                              value={formData[field.name] || ''}
+                              value={String(formData[field.name] ?? '')}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 let updated = { ...formData, [field.name]: val };
@@ -404,7 +477,7 @@ export default function MaintenancePageTemplate({
                               "w-full bg-philsa-bg border-none rounded-xl px-4 py-2.5 text-xs font-bold text-philsa-navy outline-none focus:ring-2 transition-all resize-none",
                               formErrors[field.name] ? "ring-2 ring-philsa-red/30" : "focus:ring-philsa-navy/10"
                             )}
-                            value={formData[field.name] || ''}
+                            value={String(formData[field.name] ?? '')}
                             onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
                           />
                         ) : field.type === 'toggle' ? (
@@ -530,7 +603,7 @@ export default function MaintenancePageTemplate({
 }
 
 function StatusBadge({ status, isApproval }: { status: string; isApproval?: boolean }) {
-  const configs: Record<string, { bg: string; text: string; border: string; icon: any }> = {
+  const configs: Record<string, { bg: string; text: string; border: string; icon: LucideIcon }> = {
     'Active': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-100', icon: CheckCircle2 },
     'Inactive': { bg: 'bg-slate-50', text: 'text-slate-600', border: 'border-slate-100', icon: AlertCircle },
     'Approved': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-100', icon: CheckCircle2 },

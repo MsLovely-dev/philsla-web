@@ -2,8 +2,8 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandParser
 from django.db import transaction
 
-from apps.accounts.default_permissions import default_module_access_for_role
 from apps.accounts.models import AccountProfile
+from apps.accounts.permission_codes import ensure_account_assignment, ensure_role_baseline
 from apps.accounts.roles import PortalRole
 
 
@@ -11,6 +11,8 @@ NON_STUDENT_ROLES = tuple(role for role in PortalRole if role != PortalRole.STUD
 
 ROLE_EMAIL_LOCAL_PARTS = {
     PortalRole.ADMISSIONS_REVIEWER: "admissions.reviewer",
+    PortalRole.ITEM_WRITER: "item.writer",
+    PortalRole.ACADEMIC_REVIEWER: "academic.reviewer",
     PortalRole.PROCTOR: "proctor",
     PortalRole.PROCTOR_ADMIN: "proctor.admin",
     PortalRole.UNIVERSITY_ADMIN: "university.admin",
@@ -52,6 +54,7 @@ class Command(BaseCommand):
         updated_count = 0
 
         for role in NON_STUDENT_ROLES:
+            ensure_role_baseline(role.value)
             username = role.value.lower()
             email = f"{ROLE_EMAIL_LOCAL_PARTS[role]}@{email_domain}"
             user, user_created = UserModel.objects.get_or_create(
@@ -89,22 +92,17 @@ class Command(BaseCommand):
                 user=user,
                 defaults={
                     "role": role.value,
-                    "api_permissions": default_module_access_for_role(role.value),
                     "scopes": {},
                 },
             )
 
-            role_default_permissions = default_module_access_for_role(role.value)
             profile_changed = False
             if not profile_created and profile.role != role.value:
                 profile.role = role.value
                 profile_changed = True
-            if not profile.api_permissions:
-                profile.api_permissions = role_default_permissions
-                profile_changed = True
 
             if profile_changed:
-                profile.save(update_fields=["role", "api_permissions", "updated_at"])
+                profile.save(update_fields=["role", "updated_at"])
                 updated_count += 1
             elif user_created or profile_created:
                 created_count += 1
@@ -112,6 +110,7 @@ class Command(BaseCommand):
                 updated_count += 1
 
             password_state = "usable password set" if password and user_created else "unusable password" if user_created else "existing password unchanged"
+            ensure_account_assignment(profile)
             self.stdout.write(f"{role.value}: {email} ({password_state})")
 
         self.stdout.write(self.style.SUCCESS(f"Provisioned non-student role accounts. Created: {created_count}. Existing/updated: {updated_count}."))
