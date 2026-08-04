@@ -19,6 +19,7 @@ import {
   type SchoolRecord,
 } from '../../../services/backendSchoolService';
 import type { ServiceFailure } from '../../../services/serviceResult';
+import { ConfirmationDialog } from '../../../components/ui';
 
 function isSchoolClassification(value: string): value is SchoolClassification {
   return value === 'Public' || value === 'Private';
@@ -43,6 +44,9 @@ export default function SchoolsListMaintenance() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
   const [formData, setFormData] = useState<SchoolPayload>(EMPTY_FORM);
+
+  const [pendingDelete, setPendingDelete] = useState<SchoolRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -118,14 +122,19 @@ export default function SchoolsListMaintenance() {
     setIsModalOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this school from the accredited list?')) return;
-    const result = await schoolService.deleteSchool(id);
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setIsDeleting(true);
+    const result = await schoolService.deleteSchool(pendingDelete.id);
+    setIsDeleting(false);
+
     if (!result.ok) {
       setError((result as ServiceFailure).error.message);
+      setPendingDelete(null);
       return;
     }
-    setSchools((prev) => prev.filter((s) => s.id !== id));
+    setSchools((prev) => prev.filter((s) => s.id !== pendingDelete.id));
+    setPendingDelete(null);
   };
 
   const exportCSV = () => {
@@ -318,7 +327,7 @@ export default function SchoolsListMaintenance() {
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(s.id)}
+                          onClick={() => setPendingDelete(s)}
                           className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
                           title="Remove School"
                         >
@@ -438,6 +447,17 @@ export default function SchoolsListMaintenance() {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog
+        isOpen={pendingDelete !== null}
+        title="Remove accredited school?"
+        message={pendingDelete ? `"${pendingDelete.name}" (${pendingDelete.code}) will be removed from the accredited list. This cannot be undone.` : ''}
+        confirmLabel="Remove School"
+        tone="danger"
+        isConfirming={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }
