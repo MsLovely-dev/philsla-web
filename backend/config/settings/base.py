@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "apps.applications",
     "apps.configuration",
     "apps.core",
+    "apps.exams",
 ]
 
 MIDDLEWARE = [

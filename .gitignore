@@ -28,3 +28,4 @@ artifacts/*.zip
 # Claude Code local setup
 .claude/*
 CLAUDE.md
+local/
