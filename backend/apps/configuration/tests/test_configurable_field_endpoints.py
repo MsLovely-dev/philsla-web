@@ -177,6 +177,41 @@ class ConfigurableFieldEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_admin_cannot_create_duplicate_verification_method(self):
+        response = self.client.post(
+            reverse("configuration:fields-admin"),
+            {
+                "module": "student_registration",
+                "section": "Step 1 Registration",
+                "type": "Verification Method",
+                "value": "Manual Entry",
+                "inputType": "text",
+                "optionValues": [],
+                "priority": "High Priority",
+                "remarks": "",
+                "status": False,
+                "display_order": 4,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["fields"]["value"][0], "This registration method already exists.")
+
+    def test_admin_cannot_rename_verification_method_to_duplicate(self):
+        lrn = ConfigurableField.objects.get(module="student_registration", field_name="Learner Reference Number (LRN)")
+
+        response = self.client.patch(
+            reverse("configuration:fields-admin-detail", args=[lrn.id]),
+            {"value": "Manual Entry"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["fields"]["value"][0], "This registration method already exists.")
+        lrn.refresh_from_db()
+        self.assertEqual(lrn.field_name, "Learner Reference Number (LRN)")
+
     def test_admin_can_disable_field_and_public_hides_it(self):
         field = ConfigurableField.objects.get(module="student_registration", field_name="School Year")
 
@@ -233,12 +268,32 @@ class ConfigurableFieldEndpointTests(TestCase):
         lrn.refresh_from_db()
         self.assertTrue(lrn.is_enabled)
 
-    def test_last_enabled_verification_method_cannot_be_deleted(self):
+    def test_predefined_verification_method_cannot_be_deleted(self):
         lrn = ConfigurableField.objects.get(module="student_registration", field_name="Learner Reference Number (LRN)")
 
         response = self.client.delete(reverse("configuration:fields-admin-detail", args=[lrn.id]))
 
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["fields"]["type"][0], "Predefined registration methods cannot be deleted.")
+        self.assertTrue(ConfigurableField.objects.filter(id=lrn.id).exists())
+
+    def test_inactive_predefined_verification_method_cannot_be_deleted(self):
+        manual = ConfigurableField.objects.get(module="student_registration", field_name="Manual Entry")
+
+        response = self.client.delete(reverse("configuration:fields-admin-detail", args=[manual.id]))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["fields"]["type"][0], "Predefined registration methods cannot be deleted.")
+        self.assertTrue(ConfigurableField.objects.filter(id=manual.id).exists())
+
+    def test_active_predefined_verification_method_cannot_be_deleted_when_another_method_is_active(self):
+        lrn = ConfigurableField.objects.get(module="student_registration", field_name="Learner Reference Number (LRN)")
+        ConfigurableField.objects.filter(module="student_registration", field_name="Manual Entry").update(is_enabled=True)
+
+        response = self.client.delete(reverse("configuration:fields-admin-detail", args=[lrn.id]))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["fields"]["type"][0], "Predefined registration methods cannot be deleted.")
         self.assertTrue(ConfigurableField.objects.filter(id=lrn.id).exists())
 
     def test_student_cannot_manage_configurable_fields(self):

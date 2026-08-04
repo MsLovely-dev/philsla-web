@@ -4,6 +4,9 @@ from .models import ConfigurableField
 
 
 SUPPORTED_INPUT_TYPES = {"text", "date", "dropdown", "textarea", "checkbox", "file"}
+STUDENT_REGISTRATION_MODULE = "student_registration"
+STEP_1_REGISTRATION_SECTION = "Step 1 Registration"
+VERIFICATION_METHOD_TYPE = "Verification Method"
 
 
 class ConfigurableFieldSerializer(serializers.ModelSerializer):
@@ -35,9 +38,14 @@ class ConfigurableFieldSerializer(serializers.ModelSerializer):
             "updatedAt",
         )
         read_only_fields = ("id", "createdAt", "updatedAt")
+        validators = []
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        module = attrs.get("module", getattr(self.instance, "module", ""))
+        section = attrs.get("section", getattr(self.instance, "section", ""))
+        field_type = attrs.get("field_type", getattr(self.instance, "field_type", ""))
+        field_name = attrs.get("field_name", getattr(self.instance, "field_name", ""))
         input_type = attrs.get("input_type", getattr(self.instance, "input_type", "text"))
         option_values = attrs.get("option_values", getattr(self.instance, "option_values", []))
         if input_type not in SUPPORTED_INPUT_TYPES:
@@ -50,4 +58,18 @@ class ConfigurableFieldSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"optionValues": ["Dropdown fields require at least one option."]})
         if input_type != "dropdown":
             attrs["option_values"] = []
+        duplicate_exists = ConfigurableField.objects.filter(
+            module=module,
+            section=section,
+            field_type=field_type,
+            field_name=field_name,
+        ).exclude(id=getattr(self.instance, "id", None)).exists()
+        if duplicate_exists:
+            if (
+                module == STUDENT_REGISTRATION_MODULE
+                and section == STEP_1_REGISTRATION_SECTION
+                and field_type == VERIFICATION_METHOD_TYPE
+            ):
+                raise serializers.ValidationError({"value": ["This registration method already exists."]})
+            raise serializers.ValidationError({"value": ["This configurable field already exists."]})
         return attrs

@@ -42,6 +42,14 @@ def validate_verification_method_value(field: ConfigurableField) -> None:
         return
     if field.field_name not in ALLOWED_STUDENT_REGISTRATION_VERIFICATION_METHODS:
         raise ValidationError({"value": ["Only the predefined LRN, PhilSys, and Manual Entry verification methods are allowed."]})
+    duplicate_exists = ConfigurableField.objects.filter(
+        module=STUDENT_REGISTRATION_MODULE,
+        section=STEP_1_REGISTRATION_SECTION,
+        field_type=VERIFICATION_METHOD_TYPE,
+        field_name=field.field_name,
+    ).exclude(id=field.id).exists()
+    if duplicate_exists:
+        raise ValidationError({"value": ["This registration method already exists."]})
 
 
 def enforce_verification_method_policy(field: ConfigurableField) -> None:
@@ -65,16 +73,33 @@ def enforce_verification_method_policy(field: ConfigurableField) -> None:
 
 
 def assert_can_delete(field: ConfigurableField) -> None:
-    if not is_student_registration_verification_method(field) or not field.is_enabled:
-        return
-    has_other_enabled = ConfigurableField.objects.filter(
-        module=STUDENT_REGISTRATION_MODULE,
-        section=STEP_1_REGISTRATION_SECTION,
-        field_type=VERIFICATION_METHOD_TYPE,
-        is_enabled=True,
-    ).exclude(id=field.id).exists()
-    if not has_other_enabled:
-        raise ValidationError({"status": ["Enable another Step 1 verification method before deleting this one."]})
+    if is_student_registration_verification_method(field):
+        raise ValidationError({"type": ["Predefined registration methods cannot be deleted."]})
+
+
+def build_configurable_field_candidate(
+    attrs: dict,
+    instance: ConfigurableField | None = None,
+) -> ConfigurableField:
+    candidate = ConfigurableField()
+    if instance is not None:
+        candidate.id = instance.id
+        candidate.module = instance.module
+        candidate.section = instance.section
+        candidate.field_type = instance.field_type
+        candidate.field_name = instance.field_name
+        candidate.field_section = instance.field_section
+        candidate.input_type = instance.input_type
+        candidate.option_values = instance.option_values
+        candidate.priority = instance.priority
+        candidate.remarks = instance.remarks
+        candidate.is_enabled = instance.is_enabled
+        candidate.display_order = instance.display_order
+
+    for key, value in attrs.items():
+        setattr(candidate, key, value)
+
+    return candidate
 
 
 class PublicConfigurableFieldView(APIView):
@@ -132,9 +157,10 @@ class ConfigurableFieldAdminView(APIView):
         serializer = ConfigurableFieldSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
+            candidate = build_configurable_field_candidate(serializer.validated_data)
+            validate_verification_method_value(candidate)
+            enforce_verification_method_policy(candidate)
             field = serializer.save(created_by_id=getattr(request.user, "user_id", request.user.id))
-            validate_verification_method_value(field)
-            enforce_verification_method_policy(field)
         record_configuration_event(event="configurable_field_created", outcome="success", request=request, user=request.user)
         return Response(ConfigurableFieldSerializer(field).data, status=status.HTTP_201_CREATED)
 
@@ -151,9 +177,10 @@ class ConfigurableFieldAdminDetailView(APIView):
         serializer = ConfigurableFieldSerializer(field, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
+            candidate = build_configurable_field_candidate(serializer.validated_data, field)
+            validate_verification_method_value(candidate)
+            enforce_verification_method_policy(candidate)
             updated = serializer.save()
-            validate_verification_method_value(updated)
-            enforce_verification_method_policy(updated)
         record_configuration_event(event="configurable_field_updated", outcome="success", request=request, user=request.user)
         return Response(ConfigurableFieldSerializer(updated).data)
 
@@ -162,9 +189,10 @@ class ConfigurableFieldAdminDetailView(APIView):
         serializer = ConfigurableFieldSerializer(field, data=request.data)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
+            candidate = build_configurable_field_candidate(serializer.validated_data, field)
+            validate_verification_method_value(candidate)
+            enforce_verification_method_policy(candidate)
             updated = serializer.save()
-            validate_verification_method_value(updated)
-            enforce_verification_method_policy(updated)
         record_configuration_event(event="configurable_field_updated", outcome="success", request=request, user=request.user)
         return Response(ConfigurableFieldSerializer(updated).data)
 

@@ -7,76 +7,6 @@ import {
   type StudentRegistrationFieldInput,
 } from '../../../services/backendApplicationService';
 
-const PWD_TYPES = [
-  'Psychosocial disability',
-  'Disability due to chronic illness',
-  'Learning disability',
-  'Intellectual disability',
-  'Mental disability',
-  'Visual disability',
-  'Physical/orthopedic disability',
-  'Speech impairment',
-  'Deaf / hard-of-hearing',
-  'Cancer and rare diseases',
-];
-
-const PWD_CONDITIONS = [
-  'Bipolar disorder',
-  'Depression',
-  'Schizophrenia',
-  'ADHD',
-  'Epilepsy',
-  'Other long-term mental/behavioral condition',
-  'Orthopedic disability from cancer',
-  'Blindness from diabetes',
-  'Dialysis',
-  'Heart disorder',
-  'Severe cancer',
-  'Other disability arising from a chronic disease',
-  'Dyslexia',
-  'Dysgraphia',
-  'Similar learning disability',
-  'Cognitive impairment affecting adaptive functioning',
-  'Broader mental impairment classification used in the NCDA list',
-  'Blindness',
-  'Low vision',
-  'Functional visual limitation certified by an ophthalmologist',
-  'Mobility impairment',
-  'Missing limb',
-  'Other physical/orthopedic disability',
-  'Communication disorder',
-  'Deaf',
-  'Hard-of-hearing',
-  'Other hearing impairment',
-  'Cancer',
-  'Rare disease',
-];
-
-const MOCK_DATA = [
-  { id: 'hp-lrn', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'LRN', priority: 'High Priority', remarks: 'Primary identifier', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-dob', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Birth Date', priority: 'High Priority', remarks: 'Verify against DepEd', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-first-name', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'First Name', priority: 'High Priority', remarks: 'Read-only from DepEd or PhilSys when verified', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-middle-name', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Middle Name', priority: 'High Priority', remarks: 'Read-only from DepEd or PhilSys when verified', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-last-name', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Last Name', priority: 'High Priority', remarks: 'Read-only from DepEd or PhilSys when verified', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'mp-extension-name', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Extension Name', priority: 'Medium Priority', remarks: 'Only if applicable', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-sex', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Sex', priority: 'High Priority', remarks: 'Read-only from verified registry', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-school-id', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'School ID', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-school-name', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'School Name', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-grade-level', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Grade Level', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-enrollment-status', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Enrollment Status', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'hp-school-year', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'School Year', priority: 'High Priority', remarks: '', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-15 09:00' },
-  { id: 'pwd-toggle', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD', fieldSection: 'PWD Information', inputType: 'checkbox', priority: 'Low Priority', remarks: 'Shows the PWD declaration section before selfie capture', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 130 },
-  { id: 'pwd-type', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD Type', fieldSection: 'PWD Information', inputType: 'dropdown', optionValues: PWD_TYPES, priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 131 },
-  { id: 'pwd-condition', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Condition', fieldSection: 'PWD Information', inputType: 'dropdown', optionValues: PWD_CONDITIONS, priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 132 },
-  { id: 'pwd-id-number', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD ID Number', fieldSection: 'PWD Information', inputType: 'text', priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 133 },
-  { id: 'pwd-id-attachment', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'PWD ID Attachment', fieldSection: 'PWD Information', inputType: 'file', priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 134 },
-  { id: 'pwd-accommodation', section: 'Step 1 Registration', type: 'Student Registration Field', value: 'Accommodation Needed', fieldSection: 'PWD Information', inputType: 'textarea', priority: 'High Priority', remarks: 'Required when PWD is checked', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-07-21 09:00', display_order: 135 },
-  // Registration Methods
-  { id: 'v1', section: 'Step 1 Registration', type: 'Verification Method', value: 'Learner Reference Number (LRN)', status: 'Active', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-05-01 08:00' },
-  { id: 'v2', section: 'Step 1 Registration', type: 'Verification Method', value: 'PhilSys National ID', status: 'Inactive', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-05-01 08:00' },
-  { id: 'v3', section: 'Step 1 Registration', type: 'Verification Method', value: 'Manual Entry', status: 'Inactive', approvalStatus: 'Approved', updatedBy: 'system', updatedAt: '2026-05-01 08:00' },
-];
-
 const REGISTRATION_SECTIONS = ['Step 1 Registration'];
 const PAGE_SIZE = 10;
 type RegistrationSectionFilter = 'All' | 'Step 1 Registration' | 'Registration Methods';
@@ -125,23 +55,7 @@ const getStatusFilter = (status: RegistrationStatusFilter) => {
 };
 
 export default function StudentRegistrationMaintenance() {
-  const [data, setData] = useState<StudentRegistrationFieldConfig[]>(() => {
-    const saved = localStorage.getItem('philsa_registration_configs');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        const sanitized = sanitizeRegistrationConfigRows(parsed);
-        const missingDefaults = MOCK_DATA.filter(defaultItem => !sanitized.some((item: any) => item.id === defaultItem.id));
-        const merged = [...missingDefaults, ...sanitized];
-        localStorage.setItem('philsa_registration_configs', JSON.stringify(merged));
-        return merged;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    localStorage.setItem('philsa_registration_configs', JSON.stringify(MOCK_DATA));
-    return MOCK_DATA;
-  });
+  const [data, setData] = useState<StudentRegistrationFieldConfig[]>([]);
 
   const [selectedSection, setSelectedSection] = useState<RegistrationSectionFilter>('All');
   const [currentPage, setCurrentPage] = useState(1);
