@@ -31,7 +31,7 @@ const TONE_STYLES = {
     confirmButtonClass: 'bg-philsa-navy shadow-philsa-navy/10 hover:bg-philsa-navy/90',
   },
   danger: {
-    eyebrow: 'Destructive Action',
+    eyebrow: 'Confirmation Details',
     badgeClass: 'badge-rejected',
     spineClass: 'bg-philsa-red',
     iconClass: 'text-philsa-red',
