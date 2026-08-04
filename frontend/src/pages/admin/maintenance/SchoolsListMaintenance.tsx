@@ -451,7 +451,8 @@ export default function SchoolsListMaintenance() {
       <ConfirmationDialog
         isOpen={pendingDelete !== null}
         title="Remove accredited school?"
-        message={pendingDelete ? `"${pendingDelete.name}" (${pendingDelete.code}) will be removed from the accredited list. This cannot be undone.` : ''}
+        message="This will remove the school from the accredited list. This cannot be undone."
+        details={pendingDelete ? `${pendingDelete.name} • ${pendingDelete.code}` : ''}
         confirmLabel="Remove School"
         tone="danger"
         isConfirming={isDeleting}
