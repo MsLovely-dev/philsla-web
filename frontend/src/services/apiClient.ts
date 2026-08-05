@@ -240,7 +240,11 @@ export class ApiClient {
 
   private normalizeErrorMessage(message: string | undefined, fields: Record<string, string[]>): string {
     const fallback = 'The request could not be processed.';
-    const genericValidationMessages = new Set(['Invalid input.', 'Invalid input']);
+    const genericValidationMessages = new Set([
+      'Invalid input.',
+      'Invalid input',
+      'The request could not be processed.',
+    ]);
     if (message && !genericValidationMessages.has(message)) {
       return message;
     }

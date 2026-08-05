@@ -162,14 +162,14 @@ export class BackendExamBlueprintService {
   }
 
   private mapListResult(result: BlueprintListResult): ServiceResult<Blueprint[]> {
-    if (!result.ok) {
+    if (result.ok === false) {
       return result;
     }
     return { ...result, data: result.data.map((item) => this.fromApiBlueprint(item)) };
   }
 
   private mapItemResult(result: BlueprintItemResult): ServiceResult<Blueprint> {
-    if (!result.ok) {
+    if (result.ok === false) {
       return result;
     }
     return { ...result, data: this.fromApiBlueprint(result.data) };
