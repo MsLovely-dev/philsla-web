@@ -5,7 +5,8 @@ from rest_framework.test import APIClient, APITestCase
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 
-from .models import AcademicYear, Agency, BlueprintCategory, BlueprintVersion, ExamBlueprint, ExamSet, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
+from .models import AcademicYear, Agency, BlueprintCategory, BlueprintSection, BlueprintVersion, ExamBlueprint, ExamSet, ExamSetStatus, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
+from .services import ExamSetLifecycleConflict, create_or_update_exam_set, transition_exam_set
 
 
 class ExamBlueprintApiTests(APITestCase):
@@ -341,3 +342,111 @@ class ExamSetApiTests(APITestCase):
         self.client.force_authenticate(university_user)
 
         self.assertEqual(self.client.get(reverse("exams:exam_set_list")).status_code, 403)
+
+    def test_rejects_invalid_item_references_without_replacing_existing_items(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": created.data["id"]})
+
+        unknown_question = self.client.put(
+            detail_url,
+            {**self.payload, "title": "Must roll back", "items": [{"question_id": 999999, "display_order": 1}]},
+            format="json",
+        )
+        self.assertEqual(unknown_question.status_code, 400)
+        self.assertEqual(unknown_question.data["error"]["code"], "VALIDATION_FAILED")
+
+        duplicate_question = self.client.put(
+            detail_url,
+            {
+                **self.payload,
+                "items": [
+                    {"question_id": self.question.id, "display_order": 1},
+                    {"question_id": self.question.id, "display_order": 2},
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(duplicate_question.status_code, 400)
+
+        other_version = BlueprintVersion.objects.create(
+            blueprint=self.blueprint,
+            version_number="2.00",
+            name="Another synthetic Blueprint Version",
+            academic_year=self.academic_year,
+            status="approved",
+            shuffle_questions=True,
+            shuffle_choices=True,
+            active_items_only=True,
+            shared_stimulus_required=False,
+            shared_stimulus_min_count=0,
+            shared_stimulus_questions_per_stimulus=0,
+            max_item_reuse_count=0,
+            version_compatibility=">= 1.0",
+            created_by=self.profile,
+            approved_by=self.profile,
+        )
+        foreign_section = BlueprintSection.objects.create(
+            blueprint_version=other_version,
+            section_number=1,
+            section_name="Foreign synthetic section",
+            subject=self.subject,
+            item_count=1,
+            total_marks="5.00",
+            passing_score="3.00",
+            time_limit_minutes=10,
+            display_order=1,
+        )
+        cross_version_section = self.client.put(
+            detail_url,
+            {
+                **self.payload,
+                "items": [{
+                    "question_id": self.question.id,
+                    "blueprint_section_id": foreign_section.id,
+                    "display_order": 1,
+                }],
+            },
+            format="json",
+        )
+        self.assertEqual(cross_version_section.status_code, 400)
+
+        preserved = self.client.get(detail_url)
+        self.assertEqual(preserved.data["title"], self.payload["title"])
+        self.assertEqual([item["question"]["id"] for item in preserved.data["items"]], [str(self.question.id)])
+
+    def test_rejects_unknown_blueprint_and_academic_year_with_safe_validation_errors(self) -> None:
+        unknown_blueprint = self.client.post(
+            reverse("exams:exam_set_list"),
+            {**self.payload, "blueprint_version_id": 999999},
+            format="json",
+        )
+        self.assertEqual(unknown_blueprint.status_code, 400)
+        self.assertEqual(unknown_blueprint.data["error"]["code"], "VALIDATION_FAILED")
+
+        unknown_academic_year = self.client.post(
+            reverse("exams:exam_set_list"),
+            {**self.payload, "academic_year_id": 999999},
+            format="json",
+        )
+        self.assertEqual(unknown_academic_year.status_code, 400)
+        self.assertEqual(unknown_academic_year.data["error"]["code"], "VALIDATION_FAILED")
+
+    def test_stale_instances_cannot_overwrite_or_bypass_the_current_lifecycle(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        stale_exam_set = ExamSet.objects.get(pk=created.data["id"])
+        ExamSet.objects.filter(pk=stale_exam_set.pk).update(status=ExamSetStatus.ACADEMIC_REVIEW)
+
+        with self.assertRaises(ExamSetLifecycleConflict):
+            create_or_update_exam_set(
+                payload={**self.payload, "title": "Stale overwrite"},
+                actor_profile=self.profile,
+                exam_set=stale_exam_set,
+            )
+
+        transitioned = transition_exam_set(
+            exam_set=stale_exam_set,
+            target_status=ExamSetStatus.APPROVED,
+            actor_profile=self.profile,
+        )
+        self.assertEqual(transitioned.status, ExamSetStatus.APPROVED)
+        self.assertEqual(ExamSet.objects.get(pk=stale_exam_set.pk).status, ExamSetStatus.APPROVED)

@@ -1018,6 +1018,12 @@ authenticated account outside the permitted roles receives `403`.
 
 Create and update payloads reference the authoritative Blueprint Version through
 `blueprint_version_id` and Question Bank records through each item's `question_id`.
+Unknown Blueprint Version, academic-year, question, or Blueprint Section references
+return `400 VALIDATION_FAILED`. Duplicate questions and sections that belong to a
+different Blueprint Version are also rejected. Reference validation completes before
+existing items are replaced, so a rejected update preserves the authoritative record.
+Update and transition workflows lock the Exam Set row for the duration of the database
+transaction so a stale request cannot overwrite or bypass a concurrent lifecycle change.
 The browser must not treat route guards, submitted status values, or local storage as
 authorization or authoritative Exam Set state.
 

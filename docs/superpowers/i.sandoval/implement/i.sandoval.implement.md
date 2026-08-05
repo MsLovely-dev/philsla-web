@@ -21,6 +21,8 @@
 - Restricted Exam Set endpoints and the matching frontend route to `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN`; narrower object-level assignment remains `TBD` because the current model has no regional or institutional owner.
 - Preserved historical Blueprint Version references plus server-owned item points, Blueprint Section, and selection-method metadata during unrelated edits.
 - Documented the complete Exam Set endpoint contract, transition conflicts, validation conflicts, and current nationwide administrative scope.
+- Added transactional row locking for Exam Set update and transition workflows so stale instances cannot overwrite or bypass a concurrent lifecycle change.
+- Added all-or-nothing item-reference validation: unknown or duplicate questions and unknown/cross-Blueprint sections return safe validation errors before existing items are replaced. Unknown Blueprint Version and academic-year references now use the same safe error envelope.
 
 ### Commits
 
@@ -40,8 +42,9 @@ Backend, from `backend/` using the Python 3.13 virtual environment:
 - `.\.venv\Scripts\python.exe manage.py test apps.results.tests --settings=config.settings.test` — passed; 50 tests.
 - `.\.venv\Scripts\python.exe manage.py test apps.exams.tests.ExamBlueprintApiTests --settings=config.settings.test` — first failed as expected with `KeyError: 'current_version_id'`, then passed; 2 tests.
 - `.\.venv\Scripts\python.exe manage.py check --settings=config.settings.local` — passed; no issues.
-- `.\.venv\Scripts\python.exe manage.py test apps.exams.tests --settings=config.settings.test` — passed; 7 tests, including lifecycle conflict, validation conflict, unauthenticated, and role-denied cases.
-- `.\.venv\Scripts\python.exe manage.py test --settings=config.settings.test` — passed; 279 tests.
+- `.\.venv\Scripts\python.exe manage.py test apps.exams.tests.ExamSetApiTests --settings=config.settings.test` — failed first on unsafe reference handling and stale-instance lifecycle behavior, then passed; 7 tests.
+- `.\.venv\Scripts\python.exe manage.py test apps.exams.tests --settings=config.settings.test` — passed; 10 tests, including lifecycle conflict, validation conflict, stale-instance, invalid-reference rollback, unauthenticated, and role-denied cases.
+- `.\.venv\Scripts\python.exe manage.py test --settings=config.settings.test` — passed; 282 tests.
 
 Frontend, from `frontend/`:
 
