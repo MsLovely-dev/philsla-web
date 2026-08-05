@@ -145,6 +145,14 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/applications/tests/test_registration_email_otp.py",
         "route_namespace": "applications",
     },
+    {
+        "method": "GET",
+        "path": "/api/v1/analytics/national/overview/",
+        "response": None,
+        "doc_heading": "### `GET /api/v1/analytics/national/overview/`",
+        "doc_test_reference": "backend/apps/analytics/tests/test_national_overview.py",
+        "route_namespace": "analytics",
+    },
 )
 
 

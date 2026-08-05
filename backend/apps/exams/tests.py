@@ -2,6 +2,11 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
+from apps.accounts.models import AccountProfile
+from apps.accounts.roles import PortalRole
+
+from .models import AcademicYear, Agency, BlueprintCategory, BlueprintVersion, ExamBlueprint, ExamSet, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
+
 
 class ExamBlueprintApiTests(APITestCase):
     def setUp(self) -> None:
@@ -12,6 +17,7 @@ class ExamBlueprintApiTests(APITestCase):
             email="system.admin@example.test",
             password="Password1!",
         )
+        AccountProfile.objects.get_or_create(user=self.user, defaults={"role": PortalRole.SYSTEM_ADMIN.value})
         self.client.force_authenticate(self.user)
 
         self.payload = {
@@ -115,6 +121,7 @@ class QuestionBankApiTests(APITestCase):
             email="system.admin@example.test",
             password="Password1!",
         )
+        AccountProfile.objects.get_or_create(user=self.user, defaults={"role": PortalRole.SYSTEM_ADMIN.value})
         self.client.force_authenticate(self.user)
 
         self.payload = {
@@ -163,3 +170,114 @@ class QuestionBankApiTests(APITestCase):
         )
         self.assertEqual(transition_response.status_code, 200)
         self.assertEqual(transition_response.data["status"], "PENDING_REVIEW")
+
+
+class ExamSetApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="examset_admin",
+            email="examset.admin@example.test",
+            password="Password1!",
+        )
+        self.profile = AccountProfile.objects.get_or_create(user=self.user, defaults={"role": PortalRole.SYSTEM_ADMIN.value})[0]
+        self.client.force_authenticate(self.user)
+
+        self.agency = Agency.objects.create(code="PHILSA", name="PhilSA")
+        self.category = BlueprintCategory.objects.create(name="Admissions", description="Admissions blueprint")
+        self.academic_year = AcademicYear.objects.create(name="2026-2027")
+        self.subject = Subject.objects.create(code="SCI", name="Science")
+        self.topic = Topic.objects.create(subject=self.subject, code="ORBIT", name="Orbital Mechanics")
+        self.competency = Competency.objects.create(topic=self.topic, code="ORBIT-01", name="Evaluate orbital parameters")
+        self.question_type = QuestionType.objects.create(code="MCQ", name="Multiple Choice")
+
+        self.blueprint = ExamBlueprint.objects.create(
+            spec_code="BP-2026-SCI-01",
+            exam_type="admission",
+            agency=self.agency,
+            category=self.category,
+            created_by=self.profile,
+        )
+        self.blueprint_version = BlueprintVersion.objects.create(
+            blueprint=self.blueprint,
+            version_number="1.00",
+            name="AY 2026 Admissions Exam Blueprint",
+            academic_year=self.academic_year,
+            status="approved",
+            shuffle_questions=True,
+            shuffle_choices=True,
+            active_items_only=True,
+            shared_stimulus_required=False,
+            shared_stimulus_min_count=0,
+            shared_stimulus_questions_per_stimulus=0,
+            max_item_reuse_count=0,
+            version_compatibility=">= 1.0",
+            created_by=self.profile,
+            approved_by=self.profile,
+        )
+
+        self.question = Question.objects.create(
+            question_code="Q-SCI-001",
+            question_type=self.question_type,
+            subject=self.subject,
+            topic=self.topic,
+            competency=self.competency,
+            difficulty="easy",
+            question_text="Which orbit is most suitable for continuous observation?",
+            explanation="Geostationary orbit stays above the same region.",
+            points="5.00",
+            status=QuestionStatus.APPROVED,
+            created_by=self.profile,
+            approved_by=self.profile,
+        )
+        QuestionChoice.objects.create(
+            question=self.question,
+            option_label="A",
+            option_text="Geostationary orbit",
+            is_correct=True,
+            display_order=1,
+        )
+
+        self.payload = {
+            "title": "National Space Science Fellowship - Form A",
+            "academic_year_id": self.academic_year.id,
+            "blueprint_version_id": self.blueprint_version.id,
+            "exam_type": "admission",
+            "duration_minutes": 60,
+            "instructions": "Answer all questions carefully.",
+            "items": [
+                {
+                    "question_id": self.question.id,
+                    "display_order": 1,
+                    "points": 5,
+                    "selection_method": "manual",
+                }
+            ],
+        }
+
+    def test_create_list_clone_and_transition_exam_sets(self) -> None:
+        create_response = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.data["title"], "National Space Science Fellowship - Form A")
+        self.assertEqual(create_response.data["status"], "DRAFT")
+        self.assertEqual(len(create_response.data["items"]), 1)
+        self.assertGreaterEqual(len(create_response.data["validation_results"]), 3)
+
+        list_response = self.client.get(reverse("exams:exam_set_list"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertGreaterEqual(len(list_response.data), 1)
+
+        exam_set_id = create_response.data["id"]
+
+        transition_response = self.client.post(
+            reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id}),
+            {"status": "APPROVED", "remarks": "Ready for publication"},
+            format="json",
+        )
+        self.assertEqual(transition_response.status_code, 200)
+        self.assertEqual(transition_response.data["status"], "APPROVED")
+
+        clone_response = self.client.post(reverse("exams:exam_set_clone", kwargs={"exam_set_id": exam_set_id}))
+        self.assertEqual(clone_response.status_code, 201)
+        self.assertTrue(clone_response.data["exam_code"])

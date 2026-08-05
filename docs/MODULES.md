@@ -62,3 +62,6 @@ This document provides a comprehensive list of all modules and pages within the 
 
 ## 10. Executive Dashboard (**EXECUTIVE**)
 *   **National Performance**: High-level map and charts for government policy. (`/admin/government`)
+    *   The National view's registration/verification counts, participating school/university counts, and applications-by-region breakdown are now sourced from real `StudentApplication` data via `GET /api/v1/analytics/national/overview/` (see `docs/api/API-ENDPOINTS.md`). Session, incident, and testing-center metrics remain on frontend prototype/mock data -- no backing data model exists yet.
+    *   CHED/DEPED/TESDA agency-specific views remain entirely on mock data; there is no field in the data model that tags a registration by agency, and official aggregation rules are still `TBD` (see `docs/architecture/DATABASE-DESIGN.md`).
+    *   The mechanism that selects which agency dashboard a user sees (`GovernmentAccess.tsx` matching on `user.email`) is a known placeholder, not fixed by this change -- tracked as a separate follow-up.
