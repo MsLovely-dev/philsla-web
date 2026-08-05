@@ -6,7 +6,7 @@ from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import StreamingHttpResponse
 from django.urls import reverse
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import APIException, NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -40,6 +40,12 @@ PROFILE_PERSONAL_FIELDS = (
 PROFILE_ADDRESS_FIELDS = ("region", "province", "city", "barangay", "street", "postalCode")
 PROFILE_SCHOOL_FIELDS = ("lrn", "schoolId", "name", "academicTrack", "gradeLevel", "enrollmentStatus", "schoolYear", "gwa")
 PROFILE_REVIEW_FIELDS = ("reviewerReason", "reason", "reviewNotes", "requiredCorrections")
+
+
+class Conflict(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = "The request conflicts with the current data state."
+    default_code = "conflict"
 
 
 def _get_session(session_id: str) -> ExaminationSession:
@@ -132,6 +138,17 @@ def _profile_photo_url(application: StudentApplication, request) -> str:
 
 def _profile_activity_logs(application: StudentApplication):
     return ApplicationAuditLog.objects.filter(application=application).order_by("-created_at")[:25]
+
+
+def _score_profile_application(score: CandidateScore) -> StudentApplication | None:
+    applications = list(
+        StudentApplication.objects.filter(lrn=score.lrn)
+        .exclude(status__in=[ApplicationStatus.DRAFT, ApplicationStatus.REJECTED])
+        .order_by("-submitted_at", "-created_at")[:2],
+    )
+    if len(applications) > 1:
+        raise Conflict("Multiple application profiles match this score record; profile display requires an unambiguous score anchor.")
+    return applications[0] if applications else None
 
 
 def _serialize_profile_activity(log: ApplicationAuditLog) -> dict[str, object]:
@@ -248,12 +265,7 @@ class ScoreManagementCandidateProfileView(ScoreManagementBaseView):
         except CandidateScore.DoesNotExist as exc:
             raise NotFound("Candidate score record not found for this examination session.") from exc
 
-        application = (
-            StudentApplication.objects.filter(lrn=score.lrn)
-            .exclude(status=ApplicationStatus.DRAFT)
-            .order_by("-submitted_at", "-created_at")
-            .first()
-        )
+        application = _score_profile_application(score)
         return Response({"score": _serialize_score(score), "profile": _serialize_profile(application, request)})
 
 

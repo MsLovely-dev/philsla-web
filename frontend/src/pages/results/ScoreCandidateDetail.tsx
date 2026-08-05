@@ -32,34 +32,6 @@ const ACTIVITY_FILTERS: Array<{ label: string; value: ActivityFilter }> = [
   { label: 'Validation Errors', value: 'VALIDATION' },
   { label: 'Biometric Checks', value: 'BIOMETRIC' },
 ];
-const AUDIT_EVENT_SPECS = [
-  {
-    event: 'Registration Submitted',
-    trigger: 'Applicant successfully submits the registration application.',
-    data: 'Registration ID, Submission Timestamp',
-  },
-  {
-    event: 'OTP Verification Successful',
-    trigger: 'Applicant successfully enters the correct OTP and verifies their email address.',
-    data: 'Masked Email Address, Verification Timestamp',
-  },
-  {
-    event: 'OTP Verification Failed (if applicable)',
-    trigger: 'Applicant enters an invalid or expired OTP.',
-    data: 'Failure Reason, Failed Attempt Count, Timestamp',
-  },
-  {
-    event: 'Account Credentials Created',
-    trigger: 'Applicant successfully creates their email and password.',
-    data: 'Masked Email Address, Account Creation Timestamp',
-  },
-  {
-    event: 'Validation Failed (if applicable)',
-    trigger: 'System detects validation errors during registration that prevent completion.',
-    data: 'Field Name, Validation Error, Timestamp',
-  },
-];
-
 export default function ScoreCandidateDetail() {
   const { batchId, candidateId } = useParams();
   const location = useLocation();
@@ -71,7 +43,6 @@ export default function ScoreCandidateDetail() {
   const [profile, setProfile] = useState<ScoreManagementCandidateProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [showSpecRules, setShowSpecRules] = useState(true);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('ALL');
   const [activitySearch, setActivitySearch] = useState('');
 
@@ -335,48 +306,10 @@ export default function ScoreCandidateDetail() {
                     <Fingerprint className="h-4 w-4 text-[#00563F]" />
                     Biometric & Identity Verification Logs
                   </h2>
-                  <button
-                    type="button"
-                    onClick={() => setShowSpecRules((current) => !current)}
-                    className="shrink-0 text-[10px] font-bold text-slate-500 underline underline-offset-2 hover:text-philsa-navy"
-                  >
-                    {showSpecRules ? 'Hide' : 'Show'} Specification Rules
-                  </button>
                 </div>
 
                 <div className="space-y-6 rounded-xl border border-slate-200/60 bg-slate-50/50 p-6">
-                  {showSpecRules && (
-                    <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50/60">
-                      <div className="border-b border-amber-100 bg-amber-100/40 px-4 py-3">
-                        <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-800">
-                          <ShieldAlert className="h-3.5 w-3.5" />
-                          Audit Event Trigger & Data Capture Specifications
-                        </p>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse text-left text-xs">
-                          <thead className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
-                            <tr>
-                              <th className="px-4 py-2">Audit Event</th>
-                              <th className="px-4 py-2">Trigger</th>
-                              <th className="px-4 py-2">Data To Capture</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-amber-100/70">
-                            {AUDIT_EVENT_SPECS.map((spec) => (
-                              <tr key={spec.event}>
-                                <td className="px-4 py-2.5 font-bold text-philsa-navy">{spec.event}</td>
-                                <td className="px-4 py-2.5 text-slate-600">{spec.trigger}</td>
-                                <td className="px-4 py-2.5 font-mono text-[10px] text-slate-500">{spec.data}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-col justify-between gap-3 border-t border-slate-200/60 pt-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                     <div className="flex flex-wrap gap-1.5">
                       {ACTIVITY_FILTERS.map((filter) => {
                         const isSelected = activityFilter === filter.value;
@@ -528,52 +461,7 @@ interface ActivityRow {
 
 function buildActivityRows(profile: ScoreManagementCandidateProfile | null): ActivityRow[] {
   if (!profile) return [];
-  const rows = (profile.activityLogs ?? []).map((log) => mapActivityLog(log, profile));
-
-  const timestamp = formatTimestamp(profile.submittedAt);
-  const email = textValue(profile.personal.email, '');
-  if (profile.submittedAt && !rows.some((row) => row.activity === 'Registration Submitted')) {
-    rows.push({
-      id: 'submitted',
-      timestamp,
-      activity: 'Registration Submitted',
-      details: `Application submitted for review (Registration ID: ${profile.candidateId})`,
-      outcome: 'success',
-      category: 'SUCCESS',
-    });
-  }
-  if (email && !rows.some((row) => row.activity.includes('OTP Verification'))) {
-    rows.push({
-      id: 'otp-success',
-      timestamp,
-      activity: 'OTP Verification Successful',
-      details: `Email verified (${maskEmail(email)})`,
-      outcome: 'success',
-      category: 'OTP',
-    });
-  }
-  if (email && !rows.some((row) => row.activity === 'Account Credentials Created')) {
-    rows.push({
-      id: 'account-created',
-      timestamp,
-      activity: 'Account Credentials Created',
-      details: `Email account registered successfully (${maskEmail(email)})`,
-      outcome: 'success',
-      category: 'SUCCESS',
-    });
-  }
-  const identityStatus = textValue(profile.personal.identityVerificationStatus, '');
-  if (identityStatus && !rows.some((row) => row.category === 'BIOMETRIC')) {
-    rows.push({
-      id: 'identity-status',
-      timestamp,
-      activity: 'Biometric Liveness Verification',
-      details: `Identity verification status: ${identityStatus}`,
-      outcome: 'success',
-      category: 'BIOMETRIC',
-    });
-  }
-  return rows;
+  return (profile.activityLogs ?? []).map((log) => mapActivityLog(log, profile));
 }
 
 function mapActivityLog(log: ScoreManagementCandidateActivityLog, profile: ScoreManagementCandidateProfile): ActivityRow {
@@ -632,10 +520,4 @@ function formatTimestamp(value: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function maskEmail(email: string): string {
-  const [name, domain] = email.split('@');
-  if (!name || !domain) return email;
-  return `${name.slice(0, 1)}*****@${domain}`;
 }

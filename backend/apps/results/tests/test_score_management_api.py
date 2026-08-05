@@ -339,6 +339,55 @@ class ScoreManagementApiTests(TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_profile_lookup_rejects_ambiguous_lrn_matches(self):
+        StudentApplication.objects.create(
+            owner=None,
+            lrn="109000000001",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={"firstName": "Older"},
+        )
+        StudentApplication.objects.create(
+            owner=None,
+            lrn="109000000001",
+            exam_cycle_id="2027",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={"firstName": "Newer"},
+        )
+
+        response = self.client.get(
+            reverse("results:score-management-profile", args=[REGULAR_SESSION_ID, "PHL-2027-000001"]),
+        )
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_profile_lookup_ignores_rejected_lrn_matches(self):
+        StudentApplication.objects.create(
+            owner=None,
+            lrn="109000000001",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.REJECTED,
+            submitted_at=timezone.now(),
+            personal={"firstName": "Rejected"},
+        )
+        StudentApplication.objects.create(
+            owner=None,
+            lrn="109000000001",
+            exam_cycle_id="2027",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={"firstName": "Current"},
+        )
+
+        response = self.client.get(
+            reverse("results:score-management-profile", args=[REGULAR_SESSION_ID, "PHL-2027-000001"]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["profile"]["personal"]["firstName"], "Current")
+
     def test_student_cannot_access_score_management(self):
         self.client.force_authenticate(user=principal(self.user, PortalRole.STUDENT.value))
 
