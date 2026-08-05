@@ -23,6 +23,7 @@
 - Documented the complete Exam Set endpoint contract, transition conflicts, validation conflicts, and current nationwide administrative scope.
 - Added transactional row locking for Exam Set update and transition workflows so stale instances cannot overwrite or bypass a concurrent lifecycle change.
 - Added all-or-nothing item-reference validation: unknown or duplicate questions and unknown/cross-Blueprint sections return safe validation errors before existing items are replaced. Unknown Blueprint Version and academic-year references now use the same safe error envelope.
+- Corrected academic-year update precedence so frontend name-based changes are applied, while unknown, invalid-ID, and conflicting ID/name references are rejected.
 
 ### Commits
 
@@ -42,9 +43,9 @@ Backend, from `backend/` using the Python 3.13 virtual environment:
 - `.\.venv\Scripts\python.exe manage.py test apps.results.tests --settings=config.settings.test` — passed; 50 tests.
 - `.\.venv\Scripts\python.exe manage.py test apps.exams.tests.ExamBlueprintApiTests --settings=config.settings.test` — first failed as expected with `KeyError: 'current_version_id'`, then passed; 2 tests.
 - `.\.venv\Scripts\python.exe manage.py check --settings=config.settings.local` — passed; no issues.
-- `.\.venv\Scripts\python.exe manage.py test apps.exams.tests.ExamSetApiTests --settings=config.settings.test` — failed first on unsafe reference handling and stale-instance lifecycle behavior, then passed; 7 tests.
-- `.\.venv\Scripts\python.exe manage.py test apps.exams.tests --settings=config.settings.test` — passed; 10 tests, including lifecycle conflict, validation conflict, stale-instance, invalid-reference rollback, unauthenticated, and role-denied cases.
-- `.\.venv\Scripts\python.exe manage.py test --settings=config.settings.test` — passed; 282 tests.
+- `.\.venv\Scripts\python.exe manage.py test apps.exams.tests.ExamSetApiTests --settings=config.settings.test` — failed first on unsafe reference handling, stale-instance lifecycle behavior, and ignored academic-year name updates, then passed; 8 tests.
+- `.\.venv\Scripts\python.exe manage.py test apps.exams.tests --settings=config.settings.test` — passed; 11 tests, including lifecycle conflict, validation conflict, stale-instance, invalid-reference rollback, academic-year precedence, unauthenticated, and role-denied cases.
+- `.\.venv\Scripts\python.exe manage.py test --settings=config.settings.test` — passed; 283 tests.
 
 Frontend, from `frontend/`:
 

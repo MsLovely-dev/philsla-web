@@ -1337,23 +1337,19 @@ def create_or_update_exam_set(
     if blueprint_version is None:
         raise ValidationError({"blueprint_version_id": ["Select a valid Blueprint Version."]})
 
-    academic_year_value = _payload_value(
-        payload,
-        "academic_year_id",
-        "academicYearId",
-        default=exam_set.academic_year_id if exam_set else None,
-    )
-    academic_year_name = _payload_value(
-        payload,
-        "academic_year",
-        "academicYear",
-        default=exam_set.academic_year.name if exam_set else None,
-    )
+    academic_year_value = _payload_value(payload, "academic_year_id", "academicYearId")
+    academic_year_name = _payload_value(payload, "academic_year", "academicYear")
     academic_year = None
     if academic_year_value not in (None, ""):
         academic_year = AcademicYear.objects.filter(pk=academic_year_value).first()
-    if academic_year is None and academic_year_name not in (None, ""):
+        if academic_year is None:
+            raise ValidationError({"academic_year_id": ["Select a valid academic year."]})
+        if academic_year_name not in (None, "") and academic_year.name != str(academic_year_name).strip():
+            raise ValidationError({"academic_year": ["Academic year references must identify the same record."]})
+    elif academic_year_name not in (None, ""):
         academic_year = AcademicYear.objects.filter(name=str(academic_year_name).strip()).first()
+    elif exam_set is not None:
+        academic_year = exam_set.academic_year
     if academic_year is None:
         raise ValidationError({"academic_year_id": ["Select a valid academic year."]})
 

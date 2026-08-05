@@ -431,6 +431,39 @@ class ExamSetApiTests(APITestCase):
         self.assertEqual(unknown_academic_year.status_code, 400)
         self.assertEqual(unknown_academic_year.data["error"]["code"], "VALIDATION_FAILED")
 
+    def test_updates_academic_year_by_name_and_rejects_unknown_or_conflicting_references(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": created.data["id"]})
+        next_year = AcademicYear.objects.create(name="2027-2028")
+        by_name_payload = {**self.payload, "academic_year": next_year.name}
+        by_name_payload.pop("academic_year_id")
+
+        changed = self.client.put(detail_url, by_name_payload, format="json")
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(changed.data["academic_year"], next_year.name)
+
+        unknown_name = self.client.put(
+            detail_url,
+            {**by_name_payload, "academic_year": "2099-2100"},
+            format="json",
+        )
+        self.assertEqual(unknown_name.status_code, 400)
+        self.assertEqual(unknown_name.data["error"]["code"], "VALIDATION_FAILED")
+
+        conflicting = self.client.put(
+            detail_url,
+            {**self.payload, "academic_year": next_year.name},
+            format="json",
+        )
+        self.assertEqual(conflicting.status_code, 400)
+
+        invalid_id_with_valid_name = self.client.put(
+            detail_url,
+            {**self.payload, "academic_year_id": 999999, "academic_year": next_year.name},
+            format="json",
+        )
+        self.assertEqual(invalid_id_with_valid_name.status_code, 400)
+
     def test_stale_instances_cannot_overwrite_or_bypass_the_current_lifecycle(self) -> None:
         created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
         stale_exam_set = ExamSet.objects.get(pk=created.data["id"])
