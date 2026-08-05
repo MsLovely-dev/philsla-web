@@ -15,6 +15,11 @@ These instructions apply to the entire repository. Read the closest scoped `AGEN
 - `docs/` contains business, architecture, API, decision, security, and development documentation, including `docs/superpowers/` — per-developer AI-assisted workflow artifacts (see "AI-assisted development workflow" below).
 - `.agents/` is reserved for supporting AI material. Root and scoped `AGENTS.md` files are the authoritative agent instructions.
 - Keep frontend and backend independently buildable and deployable. They communicate only through documented, versioned API contracts.
+- `frontend/` is the implemented React, TypeScript, and Vite application.
+- `backend/` is the implemented Django and Django REST Framework API service.
+- `docs/` contains business, architecture, API, decision, security, and development documentation.
+- `.agents/` is reserved for supporting AI material. Root and scoped `AGENTS.md` files are the authoritative agent instructions.
+- Keep frontend and backend independently buildable and deployable. They communicate only through documented, versioned API contracts.
 
 ## AI-assisted development workflow
 
