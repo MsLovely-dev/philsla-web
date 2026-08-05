@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePhilSA } from '../PhilSAContext';
 import { 
   Plus, 
@@ -32,6 +33,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { ExamHubTabs, type ExamHubTabKey } from '../components/ExamHubTabs';
+import { examBlueprintService } from '../services/backendExamBlueprintService';
 import { 
   INITIAL_BLUEPRINTS, 
   MOCK_CENTRAL_ITEM_BANK, 
@@ -44,12 +47,40 @@ import {
 
 export default function ExamBlueprints() {
   const { addAuditLog, user } = usePhilSA();
+  const navigate = useNavigate();
 
-  // Load and manage Blueprints list in state (with localStorage persistence)
-  const [blueprints, setBlueprints] = useState<Blueprint[]>(() => {
-    const saved = localStorage.getItem('philsa_blueprints');
-    return saved ? JSON.parse(saved) : INITIAL_BLUEPRINTS;
-  });
+  // Load and manage Blueprints list in state
+  const [blueprints, setBlueprints] = useState<Blueprint[]>(INITIAL_BLUEPRINTS);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadBlueprints = async () => {
+      const remote = await examBlueprintService.listBlueprints();
+      if (!active) return;
+
+      if (remote.ok && remote.data.length > 0) {
+        setBlueprints(remote.data);
+        localStorage.setItem('philsa_blueprints', JSON.stringify(remote.data));
+        return;
+      }
+
+      const saved = localStorage.getItem('philsa_blueprints');
+      if (saved) {
+        try {
+          setBlueprints(JSON.parse(saved));
+          return;
+        } catch {
+          localStorage.removeItem('philsa_blueprints');
+        }
+      }
+    };
+
+    void loadBlueprints();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Save blueprints helper
   const saveBlueprints = (updated: Blueprint[]) => {
@@ -97,6 +128,25 @@ export default function ExamBlueprints() {
 
   // Editor modal section expand/collapse accordion state
   const [editorExpandedSections, setEditorExpandedSections] = useState<Record<string, boolean>>({});
+
+  const handleHubTabChange = (tab: ExamHubTabKey) => {
+    if (tab === 'blueprints') return;
+    if (tab === 'setAssembly') {
+      navigate('/admin/hub/exam-sets#dashboard');
+      return;
+    }
+    if (tab === 'builder') {
+      navigate('/admin/hub/exam-sets#assembly');
+      return;
+    }
+    if (tab === 'published') {
+      navigate('/admin/hub/exam-sets#packages');
+      return;
+    }
+    if (tab === 'audit') {
+      navigate('/admin/hub/exam-sets#audit');
+    }
+  };
 
   // Auto-expand first section when a new blueprint is selected
   useEffect(() => {
@@ -211,33 +261,14 @@ export default function ExamBlueprints() {
   };
 
   // Initiate Copy / Clone with Version Control Update
-  const handleCopyAndClone = (bp: Blueprint) => {
-    const clone: Blueprint = JSON.parse(JSON.stringify(bp));
-    
-    // Assign a new ID and code with high-grade versioning
-    clone.id = 'BP-' + Date.now();
-    clone.code = `${bp.code}-CLONE`;
-    clone.name = `${bp.name} (Copy)`;
-    clone.status = 'DRAFT';
-    
-    // Bump minor version
-    const parts = bp.version.split('.');
-    const major = parseInt(parts[0]) || 1;
-    const minor = parseInt(parts[1]) || 0;
-    clone.version = `${major}.${minor + 1}`;
-    
-    clone.createdAt = new Date().toISOString();
-    clone.history = [
-      {
-        id: 'LH-' + Date.now(),
-        version: clone.version,
-        action: 'Created (Cloned)',
-        updatedBy: `${user?.firstName || 'Admin'} ${user?.lastName || 'Expert'}`,
-        updatedAt: new Date().toISOString(),
-        comments: `Cloned parameters from ${bp.code} v${bp.version} into new version.`
-      }
-    ];
+  const handleCopyAndClone = async (bp: Blueprint) => {
+    const result = await examBlueprintService.cloneBlueprint(bp.id);
+    if (!result.ok) {
+      alert(result.error.message);
+      return;
+    }
 
+    const clone = result.data;
     saveBlueprints([clone, ...blueprints]);
     setSelectedBlueprint(clone);
     addAuditLog('BLUEPRINT_CLONE', `Cloned blueprint ${bp.code} into new instance ${clone.code}`);
@@ -280,52 +311,46 @@ export default function ExamBlueprints() {
   };
 
   // Archive / Restore / Retire Actions
-  const handleUpdateStatusDirect = (bpId: string, action: 'ARCHIVE' | 'RESTORE' | 'RETIRE') => {
-    const updated = blueprints.map(bp => {
-      if (bp.id === bpId) {
-        let newStatus = bp.status;
-        let comments = '';
+  const handleUpdateStatusDirect = async (bpId: string, action: 'ARCHIVE' | 'RESTORE' | 'RETIRE') => {
+    const targetStatus: Blueprint['status'] =
+      action === 'ARCHIVE' ? 'ARCHIVED' :
+      action === 'RESTORE' ? 'DRAFT' :
+      'RETIRED';
+    const remarks =
+      action === 'ARCHIVE' ? 'Archived blueprint for records conservation.' :
+      action === 'RESTORE' ? 'Restored archived blueprint back into DRAFT state.' :
+      'Retired obsolete blueprint from active examine systems.';
 
-        if (action === 'ARCHIVE') {
-          newStatus = 'ARCHIVED';
-          comments = 'Archived blueprint for records conservation.';
-        } else if (action === 'RESTORE') {
-          newStatus = 'DRAFT';
-          comments = 'Restored archived blueprint back into DRAFT state.';
-        } else if (action === 'RETIRE') {
-          newStatus = 'RETIRED';
-          comments = 'Retired obsolete blueprint from Active examine systems.';
-        }
-
-        const historyEntry: BlueprintHistoryEntry = {
-          id: 'LH-' + Date.now(),
-          version: bp.version,
-          action: action,
-          updatedBy: `${user?.firstName || 'Admin'} ${user?.lastName || 'Expert'}`,
-          updatedAt: new Date().toISOString(),
-          comments: comments
-        };
-
-        return {
-          ...bp,
-          status: newStatus,
-          history: [historyEntry, ...bp.history]
-        };
-      }
-      return bp;
+    const result = await examBlueprintService.transitionBlueprint(bpId, {
+      status: targetStatus,
+      remarks,
     });
 
+    if (!result.ok) {
+      alert(result.error.message);
+      return;
+    }
+
+    const updated = blueprints.map(bp => bp.id === bpId ? result.data : bp);
     saveBlueprints(updated);
+    if (selectedBlueprint?.id === bpId) {
+      setSelectedBlueprint(result.data);
+    }
     addAuditLog('BLUEPRINT_STATUS_DIRECT', `${action} operation triggered on blueprint ${bpId}`);
   };
 
   // Delete draft helper
-  const handleDeleteDraft = (bp: Blueprint) => {
+  const handleDeleteDraft = async (bp: Blueprint) => {
     if (bp.status !== 'DRAFT') {
       alert("Only blueprints in DRAFT status can be permanently deleted.");
       return;
     }
     if (confirm(`Are you sure you want to permanently delete draft blueprint "${bp.name}"?`)) {
+      const result = await examBlueprintService.deleteBlueprint(bp.id);
+      if (!result.ok) {
+        alert(result.error.message);
+        return;
+      }
       const remaining = blueprints.filter(b => b.id !== bp.id);
       saveBlueprints(remaining);
       setSelectedBlueprint(remaining[0] || null);
@@ -340,7 +365,7 @@ export default function ExamBlueprints() {
     setIsWorkflowModalOpen(true);
   };
 
-  const submitWorkflowTransition = () => {
+  const submitWorkflowTransition = async () => {
     if (!selectedBlueprint || !targetWorkflowStatus) return;
 
     // Validate if publishing
@@ -352,56 +377,23 @@ export default function ExamBlueprints() {
         return;
       }
 
-      // If publishing, retire any other published version of this exact blueprint code!
-      const updated = blueprints.map(bp => {
-        if (bp.code === selectedBlueprint.code && bp.status === 'PUBLISHED' && bp.id !== selectedBlueprint.id) {
-          const retireHistory: BlueprintHistoryEntry = {
-            id: 'LH-R-' + Date.now(),
-            version: bp.version,
-            action: 'Retired',
-            updatedBy: 'System Automation',
-            updatedAt: new Date().toISOString(),
-            comments: `Automatically retired because a newer version (${selectedBlueprint.version}) has been published.`
-          };
-          return {
-            ...bp,
-            status: 'RETIRED' as const,
-            history: [retireHistory, ...bp.history]
-          };
-        }
-        return bp;
-      });
-      saveBlueprints(updated);
     }
 
-    const updatedBlueprints = blueprints.map(bp => {
-      if (bp.id === selectedBlueprint.id) {
-        const entry: BlueprintHistoryEntry = {
-          id: 'LH-' + Date.now(),
-          version: bp.version,
-          action: targetWorkflowStatus === 'SUBMITTED' ? 'Submitted' :
-                  targetWorkflowStatus === 'ACADEMIC_REVIEW' ? 'Academic Review' :
-                  targetWorkflowStatus === 'APPROVED' ? 'Approved' :
-                  targetWorkflowStatus === 'PUBLISHED' ? 'Published' :
-                  targetWorkflowStatus === 'REVISION_REQUIRED' ? 'Revision Required' :
-                  targetWorkflowStatus === 'RETIRED' ? 'Retired' : 'Modified',
-          updatedBy: `${user?.firstName || 'Admin'} ${user?.lastName || 'Expert'}`,
-          updatedAt: new Date().toISOString(),
-          comments: workflowComment || `Transitioned status to ${targetWorkflowStatus}`
-        };
-
-        return {
-          ...bp,
-          status: targetWorkflowStatus,
-          history: [entry, ...bp.history]
-        };
-      }
-      return bp;
+    const result = await examBlueprintService.transitionBlueprint(selectedBlueprint.id, {
+      status: targetWorkflowStatus,
+      remarks: workflowComment || `Transitioned status to ${targetWorkflowStatus}`,
     });
 
+    if (!result.ok) {
+      alert(result.error.message);
+      return;
+    }
+
+    const updatedBlueprints = blueprints.map(bp => bp.id === selectedBlueprint.id ? result.data : bp);
     saveBlueprints(updatedBlueprints);
     addAuditLog('BLUEPRINT_WORKFLOW', `Moved blueprint ${selectedBlueprint.code} to status ${targetWorkflowStatus}`);
     setIsWorkflowModalOpen(false);
+    setSelectedBlueprint(result.data);
     alert(`Successfully moved ${selectedBlueprint.code} status to ${targetWorkflowStatus}`);
   };
 
@@ -569,7 +561,7 @@ export default function ExamBlueprints() {
   };
 
   // Editor Sub-handlers
-  const handleSaveEditor = () => {
+  const handleSaveEditor = async () => {
     if (!currentEditBlueprint) return;
 
     // Validate fields
@@ -579,20 +571,25 @@ export default function ExamBlueprints() {
     }
 
     const isExisting = blueprints.some(b => b.id === currentEditBlueprint.id);
-    let updatedList: Blueprint[] = [];
+    const result = isExisting
+      ? await examBlueprintService.updateBlueprint(currentEditBlueprint)
+      : await examBlueprintService.createBlueprint(currentEditBlueprint);
 
-    if (isExisting) {
-      updatedList = blueprints.map(b => b.id === currentEditBlueprint.id ? currentEditBlueprint : b);
-      addAuditLog('BLUEPRINT_UPDATE', `Modified draft blueprint ${currentEditBlueprint.code}`);
-    } else {
-      updatedList = [currentEditBlueprint, ...blueprints];
-      addAuditLog('BLUEPRINT_CREATE', `Created blueprint ${currentEditBlueprint.code}`);
+    if (!result.ok) {
+      alert(result.error.message);
+      return;
     }
 
+    const persisted = result.data;
+    const updatedList = isExisting
+      ? blueprints.map(b => b.id === currentEditBlueprint.id ? persisted : b)
+      : [persisted, ...blueprints];
+
     saveBlueprints(updatedList);
-    setSelectedBlueprint(currentEditBlueprint);
+    setSelectedBlueprint(persisted);
     setIsEditorOpen(false);
     setCurrentEditBlueprint(null);
+    addAuditLog(isExisting ? 'BLUEPRINT_UPDATE' : 'BLUEPRINT_CREATE', `${isExisting ? 'Modified' : 'Created'} blueprint ${persisted.code}`);
     alert("Blueprint draft successfully saved!");
   };
 
@@ -774,38 +771,42 @@ export default function ExamBlueprints() {
 
   return (
     <div className="space-y-6">
-      
       {/* Dynamic Header & Meta Stats */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
-        <div>
+      <div className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Exam Management Hub</span>
           <div className="flex items-center gap-3">
             <span className="p-2.5 bg-rose-50 text-philsa-red rounded-xl">
               <Settings className="w-6 h-6 animate-spin-slow" />
             </span>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight font-sans">Exam Blueprinting Module</h1>
-              <p className="text-slate-500 text-xs mt-0.5">Define academic curriculum constraints, validate distribution properties, and assemble automated forms from the Item Bank.</p>
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight font-sans">Exam Blueprints</h1>
+              <p className="text-slate-500 text-xs mt-0.5">Curriculum examination specifications and blueprinting.</p>
             </div>
           </div>
         </div>
-        
-        <div className="flex flex-wrap gap-2 sm:gap-4 shrink-0 w-full xl:w-auto mt-2 xl:mt-0">
-          <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 flex-1 text-center sm:text-left min-w-[120px]">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Active Blueprints</p>
-            <p className="text-lg font-black text-slate-800">{blueprints.filter(b => b.status === 'PUBLISHED').length}</p>
+
+        <ExamHubTabs activeTab="blueprints" onTabChange={handleHubTabChange} />
+
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pt-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Active Blueprints</p>
+              <p className="text-lg font-black text-slate-800">{blueprints.filter(b => b.status === 'PUBLISHED').length}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">In Review Stage</p>
+              <p className="text-lg font-black text-amber-600">{blueprints.filter(b => b.status === 'ACADEMIC_REVIEW' || b.status === 'SUBMITTED').length}</p>
+            </div>
+            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
+              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Item Bank Size</p>
+              <p className="text-lg font-black text-blue-600">{itemBank.filter(q => q.status === 'ACTIVE').length} Active</p>
+            </div>
           </div>
-          <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 flex-1 text-center sm:text-left min-w-[120px]">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">In Review Stage</p>
-            <p className="text-lg font-black text-amber-600">{blueprints.filter(b => b.status === 'ACADEMIC_REVIEW' || b.status === 'SUBMITTED').length}</p>
-          </div>
-          <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 flex-1 text-center sm:text-left min-w-[120px]">
-            <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Item Bank Size</p>
-            <p className="text-lg font-black text-blue-600">{itemBank.filter(q => q.status === 'ACTIVE').length} Active</p>
-          </div>
-          
-          <button 
+
+          <button
             onClick={handleInitiateCreate}
-            className="btn-primary flex items-center justify-center gap-2 text-xs py-2 px-4 shadow-sm font-extrabold"
+            className="bg-philsa-red hover:bg-philsa-red/90 text-white text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-philsa-red/10"
           >
             <Plus className="w-4 h-4" /> Design Blueprint
           </button>

@@ -1,10 +1,37 @@
 import React, { useState } from 'react';
 import { X, AlertCircle, ShieldCheck, Eye, Sparkles, Check, ArrowRight, ArrowLeft, Camera, Shield, Laptop, Monitor, FileText } from 'lucide-react';
+import type { MaintenanceRecord } from './MaintenancePageTemplate';
 
 interface RegistrationPreviewProps {
-  data: any[];
+  data: MaintenanceRecord[];
   onClose: () => void;
 }
+
+const INITIAL_FORM_STATE = {
+  verificationMethod: 'LRN',
+  lrn: '123456789012',
+  dob: '2008-07-24',
+  firstName: 'Juan',
+  middleName: 'Agoncillo',
+  lastName: 'Dela Cruz',
+  extensionName: '',
+  sex: 'Male',
+  schoolId: '300123',
+  schoolName: 'Rizal National High School',
+  gradeLevel: 'Grade 12',
+  enrollmentStatus: 'Currently Enrolled',
+  schoolYear: '2026-2027',
+  email: 'juan.delacruz@gmail.com',
+  mobileNumber: '09171234567',
+  password: '••••••••••••',
+  confirmPassword: '••••••••••••',
+  idFrontUploaded: true,
+  idBackUploaded: true,
+  selfieUploaded: true,
+  faceMatchResult: '98.7% Confidence',
+  livenessResult: 'Passed (99.1%)',
+  verificationStatus: 'Pending (Auto-Verified)',
+};
 
 export default function RegistrationPreview({ data, onClose }: RegistrationPreviewProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -12,197 +39,94 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
   const [simulationSuccess, setSimulationSuccess] = useState(false);
 
   // Form State for simulation
-  const [formState, setFormState] = useState({
-    candidateType: '',
-    idType: '',
-    idNumber: '',
-    lrn: '',
-    firstName: '',
-    middleName: '',
-    lastName: '',
-    suffix: '',
-    dob: '',
-    sex: '',
-    civilStatus: '',
-    citizenship: '',
-    phone: '',
-    email: '',
-    shsTrack: '',
-    program: '',
-    schoolId: '',
-    schoolName: '',
-    schoolAddress: '',
-    gradeLevel: '',
-    enrollmentStatus: '',
-    schoolYear: '',
-    customStep1Fields: {} as Record<string, string>
-  });
+  const [formState, setFormState] = useState(INITIAL_FORM_STATE);
 
   const handleInputChange = (field: string, val: string) => {
     setFormState(prev => ({ ...prev, [field]: val }));
   };
 
   // Helper to check if a configuration item is active
-  const isActive = (item: any) => {
-    return item.status === 'Active' || item.status === 'ACTIVE' || item.status === true;
-  };
-
-  // Extract active options dynamically from maintenance data
-  const candidateTypes = data
-    .filter(item => item.type === 'Candidate Type' && isActive(item))
-    .map(item => item.value);
-
-  const idTypes = data
-    .filter(item => item.type === 'ID Type' && isActive(item))
-    .map(item => item.value);
-
-  const shsTracks = data
-    .filter(item => item.type === 'SHS Track' && isActive(item))
-    .map(item => item.value);
-
-  const gradeLevels = data
-    .filter(item => item.type === 'Grade Level' && isActive(item))
-    .map(item => item.value);
-
-  const suffixes = data
-    .filter(item => item.type === 'Suffix' && isActive(item))
-    .map(item => item.value);
-
-  const nationalities = data
-    .filter(item => item.type === 'Nationality' && isActive(item))
-    .map(item => item.value);
-
-  // Dynamic field toggles parsed from "Field Toggle" rows
-  const isFieldActive = (fieldLabel: string) => {
-    const item = data.find(i => i.value === fieldLabel || i.value?.includes(fieldLabel));
+  const isFieldActive = (fieldName: string) => {
+    const item = data.find(i => typeof i.value === 'string' && i.value.toLowerCase() === fieldName.toLowerCase());
     if (!item) return true; // Default to active if config doesn't exist
-    return isActive(item);
+    return item.status === 'Active' || item.status === true;
   };
 
-  // Fallback defaults if list is empty
-  const activeCandidateTypes = candidateTypes.length > 0 ? candidateTypes : ['Regular Senior High', 'ALS Graduate'];
-  const activeIdTypes = idTypes.length > 0 ? idTypes : ['Philippine Identification Card', 'Student ID', 'Passport'];
-  const activeShsTracks = shsTracks.length > 0 ? shsTracks : ['STEM', 'ABM', 'HUMSS', 'GAS', 'TVL'];
-  const activeGradeLevels = gradeLevels.length > 0 ? gradeLevels : ['Grade 11', 'Grade 12'];
-  const activeSuffixes = suffixes.length > 0 ? suffixes : ['Jr.', 'Sr.', 'III', 'IV'];
-  const activeNationalities = nationalities.length > 0 ? nationalities : ['Filipino', 'Dual Citizen', 'Foreign National'];
-  const activeRegistrationMethod = data.find(item => item.section === 'Step 1 Registration' && item.type === 'Verification Method' && isActive(item));
-  const activeRegistrationPath = activeRegistrationMethod?.value?.includes('Manual') ? 'manual' : activeRegistrationMethod?.value?.includes('LRN') ? 'lrn' : activeRegistrationMethod?.value?.includes('PhilSys') ? 'philsys' : null;
-  const activeStep1Fields = data
-    .filter(item => item.section === 'Step 1 Registration' && item.type === 'Student Registration Field' && isActive(item))
-    .sort((a, b) => (a.display_order ?? 100) - (b.display_order ?? 100));
-  const previewStep1Sections = ['Personal Information', 'School Information', 'Additional Information'];
-  const previewStep1FieldSections: Record<string, string> = {
-    'LRN': 'Personal Information',
-    'Birth Date': 'Personal Information',
-    'First Name': 'Personal Information',
-    'Middle Name': 'Personal Information',
-    'Last Name': 'Personal Information',
-    'Extension Name': 'Personal Information',
-    'Sex': 'Personal Information',
-    'School ID': 'School Information',
-    'School Name': 'School Information',
-    'Grade Level': 'School Information',
-    'Enrollment Status': 'School Information',
-    'School Year': 'School Information',
-  };
-  const previewStep1FieldKeys: Record<string, keyof typeof formState> = {
-    'LRN': 'lrn',
-    'Birth Date': 'dob',
-    'First Name': 'firstName',
-    'Middle Name': 'middleName',
-    'Last Name': 'lastName',
-    'Extension Name': 'suffix',
-    'Sex': 'sex',
-    'School ID': 'schoolId',
-    'School Name': 'schoolName',
-    'Grade Level': 'gradeLevel',
-    'Enrollment Status': 'enrollmentStatus',
-    'School Year': 'schoolYear',
+  const isMethodActive = (methodName: string) => {
+    const item = data.find(i => i.type === 'Verification Method' && typeof i.value === 'string' && i.value.toLowerCase().includes(methodName.toLowerCase()));
+    if (!item) return true; // Default to active
+    return item.status === 'Active' || item.status === true;
   };
 
-  const renderPreviewStep1Field = (field: any) => {
-    const formKey = previewStep1FieldKeys[field.value];
-    const value = typeof formKey === 'string'
-      ? String(formState[formKey] ?? '')
-      : formState.customStep1Fields[field.value] || '';
-    const options = Array.isArray(field.optionValues) ? field.optionValues : [];
-    const required = field.priority === 'High Priority';
-    const updateValue = (nextValue: string) => {
-      if (typeof formKey === 'string') {
-        handleInputChange(formKey, nextValue);
-        return;
-      }
-      setFormState(prev => ({
-        ...prev,
-        customStep1Fields: {
-          ...prev.customStep1Fields,
-          [field.value]: nextValue,
-        },
-      }));
-    };
-
-    return (
-      <div key={field.id || field.value} className="space-y-1">
-        <label className="label-philsa text-[10px]">{field.value}{required ? ' *' : ''}</label>
-        {field.inputType === 'dropdown' && options.length > 0 ? (
-          <select
-            value={value}
-            onChange={(e) => updateValue(e.target.value)}
-            className="input-philsa text-xs py-2 bg-white cursor-pointer"
-          >
-            <option value="">Select {field.value}</option>
-            {options.map((option: string) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type={field.inputType === 'date' ? 'date' : 'text'}
-            value={value}
-            onChange={(e) => updateValue(e.target.value)}
-            placeholder={field.remarks || `Enter ${field.value}`}
-            className="input-philsa text-xs py-2 bg-white"
-          />
-        )}
-      </div>
-    );
-  };
-
-  // Check which general fields should disappear
+  // Check which general fields should be shown
+  const showLrn = isFieldActive('LRN');
+  const showBirthDate = isFieldActive('Birth Date');
   const showFirstName = isFieldActive('First Name');
+  const showMiddleName = isFieldActive('Middle Name');
   const showLastName = isFieldActive('Last Name');
-  const showPhilSys = isFieldActive('PhilSys');
+  const showExtensionName = isFieldActive('Extension Name');
+  const showSex = isFieldActive('Sex');
+
+  const showSchoolId = isFieldActive('School ID');
   const showSchoolName = isFieldActive('School Name');
-  const showSchoolAddress = isFieldActive('School Address');
   const showGradeLevel = isFieldActive('Grade Level');
+  const showEnrollmentStatus = isFieldActive('Enrollment Status');
+  const showSchoolYear = isFieldActive('School Year');
+
+  const showEmailAddress = isFieldActive('Email Address');
+  const showMobileNumber = isFieldActive('Mobile Number');
+  const showPassword = isFieldActive('Password');
+  const showConfirmPassword = isFieldActive('Confirm Password');
+
+  const showIdFront = isFieldActive('Student ID Front');
+  const showIdBack = isFieldActive('Student ID Back');
+  const showSelfie = isFieldActive('Selfie Photo');
+  const showFaceMatch = isFieldActive('Face Match Result');
+  const showLiveness = isFieldActive('Liveness Result');
+  const showVerificationStatus = isFieldActive('Verification Status');
 
   const renderRegistrationForm = (isCompact: boolean) => {
     if (simulationSuccess) {
       return (
         <div className="text-center py-12 px-6 bg-white rounded-3xl border border-slate-100 space-y-6 animate-fadeIn">
-          <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+          <div className="w-16 h-16 bg-emerald-100 text-[#00563F] rounded-full flex items-center justify-center mx-auto shadow-inner">
             <ShieldCheck className="w-8 h-8" />
           </div>
           <div>
             <h4 className="text-xl font-black text-philsa-navy">Simulated Registration Successful!</h4>
             <p className="text-xs text-philsa-gray font-semibold mt-1">
-              This demonstrates how the student portal responds to your active administrative configuration.
+              Your configurations are working beautifully. This sandbox demonstrates real-time compliance with the maintenance rules.
             </p>
           </div>
-          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 text-left max-w-md mx-auto space-y-2">
+          <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-left max-w-lg mx-auto space-y-3">
             <p className="text-[10px] font-black uppercase text-philsa-navy tracking-wider pb-1 border-b border-slate-200">
-              Active Parameters Captured:
+              Administrative Compliance Receipt:
             </p>
-            <div className="grid grid-cols-2 gap-2 text-[10px] text-philsa-gray font-bold">
-              <div>Candidate Type:</div>
-              <div className="text-philsa-navy text-right">{formState.candidateType || activeCandidateTypes[0]}</div>
-              <div>ID Type:</div>
-              <div className="text-philsa-navy text-right">{formState.idType || activeIdTypes[0]}</div>
+            <div className="grid grid-cols-2 gap-y-1.5 gap-x-4 text-[10px] text-philsa-gray font-bold">
+              <div>Verification Method:</div>
+              <div className="text-philsa-navy text-right font-black uppercase">{formState.verificationMethod}</div>
+              {showFirstName && (
+                <>
+                  <div>Name:</div>
+                  <div className="text-philsa-navy text-right">{formState.firstName} {formState.lastName}</div>
+                </>
+              )}
               {showSchoolName && (
                 <>
                   <div>School:</div>
-                  <div className="text-philsa-navy text-right overflow-hidden text-ellipsis whitespace-nowrap">{formState.schoolName || 'U.P. Diliman'}</div>
+                  <div className="text-philsa-navy text-right">{formState.schoolName}</div>
+                </>
+              )}
+              {showEmailAddress && (
+                <>
+                  <div>Account:</div>
+                  <div className="text-philsa-navy text-right">{formState.email}</div>
+                </>
+              )}
+              {showFaceMatch && (
+                <>
+                  <div>Biometric Audit:</div>
+                  <div className="text-emerald-700 text-right font-black uppercase">{formState.faceMatchResult}</div>
                 </>
               )}
             </div>
@@ -214,7 +138,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
             }}
             className="px-6 py-2.5 bg-philsa-navy hover:bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
           >
-            Reset Simulation
+            Reset Simulator
           </button>
         </div>
       );
@@ -222,210 +146,188 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
 
     return (
       <div className="space-y-6">
-        {/* Multi-step indicator */}
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <button
-            onClick={() => setActiveStep(1)}
-            className={`text-[9px] font-black uppercase py-2 px-3 rounded-lg border transition-all ${
-              activeStep === 1
-                ? 'text-philsa-red bg-red-50 border-red-100'
-                : 'text-slate-500 bg-slate-50 border-slate-100 opacity-60'
-            }`}
-          >
-            1. Personal Information
-          </button>
-          <button
-            onClick={() => setActiveStep(2)}
-            className={`text-[9px] font-black uppercase py-2 px-3 rounded-lg border transition-all ${
-              activeStep === 2
-                ? 'text-philsa-red bg-red-50 border-red-100'
-                : 'text-slate-500 bg-slate-50 border-slate-100 opacity-60'
-            }`}
-          >
-            2. Academic Track
-          </button>
-          <button
-            onClick={() => setActiveStep(3)}
-            className={`text-[9px] font-black uppercase py-2 px-3 rounded-lg border transition-all ${
-              activeStep === 3
-                ? 'text-philsa-red bg-red-50 border-red-100'
-                : 'text-slate-500 bg-slate-50 border-slate-100 opacity-60'
-            }`}
-          >
-            3. Review & Finish
-          </button>
+        {/* Multi-step indicator for 4 Steps */}
+        <div className="grid grid-cols-4 gap-2 text-center">
+          {[
+            { step: 1, label: '1. Identity' },
+            { step: 2, label: '2. School' },
+            { step: 3, label: '3. Account' },
+            { step: 4, label: '4. Verification' }
+          ].map((s) => (
+            <button
+              key={s.step}
+              onClick={() => setActiveStep(s.step)}
+              className={`text-[9px] font-black uppercase py-2 px-1 rounded-lg border transition-all ${
+                activeStep === s.step
+                  ? 'text-[#8A1538] bg-red-50 border-red-100'
+                  : 'text-slate-500 bg-slate-50 border-slate-100 opacity-60'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
 
-        {activeStep === 1 && activeRegistrationPath === 'manual' && (
+        {activeStep === 1 && (
           <div className="space-y-4 animate-fadeIn">
             <div>
-              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">1. Manual Registration</h3>
-              <p className="text-[10px] text-slate-400 font-semibold">Inputs are generated from active Step 1 Fields maintenance rows.</p>
+              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">1. Identity Verification</h3>
+              <p className="text-[10px] text-slate-400 font-semibold">Standard National Registry matching. Please select verification path.</p>
             </div>
 
-            {activeStep1Fields.length === 0 ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-800">
-                No active Step 1 fields are configured.
-              </div>
-            ) : (
-              previewStep1Sections.map(section => {
-                const fieldsInSection = activeStep1Fields.filter(field => (field.fieldSection || previewStep1FieldSections[field.value] || 'Additional Information') === section);
-                if (fieldsInSection.length === 0) return null;
-
-                return (
-                  <div key={section} className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4">
-                    <p className="text-[10px] font-black text-philsa-navy uppercase tracking-widest">{section}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {fieldsInSection.map(renderPreviewStep1Field)}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-
-            <div className="pt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setActiveStep(2)}
-                className="bg-philsa-navy hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
-              >
-                Next Step: Academics <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {activeStep === 1 && activeRegistrationPath !== 'manual' && (
-          <div className="space-y-4 animate-fadeIn">
-            {/* Heading */}
-            <div>
-              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">1. Personal Identity Verification</h3>
-              <p className="text-[10px] text-slate-400 font-semibold">Verify identity through PhilSys or civil identifiers.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Candidate Type */}
-              <div className="space-y-1">
-                <label className="label-philsa text-[10px]">Candidate Type *</label>
-                <select
-                  value={formState.candidateType}
-                  onChange={(e) => handleInputChange('candidateType', e.target.value)}
-                  className="input-philsa text-xs py-2 bg-white cursor-pointer"
+            {/* Verification Methods Selectors */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { key: 'LRN', label: 'LRN matching', active: isMethodActive('LRN') },
+                { key: 'PhilSys', label: 'PhilSys ID', active: isMethodActive('PhilSys') },
+                { key: 'Manual Entry', label: 'Manual Entry', active: isMethodActive('Manual Entry') }
+              ].map((method) => (
+                <button
+                  key={method.key}
+                  type="button"
+                  onClick={() => method.active && handleInputChange('verificationMethod', method.key)}
+                  disabled={!method.active}
+                  className={`py-2.5 px-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    !method.active 
+                      ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed opacity-50'
+                      : formState.verificationMethod === method.key
+                      ? 'bg-red-50 border-[#8A1538] text-[#8A1538] shadow-inner'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
                 >
-                  <option value="">Select candidate type</option>
-                  {activeCandidateTypes.map((type, idx) => (
-                    <option key={idx} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
+                  <span>{method.label}</span>
+                  {!method.active && <span className="text-[8px] font-black text-red-500 lowercase">(disabled)</span>}
+                </button>
+              ))}
+            </div>
 
-              {/* ID Type */}
-              <div className="space-y-1">
-                <label className="label-philsa text-[10px]">Valid ID Type *</label>
-                <select
-                  value={formState.idType}
-                  onChange={(e) => handleInputChange('idType', e.target.value)}
-                  className="input-philsa text-xs py-2 bg-white cursor-pointer"
-                >
-                  <option value="">Select ID type</option>
-                  {activeIdTypes.map((type, idx) => (
-                    <option key={idx} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Input Form Fields based on Admin Configs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              {showLrn && (formState.verificationMethod === 'LRN' || formState.verificationMethod === 'Manual Entry') && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    Learner Reference Number (LRN) *
+                    <span className="text-[9px] bg-red-100 text-red-800 px-1.5 rounded">High Priority</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.lrn}
+                    onChange={(e) => handleInputChange('lrn', e.target.value)}
+                    placeholder="Enter 12-digit LRN"
+                    className="input-philsa text-xs py-2 bg-white"
+                  />
+                </div>
+              )}
+
+              {showBirthDate && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    Birth Date *
+                    <span className="text-[9px] bg-red-100 text-red-800 px-1.5 rounded">Verify against DepEd</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={formState.dob}
+                    onChange={(e) => handleInputChange('dob', e.target.value)}
+                    className="input-philsa text-xs py-2 bg-white cursor-pointer"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* First Name */}
               {showFirstName && (
                 <div className="space-y-1">
-                  <label className="label-philsa text-[10px]">First Name *</label>
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    First Name *
+                    {formState.verificationMethod !== 'Manual Entry' && (
+                      <span className="text-[8px] bg-slate-100 text-slate-600 px-1.5 rounded">Read-only DepEd</span>
+                    )}
+                  </label>
                   <input
                     type="text"
                     value={formState.firstName}
+                    disabled={formState.verificationMethod !== 'Manual Entry'}
                     onChange={(e) => handleInputChange('firstName', e.target.value)}
                     placeholder="Enter first name"
-                    className="input-philsa text-xs py-2 bg-white"
+                    className="input-philsa text-xs py-2 disabled:bg-slate-50 disabled:text-slate-500"
                   />
                 </div>
               )}
 
-              {/* Last Name */}
+              {showMiddleName && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    Middle Name *
+                    {formState.verificationMethod !== 'Manual Entry' && (
+                      <span className="text-[8px] bg-slate-100 text-slate-600 px-1.5 rounded">Read-only DepEd</span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.middleName}
+                    disabled={formState.verificationMethod !== 'Manual Entry'}
+                    onChange={(e) => handleInputChange('middleName', e.target.value)}
+                    placeholder="Enter middle name"
+                    className="input-philsa text-xs py-2 disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+              )}
+
               {showLastName && (
                 <div className="space-y-1">
-                  <label className="label-philsa text-[10px]">Last Name *</label>
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    Last Name *
+                    {formState.verificationMethod !== 'Manual Entry' && (
+                      <span className="text-[8px] bg-slate-100 text-slate-600 px-1.5 rounded">Read-only DepEd</span>
+                    )}
+                  </label>
                   <input
                     type="text"
                     value={formState.lastName}
+                    disabled={formState.verificationMethod !== 'Manual Entry'}
                     onChange={(e) => handleInputChange('lastName', e.target.value)}
                     placeholder="Enter last name"
-                    className="input-philsa text-xs py-2 bg-white"
+                    className="input-philsa text-xs py-2 disabled:bg-slate-50 disabled:text-slate-500"
                   />
                 </div>
               )}
-
-              {/* Suffix */}
-              <div className="space-y-1">
-                <label className="label-philsa text-[10px]">Suffix</label>
-                <select
-                  value={formState.suffix}
-                  onChange={(e) => handleInputChange('suffix', e.target.value)}
-                  className="input-philsa text-xs py-2 bg-white cursor-pointer"
-                >
-                  <option value="">None</option>
-                  {activeSuffixes.map((suffix, idx) => (
-                    <option key={idx} value={suffix}>{suffix}</option>
-                  ))}
-                </select>
-              </div>
             </div>
 
-            {/* PhilSys ID Number */}
-            {showPhilSys && (
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                <div className="flex items-center gap-2 text-slate-800">
-                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  <span className="text-[10px] font-black uppercase tracking-wider">PhilSys Secure Registry Verification</span>
-                </div>
-                <div className="space-y-1">
-                  <label className="label-philsa text-[10px]">Philippine National ID Number *</label>
-                  <input
-                    type="text"
-                    value={formState.idNumber}
-                    onChange={(e) => handleInputChange('idNumber', e.target.value)}
-                    placeholder="e.g. 1234-5678-9012"
-                    className="input-philsa text-xs py-2 bg-white"
-                  />
-                  <p className="text-[9px] text-slate-400 font-bold">Secure verification happens in real time via Philsys Registry API.</p>
-                </div>
-              </div>
-            )}
-
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="label-philsa text-[10px]">Citizenship *</label>
-                <select
-                  value={formState.citizenship}
-                  onChange={(e) => handleInputChange('citizenship', e.target.value)}
-                  className="input-philsa text-xs py-2 bg-white cursor-pointer"
-                >
-                  <option value="">Select citizenship</option>
-                  {activeNationalities.map((nat, idx) => (
-                    <option key={idx} value={nat}>{nat}</option>
-                  ))}
-                </select>
-              </div>
+              {showExtensionName && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px]">Extension Name (Suffix)</label>
+                  <select
+                    value={formState.extensionName}
+                    onChange={(e) => handleInputChange('extensionName', e.target.value)}
+                    className="input-philsa text-xs py-2 bg-white cursor-pointer"
+                  >
+                    <option value="">N/A</option>
+                    <option value="Jr.">Jr.</option>
+                    <option value="Sr.">Sr.</option>
+                    <option value="III">III</option>
+                  </select>
+                </div>
+              )}
 
-              <div className="space-y-1">
-                <label className="label-philsa text-[10px]">Mobile Contact *</label>
-                <input
-                  type="text"
-                  value={formState.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  placeholder="09XXXXXXXXX"
-                  className="input-philsa text-xs py-2 bg-white"
-                />
-              </div>
+              {showSex && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    Sex *
+                    <span className="text-[8px] bg-slate-100 text-slate-600 px-1.5 rounded">Read-only</span>
+                  </label>
+                  <select
+                    value={formState.sex}
+                    disabled={formState.verificationMethod !== 'Manual Entry'}
+                    onChange={(e) => handleInputChange('sex', e.target.value)}
+                    className="input-philsa text-xs py-2 disabled:bg-slate-50 disabled:text-slate-500 cursor-pointer"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="pt-4 flex justify-end">
@@ -434,7 +336,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
                 onClick={() => setActiveStep(2)}
                 className="bg-philsa-navy hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
               >
-                Next Step: Academics <ArrowRight className="w-3.5 h-3.5" />
+                Next Step: School <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -442,89 +344,89 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
 
         {activeStep === 2 && (
           <div className="space-y-4 animate-fadeIn">
-            {/* Heading */}
             <div>
-              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">2. Academic Track & Preferred Major</h3>
-              <p className="text-[10px] text-slate-400 font-semibold">Verify current school credentials and program choice.</p>
+              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">2. School Information</h3>
+              <p className="text-[10px] text-slate-400 font-semibold">Verify current institutional registry and enrollment status.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* SHS Track */}
-              <div className="space-y-1">
-                <label className="label-philsa text-[10px]">SHS Track / Strand *</label>
-                <select
-                  value={formState.shsTrack}
-                  onChange={(e) => handleInputChange('shsTrack', e.target.value)}
-                  className="input-philsa text-xs py-2 bg-white cursor-pointer"
-                >
-                  <option value="">Select track</option>
-                  {activeShsTracks.map((track, idx) => (
-                    <option key={idx} value={track}>{track}</option>
-                  ))}
-                </select>
-              </div>
+              {showSchoolId && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    School ID *
+                    <span className="text-[9px] bg-red-100 text-red-800 px-1.5 rounded">High</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.schoolId}
+                    onChange={(e) => handleInputChange('schoolId', e.target.value)}
+                    placeholder="Enter DepEd School ID"
+                    className="input-philsa text-xs py-2 bg-white"
+                  />
+                </div>
+              )}
 
-              {/* Grade Level */}
+              {showSchoolName && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px] flex items-center gap-1">
+                    School Name *
+                    <span className="text-[9px] bg-red-100 text-red-800 px-1.5 rounded">High</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.schoolName}
+                    onChange={(e) => handleInputChange('schoolName', e.target.value)}
+                    placeholder="Enter complete secondary school name"
+                    className="input-philsa text-xs py-2 bg-white"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {showGradeLevel && (
                 <div className="space-y-1">
-                  <label className="label-philsa text-[10px]">Current Grade Level *</label>
+                  <label className="label-philsa text-[10px]">Grade Level *</label>
                   <select
                     value={formState.gradeLevel}
                     onChange={(e) => handleInputChange('gradeLevel', e.target.value)}
                     className="input-philsa text-xs py-2 bg-white cursor-pointer"
                   >
-                    <option value="">Select grade</option>
-                    {activeGradeLevels.map((g, idx) => (
-                      <option key={idx} value={g}>{g}</option>
-                    ))}
+                    <option value="Grade 11">Grade 11</option>
+                    <option value="Grade 12">Grade 12</option>
+                    <option value="ALS Graduate">ALS Graduate</option>
                   </select>
                 </div>
               )}
-            </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {/* School Name */}
-              {showSchoolName && (
+              {showEnrollmentStatus && (
                 <div className="space-y-1">
-                  <label className="label-philsa text-[10px]">School Name *</label>
-                  <input
-                    type="text"
-                    value={formState.schoolName}
-                    onChange={(e) => handleInputChange('schoolName', e.target.value)}
-                    placeholder="Enter current senior high school name"
-                    className="input-philsa text-xs py-2 bg-white"
-                  />
+                  <label className="label-philsa text-[10px]">Enrollment Status *</label>
+                  <select
+                    value={formState.enrollmentStatus}
+                    onChange={(e) => handleInputChange('enrollmentStatus', e.target.value)}
+                    className="input-philsa text-xs py-2 bg-white cursor-pointer"
+                  >
+                    <option value="Currently Enrolled">Currently Enrolled</option>
+                    <option value="Graduated">Graduated</option>
+                    <option value="Candidate for Graduation">Candidate for Graduation</option>
+                  </select>
                 </div>
               )}
 
-              {/* School Address */}
-              {showSchoolAddress && (
+              {showSchoolYear && (
                 <div className="space-y-1">
-                  <label className="label-philsa text-[10px]">School Address *</label>
-                  <input
-                    type="text"
-                    value={formState.schoolAddress}
-                    onChange={(e) => handleInputChange('schoolAddress', e.target.value)}
-                    placeholder="Enter complete school address"
-                    className="input-philsa text-xs py-2 bg-white"
-                  />
+                  <label className="label-philsa text-[10px]">School Year *</label>
+                  <select
+                    value={formState.schoolYear}
+                    onChange={(e) => handleInputChange('schoolYear', e.target.value)}
+                    className="input-philsa text-xs py-2 bg-white cursor-pointer"
+                  >
+                    <option value="2025-2026">2025-2026</option>
+                    <option value="2026-2027">2026-2027</option>
+                  </select>
                 </div>
               )}
-
-              {/* Preferred program */}
-              <div className="space-y-1">
-                <label className="label-philsa text-[10px]">Preferred Space Science Program *</label>
-                <select
-                  value={formState.program}
-                  onChange={(e) => handleInputChange('program', e.target.value)}
-                  className="input-philsa text-xs py-2 bg-white cursor-pointer"
-                >
-                  <option value="">Select preferred major</option>
-                  <option value="BS Aerospace Engineering">BS Aerospace Engineering</option>
-                  <option value="BS Space Science">BS Space Science & Technology</option>
-                  <option value="BS Geodetic Engineering">BS Geodetic Engineering</option>
-                </select>
-              </div>
             </div>
 
             <div className="pt-4 flex justify-between items-center">
@@ -540,7 +442,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
                 onClick={() => setActiveStep(3)}
                 className="bg-philsa-navy hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
               >
-                Review & Confirm <ArrowRight className="w-3.5 h-3.5" />
+                Next Step: Account <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -548,54 +450,63 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
 
         {activeStep === 3 && (
           <div className="space-y-4 animate-fadeIn">
-            {/* Heading */}
             <div>
-              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">3. Review Administrative Settings</h3>
-              <p className="text-[10px] text-slate-400 font-semibold">Please review the captured configuration values before completing the simulation.</p>
+              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">3. Account Setup</h3>
+              <p className="text-[10px] text-slate-400 font-semibold">Establish secure portal credentials for examination permits and results.</p>
             </div>
 
-            <div className="border border-slate-100 rounded-2xl bg-slate-50/60 p-4 space-y-3.5">
-              <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60">
-                <Sparkles className="w-4 h-4 text-philsa-red" />
-                <span className="text-[10px] font-black uppercase text-philsa-navy">Dynamic Setup Summary</span>
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {showEmailAddress && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px]">Email Address *</label>
+                  <input
+                    type="email"
+                    value={formState.email}
+                    onChange={(e) => handleInputChange('email', e.target.value)}
+                    placeholder="name@domain.com"
+                    className="input-philsa text-xs py-2 bg-white"
+                  />
+                </div>
+              )}
 
-              <div className="space-y-2 text-[11px] font-semibold text-slate-600">
-                <div className="flex justify-between">
-                  <span>Primary Role:</span>
-                  <span className="font-bold text-philsa-navy">{formState.candidateType || activeCandidateTypes[0]}</span>
+              {showMobileNumber && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px]">Mobile Number *</label>
+                  <input
+                    type="text"
+                    value={formState.mobileNumber}
+                    onChange={(e) => handleInputChange('mobileNumber', e.target.value)}
+                    placeholder="0917XXXXXXX"
+                    className="input-philsa text-xs py-2 bg-white"
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span>ID Verification System:</span>
-                  <span className="font-bold text-philsa-navy">{formState.idType || activeIdTypes[0]}</span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {showPassword && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px]">Password *</label>
+                  <input
+                    type="password"
+                    value={formState.password}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    className="input-philsa text-xs py-2 bg-white"
+                  />
                 </div>
-                {showFirstName && (
-                  <div className="flex justify-between">
-                    <span>Candidate Name:</span>
-                    <span className="font-bold text-philsa-navy">
-                      {formState.firstName || 'Candidate'} {formState.lastName || 'User'} {formState.suffix}
-                    </span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span>Citizenship:</span>
-                  <span className="font-bold text-philsa-navy">{formState.citizenship || activeNationalities[0]}</span>
+              )}
+
+              {showConfirmPassword && (
+                <div className="space-y-1">
+                  <label className="label-philsa text-[10px]">Confirm Password *</label>
+                  <input
+                    type="password"
+                    value={formState.confirmPassword}
+                    onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                    className="input-philsa text-xs py-2 bg-white"
+                  />
                 </div>
-                <div className="flex justify-between">
-                  <span>Senior High Track:</span>
-                  <span className="font-bold text-philsa-navy">{formState.shsTrack || activeShsTracks[0]}</span>
-                </div>
-                {showSchoolName && (
-                  <div className="flex justify-between">
-                    <span>School Institution:</span>
-                    <span className="font-bold text-philsa-navy">{formState.schoolName || 'U.P. Diliman'}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span>Desired Degree Program:</span>
-                  <span className="font-bold text-philsa-navy">{formState.program || 'BS Space Science & Technology'}</span>
-                </div>
-              </div>
+              )}
             </div>
 
             <div className="pt-4 flex justify-between items-center">
@@ -608,10 +519,104 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
               </button>
               <button
                 type="button"
-                onClick={() => setSimulationSuccess(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                onClick={() => setActiveStep(4)}
+                className="bg-philsa-navy hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
               >
-                <Check className="w-3.5 h-3.5" /> Submit Simulated Entry
+                Next Step: Verification <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeStep === 4 && (
+          <div className="space-y-4 animate-fadeIn">
+            <div>
+              <h3 className="text-xs font-black text-philsa-navy uppercase tracking-wider">4. Automated Verification & Audits</h3>
+              <p className="text-[10px] text-slate-400 font-semibold">Execute high-priority biometric and liveness checks to issue permits.</p>
+            </div>
+
+            <div className="space-y-3">
+              {/* File Uploders */}
+              <div className="grid grid-cols-2 gap-4">
+                {showIdFront && (
+                  <div className="p-3 bg-white border border-dashed border-slate-200 rounded-2xl text-center space-y-1">
+                    <span className="text-[8px] font-black uppercase tracking-wider text-philsa-gray block">Student ID Front</span>
+                    <div className="w-8 h-8 rounded-full bg-red-50 text-[#8A1538] flex items-center justify-center mx-auto">
+                      <Camera className="w-4 h-4" />
+                    </div>
+                    <span className="text-[8px] text-emerald-700 font-extrabold block">ID_Front_Captured.png</span>
+                  </div>
+                )}
+
+                {showIdBack && (
+                  <div className="p-3 bg-white border border-dashed border-slate-200 rounded-2xl text-center space-y-1">
+                    <span className="text-[8px] font-black uppercase tracking-wider text-philsa-gray block">Student ID Back</span>
+                    <div className="w-8 h-8 rounded-full bg-red-50 text-[#8A1538] flex items-center justify-center mx-auto">
+                      <Camera className="w-4 h-4" />
+                    </div>
+                    <span className="text-[8px] text-emerald-700 font-extrabold block">ID_Back_Captured.png</span>
+                  </div>
+                )}
+              </div>
+
+              {showSelfie && (
+                <div className="p-4 bg-white border border-slate-100 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-red-50 text-[#8A1538] flex items-center justify-center">
+                      <Camera className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-black text-philsa-navy uppercase">Live Selfie Photo *</p>
+                      <p className="text-[8px] text-slate-400 font-semibold">Biometric face enrollment</p>
+                    </div>
+                  </div>
+                  <span className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-0.5 rounded-full font-black uppercase">Captured</span>
+                </div>
+              )}
+
+              {/* Automatic System Checks (High Priority) */}
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2.5">
+                <span className="text-[9px] font-black text-philsa-gray uppercase tracking-widest block">System Diagnostics (High Priority)</span>
+                
+                <div className="space-y-1.5">
+                  {showFaceMatch && (
+                    <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className="text-slate-600">Face Match Result:</span>
+                      <span className="text-emerald-700 font-black">{formState.faceMatchResult}</span>
+                    </div>
+                  )}
+
+                  {showLiveness && (
+                    <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className="text-slate-600">Liveness Result:</span>
+                      <span className="text-emerald-700 font-black">{formState.livenessResult}</span>
+                    </div>
+                  )}
+
+                  {showVerificationStatus && (
+                    <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className="text-slate-600">Verification Status:</span>
+                      <span className="text-amber-700 font-black">{formState.verificationStatus}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 flex justify-between items-center">
+              <button
+                type="button"
+                onClick={() => setActiveStep(3)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <button
+                type="button"
+                onClick={() => setSimulationSuccess(true)}
+                className="bg-[#00563F] hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" /> Submit Simulator Entry
               </button>
             </div>
           </div>
@@ -693,31 +698,7 @@ export default function RegistrationPreview({ data, onClose }: RegistrationPrevi
                 onClick={() => {
                   setSimulationSuccess(false);
                   setActiveStep(1);
-                  setFormState({
-                    candidateType: '',
-                    idType: '',
-                    idNumber: '',
-                    lrn: '',
-                    firstName: '',
-                    middleName: '',
-                    lastName: '',
-                    suffix: '',
-                    dob: '',
-                    sex: '',
-                    civilStatus: '',
-                    citizenship: '',
-                    phone: '',
-                    email: '',
-                    shsTrack: '',
-                    program: '',
-                    schoolId: '',
-                    schoolName: '',
-                    schoolAddress: '',
-                    gradeLevel: '',
-                    enrollmentStatus: '',
-                    schoolYear: '',
-                    customStep1Fields: {}
-                  });
+                  setFormState(INITIAL_FORM_STATE);
                 }}
                 className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-xl transition-all cursor-pointer text-[10px] font-bold"
               >

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { AlertTriangle, ArrowLeft, Clock } from 'lucide-react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
@@ -10,6 +10,18 @@ import { User, UserRole } from '../types';
 
 function LoadingScreen() {
   return <LoadingState title="Initializing PhilSA Environment" message="Preparing your secure prototype session." fullPage />;
+}
+
+function useProtectedAuth() {
+  const auth = usePhilSA();
+
+  useEffect(() => {
+    if (!auth.isAuthInitialized) {
+      void auth.initializeAuth();
+    }
+  }, [auth.initializeAuth, auth.isAuthInitialized]);
+
+  return auth;
 }
 
 function routeForRole(role: UserRole): string {
@@ -138,11 +150,11 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ allowedRoles, children, layout = 'dashboard' }: ProtectedRouteProps) {
-  const { user, isLoading, maintenanceModules } = usePhilSA();
+  const { user, isAuthInitialized, isLoading, maintenanceModules } = useProtectedAuth();
   const location = useLocation();
   const modules = maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES;
 
-  if (isLoading) return <LoadingScreen />;
+  if (!isAuthInitialized || isLoading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   if (!allowedRoles.includes(user.role) && !canAccessRouteByModulePermission(user, location.pathname, modules)) {
     return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
@@ -156,11 +168,11 @@ export function ProtectedRoute({ allowedRoles, children, layout = 'dashboard' }:
 }
 
 export function ExamRoute({ children }: { children: ReactNode }) {
-  const { user, isLoading } = usePhilSA();
+  const { user, isAuthInitialized, isLoading } = useProtectedAuth();
   const { applications } = useMockData();
   const location = useLocation();
 
-  if (isLoading) return <LoadingScreen />;
+  if (!isAuthInitialized || isLoading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   if (user.role !== 'STUDENT') return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
 

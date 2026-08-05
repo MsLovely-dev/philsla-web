@@ -27,6 +27,21 @@ describe('APP_ROUTES', () => {
     expect(APP_ROUTES.find((route) => route.path === '/support/dashboard')?.allowedRoles).toContain('TECH_SUPPORT');
   });
 
+  it('registers the updated Maintenance Center modules with their intended roles', () => {
+    const expectedRoles = new Map([
+      ['/admin/maintenance/schools', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
+      ['/admin/maintenance/universities', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
+      ['/admin/maintenance/exam-blueprint', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
+    ]);
+
+    for (const [path, roles] of expectedRoles) {
+      const route = APP_ROUTES.find((candidate) => candidate.path === path);
+      expect(route?.access).toBe('protected');
+      expect(route?.allowedRoles).toHaveLength(roles.length);
+      expect(route?.allowedRoles).toEqual(expect.arrayContaining(roles));
+    }
+  });
+
   it('gives every protected route at least one allowed role', () => {
     const missingRoles = APP_ROUTES.filter(
       (route) => route.access === 'protected' && !route.allowedRoles?.length,
