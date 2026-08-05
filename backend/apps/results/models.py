@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -31,46 +32,6 @@ class ExamReviewRecord(models.Model):
     pending_subjective_items = models.PositiveIntegerField(default=0)
     reviewed_by = models.CharField(max_length=80, blank=True, default="")
     reviewed_at = models.DateTimeField(null=True, blank=True)
-from django.conf import settings
-from django.db import models
-
-
-class ExaminationSessionStatus(models.TextChoices):
-    OPEN = "OPEN", "Open"
-    CLOSED = "CLOSED", "Closed"
-
-
-class ScoreBatchStatus(models.TextChoices):
-    READY_FOR_PROCESSING = "READY_FOR_PROCESSING", "Ready for processing"
-    SCORING_PROCESSED = "SCORING_PROCESSED", "Scoring processed"
-    RESULTS_RELEASED = "RESULTS_RELEASED", "Results released"
-
-
-class ScoreReviewStatus(models.TextChoices):
-    APPROVED = "APPROVED", "Approved"
-    PENDING = "PENDING", "Pending"
-    REJECTED = "REJECTED", "Rejected"
-
-
-class ScoreReleaseStatus(models.TextChoices):
-    NOT_RELEASED = "NOT_RELEASED", "Not released"
-    RELEASED = "RELEASED", "Released"
-
-
-class ExaminationSession(models.Model):
-    id = models.CharField(max_length=64, primary_key=True)
-    name = models.CharField(max_length=160)
-    status = models.CharField(
-        max_length=16,
-        choices=ExaminationSessionStatus.choices,
-        default=ExaminationSessionStatus.OPEN,
-    )
-    scoring_status = models.CharField(
-        max_length=32,
-        choices=ScoreBatchStatus.choices,
-        default=ScoreBatchStatus.READY_FOR_PROCESSING,
-        db_index=True,
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -118,6 +79,104 @@ class ExamReviewItem(models.Model):
     response_submitted_at = models.DateTimeField(null=True, blank=True)
     points_awarded = models.PositiveSmallIntegerField(null=True, blank=True)
     max_points = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(fields=("review", "position"), name="exam_review_item_unique_position"),
+            models.UniqueConstraint(
+                fields=("review", "subject", "item_number"),
+                name="exam_review_item_unique_subject_number",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(points_awarded__isnull=True)
+                | models.Q(points_awarded__lte=models.F("max_points")),
+                name="exam_review_item_score_lte_max",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(ai_proposed_score__isnull=True)
+                | models.Q(ai_proposed_score__lte=models.F("max_points")),
+                name="exam_review_item_ai_score_lte_max",
+            ),
+        ]
+
+
+def answer_sheet_upload_to(instance, filename):
+    extension = {
+        "application/pdf": ".pdf",
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+    }[instance.content_type]
+    return f"private/exam-review-answer-sheets/{instance.review_id}/{uuid.uuid4().hex}{extension}"
+
+
+class ExamReviewTemplateSource(models.TextChoices):
+    STANDARD_CSV = "STANDARD_CSV", "Standard CSV"
+    HANDWRITTEN_OCR = "HANDWRITTEN_OCR", "Handwritten OCR"
+    OMR_TEMPLATE_PAPER = "OMR_TEMPLATE_PAPER", "OMR Template Paper"
+
+
+class ExamReviewAnswerSheet(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    review = models.ForeignKey(ExamReviewRecord, on_delete=models.CASCADE, related_name="answer_sheets")
+    file = models.FileField(upload_to=answer_sheet_upload_to, max_length=160)
+    content_type = models.CharField(max_length=32)
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    template_source = models.CharField(
+        max_length=24,
+        choices=ExamReviewTemplateSource.choices,
+        default=ExamReviewTemplateSource.STANDARD_CSV,
+    )
+    uploaded_by = models.CharField(max_length=80, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class ExaminationSessionStatus(models.TextChoices):
+    OPEN = "OPEN", "Open"
+    CLOSED = "CLOSED", "Closed"
+
+
+class ScoreBatchStatus(models.TextChoices):
+    READY_FOR_PROCESSING = "READY_FOR_PROCESSING", "Ready for processing"
+    SCORING_PROCESSED = "SCORING_PROCESSED", "Scoring processed"
+    RESULTS_RELEASED = "RESULTS_RELEASED", "Results released"
+
+
+class ScoreReviewStatus(models.TextChoices):
+    APPROVED = "APPROVED", "Approved"
+    PENDING = "PENDING", "Pending"
+    REJECTED = "REJECTED", "Rejected"
+
+
+class ScoreReleaseStatus(models.TextChoices):
+    NOT_RELEASED = "NOT_RELEASED", "Not released"
+    RELEASED = "RELEASED", "Released"
+
+
+class ExaminationSession(models.Model):
+    id = models.CharField(max_length=64, primary_key=True)
+    name = models.CharField(max_length=160)
+    status = models.CharField(
+        max_length=16,
+        choices=ExaminationSessionStatus.choices,
+        default=ExaminationSessionStatus.OPEN,
+    )
+    scoring_status = models.CharField(
+        max_length=32,
+        choices=ScoreBatchStatus.choices,
+        default=ScoreBatchStatus.READY_FOR_PROCESSING,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
         ordering = ["-created_at", "id"]
 
     @property
@@ -217,54 +276,6 @@ class CandidateScore(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["position"]
-        constraints = [
-            models.UniqueConstraint(fields=("review", "position"), name="exam_review_item_unique_position"),
-            models.UniqueConstraint(
-                fields=("review", "subject", "item_number"),
-                name="exam_review_item_unique_subject_number",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(points_awarded__isnull=True)
-                | models.Q(points_awarded__lte=models.F("max_points")),
-                name="exam_review_item_score_lte_max",
-            ),
-            models.CheckConstraint(
-                condition=models.Q(ai_proposed_score__isnull=True)
-                | models.Q(ai_proposed_score__lte=models.F("max_points")),
-                name="exam_review_item_ai_score_lte_max",
-            ),
-        ]
-
-
-def answer_sheet_upload_to(instance, filename):
-    extension = {
-        "application/pdf": ".pdf",
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-    }[instance.content_type]
-    return f"private/exam-review-answer-sheets/{instance.review_id}/{uuid.uuid4().hex}{extension}"
-
-
-class ExamReviewTemplateSource(models.TextChoices):
-    STANDARD_CSV = "STANDARD_CSV", "Standard CSV"
-    HANDWRITTEN_OCR = "HANDWRITTEN_OCR", "Handwritten OCR"
-    OMR_TEMPLATE_PAPER = "OMR_TEMPLATE_PAPER", "OMR Template Paper"
-
-
-class ExamReviewAnswerSheet(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    review = models.ForeignKey(ExamReviewRecord, on_delete=models.CASCADE, related_name="answer_sheets")
-    file = models.FileField(upload_to=answer_sheet_upload_to, max_length=160)
-    content_type = models.CharField(max_length=32)
-    size = models.PositiveIntegerField()
-    sha256 = models.CharField(max_length=64)
-    template_source = models.CharField(
-        max_length=24,
-        choices=ExamReviewTemplateSource.choices,
-        default=ExamReviewTemplateSource.STANDARD_CSV,
-    )
-    uploaded_by = models.CharField(max_length=80, blank=True, default="")
         ordering = ["ranking_population_id", "overall_rank", "-final_score", "candidate_name"]
         constraints = [
             models.UniqueConstraint(fields=("session", "candidate_id"), name="unique_candidate_score_per_session"),
@@ -281,7 +292,8 @@ class ExamReviewAnswerSheet(models.Model):
                 name="results_candidate_score_final_score_range",
             ),
             models.CheckConstraint(
-                condition=models.Q(percentile__isnull=True) | (models.Q(percentile__gte=0) & models.Q(percentile__lte=100)),
+                condition=models.Q(percentile__isnull=True)
+                | (models.Q(percentile__gte=0) & models.Q(percentile__lte=100)),
                 name="results_candidate_score_percentile_range",
             ),
         ]
