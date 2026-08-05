@@ -10,7 +10,6 @@ vi.mock('./services', () => ({
 }));
 
 import { INITIAL_MAINTENANCE_MODULES, PhilSAProvider, usePhilSA } from './PhilSAContext';
-import { PhilSAProvider, usePhilSA } from './PhilSAContext';
 
 function AuthStateProbe() {
   const { isAuthInitialized, isLoading } = usePhilSA();

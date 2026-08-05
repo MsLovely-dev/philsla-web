@@ -16,6 +16,16 @@ python manage.py migrate --settings=config.settings.local
 python manage.py runserver --settings=config.settings.local
 ```
 
+To load the repeatable synthetic Exam Review queue for local development, run after migrations:
+
+```powershell
+python manage.py seed_exam_reviews --settings=config.settings.local
+```
+
+The command creates or updates seven clearly labeled demo candidates and review records, including 20 synthetic review items per exam across Math, English, Filipino, and Science. The item data includes synthetic questions, choices, student responses, response duration, expected answers, rubrics, automated score recommendations, and official points for local Exam Review testing. It does not seed uploaded answer-sheet files and is not required for production startup.
+
+Local settings allow the prototype frontend session to read only these `DEMO-2026` summaries without a backend bearer token. This development-only access is disabled by default in base and production settings; authenticated role checks continue to protect all non-demo Exam Review records.
+
 Local and test settings use SQLite for development convenience. PostgreSQL-compatible storage is the accepted application database engine, and Supabase Postgres is the accepted database provider.
 
 Production settings read the database connection from `DATABASE_URL`. Do not commit real Supabase project URLs, credentials, passwords, service-role keys, connection strings, or pooled connection secrets.

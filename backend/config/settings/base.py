@@ -45,9 +45,13 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "apps.accounts",
     "apps.applications",
+    "apps.analytics",
     "apps.configuration",
+    "apps.results",
     "apps.core",
     "apps.exams",
+    "apps.results",
+    "apps.schools",
 ]
 
 MIDDLEWARE = [
@@ -101,6 +105,7 @@ STORAGES = {
     },
 }
 STEP2_MAX_IMAGE_BYTES = env_int("STEP2_MAX_IMAGE_BYTES", 5 * 1024 * 1024)
+EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES = env_int("EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES", 10 * 1024 * 1024)
 REGISTRATION_ATTACHMENT_MAX_BYTES = env_int("REGISTRATION_ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024)
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = os.environ.get("STEP2_DOCUMENT_RECOGNITION_PROVIDER", "unavailable")
 STEP1_SELFIE_FACE_PROVIDER = os.environ.get("STEP1_SELFIE_FACE_PROVIDER", "unavailable")
@@ -176,6 +181,7 @@ SIMPLE_JWT = {
 }
 
 ACTIVE_EXAM_CYCLE_ID = os.environ.get("ACTIVE_EXAM_CYCLE_ID", "TBD")
+EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS = False
 LRN_REGISTRY_PROVIDER = os.environ.get("LRN_REGISTRY_PROVIDER", "unavailable")
 LRN_VERIFICATION_TTL_MINUTES = env_int("LRN_VERIFICATION_TTL_MINUTES", 15)
 LRN_MAX_FAILED_ATTEMPTS = env_int("LRN_MAX_FAILED_ATTEMPTS", 5)

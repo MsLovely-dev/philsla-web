@@ -921,6 +921,19 @@ class ApplicationEndpointTests(TestCase):
         response = self.client.get(reverse("applications:review-queue"))
         self.assertEqual(response.status_code, 403)
 
+    def test_application_by_lrn_lookup_is_not_exposed(self):
+        StudentApplication.objects.create(
+            owner=self.user,
+            lrn="123456789012",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.SYSTEM_ADMIN.value))
+
+        response = self.client.get("/api/v1/applications/by-lrn/123456789012/")
+
+        self.assertEqual(response.status_code, 404)
+
     def test_reviewer_decision_updates_application_status_in_database(self):
         payload = complete_payload()
         payload["personal"]["email"] = "approved.student@example.test"
