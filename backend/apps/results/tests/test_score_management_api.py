@@ -1,13 +1,16 @@
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.roles import PortalRole
+from apps.applications.models import ApplicationAuditLog, ApplicationStatus, IdentityMediaType, RegistrationSelfieMedia, StudentApplication
 from apps.results.models import CandidateScore, ScoreReleaseStatus
 from apps.results.services import REGULAR_SESSION_ID, seed_score_management_data
 
@@ -87,6 +90,20 @@ class ScoreManagementApiTests(TestCase):
         self.assertEqual(batch["processingProgress"], 100)
         self.assertIsNotNone(batch["processedAt"])
         self.assertTrue(batch["processedBy"])
+
+    def test_admin_can_read_unprocessed_approved_scores_before_ranking(self):
+        response = self.client.get(
+            reverse("results:score-management-results", args=[REGULAR_SESSION_ID]),
+            {"pageSize": 5},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 114)
+        self.assertEqual(len(response.data["results"]), 5)
+        first = response.data["results"][0]
+        self.assertIsNone(first["overallRank"])
+        self.assertIsNone(first["percentile"])
+        self.assertEqual(first["releaseStatus"], ScoreReleaseStatus.NOT_RELEASED)
 
     def test_release_requires_processed_scores(self):
         response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
@@ -236,8 +253,89 @@ class ScoreManagementApiTests(TestCase):
         self.assertTrue(content.startswith("candidate_id,candidate_name,exam_set_id,raw_score,max_score,final_score,percentile,overall_rank,release_status"))
         self.assertIn("PHL-2027-", content)
 
+    def test_admin_can_read_profile_only_for_candidate_in_score_batch(self):
+        application = StudentApplication.objects.create(
+            owner=None,
+            lrn="109000000001",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={
+                "firstName": "Alon",
+                "middleName": "M",
+                "lastName": "Reyes",
+                "dateOfBirth": "2008-01-02",
+                "sex": "Male",
+                "email": "alon.reyes@example.test",
+                "mobile": "09171234567",
+            },
+            address={
+                "region": "NCR",
+                "province": "Metro Manila",
+                "city": "Quezon City",
+                "barangay": "Central",
+                "street": "Kalayaan Ave",
+            },
+            school={
+                "lrn": "109000000001",
+                "schoolId": "SCH-1001",
+                "name": "Quezon City Science High School",
+                "academicTrack": "STEM",
+                "gradeLevel": "Grade 12",
+                "enrollmentStatus": "Enrolled",
+                "schoolYear": "2026-2027",
+                "gwa": "94.5",
+            },
+            review_step={"reviewerReason": "Verified records."},
+        )
+        RegistrationSelfieMedia.objects.create(
+            application=application,
+            file=SimpleUploadedFile("selfie.jpg", b"\xff\xd8\xff\xe0profile-image", content_type="image/jpeg"),
+            content_type="image/jpeg",
+            size=16,
+            sha256="abc123",
+        )
+        ApplicationAuditLog.objects.create(
+            application=application,
+            action="REGISTRATION_SUBMITTED",
+            event="application_submitted",
+            outcome="success",
+            registration_id=application.candidate_id,
+            applicant_id=application.candidate_id,
+            actor_role="Student",
+            session_id="registration-session-1",
+            ip_address="127.0.0.1",
+            user_agent="pytest",
+        )
+
+        response = self.client.get(
+            reverse("results:score-management-profile", args=[REGULAR_SESSION_ID, "PHL-2027-000001"]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["score"]["candidateId"], "PHL-2027-000001")
+        self.assertEqual(response.data["profile"]["personal"]["firstName"], "Alon")
+        self.assertEqual(response.data["profile"]["school"]["name"], "Quezon City Science High School")
+        self.assertEqual(response.data["profile"]["reviewStep"]["reviewerReason"], "Verified records.")
+        self.assertIn(reverse("applications:identity-media", args=[application.id, IdentityMediaType.SELFIE]), response.data["profile"]["photoUrl"])
+        self.assertEqual(response.data["profile"]["activityLogs"][0]["action"], "REGISTRATION_SUBMITTED")
+        self.assertEqual(response.data["profile"]["activityLogs"][0]["ipAddress"], "127.0.0.1")
+
+    def test_profile_lookup_rejects_candidate_outside_selected_score_batch(self):
+        response = self.client.get(
+            reverse("results:score-management-profile", args=["OTHER-SESSION", "PHL-2027-000001"]),
+        )
+
+        self.assertEqual(response.status_code, 404)
+
     def test_student_cannot_access_score_management(self):
         self.client.force_authenticate(user=principal(self.user, PortalRole.STUDENT.value))
+
+        response = self.client.get(reverse("results:score-management-batches"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_exam_administrator_cannot_access_score_management(self):
+        self.client.force_authenticate(user=principal(self.user, PortalRole.EXAM_ADMINISTRATOR.value))
 
         response = self.client.get(reverse("results:score-management-batches"))
 

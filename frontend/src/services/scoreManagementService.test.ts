@@ -4,6 +4,7 @@ import {
   getScoreManagementBatchResults,
   getScoreManagementBatchResultPage,
   getScoreManagementBatches,
+  getScoreManagementCandidateProfile,
   processScoreManagementBatch,
   exportScoreManagementBatch,
   releaseScoreManagementBatch,
@@ -116,6 +117,65 @@ describe('scoreManagementService', () => {
     });
 
     expect(requestMock).toHaveBeenCalledWith('/api/v1/results/score-management/batches/SESSION-2027-REGULAR/results/?page=1&pageSize=100&sortKey=rank&sortDirection=asc&search=PHL-2027-000123&releaseStatus=NOT_RELEASED');
+  });
+
+  it('fetches candidate profile through the score-management profile endpoint', async () => {
+    requestMock.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        score: {
+          id: 'SCORE-PHL-2027-000001',
+          candidateId: 'PHL-2027-000001',
+          lrn: '109000000001',
+          candidateName: 'Alon Reyes',
+          sessionId: 'SESSION-2027-REGULAR',
+          rankingPopulationId: 'POP-REGULAR-2027',
+          examSetId: 'ES-BP0001',
+          rawScore: 193,
+          maxScore: 200,
+          finalScore: 96.5,
+          overallRank: 1,
+          percentile: 99.1234,
+          releaseStatus: 'NOT_RELEASED',
+          processingBatchId: 'SCORE-PROC-ABC',
+        },
+        profile: {
+          id: 'app-id',
+          candidateId: 'PS-2027-ABCD-EFGH',
+          status: 'SUBMITTED',
+          photoUrl: 'http://testserver/api/v1/applications/app-id/identity-media/SELFIE/',
+          personal: { firstName: 'Alon', lastName: 'Reyes' },
+          address: { city: 'Quezon City' },
+          school: { name: 'Quezon City Science High School' },
+          coursePreferences: [{ university: 'UP', course: 'BS Math' }],
+          reviewStep: { reviewerReason: 'Verified.' },
+          activityLogs: [{
+            id: 1,
+            action: 'REGISTRATION_SUBMITTED',
+            event: 'application_submitted',
+            outcome: 'success',
+            timestamp: '2026-08-05T00:00:00Z',
+            sessionId: 'registration-session',
+            ipAddress: '127.0.0.1',
+            deviceBrowser: 'vitest',
+            registrationId: 'PS-2027-ABCD-EFGH',
+            applicantId: 'PS-2027-ABCD-EFGH',
+            actorRole: 'Student',
+            correlationId: 'corr-1',
+          }],
+          examCycleId: '2027',
+          submittedAt: '2026-08-05T00:00:00Z',
+        },
+      },
+    });
+
+    const profile = await getScoreManagementCandidateProfile('SESSION-2027-REGULAR', 'PHL-2027-000001');
+
+    expect(requestMock).toHaveBeenCalledWith('/api/v1/results/score-management/batches/SESSION-2027-REGULAR/results/PHL-2027-000001/profile/');
+    expect(profile.score.candidateId).toBe('PHL-2027-000001');
+    expect(profile.profile?.personal.firstName).toBe('Alon');
+    expect(profile.profile?.photoUrl).toContain('/identity-media/SELFIE/');
+    expect(profile.profile?.activityLogs[0].action).toBe('REGISTRATION_SUBMITTED');
   });
 
   it('triggers backend processing and refreshes batch/results data', async () => {

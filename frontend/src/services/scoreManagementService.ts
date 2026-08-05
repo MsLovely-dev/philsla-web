@@ -44,6 +44,41 @@ export interface ScoreManagementResultPage {
   results: ScoreManagementResult[];
 }
 
+export interface ScoreManagementCandidateProfile {
+  id: string;
+  candidateId: string;
+  status: string;
+  photoUrl: string;
+  personal: Record<string, unknown>;
+  address: Record<string, unknown>;
+  school: Record<string, unknown>;
+  coursePreferences: Array<Record<string, unknown>>;
+  reviewStep: Record<string, unknown>;
+  activityLogs: ScoreManagementCandidateActivityLog[];
+  examCycleId: string;
+  submittedAt: string | null;
+}
+
+export interface ScoreManagementCandidateActivityLog {
+  id: number;
+  action: string;
+  event: string;
+  outcome: string;
+  timestamp: string;
+  sessionId: string;
+  ipAddress: string;
+  deviceBrowser: string;
+  registrationId: string;
+  applicantId: string;
+  actorRole: string;
+  correlationId: string;
+}
+
+export interface ScoreManagementCandidateProfileResponse {
+  score: ScoreManagementResult;
+  profile: ScoreManagementCandidateProfile | null;
+}
+
 export interface ScoreManagementResultQuery {
   page?: number;
   pageSize?: number;
@@ -88,6 +123,11 @@ interface BackendResultListResponse {
   page: number;
   pageSize: number;
   results: BackendScoreResult[];
+}
+
+interface BackendCandidateProfileResponse {
+  score: BackendScoreResult;
+  profile: ScoreManagementCandidateProfile | null;
 }
 
 interface BackendScoreResult {
@@ -141,6 +181,20 @@ export async function getScoreManagementBatchResultPage(
     page: data.page,
     pageSize: data.pageSize,
     results: data.results.map((row) => mapResult(row, batchId)),
+  };
+}
+
+export async function getScoreManagementCandidateProfile(
+  batchId: string,
+  candidateId: string,
+): Promise<ScoreManagementCandidateProfileResponse> {
+  const response = await sharedApiClient.request<BackendCandidateProfileResponse>(
+    `/api/v1/results/score-management/batches/${encodeURIComponent(batchId)}/results/${encodeURIComponent(candidateId)}/profile/`,
+  );
+  const data = unwrap(response);
+  return {
+    score: mapResult(data.score, batchId),
+    profile: data.profile,
   };
 }
 

@@ -498,7 +498,7 @@ export default function ScoreManagement() {
           <span>
             Showing {rows.length === 0 ? 0 : ((currentPage - 1) * PAGE_SIZE) + 1}
             {'-'}
-            {Math.min(currentPage * PAGE_SIZE, resultCount)} of {resultCount} processed records
+            {Math.min(currentPage * PAGE_SIZE, resultCount)} of {resultCount} approved score records
           </span>
           <div className="flex items-center gap-2">
             <button

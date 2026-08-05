@@ -1,66 +1,64 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Award, BookOpen, Camera, ChevronLeft, ClipboardList, Fingerprint, MapPin, MessageSquare, Search, ShieldAlert, ShieldCheck, User } from 'lucide-react';
 import {
-  Award,
-  BookOpen,
-  Camera,
-  ChevronLeft,
-  Fingerprint,
-  MessageSquare,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  User,
-  XCircle,
-} from 'lucide-react';
-import { cn } from '../../lib/utils';
-import type { Application } from '../../types';
-import {
-  backendApplicationService,
-  mapBackendApplicationToFrontend,
-  type BackendApplication,
-} from '../../services/backendApplicationService';
-import {
-  getScoreManagementBatchResultPage,
+  getScoreManagementCandidateProfile,
   scoreReleaseStatusLabel,
+  type ScoreManagementCandidateActivityLog,
+  type ScoreManagementCandidateProfile,
   type ScoreManagementResult,
 } from '../../services/scoreManagementService';
 
-const STATUS_BADGES: Record<string, string> = {
-  ACCEPTED: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  PENDING: 'bg-amber-50 text-amber-700 border-amber-200',
-  FOR_CORRECTION: 'bg-amber-50 text-amber-700 border-amber-200',
-  REJECTED: 'bg-philsa-red/5 text-philsa-red border-philsa-red/20',
-};
+type ActivityFilter = 'ALL' | 'SUCCESS' | 'FAILED' | 'OTP' | 'VALIDATION' | 'BIOMETRIC';
 
 const PWD_FIELD_KEYS = new Set(['isPwd', 'pwdType', 'pwdCondition', 'pwdIdNumber', 'pwdIdFilename', 'pwdAccommodation']);
-
-function firstNonEmptyString(...values: unknown[]): string {
-  for (const value of values) {
-    if (typeof value !== 'string') continue;
-    const trimmed = value.trim();
-    if (trimmed) return trimmed;
-  }
-  return '';
-}
-
-interface VerificationLog {
-  id: string;
-  type: 'LRN_VERIFICATION' | 'FACIAL_RECOGNITION' | 'SELFIE_VERIFICATION';
-  status: 'FAILED';
-  timestamp: string;
-  code: string;
-  details: string;
-  ip: string;
-  device: string;
-  attemptsLeft: number;
-}
-
-interface AuditEventSpec {
-  event: string;
-  trigger: string;
-  data: string;
-}
+const KNOWN_PERSONAL_FIELDS = new Set([
+  'firstName',
+  'middleName',
+  'lastName',
+  'suffix',
+  'extensionName',
+  'dateOfBirth',
+  'sex',
+  'email',
+  'mobile',
+  'identityVerificationStatus',
+]);
+const ACTIVITY_FILTERS: Array<{ label: string; value: ActivityFilter }> = [
+  { label: 'All Activity Logs', value: 'ALL' },
+  { label: 'Successful Events', value: 'SUCCESS' },
+  { label: 'Failed / Alerts', value: 'FAILED' },
+  { label: 'OTP Events', value: 'OTP' },
+  { label: 'Validation Errors', value: 'VALIDATION' },
+  { label: 'Biometric Checks', value: 'BIOMETRIC' },
+];
+const AUDIT_EVENT_SPECS = [
+  {
+    event: 'Registration Submitted',
+    trigger: 'Applicant successfully submits the registration application.',
+    data: 'Registration ID, Submission Timestamp',
+  },
+  {
+    event: 'OTP Verification Successful',
+    trigger: 'Applicant successfully enters the correct OTP and verifies their email address.',
+    data: 'Masked Email Address, Verification Timestamp',
+  },
+  {
+    event: 'OTP Verification Failed (if applicable)',
+    trigger: 'Applicant enters an invalid or expired OTP.',
+    data: 'Failure Reason, Failed Attempt Count, Timestamp',
+  },
+  {
+    event: 'Account Credentials Created',
+    trigger: 'Applicant successfully creates their email and password.',
+    data: 'Masked Email Address, Account Creation Timestamp',
+  },
+  {
+    event: 'Validation Failed (if applicable)',
+    trigger: 'System detects validation errors during registration that prevent completion.',
+    data: 'Field Name, Validation Error, Timestamp',
+  },
+];
 
 export default function ScoreCandidateDetail() {
   const { batchId, candidateId } = useParams();
@@ -70,36 +68,35 @@ export default function ScoreCandidateDetail() {
   const stateResult = (location.state as { result?: ScoreManagementResult } | null)?.result ?? null;
   const [result, setResult] = useState<ScoreManagementResult | null>(stateResult);
   const [isLoading, setIsLoading] = useState(!stateResult);
+  const [profile, setProfile] = useState<ScoreManagementCandidateProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-
-  const [application, setApplication] = useState<Application | null>(null);
-  const [isLoadingApplication, setIsLoadingApplication] = useState(false);
-  const [reviewerNotes, setReviewerNotes] = useState('');
-
-  const [logSearch, setLogSearch] = useState('');
-  const [logFilterType, setLogFilterType] = useState<'ALL' | 'LRN_VERIFICATION' | 'FACIAL_RECOGNITION' | 'SELFIE_VERIFICATION'>('ALL');
+  const [showSpecRules, setShowSpecRules] = useState(true);
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('ALL');
+  const [activitySearch, setActivitySearch] = useState('');
 
   useEffect(() => {
-    if (stateResult || !batchId || !candidateId) return;
+    if (!batchId || !candidateId) return;
 
     let cancelled = false;
-    setIsLoading(true);
+    if (!stateResult) setIsLoading(true);
+    setIsLoadingProfile(true);
     setErrorMessage('');
 
-    getScoreManagementBatchResultPage(batchId, { search: candidateId, pageSize: 1 })
-      .then((page) => {
+    getScoreManagementCandidateProfile(batchId, candidateId)
+      .then((payload) => {
         if (cancelled) return;
-        const match = page.results.find((row) => row.candidateId === candidateId) ?? page.results[0] ?? null;
-        if (!match) {
-          setErrorMessage('No score record found for this candidate.');
-        }
-        setResult(match);
+        setResult(payload.score);
+        setProfile(payload.profile);
       })
       .catch((error) => {
-        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : 'Unable to load candidate score.');
+        if (!cancelled) setErrorMessage(error instanceof Error ? error.message : 'Unable to load candidate profile.');
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+          setIsLoadingProfile(false);
+        }
       });
 
     return () => {
@@ -107,101 +104,37 @@ export default function ScoreCandidateDetail() {
     };
   }, [batchId, candidateId, stateResult]);
 
-  useEffect(() => {
-    if (!result?.lrn) {
-      setApplication(null);
-      setReviewerNotes('');
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoadingApplication(true);
-
-    void backendApplicationService.getApplicationByLrn(result.lrn).then((response) => {
-      if (cancelled) return;
-      setIsLoadingApplication(false);
-      if (response.ok === false) {
-        setApplication(null);
-        setReviewerNotes('');
-        return;
-      }
-      const data: BackendApplication = response.data;
-      const mapped = mapBackendApplicationToFrontend(data, data.id);
-      setApplication(mapped);
-      const reviewStep = data.reviewStep ?? {};
-      setReviewerNotes(firstNonEmptyString(reviewStep.reviewerReason, reviewStep.reason, reviewStep.reviewNotes));
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [result?.lrn]);
-
-  const [verificationLogs, setVerificationLogs] = useState<VerificationLog[]>([]);
-  const [auditEventSpecs, setAuditEventSpecs] = useState<AuditEventSpec[]>([]);
-  const [showSpecRules, setShowSpecRules] = useState(true);
-
-  useEffect(() => {
-    if (!application?.id) {
-      setVerificationLogs([]);
-      setAuditEventSpecs([]);
-      return;
-    }
-    const saved = localStorage.getItem(`philsa_failed_verification_logs_${application.id}`);
-    if (!saved) {
-      setVerificationLogs([]);
-    } else {
-      try {
-        setVerificationLogs(JSON.parse(saved));
-      } catch {
-        setVerificationLogs([]);
-      }
-    }
-
-    const savedSpecs = localStorage.getItem(`philsa_audit_event_specs_${application.id}`);
-    if (!savedSpecs) {
-      setAuditEventSpecs([]);
-    } else {
-      try {
-        setAuditEventSpecs(JSON.parse(savedSpecs));
-      } catch {
-        setAuditEventSpecs([]);
-      }
-    }
-  }, [application?.id]);
-
-  const filteredLogs = useMemo(() => {
-    return verificationLogs.filter((log) => {
-      const matchesType = logFilterType === 'ALL' || log.type === logFilterType;
-      const matchesSearch = logSearch === '' ||
-        log.code.toLowerCase().includes(logSearch.toLowerCase()) ||
-        log.details.toLowerCase().includes(logSearch.toLowerCase()) ||
-        log.device.toLowerCase().includes(logSearch.toLowerCase()) ||
-        log.ip.toLowerCase().includes(logSearch.toLowerCase());
-      return matchesType && matchesSearch;
-    });
-  }, [verificationLogs, logFilterType, logSearch]);
-
   const displayId = result?.candidateId ?? candidateId ?? '';
-
-  let percentileValue = 'N/A';
-  if (result?.percentile !== null && result?.percentile !== undefined) {
-    percentileValue = result.percentile.toFixed(2);
-  }
-
-  const registrationFields: Record<string, string> = application?.additionalHighPriorityFields ?? {};
-  const additionalRegistrationFields = Object.entries(registrationFields).filter(
-    (field): field is [string, string] => !PWD_FIELD_KEYS.has(field[0]) && Boolean(field[1]),
+  const percentileValue = result?.percentile === null || result?.percentile === undefined
+    ? 'N/A'
+    : result.percentile.toFixed(2);
+  const personal = profile?.personal ?? {};
+  const address = profile?.address ?? {};
+  const school = profile?.school ?? {};
+  const reviewStep = profile?.reviewStep ?? {};
+  const additionalRegistrationFields = Object.entries(personal).filter(
+    ([field, value]) => !knownPersonalField(field) && !PWD_FIELD_KEYS.has(field) && Boolean(value),
   );
-  const pwdFieldCandidates: Array<[string, string | undefined]> = [
-    ['PWD', registrationFields.isPwd],
-    ['PWD Type', registrationFields.pwdType],
-    ['Condition', registrationFields.pwdCondition],
-    ['PWD ID Number', registrationFields.pwdIdNumber],
-    ['PWD ID Attachment', registrationFields.pwdIdFilename],
-    ['Accommodation Needed', registrationFields.pwdAccommodation],
-  ];
-  const pwdFields = pwdFieldCandidates.filter((field): field is [string, string] => Boolean(field[1]));
+  const pwdFields = Object.entries(personal)
+    .filter(([field, value]) => PWD_FIELD_KEYS.has(field) && Boolean(value))
+    .map(([field, value]) => [pwdLabel(field), value] as const);
+  const reviewerReason = firstNonEmptyString(reviewStep.reviewerReason, reviewStep.reason, reviewStep.reviewNotes);
+  const reviewerDirectives = firstNonEmptyString(reviewerReason, reviewStep.requiredCorrections);
+  const activityRows = useMemo(() => buildActivityRows(profile), [profile]);
+  const filteredActivityRows = useMemo(() => {
+    const query = activitySearch.trim().toLowerCase();
+    return activityRows.filter((row) => {
+      const matchesFilter = activityFilter === 'ALL' ||
+        row.category === activityFilter ||
+        (activityFilter === 'SUCCESS' && row.outcome === 'success') ||
+        (activityFilter === 'FAILED' && row.outcome !== 'success');
+      const matchesSearch = !query ||
+        row.activity.toLowerCase().includes(query) ||
+        row.details.toLowerCase().includes(query) ||
+        row.timestamp.toLowerCase().includes(query);
+      return matchesFilter && matchesSearch;
+    });
+  }, [activityFilter, activityRows, activitySearch]);
 
   return (
     <div className="space-y-8 font-sans">
@@ -209,18 +142,18 @@ export default function ScoreCandidateDetail() {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="p-2 hover:bg-philsa-bg rounded-lg transition-colors border border-philsa-border shadow-sm text-philsa-red"
+          className="rounded-lg border border-philsa-border p-2 text-philsa-red shadow-sm transition-colors hover:bg-philsa-bg"
         >
-          <ChevronLeft className="w-5 h-5" />
+          <ChevronLeft className="h-5 w-5" />
         </button>
-        <h1 className="text-2xl font-extrabold text-philsa-navy tracking-tight uppercase">
+        <h1 className="text-2xl font-extrabold uppercase tracking-tight text-philsa-navy">
           Candidate Result: {displayId}
         </h1>
       </div>
 
-      <div className="inline-flex items-center gap-2 bg-white border border-philsa-border rounded-2xl px-5 py-3 shadow-sm w-fit">
-        <User className="w-4 h-4 text-philsa-red" />
-        <span className="text-sm font-bold text-philsa-navy">Student Profile & Application Details</span>
+      <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-philsa-border bg-white px-5 py-3 shadow-sm">
+        <Award className="h-4 w-4 text-philsa-red" />
+        <span className="text-sm font-bold text-philsa-navy">Score Result Details</span>
       </div>
 
       {errorMessage && (
@@ -230,285 +163,280 @@ export default function ScoreCandidateDetail() {
       )}
 
       {isLoading && (
-        <div className="card-philsa p-10 bg-white border border-philsa-border text-center text-xs italic text-slate-400">
+        <div className="card-philsa border border-philsa-border bg-white p-10 text-center text-xs italic text-slate-400">
           Loading candidate examination record...
         </div>
       )}
 
       {!isLoading && result && (
-        <div className="card-philsa p-10 bg-white border border-philsa-border relative overflow-hidden space-y-10">
-          <div className="absolute top-0 right-0 p-8 opacity-5">
-            <User className="w-32 h-32 text-philsa-navy" />
+        <div className="card-philsa relative space-y-8 overflow-hidden border border-philsa-border bg-white p-10">
+          <div className="absolute right-0 top-0 p-8 opacity-5">
+            <User className="h-32 w-32 text-philsa-navy" />
           </div>
 
-          <div className="space-y-4 relative z-10 text-philsa-navy">
-            <h3 className="text-xs font-bold text-[#8A1538] uppercase tracking-wider pb-1.5 border-b border-[#8A1538]/20 flex items-center gap-2">
-              <Award className="w-4 h-4 text-[#00563F]" /> Examination Result
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 bg-gray-50/50 p-6 rounded-xl border border-gray-100">
+          <section className="relative z-10 space-y-4 text-philsa-navy">
+            <h2 className="flex items-center gap-2 border-b border-[#8A1538]/20 pb-1.5 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+              <Award className="h-4 w-4 text-[#00563F]" />
+              Examination Result
+            </h2>
+            <div className="grid grid-cols-1 gap-6 rounded-xl border border-gray-100 bg-gray-50/50 p-6 sm:grid-cols-2 md:grid-cols-3">
+              <DataRow label="Candidate ID" value={result.candidateId} />
+              <DataRow label="Candidate Name" value={result.candidateName} />
+              <DataRow label="Learner Reference Number" value={result.lrn} />
               <DataRow label="Examination Set" value={result.examSetId || result.examName} />
               <DataRow label="Final Score" value={result.finalScoreDisplay} />
               <DataRow label="Percentile Rank" value={percentileValue} />
               <DataRow label="Overall Rank" value={result.rank === null ? 'N/A' : `#${result.rank}`} />
               <DataRow label="Result Status" value={scoreReleaseStatusLabel(result.releaseStatus)} />
+              <DataRow label="Batch" value={batchId ?? result.examName} />
             </div>
-          </div>
+          </section>
 
-          {isLoadingApplication && (
-            <p className="text-[10px] font-black uppercase tracking-widest text-philsa-gray relative z-10">
+          <section className="relative z-10 space-y-4 text-philsa-navy">
+            <h2 className="flex items-center gap-2 border-b border-[#8A1538]/20 pb-1.5 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+              <BookOpen className="h-4 w-4 text-[#00563F]" />
+              Score Components
+            </h2>
+            <div className="grid grid-cols-1 gap-6 rounded-xl border border-gray-100 bg-gray-50/50 p-6 sm:grid-cols-2 md:grid-cols-3">
+              <DataRow label="Raw Score" value={String(result.rawScore)} />
+              <DataRow label="Maximum Score" value={String(result.maxScore)} />
+              <DataRow label="Computed Final Score" value={`${result.finalScore.toFixed(2)}%`} />
+            </div>
+          </section>
+
+          {isLoadingProfile && (
+            <p className="relative z-10 text-[10px] font-black uppercase tracking-widest text-philsa-gray">
               Loading registered candidate information...
             </p>
           )}
 
-          {application && (
+          {!isLoadingProfile && !profile && (
+            <div className="relative z-10 rounded-xl border border-amber-100 bg-amber-50/60 p-6">
+              <p className="text-xs font-semibold italic text-amber-800">
+                No linked student application profile was found for this score record.
+              </p>
+            </div>
+          )}
+
+          {profile && (
             <>
-              <div className="space-y-4 relative z-10 text-philsa-navy">
-                <h3 className="text-xs font-bold text-[#8A1538] uppercase tracking-wider pb-1.5 border-b border-[#8A1538]/20 flex items-center gap-2">
-                  <User className="w-4 h-4 text-[#00563F]" /> Personal Information
-                </h3>
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-                  <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-xl border border-gray-100">
-                    <DataRow label="First Name" value={application.firstName} />
-                    <DataRow label="Middle Name" value={application.middleName || 'None'} />
-                    <DataRow label="Last Name" value={application.lastName} />
-                    <DataRow label="Suffix" value={application.suffix || 'None'} />
-                    <DataRow label="Date of Birth" value={application.dob} />
-                    <DataRow label="Gender" value={application.gender || 'Unspecified'} />
-                    <DataRow label="Place of Birth" value={application.birthPlace || 'Unspecified'} />
-                    <DataRow label="Nationality" value={application.nationality || 'Filipino'} />
-                    <DataRow label="Email Address" value={application.email} />
-                    <DataRow label="Mobile Number" value={application.mobile} />
-                  </div>
-
-                  <div className="lg:col-span-1 rounded-xl border border-gray-100 bg-gray-50/50 p-6 flex flex-col items-center text-center">
-                    <div className="w-full aspect-square rounded-2xl overflow-hidden bg-white border-4 border-white mb-4 shadow-lg ring-1 ring-philsa-border flex items-center justify-center">
-                      {application.photoUrl ? (
-                        <img
-                          src={application.photoUrl}
-                          alt={`${application.firstName} ${application.lastName}`}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <User className="w-14 h-14 text-slate-300" />
-                      )}
-                    </div>
-                    <h2 className="text-sm font-black text-philsa-navy leading-tight">
-                      {application.firstName} {application.lastName}
-                    </h2>
-                    <p className="text-philsa-red text-[10px] font-black uppercase tracking-widest mt-1 mb-3">
-                      {application.candidateId}
-                    </p>
-                    <span className={cn(
-                      'inline-flex items-center px-4 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest',
-                      STATUS_BADGES[application.status] ?? 'bg-slate-50 text-slate-600 border-slate-200',
-                    )}>
-                      {application.status.replace('_', ' ')}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4 relative z-10 text-philsa-navy">
-                <h3 className="text-xs font-bold text-[#8A1538] uppercase tracking-wider pb-1.5 border-b border-[#8A1538]/20 flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-[#00563F]" /> Registry & Educational Background
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-xl border border-gray-100">
-                  <DataRow label="Learner Reference Number (LRN)" value={application.lrn} />
-                  <DataRow label="School ID" value={application.schoolId || 'Unspecified'} />
-                  <DataRow label="High School Name" value={application.schoolName} />
-                  <DataRow label="High School Address" value={application.schoolAddress} />
-                  <DataRow label="Academic Track" value={application.academicTrack} />
-                  <DataRow label="Grade Level" value={application.gradeLevel} />
-                  <DataRow label="Enrollment Status" value={application.enrollmentStatus || 'Unspecified'} />
-                  <DataRow label="School Year" value={application.schoolYear || 'Unspecified'} />
-                  <DataRow label="GWA" value={String(application.gwa || 'Unspecified')} />
-                  {additionalRegistrationFields.map(([field, value]) => (
-                    <DataRow key={field} label={field} value={value} />
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-4 relative z-10 text-philsa-navy">
-                <h3 className="text-xs font-bold text-[#8A1538] uppercase tracking-wider pb-1.5 border-b border-[#8A1538]/20 flex items-center gap-2">
-                  <ShieldAlert className="w-4 h-4 text-[#00563F]" /> Person With Disability (PWD) Status & Accommodations
-                </h3>
-                {pwdFields.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 bg-gray-50/50 p-6 rounded-xl border border-gray-100">
-                    {pwdFields.map(([field, value]) => (
-                      <DataRow key={field} label={field} value={value} />
+              <section className="relative z-10 space-y-4 text-philsa-navy">
+                <h2 className="flex items-center gap-2 border-b border-[#8A1538]/20 pb-1.5 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+                  <User className="h-4 w-4 text-[#00563F]" />
+                  Personal Information
+                </h2>
+                <div className="grid gap-6 rounded-xl border border-gray-100 bg-gray-50/50 p-6 lg:grid-cols-[minmax(0,1fr)_190px]">
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3">
+                    <DataRow label="Application Candidate ID" value={profile.candidateId} />
+                    <DataRow label="Application Status" value={profile.status.replace('_', ' ')} />
+                    <DataRow label="First Name" value={textValue(personal.firstName)} />
+                    <DataRow label="Middle Name" value={textValue(personal.middleName, 'None')} />
+                    <DataRow label="Last Name" value={textValue(personal.lastName)} />
+                    <DataRow label="Suffix" value={textValue(personal.suffix || personal.extensionName, 'None')} />
+                    <DataRow label="Date of Birth" value={textValue(personal.dateOfBirth)} />
+                    <DataRow label="Sex" value={textValue(personal.sex)} />
+                    <DataRow label="Email Address" value={textValue(personal.email)} />
+                    <DataRow label="Mobile Number" value={textValue(personal.mobile)} />
+                    <DataRow label="Identity Status" value={textValue(personal.identityVerificationStatus)} />
+                    {additionalRegistrationFields.map(([field, value]) => (
+                      <DataRow key={field} label={field} value={textValue(value)} />
                     ))}
                   </div>
-                ) : (
-                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-6 flex items-center gap-3">
-                    <User className="w-4 h-4 text-amber-600 shrink-0" />
-                    <p className="text-xs font-semibold text-amber-800 italic">
+                  <div className="rounded-xl border border-white bg-white p-3 shadow-xs">
+                    <div className="flex aspect-[3/4] items-center justify-center overflow-hidden rounded-lg border border-gray-100 bg-philsa-bg">
+                      {profile.photoUrl ? (
+                        <img src={profile.photoUrl} alt={`${result.candidateName} profile`} className="h-full w-full object-cover" />
+                      ) : (
+                        <User className="h-14 w-14 text-slate-300" />
+                      )}
+                    </div>
+                    <p className="mt-3 text-center text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+                      Student Photo
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="relative z-10 space-y-4 text-philsa-navy">
+                <h2 className="flex items-center gap-2 border-b border-[#8A1538]/20 pb-1.5 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+                  <MapPin className="h-4 w-4 text-[#00563F]" />
+                  Address Information
+                </h2>
+                <div className="grid grid-cols-1 gap-6 rounded-xl border border-gray-100 bg-gray-50/50 p-6 sm:grid-cols-2 md:grid-cols-3">
+                  <DataRow label="Region" value={textValue(address.region)} />
+                  <DataRow label="Province" value={textValue(address.province)} />
+                  <DataRow label="City" value={textValue(address.city)} />
+                  <DataRow label="Barangay" value={textValue(address.barangay)} />
+                  <DataRow label="Street" value={textValue(address.street)} />
+                  <DataRow label="Postal Code" value={textValue(address.postalCode)} />
+                </div>
+              </section>
+
+              <section className="relative z-10 space-y-4 text-philsa-navy">
+                <h2 className="flex items-center gap-2 border-b border-[#8A1538]/20 pb-1.5 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+                  <BookOpen className="h-4 w-4 text-[#00563F]" />
+                  Registry & Educational Background
+                </h2>
+                <div className="grid grid-cols-1 gap-6 rounded-xl border border-gray-100 bg-gray-50/50 p-6 sm:grid-cols-2 md:grid-cols-3">
+                  <DataRow label="Learner Reference Number" value={textValue(school.lrn || result.lrn)} />
+                  <DataRow label="School ID" value={textValue(school.schoolId)} />
+                  <DataRow label="High School Name" value={textValue(school.name)} />
+                  <DataRow label="Academic Track" value={textValue(school.academicTrack)} />
+                  <DataRow label="Grade Level" value={textValue(school.gradeLevel)} />
+                  <DataRow label="Enrollment Status" value={textValue(school.enrollmentStatus)} />
+                  <DataRow label="School Year" value={textValue(school.schoolYear)} />
+                  <DataRow label="GWA" value={textValue(school.gwa)} />
+                </div>
+              </section>
+
+              <section className="relative z-10 space-y-4 text-philsa-navy">
+                <h2 className="flex items-center gap-2 border-b border-[#8A1538]/20 pb-1.5 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+                  <ClipboardList className="h-4 w-4 text-[#00563F]" />
+                  Course Preferences
+                </h2>
+                <div className="grid grid-cols-1 gap-4 rounded-xl border border-gray-100 bg-gray-50/50 p-6 md:grid-cols-2">
+                  {profile.coursePreferences.length === 0 ? (
+                    <p className="text-xs font-semibold italic text-slate-500">No course preferences recorded.</p>
+                  ) : (
+                    profile.coursePreferences.map((preference, index) => (
+                      <div key={`${preference.university}-${preference.course}-${index}`} className="rounded-lg border border-gray-100 bg-white p-4">
+                        <DataRow label={`Preference ${index + 1}`} value={`${textValue(preference.university)} - ${textValue(preference.course)}`} />
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <section className="relative z-10 space-y-4 text-philsa-navy">
+                <h2 className="flex items-center gap-2 border-b border-[#8A1538]/20 pb-1.5 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+                  <ShieldAlert className="h-4 w-4 text-[#00563F]" />
+                  Person With Disability (PWD) Status & Accommodations
+                </h2>
+                {pwdFields.length === 0 ? (
+                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-6">
+                    <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-[10px] font-black uppercase tracking-widest text-slate-700">
+                      <User className="h-3.5 w-3.5" />
+                      No PWD Declaration
+                    </span>
+                    <p className="mt-4 text-xs font-semibold italic text-slate-600">
                       Student candidate declared no disability or special examination accommodations during registration.
                     </p>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-6 rounded-xl border border-gray-100 bg-gray-50/50 p-6 sm:grid-cols-2 md:grid-cols-3">
+                    {pwdFields.map(([field, value]) => <DataRow key={field} label={field} value={textValue(value)} />)}
+                  </div>
                 )}
-              </div>
+              </section>
 
-              <div className="space-y-4 relative z-10 text-philsa-navy">
-                <div className="flex items-center justify-between gap-4 pb-1.5 border-b border-[#8A1538]/20">
-                  <h3 className="text-xs font-bold text-[#8A1538] uppercase tracking-wider flex items-center gap-2">
-                    <Fingerprint className="w-4 h-4 text-[#00563F]" /> Biometric & Identity Verification Logs
-                  </h3>
+              <section className="relative z-10 space-y-4 text-philsa-navy">
+                <div className="flex items-center justify-between gap-4 border-b border-[#8A1538]/20 pb-1.5">
+                  <h2 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#8A1538]">
+                    <Fingerprint className="h-4 w-4 text-[#00563F]" />
+                    Biometric & Identity Verification Logs
+                  </h2>
                   <button
                     type="button"
                     onClick={() => setShowSpecRules((current) => !current)}
-                    className="text-[10px] font-bold text-slate-500 hover:text-philsa-navy underline underline-offset-2 shrink-0"
+                    className="shrink-0 text-[10px] font-bold text-slate-500 underline underline-offset-2 hover:text-philsa-navy"
                   >
                     {showSpecRules ? 'Hide' : 'Show'} Specification Rules
                   </button>
                 </div>
-                <div className="bg-slate-50/50 p-6 rounded-xl border border-slate-200/60 space-y-6">
 
+                <div className="space-y-6 rounded-xl border border-slate-200/60 bg-slate-50/50 p-6">
                   {showSpecRules && (
-                    <div className="rounded-xl border border-amber-100 bg-amber-50/60 overflow-hidden">
-                      <div className="px-4 py-3 border-b border-amber-100 bg-amber-100/40">
+                    <div className="overflow-hidden rounded-xl border border-amber-100 bg-amber-50/60">
+                      <div className="border-b border-amber-100 bg-amber-100/40 px-4 py-3">
                         <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-amber-800">
-                          <ShieldAlert className="w-3.5 h-3.5" /> Audit Event Trigger & Data Capture Specifications
+                          <ShieldAlert className="h-3.5 w-3.5" />
+                          Audit Event Trigger & Data Capture Specifications
                         </p>
                       </div>
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">
+                        <table className="w-full border-collapse text-left text-xs">
+                          <thead className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
                             <tr>
-                              <th className="px-4 py-2 whitespace-nowrap">Audit Event</th>
+                              <th className="px-4 py-2">Audit Event</th>
                               <th className="px-4 py-2">Trigger</th>
-                              <th className="px-4 py-2">Data to Capture</th>
+                              <th className="px-4 py-2">Data To Capture</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-amber-100/70">
-                            {auditEventSpecs.length === 0 ? (
-                              <tr>
-                                <td colSpan={3} className="px-4 py-6 text-center text-amber-700/70 italic font-medium">
-                                  No audit event specifications recorded for this application.
-                                </td>
+                            {AUDIT_EVENT_SPECS.map((spec) => (
+                              <tr key={spec.event}>
+                                <td className="px-4 py-2.5 font-bold text-philsa-navy">{spec.event}</td>
+                                <td className="px-4 py-2.5 text-slate-600">{spec.trigger}</td>
+                                <td className="px-4 py-2.5 font-mono text-[10px] text-slate-500">{spec.data}</td>
                               </tr>
-                            ) : (
-                              auditEventSpecs.map((spec) => (
-                                <tr key={spec.event}>
-                                  <td className="px-4 py-2.5 font-bold text-philsa-navy whitespace-nowrap align-top">{spec.event}</td>
-                                  <td className="px-4 py-2.5 text-slate-600 align-top">{spec.trigger}</td>
-                                  <td className="px-4 py-2.5 font-mono text-[10px] text-slate-500 align-top">{spec.data}</td>
-                                </tr>
-                              ))
-                            )}
+                            ))}
                           </tbody>
                         </table>
                       </div>
                     </div>
                   )}
 
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-200/60">
+                  <div className="flex flex-col justify-between gap-3 border-t border-slate-200/60 pt-3 sm:flex-row sm:items-center">
                     <div className="flex flex-wrap gap-1.5">
-                      {(['ALL', 'LRN_VERIFICATION', 'FACIAL_RECOGNITION', 'SELFIE_VERIFICATION'] as const).map((t) => {
-                        const count = t === 'ALL' ? verificationLogs.length : verificationLogs.filter((l) => l.type === t).length;
-                        const label = t === 'ALL' ? 'All Failures' : t.replace('_', ' ');
-                        const isSelected = logFilterType === t;
+                      {ACTIVITY_FILTERS.map((filter) => {
+                        const isSelected = activityFilter === filter.value;
                         return (
                           <button
-                            key={t}
+                            key={filter.value}
                             type="button"
-                            onClick={() => setLogFilterType(t)}
-                            className={cn(
-                              'px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer',
+                            onClick={() => setActivityFilter(filter.value)}
+                            className={`rounded-full px-3 py-1 text-[10px] font-extrabold uppercase tracking-wider transition-all ${
                               isSelected
                                 ? 'bg-slate-800 text-white shadow-xs'
-                                : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200',
-                            )}
+                                : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                            }`}
                           >
-                            {label}
-                            <span className={cn(
-                              'px-1.5 py-0.2 rounded-full text-[8px] font-mono',
-                              isSelected ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500',
-                            )}>
-                              {count}
-                            </span>
+                            {filter.label}
                           </button>
                         );
                       })}
                     </div>
 
-                    <div className="relative max-w-xs w-full sm:w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <div className="relative w-full max-w-xs sm:w-64">
+                      <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Filter details or log code..."
-                        value={logSearch}
-                        onChange={(event) => setLogSearch(event.target.value)}
-                        className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold focus:ring-1 focus:ring-philsa-blue text-slate-800 bg-white"
+                        placeholder="Filter date, activity, or details..."
+                        value={activitySearch}
+                        onChange={(event) => setActivitySearch(event.target.value)}
+                        className="w-full rounded-lg border border-slate-200 bg-white py-1.5 pl-9 pr-3 text-xs font-semibold text-slate-800 focus:ring-1 focus:ring-philsa-blue"
                       />
                     </div>
                   </div>
 
-                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs bg-white">
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
                     <div className="max-h-72 overflow-y-auto">
-                      <table className="w-full border-collapse text-left text-xs">
-                        <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider sticky top-0 z-10">
+                      <table className="w-full min-w-[760px] border-collapse text-left text-xs">
+                        <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                           <tr>
-                            <th className="px-4 py-3 bg-slate-50">Timestamp & ID</th>
-                            <th className="px-4 py-3 bg-slate-50">Trace Type</th>
-                            <th className="px-4 py-3 bg-slate-50">Error Code & Details</th>
-                            <th className="px-4 py-3 bg-slate-50">Device & Client IP</th>
-                            <th className="px-4 py-3 text-right bg-slate-50">Attempts Status</th>
+                            <th className="bg-slate-50 px-4 py-3">Date & Time</th>
+                            <th className="bg-slate-50 px-4 py-3">Activity</th>
+                            <th className="bg-slate-50 px-4 py-3">Details</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {filteredLogs.length === 0 ? (
+                          {filteredActivityRows.length === 0 ? (
                             <tr>
-                              <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic font-medium">
-                                No matched verification failures found for this candidate.
+                              <td colSpan={3} className="px-4 py-8 text-center font-medium italic text-slate-400">
+                                No matched verification activity found for this candidate.
                               </td>
                             </tr>
                           ) : (
-                            filteredLogs.map((log) => (
-                              <tr key={log.id} className="hover:bg-red-50/5 transition-colors">
-                                <td className="px-4 py-3 font-mono text-[10px] text-slate-500">
-                                  <div className="font-bold text-slate-700">{log.timestamp}</div>
-                                  <div className="text-[9px] text-slate-400 mt-0.5">{log.id}</div>
-                                </td>
+                            filteredActivityRows.map((row) => (
+                              <tr key={row.id} className="transition-colors hover:bg-slate-50">
+                                <td className="px-4 py-3 font-mono text-[10px] text-slate-600">{row.timestamp}</td>
                                 <td className="px-4 py-3">
-                                  {log.type === 'LRN_VERIFICATION' && (
-                                    <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-200 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md">
-                                      <BookOpen className="w-2.5 h-2.5" /> LRN Sync
-                                    </span>
-                                  )}
-                                  {log.type === 'FACIAL_RECOGNITION' && (
-                                    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md">
-                                      <Fingerprint className="w-2.5 h-2.5" /> Facial Bio
-                                    </span>
-                                  )}
-                                  {log.type === 'SELFIE_VERIFICATION' && (
-                                    <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md">
-                                      <Camera className="w-2.5 h-2.5" /> Selfie Match
-                                    </span>
-                                  )}
+                                  <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${activityToneClass(row.outcome)}`}>
+                                    {row.category === 'BIOMETRIC' ? <Camera className="h-2.5 w-2.5" /> : <ShieldCheck className="h-2.5 w-2.5" />}
+                                    {row.activity}
+                                  </span>
                                 </td>
-                                <td className="px-4 py-3 max-w-xs md:max-w-md">
-                                  <div className="font-mono font-black text-philsa-navy text-[10px] flex items-center gap-1">
-                                    <ShieldAlert className="w-3 h-3 text-philsa-red" />
-                                    {log.code}
-                                  </div>
-                                  <p className="text-[10px] text-slate-600 mt-1 font-medium leading-relaxed break-words">
-                                    {log.details}
-                                  </p>
-                                </td>
-                                <td className="px-4 py-3 font-mono text-[10px] text-slate-500">
-                                  <div className="font-bold text-slate-700 truncate max-w-[140px]" title={log.device}>{log.device}</div>
-                                  <div className="text-[9px] text-slate-400 mt-0.5">IP: {log.ip}</div>
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <div className="flex flex-col items-end gap-1">
-                                    <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md">
-                                      <XCircle className="w-2.5 h-2.5" /> FAILED
-                                    </span>
-                                    <span className="text-[9px] text-slate-500 font-bold">
-                                      Attempts left: <span className="font-mono font-extrabold text-philsa-red">{log.attemptsLeft}</span>
-                                    </span>
-                                  </div>
-                                </td>
+                                <td className="px-4 py-3 text-slate-600">{row.details}</td>
                               </tr>
                             ))
                           )}
@@ -517,30 +445,29 @@ export default function ScoreCandidateDetail() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              <div className="pt-10 border-t border-philsa-border relative z-10">
-                <h3 className="text-[10px] font-black text-philsa-navy uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-philsa-red" /> Official Reviewer Directives
-                </h3>
+              <section className="relative z-10 border-t border-philsa-border pt-10">
+                <h2 className="mb-6 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-philsa-navy">
+                  <MessageSquare className="h-5 w-5 text-philsa-red" />
+                  Official Reviewer Directives
+                </h2>
                 <textarea
-                  className="w-full bg-philsa-bg border-none rounded-2xl p-6 text-sm font-medium focus:ring-2 focus:ring-philsa-red/10 outline-none min-h-[160px] resize-none shadow-inner text-philsa-navy"
-                  placeholder="Provide detailed compliance notes or remediation instructions..."
-                  value={reviewerNotes}
-                  onChange={(event) => setReviewerNotes(event.target.value)}
+                  className="min-h-[160px] w-full resize-none rounded-2xl border-none bg-philsa-bg p-6 text-sm font-medium text-philsa-navy shadow-inner outline-none focus:ring-2 focus:ring-philsa-red/10"
+                  value={reviewerDirectives || 'No reviewer directives recorded for this candidate.'}
+                  readOnly
                 />
-
-                <div className="mt-10 p-8 bg-philsa-bg/30 rounded-3xl border border-philsa-border border-dashed">
+                <div className="mt-10 rounded-3xl border border-dashed border-philsa-border bg-philsa-bg/30 p-8">
                   <p className="flex items-center gap-2 text-xs font-bold italic text-philsa-navy">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" /> All personal data cross-referenced with PhilSys registry.
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600" />
+                    Candidate profile is displayed from the score-anchored read-only registration record.
                   </p>
                 </div>
-              </div>
+              </section>
             </>
           )}
         </div>
       )}
-
     </div>
   );
 }
@@ -548,8 +475,167 @@ export default function ScoreCandidateDetail() {
 function DataRow({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <div>
-      <p className="text-[10px] font-black text-philsa-gray uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-sm font-bold text-philsa-navy leading-snug">{value}</p>
+      <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-philsa-gray">{label}</p>
+      <p className="text-sm font-bold leading-snug text-philsa-navy">{value}</p>
     </div>
   );
+}
+
+function textValue(value: unknown, fallback = 'Unspecified'): string {
+  if (Array.isArray(value)) {
+    const joined = value.map((item) => textValue(item, '')).filter(Boolean).join('; ');
+    return joined || fallback;
+  }
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'number') return String(value);
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    const text = textValue(value, '');
+    if (text) return text;
+  }
+  return '';
+}
+
+function knownPersonalField(field: string): boolean {
+  return KNOWN_PERSONAL_FIELDS.has(field);
+}
+
+function pwdLabel(field: string): string {
+  const labels: Record<string, string> = {
+    isPwd: 'PWD',
+    pwdType: 'PWD Type',
+    pwdCondition: 'Condition',
+    pwdIdNumber: 'PWD ID Number',
+    pwdIdFilename: 'PWD ID Attachment',
+    pwdAccommodation: 'Accommodation Needed',
+  };
+  return labels[field] ?? field;
+}
+
+interface ActivityRow {
+  id: string;
+  timestamp: string;
+  activity: string;
+  details: string;
+  outcome: string;
+  category: ActivityFilter;
+}
+
+function buildActivityRows(profile: ScoreManagementCandidateProfile | null): ActivityRow[] {
+  if (!profile) return [];
+  const rows = (profile.activityLogs ?? []).map((log) => mapActivityLog(log, profile));
+
+  const timestamp = formatTimestamp(profile.submittedAt);
+  const email = textValue(profile.personal.email, '');
+  if (profile.submittedAt && !rows.some((row) => row.activity === 'Registration Submitted')) {
+    rows.push({
+      id: 'submitted',
+      timestamp,
+      activity: 'Registration Submitted',
+      details: `Application submitted for review (Registration ID: ${profile.candidateId})`,
+      outcome: 'success',
+      category: 'SUCCESS',
+    });
+  }
+  if (email && !rows.some((row) => row.activity.includes('OTP Verification'))) {
+    rows.push({
+      id: 'otp-success',
+      timestamp,
+      activity: 'OTP Verification Successful',
+      details: `Email verified (${maskEmail(email)})`,
+      outcome: 'success',
+      category: 'OTP',
+    });
+  }
+  if (email && !rows.some((row) => row.activity === 'Account Credentials Created')) {
+    rows.push({
+      id: 'account-created',
+      timestamp,
+      activity: 'Account Credentials Created',
+      details: `Email account registered successfully (${maskEmail(email)})`,
+      outcome: 'success',
+      category: 'SUCCESS',
+    });
+  }
+  const identityStatus = textValue(profile.personal.identityVerificationStatus, '');
+  if (identityStatus && !rows.some((row) => row.category === 'BIOMETRIC')) {
+    rows.push({
+      id: 'identity-status',
+      timestamp,
+      activity: 'Biometric Liveness Verification',
+      details: `Identity verification status: ${identityStatus}`,
+      outcome: 'success',
+      category: 'BIOMETRIC',
+    });
+  }
+  return rows;
+}
+
+function mapActivityLog(log: ScoreManagementCandidateActivityLog, profile: ScoreManagementCandidateProfile): ActivityRow {
+  const activity = activityLabel(log.action);
+  return {
+    id: String(log.id),
+    timestamp: formatTimestamp(log.timestamp),
+    activity,
+    details: activityDetails(log, activity, profile),
+    outcome: log.outcome || 'success',
+    category: activityCategory(log.action, log.event),
+  };
+}
+
+function activityLabel(action: string): string {
+  const labels: Record<string, string> = {
+    REGISTRATION_SUBMITTED: 'Registration Submitted',
+    REGISTRATION_STUDENT_ACCOUNT_ACTIVATED: 'Account Credentials Created',
+  };
+  return labels[action] ?? action.split('_').map((part) => `${part.slice(0, 1)}${part.slice(1).toLowerCase()}`).join(' ');
+}
+
+function activityDetails(log: ScoreManagementCandidateActivityLog, activity: string, profile: ScoreManagementCandidateProfile): string {
+  if (log.action === 'REGISTRATION_SUBMITTED') {
+    return `Application submitted for review (Registration ID: ${log.registrationId || profile.candidateId})`;
+  }
+  if (log.action === 'REGISTRATION_STUDENT_ACCOUNT_ACTIVATED') {
+    return `Student account activated (${log.actorRole || 'Student'})`;
+  }
+  const session = log.sessionId ? `Session: ${log.sessionId}` : '';
+  const device = log.deviceBrowser ? `Device: ${log.deviceBrowser}` : '';
+  return [activity, session, device].filter(Boolean).join(' - ');
+}
+
+function activityCategory(action: string, event: string): ActivityFilter {
+  const text = `${action} ${event}`.toUpperCase();
+  if (text.includes('OTP')) return 'OTP';
+  if (text.includes('VALIDATION')) return 'VALIDATION';
+  if (text.includes('BIOMETRIC') || text.includes('SELFIE') || text.includes('FACE')) return 'BIOMETRIC';
+  return 'SUCCESS';
+}
+
+function activityToneClass(outcome: string): string {
+  if (outcome !== 'success') return 'border-red-200 bg-red-50 text-red-700';
+  return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+}
+
+function formatTimestamp(value: string | null): string {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function maskEmail(email: string): string {
+  const [name, domain] = email.split('@');
+  if (!name || !domain) return email;
+  return `${name.slice(0, 1)}*****@${domain}`;
 }

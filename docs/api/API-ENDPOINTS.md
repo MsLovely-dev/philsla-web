@@ -46,11 +46,12 @@ The baseline health and authentication boundaries plus the first student-applica
 | `PUT`, `PATCH`, `DELETE` | `/api/v1/configuration/admin/fields/{fieldId}/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | Update or delete a configurable field maintenance row | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
-| `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | List examination sessions with score-processing status and candidate counts | Implemented |
-| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
-| `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Return paginated computed ranks and percentiles for approved candidate scores | Implemented |
-| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Release already processed examination results | Implemented |
-| `GET` | `/api/v1/results/score-management/batches/{sessionId}/export/` | Bearer token | `SYSTEM_ADMIN` or `EXAM_ADMINISTRATOR` | Stream processed approved score results as CSV | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` | List examination sessions with score-processing status and candidate counts | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` | Return paginated approved candidate score records, with rank and percentile populated after processing | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` | Bearer token | `SYSTEM_ADMIN` | Return a score-anchored read-only candidate profile for a candidate in the selected score batch | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `SYSTEM_ADMIN` | Release already processed examination results | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/export/` | Bearer token | `SYSTEM_ADMIN` | Stream processed approved score results as CSV | Implemented |
 
 ### Score Management
 
@@ -103,7 +104,9 @@ Successful response:
 }
 ```
 
-`GET /api/v1/results/score-management/batches/{sessionId}/results/?page=1&pageSize=25&sortKey=rank&sortDirection=asc` returns processed approved scores only. `page` must be a positive integer and `pageSize` must be between 1 and 100. `sortKey` supports `candidateId`, `candidateName`, `examName`, `finalScore`, `percentile`, `rank`, and `releaseStatus`; `sortDirection` supports `asc` or `desc`. Optional `search` filters by candidate name and by candidate ID or LRN prefix. Optional `releaseStatus` filters to `NOT_RELEASED` or `RELEASED`.
+`GET /api/v1/results/score-management/batches/{sessionId}/results/?page=1&pageSize=25&sortKey=rank&sortDirection=asc` returns approved score records for the selected batch. Before processing, `overallRank` and `percentile` are `null`; after processing, they contain the computed ranking values. `page` must be a positive integer and `pageSize` must be between 1 and 100. `sortKey` supports `candidateId`, `candidateName`, `examName`, `finalScore`, `percentile`, `rank`, and `releaseStatus`; `sortDirection` supports `asc` or `desc`. Optional `search` filters by candidate name and by candidate ID or LRN prefix. Optional `releaseStatus` filters to `NOT_RELEASED` or `RELEASED`.
+
+`GET /api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` returns the selected approved score record plus a read-only application profile when the score record's LRN matches a non-draft application. The profile includes whitelisted personal, address, school, course preference, PWD/accommodation, reviewer directive, student photo URL, and registration activity log fields for display. The endpoint is anchored to the selected `sessionId` and `candidateId`; it must not expose arbitrary LRN lookup. The profile is display-only in Score Management and must not include application decision actions.
 
 ```json
 {

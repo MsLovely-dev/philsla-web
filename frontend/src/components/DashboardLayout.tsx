@@ -142,9 +142,9 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
   },
   {
     label: 'Results & Analytics',
-    roles: ['SYSTEM_ADMIN', 'EXECUTIVE', 'UNIVERSITY_ADMIN', 'GOVERNMENT'],
+    roles: ['SYSTEM_ADMIN'],
     items: [
-      { icon: ClipboardList, label: 'Score Management', href: '/admin/results/scores', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN'] },
+      { icon: ClipboardList, label: 'Score Management', href: '/admin/results/scores', roles: ['SYSTEM_ADMIN'] },
     ]
   },
   {

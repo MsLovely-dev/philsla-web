@@ -4,6 +4,7 @@ import csv
 
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import StreamingHttpResponse
+from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
@@ -11,10 +12,34 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.accounts.roles import PortalRole
+from apps.applications.models import ApplicationAuditLog, ApplicationStatus, IdentityMediaType, StudentApplication
 
 from .models import CandidateScore, ExaminationSession, ScoreBatchStatus, ScoreProcessingBatch, ScoreReviewStatus
 from .serializers import ScoreProcessRequestSerializer, ScoreResultsQuerySerializer
 from .services import ScoreProcessingError, process_score_session, release_score_session
+
+
+PROFILE_PERSONAL_FIELDS = (
+    "firstName",
+    "middleName",
+    "lastName",
+    "suffix",
+    "extensionName",
+    "dateOfBirth",
+    "sex",
+    "email",
+    "mobile",
+    "identityVerificationStatus",
+    "isPwd",
+    "pwdType",
+    "pwdCondition",
+    "pwdIdNumber",
+    "pwdIdFilename",
+    "pwdAccommodation",
+)
+PROFILE_ADDRESS_FIELDS = ("region", "province", "city", "barangay", "street", "postalCode")
+PROFILE_SCHOOL_FIELDS = ("lrn", "schoolId", "name", "academicTrack", "gradeLevel", "enrollmentStatus", "schoolYear", "gwa")
+PROFILE_REVIEW_FIELDS = ("reviewerReason", "reason", "reviewNotes", "requiredCorrections")
 
 
 def _get_session(session_id: str) -> ExaminationSession:
@@ -66,6 +91,66 @@ def _serialize_score(score: CandidateScore) -> dict[str, object]:
     }
 
 
+def _serialize_profile(application: StudentApplication | None, request) -> dict[str, object] | None:
+    if application is None:
+        return None
+    return {
+        "id": str(application.id),
+        "candidateId": application.candidate_id,
+        "status": application.status,
+        "photoUrl": _profile_photo_url(application, request),
+        "personal": _only_fields(application.personal, PROFILE_PERSONAL_FIELDS),
+        "address": _only_fields(application.address, PROFILE_ADDRESS_FIELDS),
+        "school": _only_fields(application.school, PROFILE_SCHOOL_FIELDS),
+        "coursePreferences": [_only_fields(preference, ("university", "course")) for preference in application.course_preferences],
+        "reviewStep": _only_fields(application.review_step, PROFILE_REVIEW_FIELDS),
+        "activityLogs": [_serialize_profile_activity(log) for log in _profile_activity_logs(application)],
+        "examCycleId": application.exam_cycle_id,
+        "submittedAt": application.submitted_at.isoformat() if application.submitted_at else None,
+    }
+
+
+def _only_fields(source: dict, fields: tuple[str, ...]) -> dict[str, object]:
+    return {field: source[field] for field in fields if field in source}
+
+
+def _profile_photo_url(application: StudentApplication, request) -> str:
+    media_type = ""
+    if hasattr(application, "registration_selfie"):
+        media_type = IdentityMediaType.SELFIE
+    else:
+        verification = getattr(application, "step2_verification", None)
+        if verification is not None and hasattr(verification, "registration_selfie"):
+            media_type = IdentityMediaType.SELFIE
+        elif verification is not None and verification.media.filter(media_type=IdentityMediaType.STUDENT_ID_FRONT).exists():
+            media_type = IdentityMediaType.STUDENT_ID_FRONT
+    if not media_type:
+        return ""
+    url = reverse("applications:identity-media", args=[application.id, media_type])
+    return request.build_absolute_uri(url) if request is not None else url
+
+
+def _profile_activity_logs(application: StudentApplication):
+    return ApplicationAuditLog.objects.filter(application=application).order_by("-created_at")[:25]
+
+
+def _serialize_profile_activity(log: ApplicationAuditLog) -> dict[str, object]:
+    return {
+        "id": log.id,
+        "action": log.action,
+        "event": log.event,
+        "outcome": log.outcome,
+        "timestamp": log.created_at.isoformat(),
+        "sessionId": log.session_id,
+        "ipAddress": log.ip_address,
+        "deviceBrowser": log.user_agent,
+        "registrationId": log.registration_id,
+        "applicantId": log.applicant_id,
+        "actorRole": log.actor_role,
+        "correlationId": log.correlation_id,
+    }
+
+
 def _page_bounds(validated_query: dict[str, int], total_count: int) -> tuple[int, int, int, int]:
     page = validated_query["page"]
     page_size = validated_query["pageSize"]
@@ -76,7 +161,7 @@ def _page_bounds(validated_query: dict[str, int], total_count: int) -> tuple[int
 
 class ScoreManagementBaseView(APIView):
     permission_classes = [RoleRequiredPermission]
-    required_roles = require_roles(PortalRole.SYSTEM_ADMIN, PortalRole.EXAM_ADMINISTRATOR)
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
 
 
 class ScoreManagementBatchListView(ScoreManagementBaseView):
@@ -130,7 +215,6 @@ class ScoreManagementBatchResultsView(ScoreManagementBaseView):
         scores = CandidateScore.objects.filter(
             session_id=session_id,
             review_status=ScoreReviewStatus.APPROVED,
-            overall_rank__isnull=False,
         )
         query = serializer.validated_data["search"]
         if query:
@@ -151,6 +235,26 @@ class ScoreManagementBatchResultsView(ScoreManagementBaseView):
                 "results": [_serialize_score(score) for score in scores[start:end]],
             },
         )
+
+
+class ScoreManagementCandidateProfileView(ScoreManagementBaseView):
+    def get(self, request, session_id: str, candidate_id: str) -> Response:
+        try:
+            score = CandidateScore.objects.get(
+                session_id=session_id,
+                candidate_id=candidate_id,
+                review_status=ScoreReviewStatus.APPROVED,
+            )
+        except CandidateScore.DoesNotExist as exc:
+            raise NotFound("Candidate score record not found for this examination session.") from exc
+
+        application = (
+            StudentApplication.objects.filter(lrn=score.lrn)
+            .exclude(status=ApplicationStatus.DRAFT)
+            .order_by("-submitted_at", "-created_at")
+            .first()
+        )
+        return Response({"score": _serialize_score(score), "profile": _serialize_profile(application, request)})
 
 
 class ScoreManagementBatchReleaseView(ScoreManagementBaseView):

@@ -128,8 +128,8 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/hub/review/:id', element: <ExamReviewDetail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN') },
   { path: '/admin/hub/results-release', element: <ResultsRelease />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
 
-  { path: '/admin/results/scores', element: <ScoreManagement />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN') },
-  { path: '/admin/results/scores/:batchId/:candidateId', element: <ScoreCandidateDetail />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN') },
+  { path: '/admin/results/scores', element: <ScoreManagement />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
+  { path: '/admin/results/scores/:batchId/:candidateId', element: <ScoreCandidateDetail />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
   { path: '/admin/results/matrix', element: <ReportingMatrix />, access: 'protected', allowedRoles: withSystemAdmin('EXECUTIVE', 'GOVERNMENT', 'UNIVERSITY_ADMIN') },
   { path: '/admin/questions', element: <HubQuestionBank />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/blueprints', element: <ExamBlueprints />, access: 'protected', allowedRoles: HUB },

@@ -320,10 +320,6 @@ export class BackendApplicationService {
     return this.apiClient.request<BackendApplication>(`/api/v1/applications/${applicationId}/`);
   }
 
-  async getApplicationByLrn(lrn: string): Promise<ServiceResult<BackendApplication>> {
-    return this.apiClient.request<BackendApplication>(`/api/v1/applications/by-lrn/${encodeURIComponent(lrn)}/`);
-  }
-
   async getApplicationPhoto(applicationId: string): Promise<ServiceResult<Blob>> {
     return this.apiClient.requestBlob(`/api/v1/applications/${applicationId}/identity-media/SELFIE/`);
   }

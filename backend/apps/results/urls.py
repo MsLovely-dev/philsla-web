@@ -5,6 +5,7 @@ from .views import (
     ScoreManagementBatchExportView,
     ScoreManagementBatchReleaseView,
     ScoreManagementBatchResultsView,
+    ScoreManagementCandidateProfileView,
     ScoreManagementProcessView,
 )
 
@@ -19,6 +20,11 @@ urlpatterns = [
         "score-management/batches/<str:session_id>/results/",
         ScoreManagementBatchResultsView.as_view(),
         name="score-management-results",
+    ),
+    path(
+        "score-management/batches/<str:session_id>/results/<str:candidate_id>/profile/",
+        ScoreManagementCandidateProfileView.as_view(),
+        name="score-management-profile",
     ),
     path(
         "score-management/batches/<str:session_id>/release/",
