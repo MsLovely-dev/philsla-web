@@ -1,9 +1,9 @@
+from __future__ import annotations
+
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.parsers import FormParser, MultiPartParser
-from __future__ import annotations
-
 import csv
 
 from django.db.models import Count, OuterRef, Q, Subquery
