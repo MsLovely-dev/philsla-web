@@ -8,7 +8,7 @@
 
 **Tech stack:** Python 3.13, Django 5.2, Django REST Framework 3.16, DRF SimpleJWT, Django test runner, React 19, and TypeScript 5.8.
 
-**Status:** Phase 1 inspection complete. Database-backed lockout storage is proposed; no application implementation is authorized until Maricon approves it.
+**Status:** Reviewed and approved for Thursday execution; Wednesday remains planning-only.
 
 **Specification:** `../specs/2026-08-05-ticket-001-finish-user-authentication-login-design.md`
 
@@ -48,12 +48,14 @@
 - [x] Confirm no approved shared cache provides cross-worker atomic operations and reliable expiry; production inherits process-local `LocMemCache`.
 - [x] Prepare the separate database-persistence and migration proposal at `2026-08-05-ticket-001-password-lockout-storage-proposal.md`.
 - [x] Specify the internal Django user identifier as the state relation; exclude email and LRN.
-- [ ] Obtain Maricon's approval before password-lockout tests or implementation.
+- [x] Maricon approved the database-backed storage design and separately authorized its model/migration on 2026-08-05.
 
 ## Phase 2 — Password lockout with TDD
 
 **Files:**
 
+- Modify `backend/apps/accounts/models.py`.
+- Add `backend/apps/accounts/migrations/0008_password_login_lockout.py`.
 - Modify `backend/apps/accounts/services.py`.
 - Modify `backend/apps/accounts/tests/test_login_endpoints.py`.
 - Modify `backend/apps/accounts/tests/test_auth_controls.py`.
@@ -61,9 +63,9 @@
 - [ ] Add failing tests for attempts one through four without lockout.
 - [ ] Add a failing test for lockout on the fifth failure.
 - [ ] Add failing tests for correct-password denial during lockout, lockout expiry, and success-state reset.
-- [ ] Add a failing leakage test covering lockout keys and audit output.
+- [ ] Add a failing leakage test covering the durable internal-ID state and safe lockout audit output.
 - [ ] Run the focused tests and record the expected red result.
-- [ ] Implement only the behavior required by those tests using the Phase 1-approved storage.
+- [ ] Implement only the behavior required by those tests using the Phase 1-approved database storage.
 - [ ] Preserve the generic `401 AUTHENTICATION_FAILED` response for invalid, inactive, locked, and wrong-password paths.
 - [ ] Rerun the focused tests and require zero failures and errors.
 - [ ] Inspect the diff and stop for Maricon's review.
@@ -124,6 +126,6 @@
 
 ## Approval gate
 
-- [ ] Maricon Landicho reviewed and approved this dated plan.
+- [x] Maricon Landicho reviewed and approved this dated plan for Thursday Phase 2 execution.
 - [x] Phase 0 runtime and focused baseline checks completed; Maricon explicitly accepted the two unrelated full-suite failures for proceeding to Phase 1.
 - [ ] Each later phase requires its own review checkpoint.
