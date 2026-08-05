@@ -1,188 +1,154 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  School as SchoolIcon, 
-  Search, 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  Filter, 
-  CheckCircle2, 
-  XCircle, 
-  Building2, 
-  MapPin, 
-  Mail, 
-  Phone, 
-  Users, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  School as SchoolIcon,
+  Search,
+  Plus,
+  Edit3,
+  Trash2,
   Download,
   X,
   Check,
   ChevronRight,
-  Sparkles
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { PHILIPPINE_REGIONS, regionLabel } from '../../../data/philippineRegions';
+import {
+  schoolService,
+  type SchoolClassification,
+  type SchoolPayload,
+  type SchoolRecord,
+} from '../../../services/backendSchoolService';
+import type { ServiceFailure } from '../../../services/serviceResult';
+import { ConfirmationDialog } from '../../../components/ui';
 
-export interface SchoolItem {
-  id: string;
-  code: string;
-  name: string;
-  classification: 'Public' | 'Private';
-  schoolType: 'Senior High School' | 'Science High School' | 'Integrated School' | 'Testing Venue Partner';
-  region: string;
-  city: string;
-  principalAdministrator: string;
-  email: string;
-  phone: string;
-  capacity: number;
-  status: 'Active' | 'Inactive';
-}
-
-function isSchoolClassification(value: string): value is SchoolItem['classification'] {
+function isSchoolClassification(value: string): value is SchoolClassification {
   return value === 'Public' || value === 'Private';
 }
 
-function isSchoolType(value: string): value is SchoolItem['schoolType'] {
-  return ['Senior High School', 'Science High School', 'Integrated School', 'Testing Venue Partner'].includes(value);
-}
+const EMPTY_FORM: SchoolPayload = {
+  classification: 'Public',
+  name: '',
+  examineeCapacity: 1000,
+  region: PHILIPPINE_REGIONS[0].code,
+};
 
 export default function SchoolsListMaintenance() {
-  const [schools, setSchools] = useState<SchoolItem[]>([]);
+  const [schools, setSchools] = useState<SchoolRecord[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [classificationFilter, setClassificationFilter] = useState<'ALL' | 'Public' | 'Private'>('ALL');
-  const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [classificationFilter, setClassificationFilter] = useState<'ALL' | SchoolClassification>('ALL');
   const [regionFilter, setRegionFilter] = useState<string>('ALL');
 
-  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingSchool, setEditingSchool] = useState<SchoolItem | null>(null);
+  const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
+  const [formData, setFormData] = useState<SchoolPayload>(EMPTY_FORM);
 
-  const [formData, setFormData] = useState<Partial<SchoolItem>>({
-    code: '',
-    name: '',
-    classification: 'Public',
-    schoolType: 'Senior High School',
-    region: 'NCR - National Capital Region',
-    city: '',
-    principalAdministrator: '',
-    email: '',
-    phone: '',
-    capacity: 1000,
-    status: 'Active'
-  });
+  const [pendingDelete, setPendingDelete] = useState<SchoolRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const saveSchools = (updated: SchoolItem[]) => {
-    setSchools(updated);
-  };
+  useEffect(() => {
+    let active = true;
+    schoolService.listSchools().then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setSchools(result.data);
+      } else {
+        setError((result as ServiceFailure).error.message);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const uniqueRegions = useMemo(() => {
-    return Array.from(new Set(schools.map(s => s.region))).sort();
+    return Array.from(new Set(schools.map((s) => s.region))).sort();
   }, [schools]);
 
   const filteredSchools = useMemo(() => {
-    return schools.filter(s => {
+    return schools.filter((s) => {
       if (classificationFilter !== 'ALL' && s.classification !== classificationFilter) return false;
-      if (typeFilter !== 'ALL' && s.schoolType !== typeFilter) return false;
       if (regionFilter !== 'ALL' && s.region !== regionFilter) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchName = s.name.toLowerCase().includes(q);
-        const matchCode = s.code.toLowerCase().includes(q);
-        const matchAdmin = s.principalAdministrator.toLowerCase().includes(q);
-        const matchCity = s.city.toLowerCase().includes(q);
-        if (!matchName && !matchCode && !matchAdmin && !matchCity) return false;
+        if (!s.name.toLowerCase().includes(q) && !s.code.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [schools, classificationFilter, typeFilter, regionFilter, searchQuery]);
+  }, [schools, classificationFilter, regionFilter, searchQuery]);
 
   const handleOpenAddModal = () => {
     setEditingSchool(null);
+    setError(null);
+    setFormData({ ...EMPTY_FORM, region: uniqueRegions[0] ?? PHILIPPINE_REGIONS[0].code });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (school: SchoolRecord) => {
+    setEditingSchool(school);
+    setError(null);
     setFormData({
-      code: `SCH-${Math.floor(100 + Math.random() * 900)}`,
-      name: '',
-      classification: 'Public',
-      schoolType: 'Senior High School',
-      region: uniqueRegions[0] || 'NCR - National Capital Region',
-      city: '',
-      principalAdministrator: '',
-      email: '',
-      phone: '',
-      capacity: 1000,
-      status: 'Active'
+      classification: school.classification,
+      name: school.name,
+      examineeCapacity: school.examineeCapacity,
+      region: school.region,
     });
     setIsModalOpen(true);
   };
 
-  const handleOpenEditModal = (school: SchoolItem) => {
-    setEditingSchool(school);
-    setFormData({ ...school });
-    setIsModalOpen(true);
-  };
-
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.code || !formData.city) return;
+    if (!formData.name.trim() || isSaving) return;
 
-    if (editingSchool) {
-      const updated = schools.map(s => s.id === editingSchool.id ? { ...s, ...formData } as SchoolItem : s);
-      saveSchools(updated);
-    } else {
-      const newSchool: SchoolItem = {
-        id: `sch-${Date.now()}`,
-        code: formData.code || 'SCH-NEW',
-        name: formData.name || 'New School',
-        classification: formData.classification || 'Public',
-        schoolType: formData.schoolType || 'Senior High School',
-        region: formData.region || 'NCR - National Capital Region',
-        city: formData.city || 'City',
-        principalAdministrator: formData.principalAdministrator || 'Administrator',
-        email: formData.email || 'admin@school.edu.ph',
-        phone: formData.phone || '0917-000-0000',
-        capacity: Number(formData.capacity) || 1000,
-        status: formData.status || 'Active'
-      };
-      saveSchools([newSchool, ...schools]);
+    setIsSaving(true);
+    setError(null);
+    const result = editingSchool
+      ? await schoolService.updateSchool(editingSchool.id, formData)
+      : await schoolService.createSchool(formData);
+    setIsSaving(false);
+
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      return;
     }
 
+    if (editingSchool) {
+      setSchools((prev) => prev.map((s) => (s.id === result.data.id ? result.data : s)));
+    } else {
+      setSchools((prev) => [result.data, ...prev]);
+    }
     setIsModalOpen(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to remove this school from the accredited list?')) {
-      const updated = schools.filter(s => s.id !== id);
-      saveSchools(updated);
-    }
-  };
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setIsDeleting(true);
+    const result = await schoolService.deleteSchool(pendingDelete.id);
+    setIsDeleting(false);
 
-  const handleToggleStatus = (id: string) => {
-    const updated = schools.map(s => {
-      if (s.id === id) {
-        return { ...s, status: s.status === 'Active' ? 'Inactive' : 'Active' } as SchoolItem;
-      }
-      return s;
-    });
-    saveSchools(updated);
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      setPendingDelete(null);
+      return;
+    }
+    setSchools((prev) => prev.filter((s) => s.id !== pendingDelete.id));
+    setPendingDelete(null);
   };
 
   const exportCSV = () => {
-    const headers = ['Code', 'Name', 'Classification', 'School Type', 'Region', 'City', 'Administrator', 'Email', 'Phone', 'Capacity', 'Status'];
-    const rows = filteredSchools.map(s => [
+    const headers = ['Code', 'Classification', 'Name', 'Examinee Capacity', 'Region/Municipality/City'];
+    const rows = filteredSchools.map((s) => [
       `"${s.code}"`,
-      `"${s.name}"`,
       `"${s.classification}"`,
-      `"${s.schoolType}"`,
-      `"${s.region}"`,
-      `"${s.city}"`,
-      `"${s.principalAdministrator}"`,
-      `"${s.email}"`,
-      `"${s.phone}"`,
-      s.capacity,
-      `"${s.status}"`
+      `"${s.name}"`,
+      s.examineeCapacity,
+      `"${regionLabel(s.region)}"`,
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', encodeURI(csvContent));
     link.setAttribute('download', `philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
@@ -191,7 +157,6 @@ export default function SchoolsListMaintenance() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
       {/* Breadcrumb & Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-philsa-gray">
@@ -213,10 +178,10 @@ export default function SchoolsListMaintenance() {
             </div>
             <h1 className="text-2xl font-black text-philsa-navy flex items-center gap-2">
               <SchoolIcon className="w-7 h-7 text-philsa-navy" />
-              List of Accredited Schools
+              List of Schools
             </h1>
             <p className="text-xs text-philsa-gray max-w-3xl">
-              Directory of secondary schools, science high schools, and examination venue partner institutions across all regions of the Philippines.
+              Directory of accredited schools and examination venue partner institutions across all regions of the Philippines.
             </p>
           </div>
 
@@ -237,39 +202,41 @@ export default function SchoolsListMaintenance() {
         </div>
 
         {/* Quick Stat Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
+        <div className="grid grid-cols-3 gap-4 pt-2">
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Total Schools</div>
             <div className="text-2xl font-black text-philsa-navy mt-1">{schools.length}</div>
           </div>
           <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public / State</div>
-            <div className="text-2xl font-black text-blue-900 mt-1">{schools.filter(s => s.classification === 'Public').length}</div>
+            <div className="text-2xl font-black text-blue-900 mt-1">{schools.filter((s) => s.classification === 'Public').length}</div>
           </div>
           <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private Schools</div>
-            <div className="text-2xl font-black text-purple-900 mt-1">{schools.filter(s => s.classification === 'Private').length}</div>
-          </div>
-          <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
-            <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Active Venues</div>
-            <div className="text-2xl font-black text-emerald-900 mt-1">{schools.filter(s => s.status === 'Active').length}</div>
+            <div className="text-2xl font-black text-purple-900 mt-1">{schools.filter((s) => s.classification === 'Private').length}</div>
           </div>
         </div>
       </div>
 
+      {error && (
+        <div className="card-philsa bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-4">
+          {error}
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <div className="card-philsa bg-white p-5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Search */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Search School / City</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Search School / Code</label>
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Name, code, admin..."
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Name or code..."
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
               />
             </div>
@@ -280,7 +247,7 @@ export default function SchoolsListMaintenance() {
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
             <select
               value={classificationFilter}
-              onChange={e => {
+              onChange={(e) => {
                 const value = e.target.value;
                 if (value === 'ALL' || isSchoolClassification(value)) setClassificationFilter(value);
               }}
@@ -292,33 +259,17 @@ export default function SchoolsListMaintenance() {
             </select>
           </div>
 
-          {/* School Type */}
-          <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">School Type</label>
-            <select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-            >
-              <option value="ALL">All School Types</option>
-              <option value="Senior High School">Senior High School</option>
-              <option value="Science High School">Science High School</option>
-              <option value="Integrated School">Integrated School</option>
-              <option value="Testing Venue Partner">Testing Venue Partner</option>
-            </select>
-          </div>
-
           {/* Region */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region/Municipality/City</label>
             <select
               value={regionFilter}
-              onChange={e => setRegionFilter(e.target.value)}
+              onChange={(e) => setRegionFilter(e.target.value)}
               className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
             >
               <option value="ALL">All Regions</option>
-              {uniqueRegions.map(r => (
-                <option key={r} value={r}>{r}</option>
+              {uniqueRegions.map((r) => (
+                <option key={r} value={r}>{regionLabel(r)}</option>
               ))}
             </select>
           </div>
@@ -331,67 +282,40 @@ export default function SchoolsListMaintenance() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-100 border-b border-philsa-border text-[11px] font-black uppercase text-philsa-navy tracking-wider">
-                <th className="py-3.5 px-4">Code & Name</th>
-                <th className="py-3.5 px-4">Classification & Type</th>
-                <th className="py-3.5 px-4">Region & Location</th>
-                <th className="py-3.5 px-4">Administrator / Contact</th>
-                <th className="py-3.5 px-4 text-center">Capacity</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
+                <th className="py-3.5 px-4">School Code</th>
+                <th className="py-3.5 px-4">School Name</th>
+                <th className="py-3.5 px-4">Classification</th>
+                <th className="py-3.5 px-4">Region/Municipality/City</th>
+                <th className="py-3.5 px-4 text-center">Examinee Capacity</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredSchools.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
+                  <td colSpan={6} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
                     No schools match your search and filter criteria.
                   </td>
                 </tr>
               ) : (
                 filteredSchools.map((s) => (
                   <tr key={s.id} className="hover:bg-slate-50/80 transition-all">
-                    <td className="py-3.5 px-4 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-philsa-navy">{s.name}</span>
-                      </div>
-                      <div className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block">
+                    <td className="py-3.5 px-4">
+                      <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block">
                         {s.code}
-                      </div>
+                      </span>
                     </td>
-                    <td className="py-3.5 px-4 space-y-1">
-                      <div>
-                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                          s.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'
-                        }`}>
-                          {s.classification}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-medium">{s.schoolType}</div>
+                    <td className="py-3.5 px-4 font-extrabold text-philsa-navy">{s.name}</td>
+                    <td className="py-3.5 px-4">
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                        s.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'
+                      }`}>
+                        {s.classification}
+                      </span>
                     </td>
-                    <td className="py-3.5 px-4 space-y-0.5">
-                      <div className="font-bold text-slate-800">{s.city}</div>
-                      <div className="text-[10px] text-slate-400">{s.region}</div>
-                    </td>
-                    <td className="py-3.5 px-4 space-y-0.5">
-                      <div className="font-bold text-philsa-navy">{s.principalAdministrator}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">
-                        {s.email} • {s.phone}
-                      </div>
-                    </td>
+                    <td className="py-3.5 px-4 font-medium text-slate-700">{regionLabel(s.region)}</td>
                     <td className="py-3.5 px-4 text-center font-bold text-slate-700 font-mono">
-                      {s.capacity.toLocaleString()} Seats
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => handleToggleStatus(s.id)}
-                        className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
-                          s.status === 'Active' 
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
-                            : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                        }`}
-                      >
-                        {s.status}
-                      </button>
+                      {s.examineeCapacity.toLocaleString()} Seats
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -403,7 +327,7 @@ export default function SchoolsListMaintenance() {
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(s.id)}
+                          onClick={() => setPendingDelete(s)}
                           className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
                           title="Remove School"
                         >
@@ -439,28 +363,27 @@ export default function SchoolsListMaintenance() {
             <form onSubmit={handleSave} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">School Code *</label>
+                  <label className="font-bold text-slate-700">School Code</label>
                   <input
                     type="text"
-                    required
-                    value={formData.code || ''}
-                    onChange={e => setFormData({ ...formData, code: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="e.g. PSHS-MAIN"
+                    disabled
+                    readOnly
+                    value={editingSchool ? editingSchool.code : 'Auto-generated (SCH-#####)'}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono text-xs text-slate-500 cursor-not-allowed"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Classification *</label>
                   <select
-                    value={formData.classification || 'Public'}
-                    onChange={e => {
+                    value={formData.classification}
+                    onChange={(e) => {
                       if (isSchoolClassification(e.target.value)) {
                         setFormData({ ...formData, classification: e.target.value });
                       }
                     }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
-                    <option value="Public">Public (Government / State)</option>
+                    <option value="Public">Public</option>
                     <option value="Private">Private</option>
                   </select>
                 </div>
@@ -471,8 +394,8 @@ export default function SchoolsListMaintenance() {
                 <input
                   type="text"
                   required
-                  value={formData.name || ''}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   placeholder="Official name of school..."
                 />
@@ -480,90 +403,27 @@ export default function SchoolsListMaintenance() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">School Type</label>
-                  <select
-                    value={formData.schoolType || 'Senior High School'}
-                    onChange={e => {
-                      if (isSchoolType(e.target.value)) {
-                        setFormData({ ...formData, schoolType: e.target.value });
-                      }
-                    }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  >
-                    <option value="Senior High School">Senior High School</option>
-                    <option value="Science High School">Science High School</option>
-                    <option value="Integrated School">Integrated School</option>
-                    <option value="Testing Venue Partner">Testing Venue Partner</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Examinee Capacity</label>
+                  <label className="font-bold text-slate-700">Examinee Capacity *</label>
                   <input
                     type="number"
-                    min={50}
-                    value={formData.capacity || 1000}
-                    onChange={e => setFormData({ ...formData, capacity: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Region *</label>
-                  <input
-                    type="text"
                     required
-                    value={formData.region || ''}
-                    onChange={e => setFormData({ ...formData, region: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="e.g. NCR - National Capital Region"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">City / Municipality *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.city || ''}
-                    onChange={e => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="e.g. Quezon City"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Principal / School Administrator</label>
-                <input
-                  type="text"
-                  value={formData.principalAdministrator || ''}
-                  onChange={e => setFormData({ ...formData, principalAdministrator: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  placeholder="e.g. Dr. Maria Santos"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Official Email</label>
-                  <input
-                    type="email"
-                    value={formData.email || ''}
-                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    min={0}
+                    value={formData.examineeCapacity}
+                    onChange={(e) => setFormData({ ...formData, examineeCapacity: Number(e.target.value) })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="admin@school.edu.ph"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Contact Number</label>
-                  <input
-                    type="text"
-                    value={formData.phone || ''}
-                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="0917-000-0000"
-                  />
+                  <label className="font-bold text-slate-700">Region/Municipality/City *</label>
+                  <select
+                    value={formData.region}
+                    onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                  >
+                    {PHILIPPINE_REGIONS.map((region) => (
+                      <option key={region.code} value={region.code}>{region.label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -577,9 +437,10 @@ export default function SchoolsListMaintenance() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+                  disabled={isSaving}
+                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-4 h-4" /> Save School Record
+                  <Check className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save School Record'}
                 </button>
               </div>
             </form>
@@ -587,6 +448,17 @@ export default function SchoolsListMaintenance() {
         </div>
       )}
 
+      <ConfirmationDialog
+        isOpen={pendingDelete !== null}
+        title={pendingDelete ? `Are you sure you want to remove ${pendingDelete.name} at Maintenance Table?` : ''}
+        message="This will be removed to other modules."
+        details={pendingDelete ? `${pendingDelete.name} • ${pendingDelete.code}` : ''}
+        confirmLabel="Agree"
+        tone="danger"
+        isConfirming={isDeleting}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

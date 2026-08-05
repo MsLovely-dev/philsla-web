@@ -12,8 +12,10 @@ class SafeJsonFormatter(logging.Formatter):
         "duration_ms",
         "event",
         "method",
+        "outcome",
         "route",
         "status_code",
+        "user_id",
     }
 
     def format(self, record: logging.LogRecord) -> str:

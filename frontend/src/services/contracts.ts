@@ -108,3 +108,21 @@ export interface ReviewerService {
   reassignTestingSchedule(applicationId: string, scheduleId: string): Promise<ServiceResult<Application>>;
   listSchedules(): Promise<ServiceResult<Schedule[]>>;
 }
+
+export interface RegionalApplicationCount {
+  region: string;
+  applicationCount: number;
+}
+
+export interface NationalOverview {
+  totalRegisteredExaminees: number;
+  totalVerifiedExaminees: number;
+  totalParticipatingSchools: number;
+  totalParticipatingUniversities: number;
+  regionalBreakdown: RegionalApplicationCount[];
+  generatedAt: string;
+}
+
+export interface AnalyticsService {
+  getNationalOverview(): Promise<ServiceResult<NationalOverview>>;
+}
