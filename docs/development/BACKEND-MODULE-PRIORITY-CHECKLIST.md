@@ -210,11 +210,14 @@ Build these after P0 backend foundation is running and tested.
 
 ### 14. Executive reporting
 
+- [x] Implement national registration-count overview (registered, verified, schools, universities, region breakdown) from real `StudentApplication` data (`GET /api/v1/analytics/national/overview/`).
 - [ ] Implement national, regional, school, and cohort reporting filters.
 - [ ] Return tabular alternatives for chart data.
 - [ ] Define official metrics and aggregation rules (`TBD`).
 - [ ] Define report export authorization and file generation (`TBD`).
-- [ ] Add insufficient-data, permission, aggregation, and export tests.
+- [x] Add insufficient-data (empty database), permission, and aggregation tests for the national overview endpoint.
+- [ ] Add export tests once export is implemented.
+- [ ] Agency-scoped (CHED/DEPED/TESDA) real data requires an agency dimension in the data model -- `TBD`, not started.
 
 ## Backend completion gate
 
