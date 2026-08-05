@@ -57,7 +57,6 @@ describe('ApiClient', () => {
   });
 
   it('refreshes an expired bearer token and retries a protected blob request once', async () => {
-    const exportBlob = new Blob(['candidate_id\nPHL-2027-000001\n'], { type: 'text/csv' });
     const fetcher = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(
@@ -73,7 +72,7 @@ describe('ApiClient', () => {
         },
         { status: 200 },
       ))
-      .mockResolvedValueOnce(new Response(exportBlob, { status: 200, headers: { 'Content-Type': 'text/csv' } }));
+      .mockResolvedValueOnce(new Response('candidate_id\nPHL-2027-000001\n', { status: 200, headers: { 'Content-Type': 'text/csv' } }));
     const client = new ApiClient({ baseUrl: 'http://backend.test', fetcher });
     client.setBearerToken('expired-access-token');
 
