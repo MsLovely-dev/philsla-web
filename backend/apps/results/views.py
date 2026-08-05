@@ -1,32 +1,38 @@
-from django.conf import settings
-from django.shortcuts import get_object_or_404
-from rest_framework.permissions import AllowAny
-from rest_framework.parsers import FormParser, MultiPartParser
 from __future__ import annotations
 
 import csv
 
+from django.conf import settings
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import StreamingHttpResponse
+from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.exceptions import APIException, NotFound
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.accounts.roles import PortalRole
+from apps.applications.models import ApplicationAuditLog, ApplicationStatus, IdentityMediaType, StudentApplication
 
-from .models import ExamReviewRecord
+from .models import CandidateScore, ExaminationSession, ExamReviewRecord, ScoreBatchStatus, ScoreProcessingBatch, ScoreReviewStatus
 from .serializers import (
     ExamReviewAnswerSheetUploadSerializer,
     ExamReviewDetailSerializer,
     ExamReviewGradingStatusSerializer,
     ExamReviewItemScoreSerializer,
     ExamReviewRecordSerializer,
+    ScoreProcessRequestSerializer,
+    ScoreResultsQuerySerializer,
 )
 from .services import (
+    ScoreProcessingError,
+    process_score_session,
     release_exam_review,
+    release_score_session,
     score_exam_review_item,
     set_exam_review_grading_status,
     upload_exam_review_answer_sheet,
@@ -120,11 +126,6 @@ class ExamReviewItemScoreView(ExamReviewAccessMixin, APIView):
             actor=request.user,
         )
         return Response(ExamReviewDetailSerializer(updated).data)
-from apps.applications.models import ApplicationAuditLog, ApplicationStatus, IdentityMediaType, StudentApplication
-
-from .models import CandidateScore, ExaminationSession, ScoreBatchStatus, ScoreProcessingBatch, ScoreReviewStatus
-from .serializers import ScoreProcessRequestSerializer, ScoreResultsQuerySerializer
-from .services import ScoreProcessingError, process_score_session, release_score_session
 
 
 PROFILE_PERSONAL_FIELDS = (
