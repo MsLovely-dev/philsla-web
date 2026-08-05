@@ -1,7 +1,9 @@
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -88,6 +90,12 @@ class UniversityRegistryEndpointTests(TestCase):
         self.assertEqual(response.data["results"][0]["establishedYear"], 1908)
         self.assertEqual(response.data["results"][0]["courseCount"], 0)
         self.assertEqual(response.data["results"][0]["version"], 1)
+        self.assertEqual(response.data["summary"], {
+            "totalUniversities": 2,
+            "publicUniversities": 1,
+            "privateUniversities": 1,
+            "totalDegreeCourses": 0,
+        })
 
     def test_backend_validates_university_fields_and_unique_code(self):
         self.create_university()
@@ -221,3 +229,76 @@ class UniversityRegistryEndpointTests(TestCase):
         self.assertEqual(create_university_response.status_code, 403)
         self.assertEqual(assigned_course.status_code, 201)
         self.assertEqual(unassigned_course.status_code, 403)
+
+    def test_university_admin_reads_only_assigned_university_records(self):
+        assigned = self.create_university()
+        unassigned = self.create_university(code="ADMU", name="Ateneo de Manila University", classification="Private")
+        assigned_course = self.client.post(
+            reverse("configuration:university-courses-admin", args=[assigned["id"]]),
+            course_payload(),
+            format="json",
+        ).data
+        unassigned_course = self.client.post(
+            reverse("configuration:university-courses-admin", args=[unassigned["id"]]),
+            course_payload(programCode="BSIT", programName="Bachelor of Science in Information Technology"),
+            format="json",
+        ).data
+
+        self.client.force_authenticate(
+            user=principal(
+                self.user,
+                PortalRole.UNIVERSITY_ADMIN.value,
+                permissions=["MOD_38_READ"],
+                scopes={"universityIds": [assigned["id"]]},
+            ),
+        )
+
+        listed = self.client.get(self.list_url)
+        assigned_detail = self.client.get(reverse("configuration:universities-admin-detail", args=[assigned["id"]]))
+        unassigned_detail = self.client.get(reverse("configuration:universities-admin-detail", args=[unassigned["id"]]))
+        assigned_courses = self.client.get(reverse("configuration:university-courses-admin", args=[assigned["id"]]))
+        unassigned_courses = self.client.get(reverse("configuration:university-courses-admin", args=[unassigned["id"]]))
+        assigned_course_detail = self.client.get(
+            reverse("configuration:university-courses-admin-detail", args=[assigned["id"], assigned_course["id"]]),
+        )
+        unassigned_course_detail = self.client.get(
+            reverse("configuration:university-courses-admin-detail", args=[unassigned["id"], unassigned_course["id"]]),
+        )
+
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.data["count"], 1)
+        self.assertEqual([item["id"] for item in listed.data["results"]], [assigned["id"]])
+        self.assertEqual(assigned_detail.status_code, 200)
+        self.assertEqual(unassigned_detail.status_code, 403)
+        self.assertEqual(assigned_courses.status_code, 200)
+        self.assertEqual(unassigned_courses.status_code, 403)
+        self.assertEqual(assigned_course_detail.status_code, 200)
+        self.assertEqual(unassigned_course_detail.status_code, 403)
+
+    def test_update_integrity_errors_return_conflict_responses(self):
+        university = self.create_university()
+        university_detail_url = reverse("configuration:universities-admin-detail", args=[university["id"]])
+        course_list_url = reverse("configuration:university-courses-admin", args=[university["id"]])
+        course = self.client.post(course_list_url, course_payload(), format="json").data
+        course_detail_url = reverse(
+            "configuration:university-courses-admin-detail",
+            args=[university["id"], course["id"]],
+        )
+
+        with patch.object(University, "save", side_effect=IntegrityError):
+            university_response = self.client.patch(
+                university_detail_url,
+                {"code": "RACE", "expectedVersion": university["version"]},
+                format="json",
+            )
+        with patch.object(CollegeCourse, "save", side_effect=IntegrityError):
+            course_response = self.client.patch(
+                course_detail_url,
+                {"programCode": "RACE", "expectedVersion": course["version"]},
+                format="json",
+            )
+
+        self.assertEqual(university_response.status_code, 409)
+        self.assertEqual(university_response.data["error"]["code"], "CONFLICT")
+        self.assertEqual(course_response.status_code, 409)
+        self.assertEqual(course_response.data["error"]["code"], "CONFLICT")

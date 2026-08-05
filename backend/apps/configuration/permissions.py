@@ -24,6 +24,18 @@ UNIVERSITY_REGISTRY_ROLES = {
 }
 
 
+def assigned_university_ids(request) -> set[str] | None:
+    account = resolve_authenticated_account(request.user)
+    if account is None or account["role"] != PortalRole.UNIVERSITY_ADMIN.value:
+        return None
+
+    scopes = account.get("scopes", {})
+    assigned_ids = scopes.get("universityIds", []) if isinstance(scopes, dict) else []
+    if not isinstance(assigned_ids, list):
+        return set()
+    return {str(item) for item in assigned_ids}
+
+
 class UniversityRegistryPermission(BasePermission):
     message = "You do not have permission to manage the university registry."
 
@@ -53,17 +65,10 @@ class UniversityRegistryPermission(BasePermission):
     def has_object_permission(self, request, view, obj) -> bool:
         if not self.has_permission(request, view):
             return False
-        if request.method in {"GET", "HEAD", "OPTIONS"}:
-            return True
 
-        account = resolve_authenticated_account(request.user)
-        if account is None or account["role"] != PortalRole.UNIVERSITY_ADMIN.value:
+        assigned_ids = assigned_university_ids(request)
+        if assigned_ids is None:
             return True
-
-        scopes = account.get("scopes", {})
-        assigned_ids = scopes.get("universityIds", []) if isinstance(scopes, dict) else []
-        if not isinstance(assigned_ids, list):
-            return False
 
         university_id = obj.university_id if isinstance(obj, CollegeCourse) else obj.id
-        return str(university_id) in {str(item) for item in assigned_ids}
+        return str(university_id) in assigned_ids

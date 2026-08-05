@@ -13,7 +13,7 @@ from apps.core.pagination import StandardPageNumberPagination
 
 from .audit import record_configuration_event
 from .models import CollegeCourse, ConfigurableField, University
-from .permissions import UniversityRegistryPermission
+from .permissions import UniversityRegistryPermission, assigned_university_ids
 from .serializers import (
     CollegeCourseInputSerializer,
     CollegeCourseListQuerySerializer,
@@ -188,6 +188,13 @@ def actor_id(request):
     return getattr(request.user, "user_id", request.user.id)
 
 
+def restrict_universities_to_assigned_scope(request, universities):
+    assigned_ids = assigned_university_ids(request)
+    if assigned_ids is None:
+        return universities
+    return universities.filter(id__in=assigned_ids)
+
+
 class UniversityAdminListView(APIView):
     permission_classes = [UniversityRegistryPermission]
     creates_university = True
@@ -196,7 +203,14 @@ class UniversityAdminListView(APIView):
         query_serializer = UniversityListQuerySerializer(data=request.query_params)
         query_serializer.is_valid(raise_exception=True)
         query = query_serializer.validated_data
-        universities = University.objects.annotate(course_count=Count("college_courses"))
+        scoped_universities = restrict_universities_to_assigned_scope(request, University.objects.all())
+        summary = scoped_universities.aggregate(
+            totalUniversities=Count("id", distinct=True),
+            publicUniversities=Count("id", filter=Q(classification="Public"), distinct=True),
+            privateUniversities=Count("id", filter=Q(classification="Private"), distinct=True),
+            totalDegreeCourses=Count("college_courses"),
+        )
+        universities = scoped_universities.annotate(course_count=Count("college_courses"))
         if query.get("search"):
             search = query["search"]
             universities = universities.filter(
@@ -214,7 +228,9 @@ class UniversityAdminListView(APIView):
 
         paginator = StandardPageNumberPagination()
         page = paginator.paginate_queryset(universities, request, view=self)
-        return paginator.get_paginated_response(UniversitySerializer(page, many=True).data)
+        response = paginator.get_paginated_response(UniversitySerializer(page, many=True).data)
+        response.data["summary"] = summary
+        return response
 
     def post(self, request) -> Response:
         serializer = UniversityInputSerializer(data=request.data)
