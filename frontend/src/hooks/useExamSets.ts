@@ -31,8 +31,11 @@ export function useExamSets(services: UseExamSetsServices = defaultServices) {
   const loadGeneration = useRef(0);
   const mounted = useRef(true);
 
-  useEffect(() => () => {
-    mounted.current = false;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
   }, []);
 
   const reload = useCallback(async (): Promise<void> => {
