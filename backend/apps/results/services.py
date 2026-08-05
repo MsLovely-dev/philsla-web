@@ -1,8 +1,12 @@
-from __future__ import annotations
-
 import hashlib
+import random
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Literal, Sequence
+from uuid import uuid4
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -10,7 +14,23 @@ from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.roles import get_user_role
 
-from .models import ExamReviewAnswerSheet, ExamReviewItem, ExamReviewItemType, ExamReviewRecord, ExamReviewStatus
+from .models import (
+    CandidateScore,
+    ExamReviewAnswerSheet,
+    ExamReviewItem,
+    ExamReviewItemType,
+    ExamReviewRecord,
+    ExamReviewStatus,
+    ExamSet,
+    ExaminationSession,
+    ExaminationSessionStatus,
+    RankingPopulation,
+    ScoreBatchStatus,
+    ScoreProcessingBatch,
+    ScoreReleaseAuditLog,
+    ScoreReleaseStatus,
+    ScoreReviewStatus,
+)
 
 
 class ExamReviewReleaseConflict(APIException):
@@ -121,28 +141,6 @@ def upload_exam_review_answer_sheet(*, review_id, uploaded_file, template_source
         uploaded_by=get_user_role(actor) or "LOCAL_PROTOTYPE",
     )
     return record
-import random
-from collections import defaultdict
-from dataclasses import dataclass
-from typing import Literal, Sequence
-from uuid import uuid4
-
-from django.contrib.auth import get_user_model
-from django.db import transaction
-from django.utils import timezone
-
-from .models import (
-    CandidateScore,
-    ExamSet,
-    ExaminationSession,
-    ExaminationSessionStatus,
-    RankingPopulation,
-    ScoreBatchStatus,
-    ScoreProcessingBatch,
-    ScoreReleaseAuditLog,
-    ScoreReleaseStatus,
-    ScoreReviewStatus,
-)
 
 
 ReviewStatus = Literal["APPROVED", "PENDING", "REJECTED"]

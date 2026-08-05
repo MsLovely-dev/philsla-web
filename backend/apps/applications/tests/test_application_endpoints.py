@@ -814,6 +814,14 @@ class ApplicationEndpointTests(TestCase):
             size=12,
             sha256="abc123",
         )
+        ApplicationIdentityMedia.objects.create(
+            verification=verification,
+            media_type=IdentityMediaType.STUDENT_ID_FRONT,
+            file="private/registration-identity/student-id-front.jpg",
+            content_type="image/jpeg",
+            size=34,
+            sha256="def456",
+        )
         self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
 
         response = self.client.get(reverse("applications:detail", args=[submitted.id]))

@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("results", "0006_exam_review_item"),
+        ("results", "0003_examreviewitem"),
     ]
 
     operations = [
@@ -15,8 +15,5 @@ class Migration(migrations.Migration):
         migrations.AddField(model_name="examreviewitem", name="response_submitted_at", field=models.DateTimeField(blank=True, null=True)),
         migrations.AddField(model_name="examreviewitem", name="rubric_text", field=models.TextField(blank=True, default="")),
         migrations.AddField(model_name="examreviewitem", name="word_count", field=models.PositiveIntegerField(blank=True, null=True)),
-        migrations.AddConstraint(
-            model_name="examreviewitem",
-            constraint=models.CheckConstraint(condition=models.Q(("ai_proposed_score__isnull", True), ("ai_proposed_score__lte", models.F("max_points")), _connector="OR"), name="exam_review_item_ai_score_lte_max"),
-        ),
+        migrations.AddConstraint(model_name="examreviewitem", constraint=models.CheckConstraint(condition=models.Q(("ai_proposed_score__isnull", True), ("ai_proposed_score__lte", models.F("max_points")), _connector="OR"), name="exam_review_item_ai_score_lte_max")),
     ]

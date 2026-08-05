@@ -8,7 +8,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("results", "0004_exam_review_record"),
+        ("results", "0001_initial"),
     ]
 
     operations = [
