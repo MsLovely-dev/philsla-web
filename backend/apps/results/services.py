@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import hashlib
 
 from django.conf import settings
@@ -119,8 +121,6 @@ def upload_exam_review_answer_sheet(*, review_id, uploaded_file, template_source
         uploaded_by=get_user_role(actor) or "LOCAL_PROTOTYPE",
     )
     return record
-from __future__ import annotations
-
 import random
 from collections import defaultdict
 from dataclasses import dataclass
