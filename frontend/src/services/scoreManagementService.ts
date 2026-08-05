@@ -202,8 +202,8 @@ function scoreResultQueryString(query: ScoreManagementResultQuery): string {
   const params = new URLSearchParams({
     page: String(query.page ?? 1),
     pageSize: String(query.pageSize ?? 100),
-    sortKey: query.sortKey ?? 'rank',
-    sortDirection: query.sortDirection ?? 'asc',
+    sortKey: query.sortKey ?? 'finalScore',
+    sortDirection: query.sortDirection ?? 'desc',
   });
   const search = query.search?.trim();
   if (search) params.set('search', search);

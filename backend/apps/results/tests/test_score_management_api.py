@@ -142,6 +142,18 @@ class ScoreManagementApiTests(TestCase):
         scores = [row["finalScore"] for row in response.data["results"]]
         self.assertEqual(scores, sorted(scores))
 
+    def test_results_default_to_highest_final_score_first_after_processing(self):
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+
+        response = self.client.get(
+            reverse("results:score-management-results", args=[REGULAR_SESSION_ID]),
+            {"pageSize": 10},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        scores = [row["finalScore"] for row in response.data["results"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
     def test_results_can_sort_by_candidate_id(self):
         self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
 

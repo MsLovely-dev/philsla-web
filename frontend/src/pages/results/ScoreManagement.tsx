@@ -41,6 +41,8 @@ const RELEASE_FILTERS: Array<{ label: string; value: ReleaseFilter }> = [
   { label: 'Released', value: 'RELEASED' },
 ];
 const PAGE_SIZE = 100;
+const DEFAULT_SORT_KEY: SortKey = 'finalScore';
+const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 
 export default function ScoreManagement() {
   const navigate = useNavigate();
@@ -51,8 +53,8 @@ export default function ScoreManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [releaseFilter, setReleaseFilter] = useState<ReleaseFilter>('All');
-  const [sortKey, setSortKey] = useState<SortKey>('rank');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT_KEY);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(DEFAULT_SORT_DIRECTION);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -179,8 +181,8 @@ export default function ScoreManagement() {
     setSelectedBatchId(batchId);
     setSearchTerm('');
     setReleaseFilter('All');
-    setSortKey('rank');
-    setSortDirection('asc');
+    setSortKey(DEFAULT_SORT_KEY);
+    setSortDirection(DEFAULT_SORT_DIRECTION);
     setCurrentPage(1);
     setIsLoading(true);
     setErrorMessage(null);
@@ -190,8 +192,8 @@ export default function ScoreManagement() {
         getScoreManagementBatchResultPage(batchId, {
           page: 1,
           pageSize: PAGE_SIZE,
-          sortKey: 'rank',
-          sortDirection: 'asc',
+          sortKey: DEFAULT_SORT_KEY,
+          sortDirection: DEFAULT_SORT_DIRECTION,
           search: '',
         }),
       ]);

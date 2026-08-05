@@ -119,8 +119,8 @@ describe('ScoreManagement', () => {
       page: 1,
       pageSize: 100,
       search: 'PHL-2027-000123',
-      sortKey: 'rank',
-      sortDirection: 'asc',
+      sortKey: 'finalScore',
+      sortDirection: 'desc',
     })));
   });
 
@@ -137,8 +137,8 @@ describe('ScoreManagement', () => {
       page: 1,
       pageSize: 100,
       search: 'PHL-2027-000123',
-      sortKey: 'rank',
-      sortDirection: 'asc',
+      sortKey: 'finalScore',
+      sortDirection: 'desc',
     })));
   });
 

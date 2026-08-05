@@ -116,7 +116,7 @@ describe('scoreManagementService', () => {
       releaseStatus: 'NOT_RELEASED',
     });
 
-    expect(requestMock).toHaveBeenCalledWith('/api/v1/results/score-management/batches/SESSION-2027-REGULAR/results/?page=1&pageSize=100&sortKey=rank&sortDirection=asc&search=PHL-2027-000123&releaseStatus=NOT_RELEASED');
+    expect(requestMock).toHaveBeenCalledWith('/api/v1/results/score-management/batches/SESSION-2027-REGULAR/results/?page=1&pageSize=100&sortKey=finalScore&sortDirection=desc&search=PHL-2027-000123&releaseStatus=NOT_RELEASED');
   });
 
   it('fetches candidate profile through the score-management profile endpoint', async () => {
