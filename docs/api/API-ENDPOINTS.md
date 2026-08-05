@@ -966,6 +966,18 @@ Test coverage:
 - Behavior tests: `backend/apps/analytics/tests/test_national_overview.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
 
+## Exam management
+
+### `/api/v1/exams/blueprints/`
+
+Authenticated Blueprint list responses and successful create or update responses include
+`current_version_id`. The value is the current Blueprint Version identifier required as
+`blueprint_version_id` when creating or updating an Exam Set. It is `null` only when a
+Blueprint has no current version.
+
+This is an additive response field. Existing authentication and role requirements for
+Blueprint operations are unchanged.
+
 ## Candidate endpoint groups
 
 | Capability | Candidate base path | Status |

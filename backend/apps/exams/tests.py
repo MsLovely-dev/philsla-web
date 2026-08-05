@@ -91,10 +91,15 @@ class ExamBlueprintApiTests(APITestCase):
         self.assertEqual(response.data["code"], "BP-2026-ADM-01")
         self.assertEqual(response.data["status"], "DRAFT")
         self.assertEqual(response.data["sections"][0]["item_count"], 2)
+        self.assertEqual(
+            response.data["current_version_id"],
+            str(BlueprintVersion.objects.get(blueprint_id=response.data["id"]).pk),
+        )
 
         list_response = self.client.get(reverse("exams:blueprint_list"))
         self.assertEqual(list_response.status_code, 200)
         self.assertGreaterEqual(len(list_response.data), 1)
+        self.assertEqual(list_response.data[0]["current_version_id"], response.data["current_version_id"])
 
     def test_transition_and_delete_draft_blueprint(self) -> None:
         created = self.client.post(reverse("exams:blueprint_list"), self.payload, format="json")

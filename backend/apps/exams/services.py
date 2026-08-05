@@ -394,6 +394,7 @@ def serialize_blueprint(blueprint: ExamBlueprint) -> dict[str, Any]:
     if version is None:
         return {
             "id": str(blueprint.pk),
+            "current_version_id": None,
             "code": blueprint.spec_code,
             "name": "",
             "description": "",
@@ -423,6 +424,7 @@ def serialize_blueprint(blueprint: ExamBlueprint) -> dict[str, Any]:
 
     return {
         "id": str(blueprint.pk),
+        "current_version_id": str(version.pk),
         "code": blueprint.spec_code,
         "name": version.name,
         "description": version.description,
