@@ -89,7 +89,7 @@ export class ApiClient {
 
     for (const url of urls) {
       try {
-        return await this.sendBlob(url, init);
+        return await this.sendBlob(url, path, init);
       } catch (error) {
         failures.push(`${url}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -142,15 +142,12 @@ export class ApiClient {
     return this.mapError(response, payload as ApiErrorEnvelope);
   }
 
-  private async sendBlob(url: string, init: RequestInit): Promise<ServiceResult<Blob>> {
-    const response = await this.fetcher(url, {
-      ...init,
-      credentials: 'include',
-      headers: {
-        ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
-        ...init.headers,
-      },
-    });
+  private async sendBlob(url: string, path: string, init: RequestInit): Promise<ServiceResult<Blob>> {
+    let response = await this.fetchBlobOnce(url, init);
+
+    if (response.status === 401 && this.shouldAttemptRefresh(path) && await this.refreshBearerToken()) {
+      response = await this.fetchBlobOnce(url, init);
+    }
 
     if (response.ok) {
       return serviceSuccess(await response.blob());
@@ -158,6 +155,17 @@ export class ApiClient {
 
     const payload = await this.readJson<ApiErrorEnvelope>(response).catch(() => ({} as ApiErrorEnvelope));
     return this.mapError(response, payload as ApiErrorEnvelope);
+  }
+
+  private async fetchBlobOnce(url: string, init: RequestInit): Promise<Response> {
+    return this.fetcher(url, {
+      ...init,
+      credentials: 'include',
+      headers: {
+        ...(this.bearerToken ? { Authorization: `Bearer ${this.bearerToken}` } : {}),
+        ...init.headers,
+      },
+    });
   }
 
   private shouldAttemptRefresh(path: string): boolean {
