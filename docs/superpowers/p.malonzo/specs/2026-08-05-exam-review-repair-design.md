@@ -8,7 +8,7 @@
 
 **Target branch:** `p.malonzo/exam-review`
 
-**Status:** Design approved; awaiting written-spec review
+**Status:** Approved and implemented; changes intentionally uncommitted
 
 ## Problem
 

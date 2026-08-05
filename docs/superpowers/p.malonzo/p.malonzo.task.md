@@ -7,9 +7,9 @@
 | Sprint | Wednesday 2026-08-05 through Friday 2026-08-07 |
 | Primary module | BRD-05 Exam Review |
 | Official primary branch | `p.malonzo/exam-review` |
-| Current checkout | `feat/exam-review` at `origin/main`; branch alignment is required before implementation |
-| Documentation status | Exam Review design approved; written specification awaiting owner review |
-| Implementation status | No repair implementation is authorized yet |
+| Current checkout | `p.malonzo/exam-review`; owner directed execution in the current checkout |
+| Documentation status | Design, specification, plan, and implementation record complete |
+| Implementation status | Code repair verified; branch publication authorized; local database recovery choice pending |
 
 ## Stories
 
