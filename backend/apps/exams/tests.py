@@ -277,6 +277,14 @@ class ExamSetApiTests(APITestCase):
 
         transition_response = self.client.post(
             reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id}),
+            {"status": "ACADEMIC_REVIEW", "remarks": "Ready for review"},
+            format="json",
+        )
+        self.assertEqual(transition_response.status_code, 200)
+        self.assertEqual(transition_response.data["status"], "ACADEMIC_REVIEW")
+
+        transition_response = self.client.post(
+            reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id}),
             {"status": "APPROVED", "remarks": "Ready for publication"},
             format="json",
         )
@@ -286,3 +294,50 @@ class ExamSetApiTests(APITestCase):
         clone_response = self.client.post(reverse("exams:exam_set_clone", kwargs={"exam_set_id": exam_set_id}))
         self.assertEqual(clone_response.status_code, 201)
         self.assertTrue(clone_response.data["exam_code"])
+
+    def test_rejects_invalid_lifecycle_transitions_and_locked_updates(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        exam_set_id = created.data["id"]
+        transition_url = reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id})
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": exam_set_id})
+
+        direct_approval = self.client.post(transition_url, {"status": "APPROVED"}, format="json")
+        self.assertEqual(direct_approval.status_code, 409)
+        self.assertEqual(direct_approval.data["error"]["code"], "EXAM_SET_LIFECYCLE_CONFLICT")
+
+        self.assertEqual(self.client.post(transition_url, {"status": "ACADEMIC_REVIEW"}, format="json").status_code, 200)
+        self.assertEqual(self.client.post(transition_url, {"status": "PUBLISHED"}, format="json").status_code, 409)
+        self.assertEqual(self.client.post(transition_url, {"status": "APPROVED"}, format="json").status_code, 200)
+
+        locked_update = self.client.put(detail_url, {**self.payload, "title": "Changed after approval"}, format="json")
+        self.assertEqual(locked_update.status_code, 409)
+
+        self.assertEqual(self.client.post(transition_url, {"status": "PUBLISHED"}, format="json").status_code, 200)
+        self.assertEqual(self.client.post(transition_url, {"status": "ARCHIVED"}, format="json").status_code, 200)
+        self.assertEqual(self.client.post(transition_url, {"status": "DRAFT"}, format="json").status_code, 409)
+
+    def test_rejects_submission_of_an_empty_exam_set(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), {**self.payload, "items": []}, format="json")
+        response = self.client.post(
+            reverse("exams:exam_set_transition", kwargs={"exam_set_id": created.data["id"]}),
+            {"status": "ACADEMIC_REVIEW"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["code"], "EXAM_SET_VALIDATION_CONFLICT")
+
+    def test_denies_unauthenticated_and_unapproved_roles(self) -> None:
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get(reverse("exams:exam_set_list")).status_code, 401)
+
+        User = get_user_model()
+        university_user = User.objects.create_user(
+            username="university_admin",
+            email="university.admin@example.test",
+            password="Password1!",
+        )
+        AccountProfile.objects.create(user=university_user, role=PortalRole.UNIVERSITY_ADMIN.value)
+        self.client.force_authenticate(university_user)
+
+        self.assertEqual(self.client.get(reverse("exams:exam_set_list")).status_code, 403)

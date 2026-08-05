@@ -9,6 +9,7 @@ from django.db.models import Prefetch
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.utils.text import slugify
+from rest_framework.exceptions import APIException
 
 from apps.accounts.models import AccountProfile
 
@@ -69,6 +70,30 @@ QUESTION_TYPE_CODE_MAP = {
     "fib": "IDENTIFICATION",
     "essay": "ESSAY",
 }
+
+
+class ExamSetLifecycleConflict(APIException):
+    status_code = 409
+    default_code = "exam_set_lifecycle_conflict"
+    default_detail = "The requested Exam Set lifecycle action is not allowed."
+
+
+class ExamSetValidationConflict(APIException):
+    status_code = 409
+    default_code = "exam_set_validation_conflict"
+    default_detail = "The Exam Set must satisfy its validation requirements before this transition."
+
+
+EXAM_SET_ALLOWED_TRANSITIONS = {
+    ExamSetStatus.DRAFT: {ExamSetStatus.ACADEMIC_REVIEW},
+    ExamSetStatus.ACADEMIC_REVIEW: {ExamSetStatus.REVISION_REQUIRED, ExamSetStatus.APPROVED},
+    ExamSetStatus.REVISION_REQUIRED: {ExamSetStatus.ACADEMIC_REVIEW},
+    ExamSetStatus.APPROVED: {ExamSetStatus.PUBLISHED},
+    ExamSetStatus.PUBLISHED: {ExamSetStatus.ARCHIVED},
+    ExamSetStatus.ARCHIVED: set(),
+}
+
+EXAM_SET_EDITABLE_STATUSES = {ExamSetStatus.DRAFT, ExamSetStatus.REVISION_REQUIRED}
 
 
 def _payload_value(
@@ -1273,6 +1298,9 @@ def create_or_update_exam_set(
     actor_profile: AccountProfile,
     exam_set: ExamSet | None = None,
 ) -> ExamSet:
+    if exam_set is not None and exam_set.status not in EXAM_SET_EDITABLE_STATUSES:
+        raise ExamSetLifecycleConflict("Only draft or revision-required Exam Sets can be edited.")
+
     blueprint_version_id = _payload_value(payload, "blueprint_version_id", "blueprintVersionId")
     blueprint_version = BlueprintVersion.objects.filter(pk=blueprint_version_id).select_related("blueprint").first() if blueprint_version_id not in (None, "") else None
     if blueprint_version is None:
@@ -1305,7 +1333,7 @@ def create_or_update_exam_set(
         "exam_type": _normalize_exam_type(_payload_value(payload, "exam_type", "examType", default=exam_set.exam_type if exam_set else ExamType.ADMISSION)),
         "instructions": str(_payload_value(payload, "instructions", default=exam_set.instructions if exam_set else "") or ""),
         "duration_minutes": int(_payload_value(payload, "duration_minutes", "durationMinutes", default=exam_set.duration_minutes if exam_set else 0) or 0),
-        "status": _normalize_exam_set_status(_payload_value(payload, "status", default=exam_set.status if exam_set else ExamSetStatus.DRAFT)),
+        "status": exam_set.status if exam_set else ExamSetStatus.DRAFT,
         "cloned_from_exam_set": exam_set.cloned_from_exam_set if exam_set and exam_set.cloned_from_exam_set else None,
         "created_by": exam_set.created_by if exam_set else actor_profile,
         "approved_by": exam_set.approved_by if exam_set else None,
@@ -1353,6 +1381,25 @@ def transition_exam_set(
 ) -> ExamSet:
     normalized_status = _normalize_exam_set_status(target_status)
     previous_status = exam_set.status
+    if normalized_status not in EXAM_SET_ALLOWED_TRANSITIONS.get(previous_status, set()):
+        raise ExamSetLifecycleConflict(
+            f"Exam Sets cannot transition from {previous_status.upper()} to {normalized_status.upper()}.",
+        )
+
+    if normalized_status in {
+        ExamSetStatus.ACADEMIC_REVIEW,
+        ExamSetStatus.APPROVED,
+        ExamSetStatus.PUBLISHED,
+    }:
+        _record_exam_set_validation_results(exam_set)
+        validation_results = list(exam_set.validation_results.values_list("result", flat=True))
+        if ValidationResult.FAILED in validation_results:
+            raise ExamSetValidationConflict("Resolve failed Exam Set validations before continuing.")
+        if normalized_status in {ExamSetStatus.APPROVED, ExamSetStatus.PUBLISHED} and any(
+            result != ValidationResult.PASSED for result in validation_results
+        ):
+            raise ExamSetValidationConflict("Resolve Exam Set validation warnings before approval or publication.")
+
     exam_set.status = normalized_status
     now = timezone.now()
     if normalized_status == ExamSetStatus.APPROVED:

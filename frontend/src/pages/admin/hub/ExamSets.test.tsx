@@ -145,4 +145,71 @@ describe('ExamSets', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Synthetic conflict.');
     expect(screen.getByText('Server-provided Exam Set')).toBeInTheDocument();
   });
+
+  it('preserves server item metadata when editing other Exam Set fields', async () => {
+    const update = vi.fn().mockResolvedValue(serviceSuccess(record));
+    const recordWithMetadata = {
+      ...record,
+      items: [{
+        id: '70',
+        displayOrder: 1,
+        points: 3,
+        selectionMethod: 'automatic',
+        selectedBy: 'Synthetic Owner',
+        selectedAt: '2026-08-05T00:00:00Z',
+        blueprintSectionId: '55',
+        question: {
+          id: '101',
+          questionCode: 'Q-SYNTHETIC',
+          questionType: 'Multiple Choice',
+          questionTypeCode: 'MCQ',
+          subject: 'Synthetic Subject',
+          topic: 'Synthetic Topic',
+          difficulty: 'EASY',
+          status: 'APPROVED',
+          points: 1,
+        },
+      }],
+    } as ExamSetRecord;
+    mockUseExamSets.mockReturnValue(hookState({ examSets: [recordWithMetadata], update }));
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByRole('button', { name: 'Save Exam Set' }));
+
+    expect(update).toHaveBeenCalledWith('7', expect.objectContaining({
+      items: [{
+        questionId: '101',
+        displayOrder: 1,
+        points: 3,
+        blueprintSectionId: '55',
+        selectionMethod: 'automatic',
+      }],
+    }));
+  });
+
+  it('wires clone, lifecycle transition, and confirmed deletion to the API hook', async () => {
+    const clone = vi.fn().mockResolvedValue(serviceSuccess(record));
+    const transition = vi.fn().mockResolvedValue(serviceSuccess(record));
+    const remove = vi.fn().mockResolvedValue(serviceSuccess(null));
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockUseExamSets.mockReturnValue(hookState({ clone, transition, remove }));
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Clone' }));
+    expect(clone).toHaveBeenCalledWith('7');
+
+    await user.click(screen.getByRole('button', { name: 'Submit for Review' }));
+    expect(transition).toHaveBeenCalledWith('7', {
+      status: 'ACADEMIC_REVIEW',
+      remarks: 'Submitted for academic review.',
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(confirm).toHaveBeenCalledWith('Delete Server-provided Exam Set? This action cannot be undone.');
+    expect(remove).toHaveBeenCalledWith('7');
+    confirm.mockRestore();
+  });
 });

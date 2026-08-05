@@ -978,6 +978,49 @@ Blueprint has no current version.
 This is an additive response field. Existing authentication and role requirements for
 Blueprint operations are unchanged.
 
+### `/api/v1/exams/exam-sets/`
+
+Exam Set administration is implemented through these authenticated endpoints:
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `GET`, `POST` | `/api/v1/exams/exam-sets/` | List Exam Sets or create a new draft |
+| `GET`, `PUT`, `PATCH`, `DELETE` | `/api/v1/exams/exam-sets/{exam_set_id}/` | Read, edit, or delete one Exam Set |
+| `POST` | `/api/v1/exams/exam-sets/{exam_set_id}/clone/` | Clone an Exam Set into a new draft |
+| `POST` | `/api/v1/exams/exam-sets/{exam_set_id}/transition/` | Apply an allowed lifecycle transition |
+
+Only authenticated `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN` accounts may use these
+endpoints. The current data model does not assign Exam Sets to a region, institution,
+or other administrative scope, so these roles operate against the nationwide Exam Set
+collection. Any future narrower object-level assignment rule requires a reviewed model
+and contract change and remains `TBD`.
+
+Creation always produces `DRAFT`, regardless of any client-submitted `status`. Metadata
+and item edits are allowed only while an Exam Set is `DRAFT` or
+`REVISION_REQUIRED`. Deletion is allowed only for `DRAFT`, `REVISION_REQUIRED`, or
+`ARCHIVED` records. The lifecycle graph is authoritative on the backend:
+
+```text
+DRAFT -> ACADEMIC_REVIEW
+ACADEMIC_REVIEW -> REVISION_REQUIRED | APPROVED
+REVISION_REQUIRED -> ACADEMIC_REVIEW
+APPROVED -> PUBLISHED
+PUBLISHED -> ARCHIVED
+ARCHIVED -> no further transition
+```
+
+Transitions into `ACADEMIC_REVIEW`, `APPROVED`, or `PUBLISHED` rerun Exam Set
+validation. Failed validations block all three transitions; warnings also block approval
+and publication. Invalid transitions return HTTP `409` with code
+`EXAM_SET_LIFECYCLE_CONFLICT`; validation-gate failures return HTTP `409` with code
+`EXAM_SET_VALIDATION_CONFLICT`. Missing authentication returns `401`, and an
+authenticated account outside the permitted roles receives `403`.
+
+Create and update payloads reference the authoritative Blueprint Version through
+`blueprint_version_id` and Question Bank records through each item's `question_id`.
+The browser must not treat route guards, submitted status values, or local storage as
+authorization or authoritative Exam Set state.
+
 ## Candidate endpoint groups
 
 | Capability | Candidate base path | Status |

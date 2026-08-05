@@ -43,12 +43,18 @@ interface EditorState {
   recordId: string | null;
   title: string;
   blueprintId: string;
+  blueprintVersionId: string;
   academicYear: string;
   examinationPeriod: string;
   examType: string;
   instructions: string;
   durationMinutes: number;
   questionIds: string[];
+  itemMetadata: Record<string, {
+    points: number;
+    blueprintSectionId?: string | null;
+    selectionMethod?: string;
+  }>;
 }
 
 function emptyEditor(blueprint?: Blueprint): EditorState {
@@ -56,12 +62,14 @@ function emptyEditor(blueprint?: Blueprint): EditorState {
     recordId: null,
     title: '',
     blueprintId: blueprint?.id ?? '',
+    blueprintVersionId: blueprint?.currentVersionId ?? '',
     academicYear: blueprint?.academicYear ?? '',
     examinationPeriod: '',
     examType: blueprint?.examType ?? '',
     instructions: '',
     durationMinutes: blueprint?.rules?.totalTimeLimit || 60,
     questionIds: [],
+    itemMetadata: {},
   };
 }
 
@@ -102,7 +110,8 @@ function toEditor(record: ExamSetRecord, blueprints: Blueprint[]): EditorState {
   return {
     recordId: record.id,
     title: record.title,
-    blueprintId: blueprint?.id ?? '',
+    blueprintId: blueprint?.id ?? `version:${record.blueprintVersion.id}`,
+    blueprintVersionId: record.blueprintVersion.id,
     academicYear: record.academicYear,
     examinationPeriod: record.examinationPeriod,
     examType: record.examType,
@@ -112,6 +121,11 @@ function toEditor(record: ExamSetRecord, blueprints: Blueprint[]): EditorState {
       .slice()
       .sort((left, right) => left.displayOrder - right.displayOrder)
       .map((item) => item.question.id),
+    itemMetadata: Object.fromEntries(record.items.map((item) => [item.question.id, {
+      points: item.points,
+      blueprintSectionId: item.blueprintSectionId,
+      selectionMethod: item.selectionMethod,
+    }])),
   };
 }
 
@@ -140,7 +154,9 @@ export default function ExamSets() {
   const pending = mutationState === 'pending';
 
   const eligibleBlueprints = useMemo(
-    () => blueprints.filter((blueprint) => blueprint.currentVersionId),
+    () => blueprints.filter(
+      (blueprint) => blueprint.currentVersionId && (blueprint.status === 'APPROVED' || blueprint.status === 'PUBLISHED'),
+    ),
     [blueprints],
   );
   const filteredExamSets = useMemo(() => {
@@ -172,6 +188,7 @@ export default function ExamSets() {
     setEditor((current) => current ? {
       ...current,
       blueprintId,
+      blueprintVersionId: blueprint?.currentVersionId ?? current.blueprintVersionId,
       academicYear: blueprint?.academicYear ?? current.academicYear,
       examType: blueprint?.examType ?? current.examType,
       durationMinutes: blueprint?.rules?.totalTimeLimit || current.durationMinutes,
@@ -207,7 +224,8 @@ export default function ExamSets() {
     event.preventDefault();
     if (!editor) return;
     const blueprint = eligibleBlueprints.find((item) => item.id === editor.blueprintId);
-    if (!blueprint?.currentVersionId) {
+    const blueprintVersionId = blueprint?.currentVersionId ?? editor.blueprintVersionId;
+    if (!blueprintVersionId) {
       setNotice({ type: 'error', message: 'Select a Blueprint with a current version.' });
       return;
     }
@@ -215,17 +233,22 @@ export default function ExamSets() {
     const questionById = new Map(questions.map((question) => [question.id, question]));
     const draft: ExamSetDraft = {
       title: editor.title.trim(),
-      blueprintVersionId: blueprint.currentVersionId,
+      blueprintVersionId,
       academicYear: editor.academicYear.trim(),
       durationMinutes: editor.durationMinutes,
       examinationPeriod: editor.examinationPeriod.trim(),
       examType: editor.examType.trim(),
       instructions: editor.instructions.trim(),
-      items: editor.questionIds.map((questionId, index) => ({
-        questionId,
-        displayOrder: index + 1,
-        points: questionById.get(questionId)?.points ?? 1,
-      })),
+      items: editor.questionIds.map((questionId, index) => {
+        const metadata = editor.itemMetadata[questionId];
+        return {
+          questionId,
+          displayOrder: index + 1,
+          points: metadata?.points ?? questionById.get(questionId)?.points ?? 1,
+          ...(metadata?.blueprintSectionId ? { blueprintSectionId: metadata.blueprintSectionId } : {}),
+          ...(metadata?.selectionMethod ? { selectionMethod: metadata.selectionMethod } : {}),
+        };
+      }),
     };
     const result = editor.recordId
       ? await update(editor.recordId, draft)
@@ -442,6 +465,7 @@ interface ExamSetEditorProps {
 
 function ExamSetEditor({ editor, setEditor, blueprints, questions, pending, chooseBlueprint, toggleQuestion, moveQuestion, onSubmit }: ExamSetEditorProps) {
   const selectedIndex = new Map(editor.questionIds.map((id, index) => [id, index]));
+  const usesHistoricalBlueprintVersion = editor.blueprintId.startsWith('version:');
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="exam-set-editor-title">
       <button type="button" aria-label="Close editor" className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" onClick={() => setEditor(null)} />
@@ -453,7 +477,7 @@ function ExamSetEditor({ editor, setEditor, blueprints, questions, pending, choo
         <form onSubmit={onSubmit} className="space-y-6 p-5 sm:p-7">
           <div className="grid gap-5 sm:grid-cols-2">
             <label className={`${FIELD_LABEL} sm:col-span-2`}>Title<input required value={editor.title} onChange={(event) => setEditor((current) => current ? { ...current, title: event.target.value } : current)} className={FIELD_INPUT} /></label>
-            <label className={FIELD_LABEL}>Blueprint<select required value={editor.blueprintId} onChange={(event) => chooseBlueprint(event.target.value)} className={FIELD_INPUT}><option value="">Select Blueprint</option>{blueprints.map((blueprint) => <option key={blueprint.id} value={blueprint.id}>{blueprint.code} — {blueprint.name}</option>)}</select></label>
+            <label className={FIELD_LABEL}>Blueprint<select required value={editor.blueprintId} onChange={(event) => chooseBlueprint(event.target.value)} className={FIELD_INPUT}><option value="">Select Blueprint</option>{usesHistoricalBlueprintVersion && <option value={editor.blueprintId}>Existing Blueprint version {editor.blueprintVersionId}</option>}{blueprints.map((blueprint) => <option key={blueprint.id} value={blueprint.id}>{blueprint.code} — {blueprint.name}</option>)}</select></label>
             <label className={FIELD_LABEL}>Academic Year<input required value={editor.academicYear} onChange={(event) => setEditor((current) => current ? { ...current, academicYear: event.target.value } : current)} className={FIELD_INPUT} /></label>
             <label className={FIELD_LABEL}>Examination Period<input value={editor.examinationPeriod} onChange={(event) => setEditor((current) => current ? { ...current, examinationPeriod: event.target.value } : current)} className={FIELD_INPUT} /></label>
             <label className={FIELD_LABEL}>Exam Type<input value={editor.examType} onChange={(event) => setEditor((current) => current ? { ...current, examType: event.target.value } : current)} className={FIELD_INPUT} /></label>
