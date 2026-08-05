@@ -35,6 +35,7 @@ import BulkUpload from './BulkUpload';
 import { MOCK_CENTRAL_ITEM_BANK } from './blueprintMockData';
 
 type QuestionStatus = 'PENDING REVIEW' | 'APPROVED' | 'FOR CORRECTION' | 'PUBLISHED' | 'REJECTED';
+type PersonaKey = 'EXAM_ADMIN' | 'SYSTEM_ADMIN' | 'REVIEWER';
 
 interface Question {
   id: string;
@@ -175,10 +176,27 @@ const STATUS_COLORS: Record<QuestionStatus, { bg: string; text: string; border: 
   'REJECTED': { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', icon: XCircle },
 };
 
+const PERSONA_OPTIONS: Array<{ key: PersonaKey; label: string }> = [
+  { key: 'EXAM_ADMIN', label: 'Exam Admin' },
+  { key: 'SYSTEM_ADMIN', label: 'System Admin' },
+  { key: 'REVIEWER', label: 'Reviewer' },
+];
+
+function personaFromRole(role?: string | null): PersonaKey {
+  if (role === 'SYSTEM_ADMIN') return 'SYSTEM_ADMIN';
+  if (role === 'ACADEMIC_REVIEWER' || role === 'ADMISSIONS_REVIEWER') return 'REVIEWER';
+  return 'EXAM_ADMIN';
+}
+
 export default function QuestionBank() {
   const { user } = usePhilSA();
   const [activeBankTab, setActiveBankTab] = useState<'QUESTIONS' | 'STIMULI' | 'UPLOAD'>('QUESTIONS');
   const [searchTerm, setSearchTerm] = useState('');
+  const [activePersona, setActivePersona] = useState<PersonaKey>(() => personaFromRole(user?.role));
+
+  useEffect(() => {
+    setActivePersona(personaFromRole(user?.role));
+  }, [user?.role]);
   
   const [questions, setQuestions] = useState<Question[]>(() => {
     // Generate standard initial merged list
@@ -494,24 +512,65 @@ export default function QuestionBank() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div>
-          <h1 className="text-4xl font-extrabold text-philsa-navy tracking-tight leading-none mb-3">
-             Question Bank
-          </h1>
-          <p className="text-philsa-gray text-sm font-medium max-w-2xl uppercase tracking-widest opacity-60">
-             Centralized repository for secure entrance examination items
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {activeBankTab === 'QUESTIONS' && (
-            <button 
-              onClick={handleOpenAddModal}
-              className="bg-philsa-red text-white px-8 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-philsa-red/20 hover:bg-philsa-red/90 transition-all flex items-center gap-2 cursor-pointer"
-            >
-               <Plus className="w-5 h-5" /> Add New Item
-            </button>
-          )}
+      <div className="card-philsa bg-white border border-philsa-border/70 p-5 sm:p-6 space-y-5 shadow-sm">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-philsa-red/10 text-philsa-red flex items-center justify-center">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <h1 className="text-4xl font-extrabold text-philsa-navy tracking-tight leading-none">
+                  Question Bank
+                </h1>
+                <p className="text-xs font-medium text-philsa-gray uppercase tracking-widest opacity-70 mt-1">
+                  Centralized repository for secure entrance examination items
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 justify-end">
+            <div className="flex items-center gap-2 bg-philsa-bg p-1.5 rounded-2xl border border-philsa-border/40">
+              <span className="text-[10px] font-black uppercase tracking-wider text-philsa-gray px-3">Active Persona:</span>
+              {PERSONA_OPTIONS.map((persona) => (
+                <button
+                  key={persona.key}
+                  onClick={() => setActivePersona(persona.key)}
+                  className={`px-3 py-2 text-[10px] font-bold rounded-xl transition-all cursor-pointer ${
+                    activePersona === persona.key
+                      ? 'bg-philsa-navy text-white shadow-sm font-black'
+                      : 'text-philsa-gray hover:text-philsa-navy hover:bg-philsa-border/20'
+                  }`}
+                >
+                  {persona.label}
+                </button>
+              ))}
+            </div>
+
+            {activeBankTab === 'QUESTIONS' && (
+              <>
+                {questions.some(q => q.status === 'PENDING REVIEW') && (
+                  <button
+                    onClick={() => {
+                      setQuestions(prev => prev.map(q => q.status === 'PENDING REVIEW' ? { ...q, status: 'APPROVED' } : q));
+                      setToastMessage('Approved all pending questions in Question Bank!');
+                      setTimeout(() => setToastMessage(''), 4000);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                     <CheckCircle className="w-4 h-4" /> Approve All Pending Questions
+                  </button>
+                )}
+                <button
+                  onClick={handleOpenAddModal}
+                  className="bg-philsa-red text-white px-8 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest shadow-xl shadow-philsa-red/20 hover:bg-philsa-red/90 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                   <Plus className="w-5 h-5" /> Add New Item
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
