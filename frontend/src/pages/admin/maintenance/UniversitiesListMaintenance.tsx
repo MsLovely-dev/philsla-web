@@ -30,14 +30,83 @@ import {
   backendUniversityService,
   type CollegeCourse,
   type CollegeCourseInput,
+  type PaginationMetadata,
   type UniversityInput,
   type UniversityItem,
+  type UniversityPaginationMetadata,
 } from '../../../services/backendUniversityService';
 
 interface PageNotification {
   title: string;
   message: string;
   tone: NotificationTone;
+}
+
+const INITIAL_UNIVERSITY_PAGINATION: UniversityPaginationMetadata = {
+  count: 0,
+  next: null,
+  previous: null,
+  page: 1,
+  pageSize: 10,
+  summary: {
+    totalUniversities: 0,
+    publicUniversities: 0,
+    privateUniversities: 0,
+    totalDegreeCourses: 0,
+  },
+};
+
+const INITIAL_COURSE_PAGINATION: PaginationMetadata = {
+  count: 0,
+  next: null,
+  previous: null,
+  page: 1,
+  pageSize: 10,
+};
+
+interface PaginationControlsProps {
+  metadata: PaginationMetadata;
+  isLoading: boolean;
+  previousLabel: string;
+  nextLabel: string;
+  onPrevious: () => void;
+  onNext: () => void;
+}
+
+function PaginationControls({
+  metadata,
+  isLoading,
+  previousLabel,
+  nextLabel,
+  onPrevious,
+  onNext,
+}: PaginationControlsProps) {
+  const pageCount = Math.max(1, Math.ceil(metadata.count / metadata.pageSize));
+  return (
+    <nav className="flex items-center justify-between gap-3 text-xs" aria-label="Registry pagination">
+      <span className="font-medium text-slate-500">Page {metadata.page} of {pageCount}</span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-label={previousLabel}
+          disabled={isLoading || !metadata.previous}
+          onClick={onPrevious}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          aria-label={nextLabel}
+          disabled={isLoading || !metadata.next}
+          onClick={onNext}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-bold text-philsa-navy disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </nav>
+  );
 }
 
 function isUniversityClassification(value: string): value is UniversityItem['classification'] {
@@ -55,6 +124,8 @@ function isRegistryStatus(value: string): value is UniversityItem['status'] {
 export default function UniversitiesListMaintenance() {
   const [universities, setUniversities] = useState<UniversityItem[]>([]);
   const [courses, setCourses] = useState<CollegeCourse[]>([]);
+  const [universityPagination, setUniversityPagination] = useState<UniversityPaginationMetadata>(INITIAL_UNIVERSITY_PAGINATION);
+  const [coursePagination, setCoursePagination] = useState<PaginationMetadata>(INITIAL_COURSE_PAGINATION);
   const [isLoadingUniversities, setIsLoadingUniversities] = useState(true);
   const [universitiesLoadError, setUniversitiesLoadError] = useState<string | null>(null);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
@@ -85,12 +156,13 @@ export default function UniversitiesListMaintenance() {
   const [editingCourse, setEditingCourse] = useState<CollegeCourse | null>(null);
   const [courseFormData, setCourseFormData] = useState<Partial<CollegeCourse>>({});
 
-  const loadUniversities = useCallback(async () => {
+  const loadUniversities = useCallback(async (page = 1) => {
     setIsLoadingUniversities(true);
     setUniversitiesLoadError(null);
-    const result = await backendUniversityService.listUniversities();
+    const result = await backendUniversityService.listUniversities(page);
     if (result.ok === true) {
       setUniversities(result.data);
+      if (result.meta) setUniversityPagination(result.meta);
     } else {
       setUniversitiesLoadError(result.error.message);
     }
@@ -98,35 +170,41 @@ export default function UniversitiesListMaintenance() {
   }, []);
 
   useEffect(() => {
-    void loadUniversities();
+    void loadUniversities(1);
   }, [loadUniversities]);
 
   const notify = (title: string, message: string, tone: NotificationTone) => {
     setNotification({ title, message, tone });
   };
 
-  const handleSelectUniversity = async (university: UniversityItem) => {
+  const loadCourses = useCallback(async (university: UniversityItem, page = 1) => {
     const requestId = ++courseRequestId.current;
-    setSelectedUniversity(university);
-    setCourseSearch('');
-    setCollegeFilter('ALL');
     setCourses([]);
     setCoursesLoadError(null);
     setIsLoadingCourses(true);
-    const result = await backendUniversityService.listCourses(university.id);
+    const result = await backendUniversityService.listCourses(university.id, page);
     if (courseRequestId.current !== requestId) return;
     if (result.ok === true) {
       setCourses(result.data);
+      if (result.meta) setCoursePagination(result.meta);
     } else {
       setCoursesLoadError(result.error.message);
     }
     setIsLoadingCourses(false);
+  }, []);
+
+  const handleSelectUniversity = (university: UniversityItem) => {
+    setSelectedUniversity(university);
+    setCourseSearch('');
+    setCollegeFilter('ALL');
+    void loadCourses(university, 1);
   };
 
   const handleBackToUniversities = () => {
     courseRequestId.current += 1;
     setSelectedUniversity(null);
     setCourses([]);
+    setCoursePagination(INITIAL_COURSE_PAGINATION);
     setCoursesLoadError(null);
     setIsLoadingCourses(false);
   };
@@ -147,6 +225,13 @@ export default function UniversitiesListMaintenance() {
         ? { ...current, courseCount: Math.max(0, current.courseCount + change) }
         : current
     ));
+    setUniversityPagination(current => ({
+      ...current,
+      summary: {
+        ...current.summary,
+        totalDegreeCourses: Math.max(0, current.summary.totalDegreeCourses + change),
+      },
+    }));
   };
 
   const uniqueUniRegions = useMemo(() => {
@@ -247,6 +332,27 @@ export default function UniversitiesListMaintenance() {
     setUniversities(current => editingUniversity
       ? current.map(university => university.id === result.data.id ? result.data : university)
       : [result.data, ...current]);
+    if (!editingUniversity) {
+      setUniversityPagination(current => ({
+        ...current,
+        count: current.count + 1,
+        summary: {
+          ...current.summary,
+          totalUniversities: current.summary.totalUniversities + 1,
+          publicUniversities: current.summary.publicUniversities + (result.data.classification === 'Public' ? 1 : 0),
+          privateUniversities: current.summary.privateUniversities + (result.data.classification === 'Private' ? 1 : 0),
+        },
+      }));
+    } else if (editingUniversity.classification !== result.data.classification) {
+      setUniversityPagination(current => ({
+        ...current,
+        summary: {
+          ...current.summary,
+          publicUniversities: current.summary.publicUniversities + (result.data.classification === 'Public' ? 1 : -1),
+          privateUniversities: current.summary.privateUniversities + (result.data.classification === 'Private' ? 1 : -1),
+        },
+      }));
+    }
     setSelectedUniversity(current => current?.id === result.data.id ? result.data : current);
     setIsUniModalOpen(false);
     notify(
@@ -270,6 +376,16 @@ export default function UniversitiesListMaintenance() {
       return;
     }
     setUniversities(current => current.filter(item => item.id !== id));
+    setUniversityPagination(current => ({
+      ...current,
+      count: Math.max(0, current.count - 1),
+      summary: {
+        totalUniversities: Math.max(0, current.summary.totalUniversities - 1),
+        publicUniversities: Math.max(0, current.summary.publicUniversities - (university.classification === 'Public' ? 1 : 0)),
+        privateUniversities: Math.max(0, current.summary.privateUniversities - (university.classification === 'Private' ? 1 : 0)),
+        totalDegreeCourses: Math.max(0, current.summary.totalDegreeCourses - university.courseCount),
+      },
+    }));
     if (selectedUniversity?.id === id) handleBackToUniversities();
     notify('University deleted', `${university.code} and its college courses were removed.`, 'success');
   };
@@ -329,7 +445,10 @@ export default function UniversitiesListMaintenance() {
     setCourses(current => editingCourse
       ? current.map(course => course.id === result.data.id ? result.data : course)
       : [...current, result.data]);
-    if (!editingCourse) adjustCourseCount(selectedUniversity.id, 1);
+    if (!editingCourse) {
+      adjustCourseCount(selectedUniversity.id, 1);
+      setCoursePagination(current => ({ ...current, count: current.count + 1 }));
+    }
     setIsCourseModalOpen(false);
     notify(
       editingCourse ? 'College course updated' : 'College course added',
@@ -352,6 +471,7 @@ export default function UniversitiesListMaintenance() {
     }
     setCourses(current => current.filter(item => item.id !== id));
     adjustCourseCount(selectedUniversity.id, -1);
+    setCoursePagination(current => ({ ...current, count: Math.max(0, current.count - 1) }));
     notify('College course deleted', `${course.programCode} was removed.`, 'success');
   };
 
@@ -416,7 +536,7 @@ export default function UniversitiesListMaintenance() {
         <ErrorState
           title="University registry unavailable"
           message={universitiesLoadError}
-          action={<button type="button" onClick={() => void loadUniversities()} className="btn-primary">Try again</button>}
+          action={<button type="button" onClick={() => void loadUniversities(universityPagination.page)} className="btn-primary">Try again</button>}
         />
       </div>
     );
@@ -506,19 +626,19 @@ export default function UniversitiesListMaintenance() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Accredited Universities</div>
-                <div className="text-2xl font-black text-philsa-navy mt-1">{universities.length}</div>
+                <div className="text-2xl font-black text-philsa-navy mt-1">{universityPagination.summary.totalUniversities}</div>
               </div>
               <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public Universities</div>
-                <div className="text-2xl font-black text-blue-900 mt-1">{universities.filter(u => u.classification === 'Public').length}</div>
+                <div className="text-2xl font-black text-blue-900 mt-1">{universityPagination.summary.publicUniversities}</div>
               </div>
               <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private Autonomous</div>
-                <div className="text-2xl font-black text-purple-900 mt-1">{universities.filter(u => u.classification === 'Private').length}</div>
+                <div className="text-2xl font-black text-purple-900 mt-1">{universityPagination.summary.privateUniversities}</div>
               </div>
               <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Degree Courses</div>
-                <div className="text-2xl font-black text-emerald-900 mt-1">{universities.reduce((total, university) => total + university.courseCount, 0)}</div>
+                <div className="text-2xl font-black text-emerald-900 mt-1">{universityPagination.summary.totalDegreeCourses}</div>
               </div>
             </div>
           </div>
@@ -782,6 +902,14 @@ export default function UniversitiesListMaintenance() {
               })}
             </div>
           )}
+          <PaginationControls
+            metadata={universityPagination}
+            isLoading={isLoadingUniversities}
+            previousLabel="Previous university page"
+            nextLabel="Next university page"
+            onPrevious={() => void loadUniversities(universityPagination.page - 1)}
+            onNext={() => void loadUniversities(universityPagination.page + 1)}
+          />
         </>
       ) : (
         /* VIEW 2: COLLEGE COURSES FOR SELECTED UNIVERSITY */
@@ -836,7 +964,7 @@ export default function UniversitiesListMaintenance() {
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
               <div className="flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-philsa-navy" />
-                <span className="font-bold text-philsa-navy">{universityCourses.length} Registered College Courses</span>
+                <span className="font-bold text-philsa-navy">{coursePagination.count} Registered College Courses</span>
               </div>
               <div className="text-xs font-medium text-slate-500">
                 President / Rector: <span className="font-bold text-slate-700">{selectedUniversity.presidentRector}</span>
@@ -886,7 +1014,7 @@ export default function UniversitiesListMaintenance() {
                         {selectedUniversity && (
                           <button
                             type="button"
-                            onClick={() => void handleSelectUniversity(selectedUniversity)}
+                            onClick={() => void loadCourses(selectedUniversity, coursePagination.page)}
                             className="mt-3 rounded-lg bg-white px-3 py-1.5 font-bold text-philsa-navy shadow-sm"
                           >
                             Try again
@@ -937,6 +1065,14 @@ export default function UniversitiesListMaintenance() {
               </table>
             </div>
           </div>
+          <PaginationControls
+            metadata={coursePagination}
+            isLoading={isLoadingCourses}
+            previousLabel="Previous course page"
+            nextLabel="Next course page"
+            onPrevious={() => selectedUniversity && void loadCourses(selectedUniversity, coursePagination.page - 1)}
+            onNext={() => selectedUniversity && void loadCourses(selectedUniversity, coursePagination.page + 1)}
+          />
         </div>
       )}
 

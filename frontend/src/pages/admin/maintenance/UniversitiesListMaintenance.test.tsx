@@ -31,9 +31,29 @@ function renderPage() {
   return render(<MemoryRouter><UniversitiesListMaintenance /></MemoryRouter>);
 }
 
+function universityPage(items: UniversityItem[], page: number, next: string | null, previous: string | null) {
+  return serviceSuccess(items, {
+    count: 21,
+    next,
+    previous,
+    page,
+    pageSize: 10,
+    summary: {
+      totalUniversities: 21,
+      publicUniversities: 12,
+      privateUniversities: 9,
+      totalDegreeCourses: 84,
+    },
+  });
+}
+
+function coursePage(items: never[], page: number, next: string | null, previous: string | null) {
+  return serviceSuccess(items, { count: 11, next, previous, page, pageSize: 10 });
+}
+
 describe('UniversitiesListMaintenance', () => {
   beforeEach(() => {
-    vi.spyOn(backendUniversityService, 'listUniversities').mockResolvedValue(serviceSuccess([]));
+    vi.spyOn(backendUniversityService, 'listUniversities').mockResolvedValue(universityPage([], 1, null, null));
   });
 
   it('shows a loading state while the university request is pending', () => {
@@ -45,16 +65,47 @@ describe('UniversitiesListMaintenance', () => {
   });
 
   it('shows backend data and loads a selected university course list', async () => {
-    vi.mocked(backendUniversityService.listUniversities).mockResolvedValue(serviceSuccess([university]));
-    const listCourses = vi.spyOn(backendUniversityService, 'listCourses').mockResolvedValue(serviceSuccess([]));
+    vi.mocked(backendUniversityService.listUniversities).mockResolvedValue(universityPage([university], 1, null, null));
+    const listCourses = vi.spyOn(backendUniversityService, 'listCourses').mockResolvedValue(coursePage([], 1, null, null));
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByText(university.name));
 
-    expect(listCourses).toHaveBeenCalledWith(university.id);
+    expect(listCourses).toHaveBeenCalledWith(university.id, 1);
     expect(await screen.findByText('No college courses match your search criteria.')).toBeInTheDocument();
     expect(screen.getByText(`${university.code} - College Courses`)).toBeInTheDocument();
+  });
+
+  it('requests the next university page instead of loading all pages', async () => {
+    const secondPageUniversity = { ...university, id: 'uni-2', code: 'ADMU', name: 'Ateneo de Manila University' };
+    const listUniversities = vi.mocked(backendUniversityService.listUniversities)
+      .mockResolvedValueOnce(universityPage([university], 1, 'http://backend.test/universities?page=2', null))
+      .mockResolvedValueOnce(universityPage([secondPageUniversity], 2, null, 'http://backend.test/universities?page=1'));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: 'Next university page' }));
+
+    expect(listUniversities).toHaveBeenNthCalledWith(1, 1);
+    expect(listUniversities).toHaveBeenNthCalledWith(2, 2);
+    expect(screen.getByText('21')).toBeInTheDocument();
+    expect(await screen.findByText(secondPageUniversity.name)).toBeInTheDocument();
+  });
+
+  it('requests the next course page for the selected university', async () => {
+    vi.mocked(backendUniversityService.listUniversities).mockResolvedValue(universityPage([university], 1, null, null));
+    const listCourses = vi.spyOn(backendUniversityService, 'listCourses')
+      .mockResolvedValueOnce(coursePage([], 1, 'http://backend.test/courses?page=2', null))
+      .mockResolvedValueOnce(coursePage([], 2, null, 'http://backend.test/courses?page=1'));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByText(university.name));
+    await user.click(await screen.findByRole('button', { name: 'Next course page' }));
+
+    expect(listCourses).toHaveBeenNthCalledWith(1, university.id, 1);
+    expect(listCourses).toHaveBeenNthCalledWith(2, university.id, 2);
   });
 
   it.each([

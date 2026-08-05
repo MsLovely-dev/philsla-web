@@ -28,23 +28,77 @@ function jsonResponse(payload: unknown, status = 200): Response {
 }
 
 describe('BackendUniversityService', () => {
-  it('loads all paginated universities and parallelizes pages after the first response', async () => {
+  it('loads only the requested university page with the 10-record page size and pagination metadata', async () => {
     const fetcher = vi.fn(async (url: RequestInfo | URL) => {
       const page = new URL(String(url)).searchParams.get('page');
       return jsonResponse({
-        count: 201,
-        next: page === '3' ? null : 'next',
-        previous: null,
+        count: 21,
+        next: 'http://backend.test/api/v1/configuration/admin/universities/?page=3&pageSize=10',
+        previous: 'http://backend.test/api/v1/configuration/admin/universities/?page=1&pageSize=10',
         results: [{ ...university, id: `uni-${page}` }],
+        summary: {
+          totalUniversities: 21,
+          publicUniversities: 12,
+          privateUniversities: 9,
+          totalDegreeCourses: 84,
+        },
       });
     });
     const service = new BackendUniversityService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
 
-    const result = await service.listUniversities();
+    const result = await service.listUniversities(2);
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.data.map((item) => item.id)).toEqual(['uni-1', 'uni-2', 'uni-3']);
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    if (result.ok) {
+      expect(result.data.map((item) => item.id)).toEqual(['uni-2']);
+      expect(result.meta).toEqual({
+        count: 21,
+        next: 'http://backend.test/api/v1/configuration/admin/universities/?page=3&pageSize=10',
+        previous: 'http://backend.test/api/v1/configuration/admin/universities/?page=1&pageSize=10',
+        page: 2,
+        pageSize: 10,
+        summary: {
+          totalUniversities: 21,
+          publicUniversities: 12,
+          privateUniversities: 9,
+          totalDegreeCourses: 84,
+        },
+      });
+    }
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/configuration/admin/universities/?page=2&pageSize=10',
+      expect.any(Object),
+    );
+  });
+
+  it('loads only the requested course page with the 10-record page size', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({
+      count: 11,
+      next: null,
+      previous: 'http://backend.test/api/v1/configuration/admin/universities/uni-1/courses/?page=1&pageSize=10',
+      results: [],
+    }));
+    const service = new BackendUniversityService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.listCourses(university.id, 2);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toEqual([]);
+      expect(result.meta).toEqual({
+        count: 11,
+        next: null,
+        previous: 'http://backend.test/api/v1/configuration/admin/universities/uni-1/courses/?page=1&pageSize=10',
+        page: 2,
+        pageSize: 10,
+      });
+    }
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/configuration/admin/universities/uni-1/courses/?page=2&pageSize=10',
+      expect.any(Object),
+    );
   });
 
   it('sends the approved university update contract with its expected version', async () => {

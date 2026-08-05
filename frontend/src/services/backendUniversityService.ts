@@ -1,5 +1,5 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
-import { serviceSuccess, type ServiceFailure, type ServiceResult } from './serviceResult';
+import { serviceSuccess, type ServiceResult } from './serviceResult';
 
 export type UniversityClassification = 'Public' | 'Private';
 export type RegistryStatus = 'Active' | 'Inactive';
@@ -68,6 +68,25 @@ export type CollegeCourseInput = Pick<
   | 'status'
 >;
 
+export interface UniversityRegistrySummary {
+  totalUniversities: number;
+  publicUniversities: number;
+  privateUniversities: number;
+  totalDegreeCourses: number;
+}
+
+export interface PaginationMetadata {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  page: number;
+  pageSize: number;
+}
+
+export interface UniversityPaginationMetadata extends PaginationMetadata {
+  summary: UniversityRegistrySummary;
+}
+
 interface PaginatedResponse<TItem> {
   count: number;
   next: string | null;
@@ -75,19 +94,44 @@ interface PaginatedResponse<TItem> {
   results: TItem[];
 }
 
-const PAGE_SIZE = 100;
+interface UniversityPaginatedResponse extends PaginatedResponse<UniversityItem> {
+  summary: UniversityRegistrySummary;
+}
+
+export const UNIVERSITY_REGISTRY_PAGE_SIZE = 10;
 
 export class BackendUniversityService {
   constructor(private readonly apiClient: ApiClient = sharedApiClient) {}
 
-  listUniversities(): Promise<ServiceResult<UniversityItem[]>> {
-    return this.listAllPages<UniversityItem>('/api/v1/configuration/admin/universities/');
+  async listUniversities(page = 1): Promise<ServiceResult<UniversityItem[], UniversityPaginationMetadata>> {
+    const result = await this.requestPage<UniversityPaginatedResponse>(
+      '/api/v1/configuration/admin/universities/',
+      page,
+    );
+    if (result.ok === false) return result;
+    return serviceSuccess(result.data.results, {
+      count: result.data.count,
+      next: result.data.next,
+      previous: result.data.previous,
+      page,
+      pageSize: UNIVERSITY_REGISTRY_PAGE_SIZE,
+      summary: result.data.summary,
+    });
   }
 
-  listCourses(universityId: string): Promise<ServiceResult<CollegeCourse[]>> {
-    return this.listAllPages<CollegeCourse>(
+  async listCourses(universityId: string, page = 1): Promise<ServiceResult<CollegeCourse[], PaginationMetadata>> {
+    const result = await this.requestPage<PaginatedResponse<CollegeCourse>>(
       `/api/v1/configuration/admin/universities/${encodeURIComponent(universityId)}/courses/`,
+      page,
     );
+    if (result.ok === false) return result;
+    return serviceSuccess(result.data.results, {
+      count: result.data.count,
+      next: result.data.next,
+      previous: result.data.previous,
+      page,
+      pageSize: UNIVERSITY_REGISTRY_PAGE_SIZE,
+    });
   }
 
   createUniversity(input: UniversityInput): Promise<ServiceResult<UniversityItem>> {
@@ -146,29 +190,13 @@ export class BackendUniversityService {
     );
   }
 
-  private async listAllPages<TItem>(path: string): Promise<ServiceResult<TItem[]>> {
-    const firstPage = await this.apiClient.request<PaginatedResponse<TItem>>(
-      `${path}?page=1&pageSize=${PAGE_SIZE}`,
+  private requestPage<TResponse extends PaginatedResponse<unknown>>(
+    path: string,
+    page: number,
+  ): Promise<ServiceResult<TResponse>> {
+    return this.apiClient.request<TResponse>(
+      `${path}?page=${page}&pageSize=${UNIVERSITY_REGISTRY_PAGE_SIZE}`,
     );
-    if (firstPage.ok === false) return firstPage as ServiceFailure;
-
-    const totalPages = Math.ceil(firstPage.data.count / PAGE_SIZE);
-    if (totalPages <= 1) return serviceSuccess(firstPage.data.results);
-
-    const remainingRequests = Array.from(
-      { length: totalPages - 1 },
-      (_, index) => this.apiClient.request<PaginatedResponse<TItem>>(
-        `${path}?page=${index + 2}&pageSize=${PAGE_SIZE}`,
-      ),
-    );
-    const remainingPages = await Promise.all(remainingRequests);
-    const failedPage = remainingPages.find((page): page is ServiceFailure => page.ok === false);
-    if (failedPage) return failedPage;
-
-    return serviceSuccess([
-      ...firstPage.data.results,
-      ...remainingPages.flatMap((page) => page.ok ? page.data.results : []),
-    ]);
   }
 }
 
