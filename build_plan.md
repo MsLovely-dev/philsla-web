@@ -123,7 +123,7 @@ docs/superpowers/
 | **Maricon Landicho (M.Landicho)** | Maintenance Table – Student Registration | Maintenance & Config | Not started | 🟡 deferred | `worktrees/m.landicho/` | *(parked — no branch yet)* | `docs/superpowers/m.landicho/m.landicho.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Exam Blueprint | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/exam-blueprint` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Question Bank Management | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/question-bank` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
-| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | In progress | 🔴 no backend entity | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
+| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | Implemented; release verification open | 🟠 API-integrated; baseline failures and migration rehearsal remain | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **Ian Chris Sandoval (I.Sandoval)** | Maintenance Table – Exam Blueprint | Maintenance & Config | Not started | 🟡 deferred | `worktrees/i.sandoval/` | *(parked — no branch yet)* | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (.NET Student) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-student` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (Proctor) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-proctor` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
@@ -136,7 +136,7 @@ docs/superpowers/
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟡 stretch goal | `worktrees/jp.mayordo/` | `jp.mayordo/deped-shs` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
 | **Joshua Ganapin (Jo.Ganapin)** | QR Scanning | Testing Center Ops | Not started | 🔴 no backend (proctoring app empty) | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
 
-**Reality check up front:** 5 of these 9 devs are working with zero or partial backend to build against (Ian, bienvenido.mendoza, Prince, Alvy on Score Management, Joshua). Their Friday output is a **polished demo/prototype and an honest roadmap narrative**, not working software. That's not a staffing failure — it reflects how much of BRD-04/04A and BRD-05 is genuinely pre-implementation. Don't let anyone on those tracks burn Thursday trying to force a real backend into existence.
+**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince, Alvy on Score Management, Joshua). Ian's separately reviewed Exam Sets integration now consumes the merged API and no longer uses mock/browser-local state as authoritative storage. It is not release-ready until the recorded frontend baseline failures are resolved or accepted and the rebased results migrations are rehearsed against PostgreSQL-compatible storage. The other named tracks remain demonstrations or partial implementations rather than claims of production readiness.
 
 ---
 
@@ -160,9 +160,9 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - **Deliverable:** two reviewed plans, one per branch.
 
 ### Ian Chris Sandoval (I.Sandoval) 🔴 / 🟡 — `worktrees/i.sandoval/`
-- On branch `i.sandoval/exam-sets`: confirm directly that Exam Sets has no backend entity (`backend/apps/exams` has no `/exam-sets/` endpoint). Agree scope: `ExamSets.tsx` stays on mock data with a visible "prototype" treatment, plus a one-slide explanation of the open Blueprint-vs-Exam-Set architecture question.
-- Maintenance Table – Exam Blueprint: confirm this is **deferred**, no branch cut — full bandwidth goes to the Exam Sets narrative.
-- **Deliverable:** scope agreement confirmed, not a code plan.
+- On branch `i.sandoval/exam-sets`: the separately approved Exam Sets plan has connected `ExamSets.tsx` to the versioned API, aligned lifecycle and role enforcement, and removed authoritative mock/browser-local persistence. Preserve the verification evidence and the remaining PostgreSQL migration-rehearsal caveat in the implementation log.
+- Maintenance Table – Exam Blueprint: keep this **deferred**, with no maintenance branch cut; the Exam Sets integration was authorized by its own reviewed plan.
+- **Deliverable:** API-backed Exam Sets workflow, verification log, and explicit open release gates.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴 — `worktrees/b.mendoza/`
 - Confirm directly: no Tauri/.NET desktop app exists anywhere in the repo — `ExamDelivery.tsx` is a React web page simulating the experience (fake SQLite log strings, no real IPC).
@@ -219,7 +219,7 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - **Late PM:** Manual smoke test of create/list/transition on both `/admin/hub/questions` and `/admin/questions`.
 
 ### Ian Chris Sandoval (I.Sandoval) 🔴
-- **All day, on `i.sandoval/exam-sets`:** No backend work. Add the "prototype" indicator to `ExamSets.tsx`. Build the Blueprint-vs-Exam-Set architecture talking point.
+- **Completed under the separately reviewed Exam Sets plan, on `i.sandoval/exam-sets`:** Align the merged backend, connect the typed frontend service and workflow, and add backend, component, and browser coverage. Keep release claims gated by the recorded full-suite and migration evidence.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴
 - **All day, on `desktop-app-student` then `desktop-app-proctor`:** No backend work. Polish `ExamDelivery.tsx`'s flow (readiness check → webcam check → offline DB check → exam → submit) for a clean walkthrough. Draft the Tauri architecture one-pager for both variants.
@@ -261,7 +261,7 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - After midday: P0 fixes only.
 
 ### Ian Chris Sandoval (I.Sandoval) 🔴
-- AM: finalize Exam Sets talking point, dry run explaining it live. No code work.
+- AM: present the implemented Exam Sets API workflow and its verification evidence; explicitly disclose unresolved baseline checks and the PostgreSQL migration-rehearsal requirement.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴
 - AM: finalize the Desktop App walkthrough + architecture one-pager, dry run the "what's built vs. what's next" story for both variants. No code work.
