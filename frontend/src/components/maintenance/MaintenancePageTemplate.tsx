@@ -43,6 +43,7 @@ export interface MaintenanceField {
   required?: boolean;
   placeholder?: string;
   dependsOn?: string;
+  dependsOnValue?: string;
   validation?: (val: unknown) => string | null;
   disabled?: boolean;
   onChange?: (val: string, currentData: MaintenanceRecord) => MaintenanceRecord;
@@ -67,6 +68,20 @@ interface MaintenancePageProps<TRow extends object> {
   sidePanel?: React.ReactNode;
   isSidePanelOpen?: boolean;
   aboveTableContent?: React.ReactNode;
+  showCreateAction?: boolean;
+  showRowActions?: boolean;
+  showApprovalColumn?: boolean;
+  renderRowActions?: (row: TRow) => React.ReactNode;
+  searchTerm?: string;
+  onSearchTermChange?: (term: string) => void;
+  advancedFilters?: React.ReactNode;
+  isBackendFiltered?: boolean;
+  pagination?: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    onPageChange: (page: number) => void;
+  };
 }
 
 function readField(row: object, key: string): unknown {
@@ -88,11 +103,22 @@ export default function MaintenancePageTemplate<TRow extends object>({
   extraHeaderActions,
   sidePanel,
   isSidePanelOpen,
-  aboveTableContent
+  aboveTableContent,
+  showCreateAction = true,
+  showRowActions = true,
+  showApprovalColumn = true,
+  renderRowActions,
+  searchTerm: controlledSearchTerm,
+  onSearchTermChange,
+  advancedFilters,
+  isBackendFiltered = false,
+  pagination,
 }: MaintenancePageProps<TRow>) {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [localSearchTerm, setLocalSearchTerm] = useState('');
+  const searchTerm = controlledSearchTerm ?? localSearchTerm;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [isAdvancedFiltersOpen, setIsAdvancedFiltersOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TRow | null>(null);
   const [formData, setFormData] = useState<MaintenanceRecord>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -139,11 +165,22 @@ export default function MaintenancePageTemplate<TRow extends object>({
     setIsModalOpen(false);
   };
 
-  const filteredData = data.filter(row => 
+  const filteredData = isBackendFiltered ? data : data.filter(row => 
     Object.values(row).some(val => 
       String(val).toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
+  const pageCount = pagination ? Math.max(1, Math.ceil(pagination.totalCount / pagination.pageSize)) : 3;
+  const visiblePages = Array.from({ length: pageCount }, (_, index) => index + 1).slice(
+    Math.max(0, Math.min(pagination ? pagination.page - 3 : 0, Math.max(pageCount - 5, 0))),
+    Math.max(0, Math.min(pagination ? pagination.page - 3 : 0, Math.max(pageCount - 5, 0))) + 5,
+  );
+  const showingStart = pagination
+    ? pagination.totalCount === 0 ? 0 : ((pagination.page - 1) * pagination.pageSize) + 1
+    : filteredData.length;
+  const showingEnd = pagination
+    ? Math.min(pagination.page * pagination.pageSize, pagination.totalCount)
+    : filteredData.length;
 
   return (
     <div className="space-y-8 pb-20">
@@ -163,12 +200,14 @@ export default function MaintenancePageTemplate<TRow extends object>({
               <Upload className="w-4 h-4" /> Bulk Import
             </button>
           )}
-          <button 
-            onClick={handleOpenCreate}
-            className="bg-philsa-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-philsa-navy/10 hover:bg-philsa-navy/90 transition-all flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" /> Create New Entry
-          </button>
+          {showCreateAction && (
+            <button
+              onClick={handleOpenCreate}
+              className="bg-philsa-navy text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-philsa-navy/10 hover:bg-philsa-navy/90 transition-all flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Create New Entry
+            </button>
+          )}
         </div>
       </div>
 
@@ -185,17 +224,32 @@ export default function MaintenancePageTemplate<TRow extends object>({
             placeholder="Search records..." 
             className="w-full bg-philsa-bg border-none rounded-2xl pl-14 pr-6 py-3.5 text-sm font-bold text-philsa-navy shadow-inner outline-none focus:ring-2 focus:ring-philsa-navy/5 transition-all"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              if (onSearchTermChange) {
+                onSearchTermChange(e.target.value);
+              } else {
+                setLocalSearchTerm(e.target.value);
+              }
+            }}
           />
         </div>
         <div className="flex gap-3">
-           <button className="btn-secondary py-3.5 px-6 text-sm flex items-center gap-2">
+           <button
+             type="button"
+             onClick={() => setIsAdvancedFiltersOpen(isOpen => !isOpen)}
+             className="btn-secondary py-3.5 px-6 text-sm flex items-center gap-2"
+           >
              <Filter className="w-4 h-4" /> Advanced Filters
            </button>
            <button className="btn-secondary py-3.5 px-4 text-sm">
              <Download className="w-4 h-4" />
            </button>
         </div>
+        {advancedFilters && isAdvancedFiltersOpen && (
+          <div className="w-full border-t border-philsa-border pt-4">
+            {advancedFilters}
+          </div>
+        )}
       </div>
 
       {/* Main Table */}
@@ -208,8 +262,8 @@ export default function MaintenancePageTemplate<TRow extends object>({
                   <th key={col.key} className="px-8 py-5">{col.label}</th>
                 ))}
                 <th className="px-8 py-5">Audit Details</th>
-                <th className="px-8 py-5">Approval</th>
-                <th className="px-8 py-5 text-right">Actions</th>
+                {showApprovalColumn && <th className="px-8 py-5">Approval</th>}
+                {showRowActions && <th className="px-8 py-5 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-philsa-border">
@@ -232,36 +286,42 @@ export default function MaintenancePageTemplate<TRow extends object>({
                       </div>
                     </div>
                   </td>
-                  <td className="px-8 py-6">
-                     <StatusBadge status={String(readField(row, 'approvalStatus') || 'Approved')} isApproval />
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <div className="flex justify-end gap-1">
-                      <button 
-                        onClick={() => onView?.(row)}
-                        className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => handleOpenEdit(row)}
-                        className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => onDelete?.(row)}
-                        className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
+                  {showApprovalColumn && (
+                    <td className="px-8 py-6">
+                       <StatusBadge status={String(readField(row, 'approvalStatus') || 'Approved')} isApproval />
+                    </td>
+                  )}
+                  {showRowActions && (
+                    <td className="px-8 py-6 text-right">
+                      {renderRowActions ? renderRowActions(row) : (
+                        <div className="flex justify-end gap-1">
+                          <button
+                            onClick={() => onView?.(row)}
+                            className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEdit(row)}
+                            className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-navy transition-all shadow-sm"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => onDelete?.(row)}
+                            className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {filteredData.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length + 3} className="px-8 py-20 text-center">
+                  <td colSpan={columns.length + 1 + (showApprovalColumn ? 1 : 0) + (showRowActions ? 1 : 0)} className="px-8 py-20 text-center">
                     <div className="flex flex-col items-center justify-center grayscale opacity-30">
                        <Database className="w-16 h-16 mb-4" />
                        <p className="text-xl font-bold uppercase tracking-widest">No Records Found</p>
@@ -277,20 +337,35 @@ export default function MaintenancePageTemplate<TRow extends object>({
         {/* Pagination */}
         <div className="p-6 bg-philsa-bg/30 border-t border-philsa-border flex items-center justify-between">
            <p className="text-xs font-bold text-philsa-gray">
-             Showing <span className="text-philsa-navy">{filteredData.length}</span> of <span className="text-philsa-navy">{data.length}</span> records
+             Showing <span className="text-philsa-navy">{pagination ? `${showingStart}-${showingEnd}` : filteredData.length}</span> of <span className="text-philsa-navy">{pagination ? pagination.totalCount : data.length}</span> records
            </p>
            <div className="flex items-center gap-3">
-              <button className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30">
+              <button
+                type="button"
+                disabled={pagination ? pagination.page <= 1 : true}
+                onClick={() => pagination?.onPageChange(Math.max(1, pagination.page - 1))}
+                className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <div className="flex gap-1">
-                 {[1, 2, 3].map(p => (
-                   <button key={p} className={cn("w-8 h-8 rounded-xl text-xs font-black transition-all", p === 1 ? "bg-philsa-navy text-white shadow-lg" : "bg-white border border-philsa-border text-philsa-gray hover:border-philsa-navy")}>
+                 {visiblePages.map(p => (
+                   <button
+                     key={p}
+                     type="button"
+                     onClick={() => pagination?.onPageChange(p)}
+                     className={cn("w-8 h-8 rounded-xl text-xs font-black transition-all", p === (pagination?.page ?? 1) ? "bg-philsa-navy text-white shadow-lg" : "bg-white border border-philsa-border text-philsa-gray hover:border-philsa-navy")}
+                   >
                      {p}
                    </button>
                  ))}
               </div>
-              <button className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray">
+              <button
+                type="button"
+                disabled={pagination ? pagination.page >= pageCount : true}
+                onClick={() => pagination?.onPageChange(Math.min(pageCount, pagination.page + 1))}
+                className="p-2 bg-white border border-philsa-border rounded-xl text-philsa-gray disabled:opacity-30 disabled:cursor-not-allowed"
+              >
                 <ChevronRight className="w-4 h-4" />
               </button>
            </div>
@@ -340,7 +415,7 @@ export default function MaintenancePageTemplate<TRow extends object>({
               <form onSubmit={handleSubmit} className="flex flex-col overflow-hidden">
                 <div className="p-6 space-y-5 overflow-y-auto max-h-[55vh]">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    {fields.map(field => (
+                    {fields.filter(field => !field.dependsOn || (field.dependsOnValue ? formData[field.dependsOn] === field.dependsOnValue : Boolean(formData[field.dependsOn]))).map(field => (
                       <div key={field.name} className={cn("space-y-1.5", field.type === 'textarea' && "md:col-span-2")}>
                         <label className="text-[11px] font-extrabold text-philsa-navy uppercase tracking-wider flex items-center gap-1">
                           {field.label} {field.required && <span className="text-philsa-red">*</span>}

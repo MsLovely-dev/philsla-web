@@ -45,10 +45,13 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "apps.accounts",
     "apps.applications",
+    "apps.analytics",
     "apps.configuration",
+    "apps.results",
     "apps.core",
     "apps.exams",
     "apps.results",
+    "apps.schools",
 ]
 
 MIDDLEWARE = [
@@ -93,6 +96,7 @@ MEDIA_ROOT = BASE_DIR / "private-media"
 MEDIA_URL = "/private-media/"
 STEP2_MAX_IMAGE_BYTES = env_int("STEP2_MAX_IMAGE_BYTES", 5 * 1024 * 1024)
 EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES = env_int("EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES", 10 * 1024 * 1024)
+REGISTRATION_ATTACHMENT_MAX_BYTES = env_int("REGISTRATION_ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024)
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = os.environ.get("STEP2_DOCUMENT_RECOGNITION_PROVIDER", "unavailable")
 STEP1_SELFIE_FACE_PROVIDER = os.environ.get("STEP1_SELFIE_FACE_PROVIDER", "unavailable")
 STEP1_SELFIE_MIN_IMAGE_WIDTH = env_int("STEP1_SELFIE_MIN_IMAGE_WIDTH", 480)

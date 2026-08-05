@@ -5,18 +5,18 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 
-from .models import BlueprintStatus, ExamBlueprint
-from .serializers import BlueprintCloneSerializer, BlueprintTransitionSerializer, ExamBlueprintSerializer
-from .services import blueprint_queryset, latest_blueprint_version
-from .models import BlueprintStatus, ExamBlueprint, QuestionStatus
+from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus
 from .serializers import (
     BlueprintCloneSerializer,
     BlueprintTransitionSerializer,
     ExamBlueprintSerializer,
+    ExamSetSerializer,
+    ExamSetTransitionSerializer,
     QuestionSerializer,
     QuestionTransitionSerializer,
 )
-from .services import blueprint_queryset, latest_blueprint_version, question_queryset
+from .services import blueprint_queryset, exam_set_queryset, latest_blueprint_version, question_queryset
+from .services import clone_exam_set
 
 
 BLUEPRINT_MANAGEMENT_ROLES = require_roles(
@@ -27,6 +27,13 @@ BLUEPRINT_MANAGEMENT_ROLES = require_roles(
 )
 
 QUESTION_MANAGEMENT_ROLES = require_roles(
+    "ITEM_WRITER",
+    "ACADEMIC_REVIEWER",
+    "EXAM_ADMINISTRATOR",
+    "SYSTEM_ADMIN",
+)
+
+EXAM_SET_MANAGEMENT_ROLES = require_roles(
     "ITEM_WRITER",
     "ACADEMIC_REVIEWER",
     "EXAM_ADMINISTRATOR",
@@ -177,3 +184,74 @@ class QuestionTransitionView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(QuestionSerializer(question_queryset().get(pk=question.pk)).data)
+
+
+class ExamSetListCreateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_SET_MANAGEMENT_ROLES
+
+    def get(self, request) -> Response:
+        serializer = ExamSetSerializer(exam_set_queryset(), many=True)
+        return Response(serializer.data)
+
+    def post(self, request) -> Response:
+        serializer = ExamSetSerializer(data=request.data, context={"actor_profile": _actor_profile(request)})
+        serializer.is_valid(raise_exception=True)
+        exam_set = serializer.save()
+        return Response(ExamSetSerializer(exam_set).data, status=201)
+
+
+class ExamSetDetailView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_SET_MANAGEMENT_ROLES
+
+    def get_object(self, exam_set_id: int) -> ExamSet:
+        return get_object_or_404(exam_set_queryset(), pk=exam_set_id)
+
+    def get(self, request, exam_set_id: int) -> Response:
+        exam_set = self.get_object(exam_set_id)
+        return Response(ExamSetSerializer(exam_set).data)
+
+    def put(self, request, exam_set_id: int) -> Response:
+        exam_set = self.get_object(exam_set_id)
+        serializer = ExamSetSerializer(
+            exam_set,
+            data=request.data,
+            context={"actor_profile": _actor_profile(request)},
+            partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        updated_exam_set = serializer.save()
+        return Response(ExamSetSerializer(updated_exam_set).data)
+
+    def patch(self, request, exam_set_id: int) -> Response:
+        return self.put(request, exam_set_id)
+
+    def delete(self, request, exam_set_id: int) -> Response:
+        exam_set = self.get_object(exam_set_id)
+        if exam_set.status not in {ExamSetStatus.DRAFT, ExamSetStatus.REVISION_REQUIRED, ExamSetStatus.ARCHIVED}:
+            return Response({"detail": "Only draft, revision-required, or archived exam sets can be deleted."}, status=409)
+        exam_set.delete()
+        return Response(status=204)
+
+
+class ExamSetCloneView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_SET_MANAGEMENT_ROLES
+
+    def post(self, request, exam_set_id: int) -> Response:
+        exam_set = get_object_or_404(exam_set_queryset(), pk=exam_set_id)
+        cloned = clone_exam_set(exam_set=exam_set, actor_profile=_actor_profile(request))
+        return Response(ExamSetSerializer(cloned).data, status=201)
+
+
+class ExamSetTransitionView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_SET_MANAGEMENT_ROLES
+
+    def post(self, request, exam_set_id: int) -> Response:
+        exam_set = get_object_or_404(exam_set_queryset(), pk=exam_set_id)
+        serializer = ExamSetTransitionSerializer(data=request.data, context={"actor_profile": _actor_profile(request), "exam_set": exam_set})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(ExamSetSerializer(exam_set_queryset().get(pk=exam_set.pk)).data)
