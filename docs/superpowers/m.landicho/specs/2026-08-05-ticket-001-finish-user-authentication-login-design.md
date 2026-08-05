@@ -4,7 +4,7 @@
 
 **Owner:** Maricon Landicho (M.Landicho)
 
-**Status:** Approved solution; Phase 1 recommends database-backed lockout state and Phase 2 remains gated by owner approval
+**Status:** Approved design for Thursday execution; no Ticket 001 implementation remains from Wednesday
 
 ## Goal
 
@@ -26,7 +26,7 @@ Keep DRF views thin and place login security behavior in `backend/apps/accounts/
 
 Password-attempt state must use an approved shared atomic cache or durable persistence. Django's default process-local cache is not acceptable as a production lockout control because multiple workers could maintain different counters. The storage choice is therefore a mandatory review gate before password-lockout implementation.
 
-Phase 1 confirmed that local, test, and production currently use or inherit Django's process-local `LocMemCache`, with no approved shared-cache provider or dependency. The recommended durable design is documented in `../plans/2026-08-05-ticket-001-password-lockout-storage-proposal.md`; it proposes an additive database-backed state related only by internal Django user ID. No model or migration has been created.
+Phase 1 confirmed that local, test, and production currently use or inherit Django's process-local `LocMemCache`, with no approved shared-cache provider or dependency. Maricon approved the durable design in `../plans/2026-08-05-ticket-001-password-lockout-storage-proposal.md` for Thursday execution. The approved plan will add database-backed state related only by internal Django user ID; no model or migration remains in the Wednesday worktree.
 
 OTP resend enforcement will check `AUTH_OTP_MAX_RESENDS` before generating or sending another code. Rejection must preserve the latest valid OTP and must not extend the pending login's absolute expiry.
 

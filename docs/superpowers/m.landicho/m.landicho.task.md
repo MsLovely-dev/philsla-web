@@ -9,8 +9,8 @@
 | Status | In progress — green track |
 | Worktree | `worktrees/m.landicho/` |
 | Branch | `m.landicho/login` |
-| Plan status | Phase 1 storage proposal ready for owner review |
-| Implementation status | No application code changed; Phase 2 is not authorized |
+| Plan status | Reviewed and approved for Thursday execution |
+| Implementation status | Wednesday planning only; no Ticket 001 code changes remain |
 
 ### Request
 
@@ -85,20 +85,71 @@ This entry records the approved solution and task scope. The phased implementati
 - **Worktree:** `worktrees/m.landicho/`
 - **Branch:** `m.landicho/login`
 
-## Deferred story
+## Ticket 002 — Maintenance Table — Student Registration
 
-- **Story:** Maintenance Table — Student Registration
-- **Module:** Maintenance & Config
-- **Status:** Deferred for this sprint
-- **Branch:** None; do not create a branch for this story during the sprint.
+| Field | Value |
+|---|---|
+| Owner | Maricon Landicho (M.Landicho) |
+| Module | Maintenance & Config |
+| Sprint status | Deferred; User Authentication (Login) remains the only real sprint deliverable |
+| Implementation assessment | Substantially implemented in the current system; verification and targeted hardening remain |
+| Branch | None; do not create a Ticket 002 branch while the story remains deferred |
+| Plan status | Design approved; implementation plan not yet written or approved |
+| Implementation status | Blocked until Ticket 002 is explicitly reactivated and Maricon approves the written plan |
+
+### Existing implementation evidence
+
+- `frontend/src/pages/admin/maintenance/StudentRegistrationMaintenance.tsx` provides a database-backed maintenance screen with list, search, filtering, pagination, create, update, delete, loading, success, and error behavior.
+- `frontend/src/services/backendApplicationService.ts` isolates the screen's calls to the versioned `/api/v1/configuration/` endpoints.
+- `frontend/src/pages/StudentApplication.tsx` consumes enabled Student Registration configuration dynamically.
+- `backend/apps/configuration/` provides persistent configurable fields, versioned public/admin APIs, validation, transactions, role enforcement, verification-method safeguards, and safe configuration audit events.
+- The focused backend configuration suite currently contains 18 passing endpoint tests. Frontend verification remains incomplete because Vitest dependencies were not installed in this worktree when the assessment was performed.
+
+### Approved solution for future planning
+
+Treat Ticket 002 as verification and targeted gap closure, not a new implementation or rewrite:
+
+1. Preserve the existing CRUD, filters, pagination, configurable-field validation, registration-method safeguards, public configuration consumption, and audit behavior.
+2. Align frontend route and navigation visibility with the documented backend/API authorization contract: `SYSTEM_ADMIN` and `DEPED_ADMIN` only.
+3. Keep backend role checks as the authoritative security boundary; frontend visibility must not be treated as authorization.
+4. Add focused frontend coverage for authorized access, denied roles, loading, empty, API-error, CRUD, and validation states.
+5. Re-run the focused backend configuration suite and relevant frontend tests, then manually verify the maintenance-to-registration configuration flow with synthetic data.
+6. Fix only confirmed gaps through the smallest reviewed changes; do not restructure the feature or add dependencies without separate approval.
+
+### Secure-coding constraints
+
+- Enforce deny-by-default backend permissions and preserve server-side validation for every create, update, and delete operation.
+- Do not trust frontend routes, browser state, or client-submitted roles as access controls.
+- Do not log or commit credentials, tokens, LRNs, registration submissions, personal data, or sensitive configuration payloads.
+- Keep audit metadata limited to safe event names, outcomes, correlation IDs, and internal user references.
+- Use synthetic configuration and identity data in automated tests, manual verification, screenshots, and documentation.
+- Preserve generic, safe API error envelopes and do not expose internal exceptions or authorization details.
+- Do not add an API-contract change, dependency, model change, or migration without separate review and approval.
+
+### Acceptance criteria for a future approved implementation
+
+- Only `SYSTEM_ADMIN` and `DEPED_ADMIN` can discover and use the maintenance screen; all other roles are denied by the backend.
+- Authorized administrators can list, search, filter, paginate, create, edit, enable or disable, and delete permitted Student Registration fields through the real API.
+- Verification methods retain the existing predefined-value, uniqueness, single-active-method, locked-PhilSys, last-active-method, and delete protections.
+- Enabled configuration is reflected in the public Step 1 registration form without exposing disabled or administrative-only data.
+- Loading, empty, validation, API-error, permission-denied, keyboard, responsive, and accessibility behavior is verified where applicable.
+- Focused backend and frontend checks pass, and exact observed results are recorded in the implementation log.
+
+### Review gate
+
+This design is approved for documentation and future plan drafting only. Ticket 002 remains deferred, no branch is required, and no application or test changes are authorized. Before implementation, Maricon must explicitly reactivate Ticket 002 and review and approve its written implementation plan.
 
 ## Wednesday — planning and scope lock
 
-- Audit `backend/apps/accounts/` against `docs/decisions/ADR-011-USER-AUTHENTICATION-FLOW.md`.
-- Produce a concrete gap list against the four-step login flow; do not implement fixes yet.
-- Complete the Superpowers brainstorm/spec phase and save its output under `specs/`.
-- Prepare a reviewed implementation plan under `plans/`; human approval is required before execution.
-- Explicitly keep Maintenance Table — Student Registration parked.
+- [x] Audit `backend/apps/accounts/` against `docs/decisions/ADR-011-USER-AUTHENTICATION-FLOW.md`.
+- [x] Produce a concrete gap list against the four-step login flow; do not implement fixes yet.
+- [x] Complete the Superpowers brainstorm/spec phase and save its output under `specs/`.
+- [x] Prepare a reviewed implementation plan under `plans/`; Maricon approved it for Thursday execution.
+- [x] Explicitly keep Maintenance Table — Student Registration parked.
+- [x] Confirm the root `AGENTS.md` applies; no scoped `backend/AGENTS.md` or `frontend/AGENTS.md` exists.
+- [x] Confirm the isolated worktree and branch: `worktrees/m.landicho/` on `m.landicho/login`.
+- [x] Confirm no Ticket 001 application, test, dependency, configuration, or migration diff remains after restoring the Wednesday planning-only state.
+- [ ] Maricon states at standup: “No commits to `main` without PR review.”
 
 **Deliverable:** Written login gap list, reviewed plan for Thursday, and confirmation that the maintenance-table story is parked.
 
