@@ -171,6 +171,8 @@ export default function ReviewerApplicationDetail() {
   const photoUrl = currentApp.photoUrl?.trim() ?? '';
   const [photoObjectUrl, setPhotoObjectUrl] = useState('');
   const [photoLoadFailed, setPhotoLoadFailed] = useState(false);
+  const usesBackendPhotoEndpoint = import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend';
+  const applicantPhotoSrc = usesBackendPhotoEndpoint ? photoObjectUrl : photoUrl;
   const isDecisionFinal = ['ACCEPTED', 'APPROVED', 'REJECTED'].includes(status);
   const rejectionReason = status === 'REJECTED'
     ? (currentApp.reviewerReason || remarks.trim() || 'No rejection reason recorded.')
@@ -205,9 +207,14 @@ export default function ReviewerApplicationDetail() {
 
     let cancelled = false;
     let objectUrl = '';
+    setPhotoObjectUrl('');
 
     void backendApplicationService.getApplicationPhoto(id).then((result) => {
-      if (cancelled || result.ok === false) return;
+      if (cancelled) return;
+      if (result.ok === false) {
+        setPhotoLoadFailed(true);
+        return;
+      }
       objectUrl = URL.createObjectURL(result.data);
       setPhotoObjectUrl(objectUrl);
     });
@@ -310,14 +317,19 @@ export default function ReviewerApplicationDetail() {
         <div className="lg:col-span-1 space-y-6">
           <div className="card-philsa p-8 bg-white border-2 border-philsa-red/10">
             <div className="w-full aspect-square rounded-2xl overflow-hidden bg-philsa-bg border-4 border-white mb-6 shadow-xl relative group ring-1 ring-philsa-border">
-               {photoUrl && !photoLoadFailed ? (
+               {applicantPhotoSrc && !photoLoadFailed ? (
                  <img
                    referrerPolicy="no-referrer"
-                   src={photoObjectUrl || photoUrl}
+                   src={applicantPhotoSrc}
                    alt={fullName ? `${fullName} applicant photo` : 'Student applicant photo'}
                    className="w-full h-full object-cover"
                    onError={() => setPhotoLoadFailed(true)}
                  />
+               ) : photoUrl && !photoLoadFailed ? (
+                 <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
+                   <Camera className="w-16 h-16" />
+                   <span className="mt-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Loading Photo</span>
+                 </div>
                ) : (
                  <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-300">
                    <User className="w-16 h-16" />
