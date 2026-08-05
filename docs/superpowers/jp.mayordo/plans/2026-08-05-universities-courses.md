@@ -21,8 +21,8 @@
 ## Approval gate (Wednesday — must be satisfied before Thursday)
 
 - [ ] Human reviewer approves the `University` / `CollegeCourse` field set and the roles.
-- [ ] Decision recorded on the Phase B open question (nested `/universities/<id>/courses/` vs flat `/courses/`).
-- [ ] Decision recorded on whether a `seed_universities` demo command is in scope.
+- [x] **Decided (2026-08-05):** Course API is **nested** — `/api/v1/universities/<university_id>/courses/` for list/create and `/api/v1/universities/<university_id>/courses/<course_id>/` for detail/update/delete. Rationale: courses are only ever accessed within a selected university; nesting makes the parent FK unambiguous and gives free scoping. (Schools stays flat because it is a single entity.)
+- [x] **Decided (2026-08-05):** `seed_universities` **is in scope** — a small idempotent command (~5–6 real PH universities × 2–3 courses each) mirroring `seed_schools`, so the demo screen and stat cards are populated on a fresh DB and the nested course endpoint is exercised end to end.
 
 ---
 
@@ -53,10 +53,12 @@ Reference: `frontend/src/services/backendSchoolService.ts` + `.test.ts`, `School
 
 ## Phase B — CollegeCourse (only if Phase A green)
 
-- [ ] Resolve the API-shape decision from the approval gate (nested vs flat).
-- [ ] `CollegeCourse` model (FK `university`, fields per spec), serializer (camelCase), views (role-guarded CRUD scoped to a university), URL route, migration, tests.
+API shape decided: **nested** — `/api/v1/universities/<university_id>/courses/` (list/create), `/api/v1/universities/<university_id>/courses/<course_id>/` (detail/update/delete). Views resolve/validate the parent university from the URL and 404 if it is missing.
+
+- [ ] `CollegeCourse` model (FK `university`, fields per spec), serializer (camelCase), views (role-guarded CRUD scoped to the URL's university), nested URL routes, migration, tests (incl. course under a missing university → 404, unprivileged role → 403).
 - [ ] Extend `backendUniversityService.ts` with `listCourses(universityId)` / `create|update|deleteCourse`, plus tests.
 - [ ] Wire the course drill-down view (`selectedUniversity` branch) onto the service; keep add/edit/delete modals.
+- [ ] Add `seed_universities` management command (idempotent, ~5–6 PH universities × 2–3 courses) mirroring `seed_schools`, with a seed test asserting idempotency + sequential `UNI-#####` codes.
 - [ ] Run backend + frontend tests → green.
 
 ## Phase C — Verify DepEd SHS / Schools (stretch story, verify-only)

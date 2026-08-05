@@ -47,7 +47,11 @@ Serializer emits camelCase (e.g. `presidentRector`, `establishedYear`) so the fr
 - With `VITE_AUTH_SERVICE_MODE=backend`, the Universities screen lists/adds/edits/deletes universities against the API and survives reload; in prototype mode it falls back to the mock service with no backend required.
 - `npm run lint` (tsc) clean.
 
-## Open questions (TBD — flag, don't invent)
+## Resolved decisions (2026-08-05)
 
-- Does `CollegeCourse` need its own API namespace (`/api/v1/universities/<id>/courses/`) or a flat `/api/v1/courses/`? Default assumption: nested under university, resolved in the plan's Phase B.
-- Is a `seed_universities` command wanted for the demo, or is manual entry enough? Default: add a small seed for a credible demo, mirroring `seed_schools`.
+- **Course API shape → nested.** `/api/v1/universities/<university_id>/courses/` (list/create) and `/api/v1/universities/<university_id>/courses/<course_id>/` (detail/update/delete). Courses are only accessed within a selected university, so nesting keeps the parent FK unambiguous and gives free scoping/404s. Schools stays flat as a single entity.
+- **`seed_universities` → in scope.** A small idempotent command (~5–6 real PH universities × 2–3 courses) mirroring `seed_schools`, so the demo screen and stat cards are populated on a fresh DB and the nested course endpoint is exercised.
+
+## Still needs human sign-off
+
+- Approval of the `University` / `CollegeCourse` field set and management roles before Thursday execution.
