@@ -19,11 +19,11 @@
 | **Ian Chris Sandoval** | Maintenance Table – Exam Blueprint | Maintenance & Config | Not started | 🟡 deferred |
 | **bienvenido.mendoza** | Desktop Exam App (.NET Student) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists |
 | **bienvenido.mendoza** | Desktop Exam App (Proctor) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists |
-| **Prince Barachiel Malonzo** | Exam Review | BRD-05 Scoring & Results | In progress | 🔴 no backend entity |
-| **Prince Barachiel Malonzo** | Exam Results Release & Analytics | BRD-05 Scoring & Results | Not started | 🔴 no backend entity |
+| **Prince Barachiel Malonzo** | Exam Review os| BRD-05 Scoring & Results | In progress | 🔴 no backend entity |
+| **Alvy Depositar** | Exam Results Release & Analytics | BRD-05 Scoring & Results | Not started | 🔴 no backend entity |
 | **Prince Barachiel Malonzo** | Student Portal | Student Portal | Not started | 🟡 out of scope this sprint |
 | **Alvy Depositar** | Score Management | BRD-05 Scoring & Results | Not started | 🔴 no backend entity |
-| **Alvy Depositar** | System Integration | System Admin & Compliance | Not started | 🟡 documentation |
+| **Joshua Ganapin** | System Integration | System Admin & Compliance | Not started | 🟡 documentation |
 | **JP Mayordo** | Maintenance Table – Universities and Courses | Maintenance & Config | In progress | 🟢 |
 | **JP Mayordo** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟡 stretch goal |
 | **Joshua Ganapin** | QR Scanning | Testing Center Ops | Not started | 🔴 no backend (proctoring app empty) |
