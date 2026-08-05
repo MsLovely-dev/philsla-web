@@ -1,7 +1,7 @@
 import { ClipboardList, Layers, Shield, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-export type ExamHubTabKey = 'blueprints' | 'setAssembly' | 'builder' | 'published' | 'audit';
+export type ExamHubTabKey = 'blueprints' | 'setAssembly' | 'published' | 'audit';
 
 interface ExamHubTabsProps {
   activeTab: ExamHubTabKey;
@@ -16,7 +16,6 @@ const EXAM_HUB_TABS: Array<{
 }> = [
   { key: 'blueprints', label: 'Exam Blueprint', icon: ClipboardList },
   { key: 'setAssembly', label: 'Exam Set Assembly', icon: Layers },
-  { key: 'builder', label: 'Exam Builder', icon: Shield },
   { key: 'published', label: 'Published Exams', icon: Shield },
   { key: 'audit', label: 'Audit Logs', icon: FileText },
 ];

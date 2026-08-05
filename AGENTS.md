@@ -12,9 +12,51 @@ These instructions apply to the entire repository. Read the closest scoped `AGEN
 
 - `frontend/` is the implemented React, TypeScript, and Vite application.
 - `backend/` is the implemented Django and Django REST Framework API service.
-- `docs/` contains business, architecture, API, decision, security, and development documentation.
+- `docs/` contains business, architecture, API, decision, security, and development documentation, including `docs/superpowers/` — per-developer AI-assisted workflow artifacts (see "AI-assisted development workflow" below).
 - `.agents/` is reserved for supporting AI material. Root and scoped `AGENTS.md` files are the authoritative agent instructions.
 - Keep frontend and backend independently buildable and deployable. They communicate only through documented, versioned API contracts.
+
+## AI-assisted development workflow
+
+- The accepted agent for AI-assisted development sessions is **Claude Code with the Superpowers plugin**. Superpowers enforces a plan → test → implement → review discipline on top of Claude Code's default agentic behavior — sessions must not go from prompt directly to code changes without a reviewed plan.
+- This is a process convention, not an architecture decision: it governs how changes get proposed and reviewed, and does not itself authorize deviating from any other rule in this document (smallest-change principle, security rules, testing requirements, contract/migration review, etc.).
+- Superpowers is a third-party, community-maintained plugin, not an Anthropic or internally-audited tool. Formal security review (what it reads, writes, and can access) against the "Security and sensitive data" rules below is `TBD` and should happen before it is pointed at data covering LRN, PhilSys, exam content, or proctoring evidence.
+
+### Developer isolation
+
+- Each developer works in their own git worktree, so no two developers' sessions ever operate against the same checkout — this is what makes single-owner-per-story assignment enforceable at the tooling level, not just by convention.
+- Worktrees are named after each developer's short code (below), lowercase: `worktrees/<code>/`.
+
+### Developer short codes
+
+Format: `<Initial(s)>.<Lastname>`. One letter by default; extended to two letters only where a single initial would collide with another developer on the team. Capitalized form for documentation, tables, and anything human-read; lowercase for every folder, branch, and filename.
+
+| Developer | Short code | Lowercase form |
+|---|---|---|
+| Lovely Mae Chavez | L.Chavez | `l.chavez` |
+| Maricon Landicho | M.Landicho | `m.landicho` |
+| Jude Cabigon | Ju.Cabigon | `ju.cabigon` |
+| Ian Chris Sandoval | I.Sandoval | `i.sandoval` |
+| bienvenido.mendoza | B.Mendoza | `b.mendoza` |
+| Prince Barachiel Malonzo | P.Malonzo | `p.malonzo` |
+| Alvy Depositar | A.Depositar | `a.depositar` |
+| JP Mayordo | JP.Mayordo | `jp.mayordo` |
+| Joshua Ganapin | Jo.Ganapin | `jo.ganapin` |
+
+### `docs/superpowers/` structure
+
+One folder per developer, named after their lowercase short code:
+
+```
+docs/superpowers/<code>/
+├── <code>.task.md          # current task brief / working reference for that developer
+├── plans/                  # reviewed, human-approved implementation plans (approval required before execution)
+├── specs/                  # Superpowers brainstorm/spec-phase output — what is being built and why
+└── implement/
+    └── <code>.implement.md # implementation log: what was built, against which plan, what was verified
+```
+
+This is distinct from `.agents/`, which remains reserved per the rule above for supporting AI material (shared skill/config assets, not per-developer process documentation). `docs/superpowers/` is per-developer, human-reviewable development documentation and falls within the existing `docs/` boundary.
 
 ## Adopted technology stack
 
