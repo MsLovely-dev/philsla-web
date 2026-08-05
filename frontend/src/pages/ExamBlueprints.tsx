@@ -1,56 +1,322 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { usePhilSA } from '../PhilSAContext';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Trash2, 
-  Eye, 
-  Copy, 
-  History, 
-  RefreshCw, 
-  CheckCircle, 
-  AlertTriangle, 
-  FileText, 
-  BookOpen, 
-  Layers, 
-  Clock, 
-  Sparkles, 
-  Check, 
-  X, 
-  Sliders, 
-  ArrowRight, 
-  ChevronRight, 
-  Settings, 
-  ChevronDown, 
-  ShieldCheck, 
-  Database, 
-  FileCode,
-  Archive,
-  RotateCcw,
-  Info
+import {
+  AlertTriangle,
+  ChevronDown,
+  ClipboardList,
+  Copy,
+  Eye,
+  Filter,
+  Plus,
+  Search,
+  Shield,
+  Sparkles,
+  Layers,
+  Save,
+  Trash2,
+  Edit3,
+  X,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { usePhilSA } from '../PhilSAContext';
 import { cn } from '../lib/utils';
 import { ExamHubTabs, type ExamHubTabKey } from '../components/ExamHubTabs';
 import { examBlueprintService } from '../services/backendExamBlueprintService';
-import { 
-  INITIAL_BLUEPRINTS, 
-  MOCK_CENTRAL_ITEM_BANK, 
-  Blueprint, 
-  BlueprintSection, 
-  BankQuestion, 
-  BlueprintRules, 
-  BlueprintHistoryEntry 
+import {
+  INITIAL_BLUEPRINTS,
+  type Blueprint,
+  type BlueprintSection,
 } from './admin/hub/blueprintMockData';
 
+type PersonaKey = 'EXAM_ADMIN' | 'SYSTEM_ADMIN' | 'REVIEWER';
+type BlueprintStatusFilter = 'ALL' | Blueprint['status'];
+type BlueprintExamTypeFilter = 'ALL' | Blueprint['examType'];
+type BlueprintSortOption = 'NEWEST_CREATED' | 'OLDEST_CREATED' | 'NAME_ASC' | 'NAME_DESC';
+type BlueprintEditorMode = 'create' | 'edit';
+type ContributorAgency = 'UP' | 'CHED' | 'TESDA' | 'DepEd';
+type SectionCollapseState = Record<string, boolean>;
+
+const CONTRIBUTOR_AGENCIES: ContributorAgency[] = ['UP', 'CHED', 'TESDA', 'DepEd'];
+const SCIENCE_TOPIC_OPTIONS = [
+  'Earth and Life Science',
+  'Physical Science',
+  'General Biology 1 & 2',
+  'General Chemistry 1 & 2',
+  'General Physics 1 & 2',
+];
+
+const PERSONA_OPTIONS: Array<{ key: PersonaKey; label: string }> = [
+  { key: 'EXAM_ADMIN', label: 'Exam Admin' },
+  { key: 'SYSTEM_ADMIN', label: 'System Admin' },
+  { key: 'REVIEWER', label: 'Reviewer' },
+];
+
+const STATUS_OPTIONS: Array<BlueprintStatusFilter> = [
+  'ALL',
+  'DRAFT',
+  'SUBMITTED',
+  'ACADEMIC_REVIEW',
+  'REVISION_REQUIRED',
+  'APPROVED',
+  'PUBLISHED',
+  'RETIRED',
+  'ARCHIVED',
+];
+
+const EXAM_TYPE_OPTIONS: Array<BlueprintExamTypeFilter> = ['ALL', 'Admission', 'Scholarship', 'Technical', 'Specialization'];
+
+const SORT_OPTIONS: Array<{ value: BlueprintSortOption; label: string }> = [
+  { value: 'NEWEST_CREATED', label: 'Newest Created' },
+  { value: 'OLDEST_CREATED', label: 'Oldest Created' },
+  { value: 'NAME_ASC', label: 'Name A-Z' },
+  { value: 'NAME_DESC', label: 'Name Z-A' },
+];
+
+function statusLabel(status: Blueprint['status']) {
+  switch (status) {
+    case 'DRAFT':
+      return 'Draft';
+    case 'SUBMITTED':
+      return 'Pending';
+    case 'ACADEMIC_REVIEW':
+      return 'Academic Review';
+    case 'REVISION_REQUIRED':
+      return 'Requires Calibration';
+    case 'APPROVED':
+      return 'Approved';
+    case 'PUBLISHED':
+      return 'Published';
+    case 'RETIRED':
+      return 'Retired';
+    case 'ARCHIVED':
+      return 'Archived';
+    default:
+      return status;
+  }
+}
+
+function statusTone(status: Blueprint['status']) {
+  switch (status) {
+    case 'DRAFT':
+      return 'bg-slate-100 text-slate-700 border-slate-200';
+    case 'SUBMITTED':
+      return 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'ACADEMIC_REVIEW':
+      return 'bg-sky-50 text-sky-700 border-sky-200';
+    case 'REVISION_REQUIRED':
+      return 'bg-rose-50 text-rose-700 border-rose-200';
+    case 'APPROVED':
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'PUBLISHED':
+      return 'bg-green-50 text-green-700 border-green-200';
+    case 'RETIRED':
+      return 'bg-zinc-100 text-zinc-700 border-zinc-200';
+    case 'ARCHIVED':
+      return 'bg-stone-100 text-stone-700 border-stone-200';
+    default:
+      return 'bg-slate-100 text-slate-700 border-slate-200';
+  }
+}
+
+function personaFromRole(role?: string | null): PersonaKey {
+  if (role === 'SYSTEM_ADMIN') return 'SYSTEM_ADMIN';
+  if (role === 'ACADEMIC_REVIEWER' || role === 'ADMISSIONS_REVIEWER') return 'REVIEWER';
+  return 'EXAM_ADMIN';
+}
+
+function buildDefaultSection(): BlueprintSection {
+  return {
+    id: `SEC-${Date.now()}`,
+    name: 'Section I: General Evaluation',
+    subject: 'Science',
+    topics: ['General Concepts'],
+    competencies: ['Evaluate foundational curriculum requirements'],
+    cognitiveLevels: {
+      remembering: 1,
+      understanding: 1,
+      applying: 1,
+      analyzing: 0,
+      evaluating: 0,
+      creating: 0,
+    },
+    itemCount: 3,
+    marksPerItem: 5,
+    totalMarks: 15,
+    passingScore: 9,
+    timeAllocation: 20,
+    instructions: 'Answer all items carefully.',
+    difficultyDistribution: {
+      easy: 1,
+      moderate: 1,
+      difficult: 1,
+    },
+    itemTypeDistribution: {
+      mcq: 2,
+      tf: 1,
+      essay: 0,
+      fib: 0,
+    },
+  };
+}
+
+function buildDefaultAccessibilityAccommodations() {
+  return {
+    screenReader: true,
+    extendedTimeAllowance: true,
+    highContrastMode: true,
+    dyslexiaTypography: false,
+    audioPrompts: false,
+  };
+}
+
+function normalizeBlueprintRules(rules: Blueprint['rules']): Blueprint['rules'] {
+  return {
+    ...rules,
+    sharedStimulusRequirement: {
+      required: false,
+      minCount: 0,
+      questionsPerStimulus: 0,
+      ...rules.sharedStimulusRequirement,
+    },
+    randomizationRules: {
+      shuffleQuestions: false,
+      shuffleChoices: false,
+      fixedSequence: false,
+      ...rules.randomizationRules,
+    },
+    accessibilityAccommodations: {
+      ...buildDefaultAccessibilityAccommodations(),
+      ...rules.accessibilityAccommodations,
+    },
+  };
+}
+
+function normalizeBlueprint(blueprint: Blueprint): Blueprint {
+  return {
+    ...blueprint,
+    rules: normalizeBlueprintRules(blueprint.rules),
+  };
+}
+
+function summarizeBlueprintSections(sections: BlueprintSection[]) {
+  return sections.reduce(
+    (totals, section) => ({
+      totalItems: totals.totalItems + section.itemCount,
+      totalMarks: totals.totalMarks + section.totalMarks,
+      totalTimeLimit: totals.totalTimeLimit + section.timeAllocation,
+    }),
+    {
+      totalItems: 0,
+      totalMarks: 0,
+      totalTimeLimit: 0,
+    },
+  );
+}
+
+function syncBlueprintTotalsFromSections(blueprint: Blueprint): Blueprint {
+  const totals = summarizeBlueprintSections(blueprint.sections);
+  return {
+    ...blueprint,
+    rules: {
+      ...blueprint.rules,
+      totalItems: totals.totalItems,
+      totalMarks: totals.totalMarks,
+      totalTimeLimit: totals.totalTimeLimit,
+    },
+  };
+}
+
+function buildDefaultBlueprint(ownerName: string): Blueprint {
+  const now = new Date();
+  const nextYear = new Date(now);
+  nextYear.setFullYear(now.getFullYear() + 1);
+
+  return {
+    id: `BP-${Date.now()}`,
+    code: `BP-${now.getFullYear()}-NEW`,
+    name: 'Untitled Blueprint',
+    description: 'Curriculum examination specifications and blueprinting.',
+    examType: 'Admission',
+    academicYear: `${now.getFullYear()}-${nextYear.getFullYear()}`,
+    institution: 'Philippine Space Agency (PhilSA)',
+    examCategory: 'General Academic & Science',
+    status: 'DRAFT',
+    version: '1.0',
+    owner: ownerName,
+    createdAt: now.toISOString(),
+    effectiveDate: now.toISOString().slice(0, 10),
+    expirationDate: nextYear.toISOString().slice(0, 10),
+    sections: [buildDefaultSection()],
+    rules: {
+      totalItems: 3,
+      totalMarks: 15,
+      totalTimeLimit: 20,
+      sharedStimulusRequirement: {
+        required: false,
+        minCount: 0,
+        questionsPerStimulus: 0,
+      },
+      randomizationRules: {
+        shuffleQuestions: true,
+        shuffleChoices: true,
+        fixedSequence: false,
+      },
+      maxReuseLimit: 3,
+      versionCompatibility: '>= 1.0',
+      activeItemOnly: true,
+      accessibilityAccommodations: buildDefaultAccessibilityAccommodations(),
+    },
+    history: [
+      {
+        id: `LH-${Date.now()}`,
+        version: '1.0',
+        action: 'Created',
+        updatedBy: ownerName,
+        updatedAt: now.toISOString(),
+        comments: 'Initial draft created from the blueprint designer.',
+      },
+    ],
+  };
+}
+
+function summarizeSubjects(blueprint: Blueprint) {
+  const subjects = Array.from(new Set(blueprint.sections.map((section) => section.subject)));
+  if (subjects.length <= 3) {
+    return subjects.join(', ');
+  }
+
+  return `${subjects.slice(0, 3).join(', ')}Ã¢â‚¬Â¦`;
+}
+
+function summarizeCount(blueprint: Blueprint) {
+  return blueprint.rules.totalMarks;
+}
+
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export default function ExamBlueprints() {
-  const { addAuditLog, user } = usePhilSA();
+  const { user } = usePhilSA();
   const navigate = useNavigate();
 
-  // Load and manage Blueprints list in state
   const [blueprints, setBlueprints] = useState<Blueprint[]>(INITIAL_BLUEPRINTS);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<BlueprintStatusFilter>('ALL');
+  const [examTypeFilter, setExamTypeFilter] = useState<BlueprintExamTypeFilter>('ALL');
+  const [academicYearFilter, setAcademicYearFilter] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<BlueprintSortOption>('NEWEST_CREATED');
+  const [activePersona, setActivePersona] = useState<PersonaKey>(() => personaFromRole(user?.role));
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedBlueprint, setSelectedBlueprint] = useState<Blueprint | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [isDesignerOpen, setIsDesignerOpen] = useState(false);
+  const [designerMode, setDesignerMode] = useState<BlueprintEditorMode>('create');
+  const [designerDraft, setDesignerDraft] = useState<Blueprint | null>(null);
+  const [expandedSections, setExpandedSections] = useState<SectionCollapseState>({});
+
+  useEffect(() => {
+    setActivePersona(personaFromRole(user?.role));
+  }, [user?.role]);
 
   useEffect(() => {
     let active = true;
@@ -60,15 +326,16 @@ export default function ExamBlueprints() {
       if (!active) return;
 
       if (remote.ok && remote.data.length > 0) {
-        setBlueprints(remote.data);
-        localStorage.setItem('philsa_blueprints', JSON.stringify(remote.data));
+        const normalizedRemote = remote.data.map((blueprint) => normalizeBlueprint(blueprint));
+        setBlueprints(normalizedRemote);
+        localStorage.setItem('philsa_blueprints', JSON.stringify(normalizedRemote));
         return;
       }
 
       const saved = localStorage.getItem('philsa_blueprints');
       if (saved) {
         try {
-          setBlueprints(JSON.parse(saved));
+          setBlueprints((JSON.parse(saved) as Blueprint[]).map((blueprint) => normalizeBlueprint(blueprint)));
           return;
         } catch {
           localStorage.removeItem('philsa_blueprints');
@@ -77,2373 +344,1132 @@ export default function ExamBlueprints() {
     };
 
     void loadBlueprints();
+
     return () => {
       active = false;
     };
   }, []);
 
-  // Save blueprints helper
-  const saveBlueprints = (updated: Blueprint[]) => {
-    setBlueprints(updated);
-    localStorage.setItem('philsa_blueprints', JSON.stringify(updated));
+  const saveBlueprints = (next: Blueprint[]) => {
+    setBlueprints(next);
+    localStorage.setItem('philsa_blueprints', JSON.stringify(next));
   };
 
-  // Centralized Item Bank
-  const [itemBank] = useState<BankQuestion[]>(MOCK_CENTRAL_ITEM_BANK);
+  const filteredBlueprints = useMemo(() => {
+    const query = normalizeText(searchTerm);
 
-  // Filter/Sort States
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [yearFilter, setYearFilter] = useState<string>('ALL');
-  const [sortBy, setSortBy] = useState<string>('NEWEST');
+    return blueprints
+      .filter((blueprint) => {
+        if (statusFilter !== 'ALL' && blueprint.status !== statusFilter) return false;
+        if (examTypeFilter !== 'ALL' && blueprint.examType !== examTypeFilter) return false;
+        if (academicYearFilter !== 'ALL' && blueprint.academicYear !== academicYearFilter) return false;
+        if (!query) return true;
 
-  // UI Selection States
-  const [selectedBlueprint, setSelectedBlueprint] = useState<Blueprint | null>(null);
-  const [isCompareMode, setIsCompareMode] = useState(false);
-  const [compareTargetId, setCompareTargetId] = useState<string>('');
-  
-  // Modals & Editors
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [isAssemblyOpen, setIsAssemblyOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
-  
-  // Editing state form
-  const [currentEditBlueprint, setCurrentEditBlueprint] = useState<Blueprint | null>(null);
-  const [workflowComment, setWorkflowComment] = useState('');
-  const [targetWorkflowStatus, setTargetWorkflowStatus] = useState<Blueprint['status'] | null>(null);
+        const searchable = [
+          blueprint.code,
+          blueprint.name,
+          blueprint.description,
+          blueprint.institution,
+          blueprint.examCategory,
+          blueprint.examType,
+          blueprint.academicYear,
+          blueprint.owner,
+          summarizeSubjects(blueprint),
+        ]
+          .join(' ')
+          .toLowerCase();
 
-  // Selection state for visual tabs inside Details pane
-  const [detailTab, setDetailTab] = useState<'SECTIONS' | 'RULES' | 'HISTORY'>('SECTIONS');
+        return searchable.includes(query);
+      })
+      .sort((left, right) => {
+        switch (sortBy) {
+          case 'OLDEST_CREATED':
+            return left.createdAt.localeCompare(right.createdAt);
+          case 'NAME_ASC':
+            return left.name.localeCompare(right.name);
+          case 'NAME_DESC':
+            return right.name.localeCompare(left.name);
+          case 'NEWEST_CREATED':
+          default:
+            return right.createdAt.localeCompare(left.createdAt);
+        }
+      });
+  }, [blueprints, searchTerm, statusFilter, examTypeFilter, academicYearFilter, sortBy]);
 
-  // View mode for curriculum section structure (TABLE or ACCORDION)
-  const [structureViewMode, setStructureViewMode] = useState<'TABLE' | 'ACCORDION'>('TABLE');
+  const academicYearOptions = useMemo(
+    () => Array.from(new Set(blueprints.map((blueprint) => blueprint.academicYear))).sort((left, right) => right.localeCompare(left)),
+    [blueprints],
+  );
 
-  // Collapsible left filter panel state
-  const [showFilters, setShowFilters] = useState(false);
+  const designerMetrics = useMemo(() => {
+    if (!designerDraft) {
+      return { totalItems: 0, totalMarks: 0, totalTimeLimit: 0 };
+    }
 
-  // Section expand/collapse accordion state
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-
-  // Editor modal section expand/collapse accordion state
-  const [editorExpandedSections, setEditorExpandedSections] = useState<Record<string, boolean>>({});
+    return summarizeBlueprintSections(designerDraft.sections);
+  }, [designerDraft]);
 
   const handleHubTabChange = (tab: ExamHubTabKey) => {
     if (tab === 'blueprints') return;
     if (tab === 'setAssembly') {
-      navigate('/admin/hub/exam-sets#dashboard');
+      navigate('/admin/hub/exam-sets/content#dashboard');
       return;
     }
     if (tab === 'builder') {
-      navigate('/admin/hub/exam-sets#assembly');
+      navigate('/admin/hub/exam-sets/content#assembly');
       return;
     }
     if (tab === 'published') {
-      navigate('/admin/hub/exam-sets#packages');
+      navigate('/admin/hub/exam-sets/content#packages');
       return;
     }
-    if (tab === 'audit') {
-      navigate('/admin/hub/exam-sets#audit');
-    }
+    navigate('/admin/hub/exam-sets/content#audit');
   };
 
-  // Auto-expand first section when a new blueprint is selected
-  useEffect(() => {
-    if (selectedBlueprint && selectedBlueprint.sections && selectedBlueprint.sections.length > 0) {
-      setExpandedSections({ [selectedBlueprint.sections[0].id]: true });
-    } else {
-      setExpandedSections({});
-    }
-  }, [selectedBlueprint?.id]);
-
-  // Assembly State
-  const [assemblyResult, setAssemblyResult] = useState<{
-    success: boolean;
-    errors: string[];
-    warnings: string[];
-    matchedQuestions: { [sectionId: string]: BankQuestion[] };
-    totalMatched: number;
-    auditLog: string[];
-  } | null>(null);
-
-  // Unique list values for filter select items
-  const uniqueTypes = Array.from(new Set(blueprints.map(b => b.examType)));
-  const uniqueYears = Array.from(new Set(blueprints.map(b => b.academicYear)));
-
-  // Sync details on edit update
-  useEffect(() => {
-    if (selectedBlueprint) {
-      const fresh = blueprints.find(b => b.id === selectedBlueprint.id);
-      if (fresh) {
-        setSelectedBlueprint(fresh);
-      }
-    }
-  }, [blueprints]);
-
-  // Handle Create New Blueprint
-  const handleInitiateCreate = () => {
-    const defaultSec: BlueprintSection = {
-      id: 'SEC-' + Date.now(),
-      name: 'Section I: General Evaluation',
-      subject: 'Science',
-      topics: ['Orbital Mechanics'],
-      competencies: ['Evaluate orbital parameters for regional coverage'],
-      cognitiveLevels: { remembering: 2, understanding: 1, applying: 1, analyzing: 0, evaluating: 0, creating: 0 },
-      itemCount: 4,
-      marksPerItem: 5,
-      totalMarks: 20,
-      passingScore: 10,
-      timeAllocation: 30,
-      instructions: 'Solve all questions meticulously.',
-      difficultyDistribution: { easy: 2, moderate: 1, difficult: 1 },
-      itemTypeDistribution: { mcq: 2, tf: 1, essay: 1, fib: 0 }
-    };
-
-    const newBP: Blueprint = {
-      id: 'BP-' + Date.now(),
-      code: `BP-2026-NEW-${Math.floor(100 + Math.random() * 900)}`,
-      name: 'Proposed Orbital Assessment Blueprint',
-      description: 'A customizable curriculum blueprint outlining standard exam assemblies.',
-      examType: 'Admission',
-      academicYear: '2026-2027',
-      institution: 'Philippine Space Agency (PhilSA)',
-      examCategory: 'Space Science and Engineering',
-      status: 'DRAFT',
-      version: '1.0',
-      owner: `${user?.firstName || 'Admin'} ${user?.lastName || 'Expert'}`,
-      createdAt: new Date().toISOString(),
-      effectiveDate: new Date().toISOString().split('T')[0],
-      expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      sections: [defaultSec],
-      rules: {
-        totalItems: 4,
-        totalMarks: 20,
-        totalTimeLimit: 30,
-        sharedStimulusRequirement: { required: false, minCount: 0, questionsPerStimulus: 0 },
-        randomizationRules: { shuffleQuestions: true, shuffleChoices: true, fixedSequence: false },
-        maxReuseLimit: 3,
-        versionCompatibility: '>= 1.0',
-        activeItemOnly: true
-      },
-      history: [
-        {
-          id: 'LH-' + Date.now(),
-          version: '1.0',
-          action: 'Created',
-          updatedBy: `${user?.firstName || 'Admin'} ${user?.lastName || 'Expert'}`,
-          updatedAt: new Date().toISOString(),
-          comments: 'Initial system draft created.'
-        }
-      ]
-    };
-
-    setCurrentEditBlueprint(newBP);
-    setEditorExpandedSections({ [newBP.sections[0].id]: true });
-    setIsEditorOpen(true);
+  const openDetails = (blueprint: Blueprint) => {
+    setSelectedBlueprint(blueprint);
+    setIsDetailsOpen(true);
   };
 
-  // Initiate Editing
-  const handleInitiateEdit = (bp: Blueprint) => {
-    if (bp.status !== 'DRAFT' && bp.status !== 'REVISION_REQUIRED') {
-      alert(`Cannot edit blueprint in "${bp.status}" state. Only DRAFT and REVISION_REQUIRED status permits updates.`);
-      return;
-    }
-    // Deep clone
-    const clone: Blueprint = JSON.parse(JSON.stringify(bp));
-    setCurrentEditBlueprint(clone);
-    const expanded: Record<string, boolean> = {};
-    if (clone.sections && clone.sections.length > 0) {
-      expanded[clone.sections[0].id] = true;
-    }
-    setEditorExpandedSections(expanded);
-    setIsEditorOpen(true);
+  const openDesigner = (mode: BlueprintEditorMode, blueprint?: Blueprint) => {
+    setDesignerMode(mode);
+    setDesignerDraft(
+      blueprint ? JSON.parse(JSON.stringify(blueprint)) as Blueprint : buildDefaultBlueprint(`${user?.firstName ?? 'Exam'} ${user?.lastName ?? 'Admin'}`),
+    );
+    setIsDesignerOpen(true);
+    const sections = blueprint?.sections ?? [buildDefaultSection()];
+    setExpandedSections(
+      sections.reduce<SectionCollapseState>((accumulator, section) => {
+        accumulator[section.id] = true;
+        return accumulator;
+      }, {}),
+    );
   };
 
-  // Initiate Copy / Clone with Version Control Update
-  const handleCopyAndClone = async (bp: Blueprint) => {
-    const result = await examBlueprintService.cloneBlueprint(bp.id);
-    if (result.ok === false) {
-      alert(result.error.message);
-      return;
-    }
+  const saveDesigner = async () => {
+    if (!designerDraft) return;
 
-    const clone = result.data;
-    saveBlueprints([clone, ...blueprints]);
-    setSelectedBlueprint(clone);
-    addAuditLog('BLUEPRINT_CLONE', `Cloned blueprint ${bp.code} into new instance ${clone.code}`);
-    alert(`Successfully cloned ${bp.code} as new blueprint ${clone.code} with Version ${clone.version}`);
-  };
+    const payload = syncBlueprintTotalsFromSections(designerDraft);
 
-  // Version bump major vs minor
-  const handleNewVersionBump = (bp: Blueprint, isMajor: boolean) => {
-    const clone: Blueprint = JSON.parse(JSON.stringify(bp));
-    clone.id = 'BP-' + Date.now();
-    clone.status = 'DRAFT';
+    const result =
+      designerMode === 'edit'
+        ? await examBlueprintService.updateBlueprint(payload)
+        : await examBlueprintService.createBlueprint(payload);
 
-    const parts = bp.version.split('.');
-    let major = parseInt(parts[0]) || 1;
-    let minor = parseInt(parts[1]) || 0;
-
-    if (isMajor) {
-      major += 1;
-      minor = 0;
-    } else {
-      minor += 1;
-    }
-    clone.version = `${major}.${minor}`;
-    clone.createdAt = new Date().toISOString();
-    clone.history = [
-      {
-        id: 'LH-' + Date.now(),
-        version: clone.version,
-        action: 'Version Bumped',
-        updatedBy: `${user?.firstName || 'Admin'} ${user?.lastName || 'Expert'}`,
-        updatedAt: new Date().toISOString(),
-        comments: `Bumped version to v${clone.version}. Ready for modification.`
-      }
-    ];
-
-    saveBlueprints([clone, ...blueprints]);
-    setSelectedBlueprint(clone);
-    addAuditLog('BLUEPRINT_VERSION_BUMP', `Bumped blueprint ${bp.code} to draft version ${clone.version}`);
-    alert(`Initiated version ${clone.version} in DRAFT state.`);
-  };
-
-  // Archive / Restore / Retire Actions
-  const handleUpdateStatusDirect = async (bpId: string, action: 'ARCHIVE' | 'RESTORE' | 'RETIRE') => {
-    const targetStatus: Blueprint['status'] =
-      action === 'ARCHIVE' ? 'ARCHIVED' :
-      action === 'RESTORE' ? 'DRAFT' :
-      'RETIRED';
-    const remarks =
-      action === 'ARCHIVE' ? 'Archived blueprint for records conservation.' :
-      action === 'RESTORE' ? 'Restored archived blueprint back into DRAFT state.' :
-      'Retired obsolete blueprint from active examine systems.';
-
-    const result = await examBlueprintService.transitionBlueprint(bpId, {
-      status: targetStatus,
-      remarks,
-    });
-
-    if (result.ok === false) {
-      alert(result.error.message);
-      return;
-    }
-
-    const updated = blueprints.map(bp => bp.id === bpId ? result.data : bp);
-    saveBlueprints(updated);
-    if (selectedBlueprint?.id === bpId) {
+    if (result.ok) {
+      const next = designerMode === 'edit'
+        ? blueprints.map((item) => (item.id === result.data.id ? result.data : item))
+        : [result.data, ...blueprints.filter((item) => item.id !== result.data.id)];
+      saveBlueprints(next);
       setSelectedBlueprint(result.data);
-    }
-    addAuditLog('BLUEPRINT_STATUS_DIRECT', `${action} operation triggered on blueprint ${bpId}`);
-  };
-
-  // Delete draft helper
-  const handleDeleteDraft = async (bp: Blueprint) => {
-    if (bp.status !== 'DRAFT') {
-      alert("Only blueprints in DRAFT status can be permanently deleted.");
-      return;
-    }
-    if (confirm(`Are you sure you want to permanently delete draft blueprint "${bp.name}"?`)) {
-      const result = await examBlueprintService.deleteBlueprint(bp.id);
-      if (result.ok === false) {
-        alert(result.error.message);
-        return;
-      }
-      const remaining = blueprints.filter(b => b.id !== bp.id);
-      saveBlueprints(remaining);
-      setSelectedBlueprint(remaining[0] || null);
-      addAuditLog('BLUEPRINT_DELETE', `Deleted draft blueprint ${bp.code}`);
-    }
-  };
-
-  // Handle Workflow Status Changes with Comments
-  const triggerWorkflowTransition = (status: Blueprint['status']) => {
-    setTargetWorkflowStatus(status);
-    setWorkflowComment('');
-    setIsWorkflowModalOpen(true);
-  };
-
-  const submitWorkflowTransition = async () => {
-    if (!selectedBlueprint || !targetWorkflowStatus) return;
-
-    // Validate if publishing
-    if (targetWorkflowStatus === 'PUBLISHED') {
-      const validation = runDetailedValidation(selectedBlueprint);
-      if (validation.errors.length > 0) {
-        alert(`Cannot Publish blueprint due to validation errors:\n\n${validation.errors.join('\n')}`);
-        setIsWorkflowModalOpen(false);
-        return;
-      }
-
-    }
-
-    const result = await examBlueprintService.transitionBlueprint(selectedBlueprint.id, {
-      status: targetWorkflowStatus,
-      remarks: workflowComment || `Transitioned status to ${targetWorkflowStatus}`,
-    });
-
-    if (result.ok === false) {
-      alert(result.error.message);
+      setIsDetailsOpen(true);
+      setIsDesignerOpen(false);
+      setExpandedSections({});
       return;
     }
 
-    const updatedBlueprints = blueprints.map(bp => bp.id === selectedBlueprint.id ? result.data : bp);
-    saveBlueprints(updatedBlueprints);
-    addAuditLog('BLUEPRINT_WORKFLOW', `Moved blueprint ${selectedBlueprint.code} to status ${targetWorkflowStatus}`);
-    setIsWorkflowModalOpen(false);
-    setSelectedBlueprint(result.data);
-    alert(`Successfully moved ${selectedBlueprint.code} status to ${targetWorkflowStatus}`);
-  };
-
-  // Detailed Rule Validation Engine
-  const runDetailedValidation = (bp: Blueprint) => {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    // Overall structure limits
-    let accumulatedItems = 0;
-    let accumulatedMarks = 0;
-    let accumulatedTime = 0;
-    const recordedTopics = new Set<string>();
-
-    bp.sections.forEach((sec, idx) => {
-      const secLabel = sec.name || `Section ${idx + 1}`;
-
-      // 1. Validate total item counts against difficulty sums
-      const difficultySum = sec.difficultyDistribution.easy + sec.difficultyDistribution.moderate + sec.difficultyDistribution.difficult;
-      if (difficultySum !== sec.itemCount) {
-        errors.push(`[${secLabel}] Total difficulty distribution items (${difficultySum}) does not match Section Item Count (${sec.itemCount}).`);
-      }
-
-      // 2. Validate total item counts against type sums
-      const typeSum = sec.itemTypeDistribution.mcq + sec.itemTypeDistribution.tf + sec.itemTypeDistribution.essay + sec.itemTypeDistribution.fib;
-      if (typeSum !== sec.itemCount) {
-        errors.push(`[${secLabel}] Item type distribution items (${typeSum}) does not match Section Item Count (${sec.itemCount}).`);
-      }
-
-      // 3. Validate Cognitive Levels equal total items
-      const cognitiveSum = 
-        sec.cognitiveLevels.remembering + 
-        sec.cognitiveLevels.understanding + 
-        sec.cognitiveLevels.applying + 
-        sec.cognitiveLevels.analyzing + 
-        sec.cognitiveLevels.evaluating + 
-        sec.cognitiveLevels.creating;
-      if (cognitiveSum !== sec.itemCount) {
-        warnings.push(`[${secLabel}] Cognitive Levels sum (${cognitiveSum}) is different from section itemCount (${sec.itemCount}).`);
-      }
-
-      // 4. Validate Section Marks
-      const calculatedMarks = sec.itemCount * sec.marksPerItem;
-      if (calculatedMarks !== sec.totalMarks) {
-        errors.push(`[${secLabel}] Marks calculation mismatch. Items (${sec.itemCount}) * Marks per Item (${sec.marksPerItem}) should be ${calculatedMarks} but is listed as ${sec.totalMarks}.`);
-      }
-
-      // 5. Section passing score bounds
-      if (sec.passingScore > sec.totalMarks) {
-        errors.push(`[${secLabel}] Passing score (${sec.passingScore}) cannot be greater than total section marks (${sec.totalMarks}).`);
-      }
-
-      // 6. Topic duplications
-      sec.topics.forEach(topic => {
-        if (recordedTopics.has(topic)) {
-          warnings.push(`[${secLabel}] Topic "${topic}" is configured across multiple sections, which might dilute distribution.`);
-        }
-        recordedTopics.add(topic);
-      });
-
-      // 7. Compentency validations - bypassed since form field was removed
-
-      accumulatedItems += sec.itemCount;
-      accumulatedMarks += sec.totalMarks;
-      accumulatedTime += sec.timeAllocation;
-    });
-
-    // Cross-check blueprint global rule syncs
-    if (accumulatedItems !== bp.rules.totalItems) {
-      errors.push(`Blueprint overall rules total items (${bp.rules.totalItems}) does not match the sum of sections (${accumulatedItems}).`);
-    }
-
-    if (accumulatedMarks !== bp.rules.totalMarks) {
-      errors.push(`Blueprint overall rules total marks (${bp.rules.totalMarks}) does not match the sum of sections (${accumulatedMarks}).`);
-    }
-
-    if (accumulatedTime > bp.rules.totalTimeLimit) {
-      errors.push(`Blueprint section cumulative time (${accumulatedTime}m) exceeds configured global limit rule (${bp.rules.totalTimeLimit}m).`);
-    }
-
-    // Effective dates sanity check
-    if (new Date(bp.effectiveDate) >= new Date(bp.expirationDate)) {
-      errors.push(`Effective Date (${bp.effectiveDate}) must be before Expiration Date (${bp.expirationDate}).`);
-    }
-
-    return { errors, warnings };
-  };
-
-  // Run Blueprint Assembly Algorithm on Centralized Item Bank
-  const simulateExamAssembly = (bp: Blueprint) => {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const matchedQuestions: { [sectionId: string]: BankQuestion[] } = {};
-    const auditLog: string[] = [];
-    let totalMatched = 0;
-
-    auditLog.push(`[${new Date().toISOString()}] Initiating automated examination form assembly for ${bp.code} v${bp.version}`);
-    auditLog.push(`Filtering Centralized Item Bank of ${itemBank.length} items for Active, approved items.`);
-
-    const activeBank = itemBank.filter(q => q.status === 'ACTIVE');
-    auditLog.push(`Found ${activeBank.length} active questions in core registry.`);
-
-    bp.sections.forEach(sec => {
-      matchedQuestions[sec.id] = [];
-      auditLog.push(`Analyzing section requirements for: "${sec.name}"`);
-
-      // 1. Gather pool matching subject, topic, and competency bounds
-      const sectionPool = activeBank.filter(q => 
-        q.subject.toLowerCase() === sec.subject.toLowerCase() &&
-        sec.topics.some(t => q.topic.toLowerCase() === t.toLowerCase())
-      );
-
-      auditLog.push(`Subject: "${sec.subject}" | Topics: [${sec.topics.join(', ')}] matched ${sectionPool.length} active items in bank.`);
-
-      // 2. Select items satisfying difficulty levels
-      const requiredEasy = sec.difficultyDistribution.easy;
-      const requiredModerate = sec.difficultyDistribution.moderate;
-      const requiredDifficult = sec.difficultyDistribution.difficult;
-
-      const easyItems = sectionPool.filter(q => q.difficulty === 'EASY');
-      const moderateItems = sectionPool.filter(q => q.difficulty === 'MODERATE');
-      const difficultItems = sectionPool.filter(q => q.difficulty === 'DIFFICULT');
-
-      auditLog.push(`Difficulty analysis for section - Required (Easy: ${requiredEasy}, Moderate: ${requiredModerate}, Difficult: ${requiredDifficult})`);
-      auditLog.push(`Available in Bank - (Easy: ${easyItems.length}, Moderate: ${moderateItems.length}, Difficult: ${difficultItems.length})`);
-
-      if (easyItems.length < requiredEasy) {
-        errors.push(`[${sec.name}] Insufficient EASY items. Required: ${requiredEasy}, Found: ${easyItems.length} in Subject "${sec.subject}" matching topics.`);
-      }
-      if (moderateItems.length < requiredModerate) {
-        errors.push(`[${sec.name}] Insufficient MODERATE items. Required: ${requiredModerate}, Found: ${moderateItems.length} in Subject "${sec.subject}" matching topics.`);
-      }
-      if (difficultItems.length < requiredDifficult) {
-        errors.push(`[${sec.name}] Insufficient DIFFICULT items. Required: ${requiredDifficult}, Found: ${difficultItems.length} in Subject "${sec.subject}" matching topics.`);
-      }
-
-      // Select specific items safely
-      const selectedEasy = easyItems.slice(0, requiredEasy);
-      const selectedModerate = moderateItems.slice(0, requiredModerate);
-      const selectedDifficult = difficultItems.slice(0, requiredDifficult);
-
-      const sectionSelections = [...selectedEasy, ...selectedModerate, ...selectedDifficult];
-      matchedQuestions[sec.id] = sectionSelections;
-      totalMatched += sectionSelections.length;
-
-      auditLog.push(`Section selection complete. Compiled ${sectionSelections.length} matching questions.`);
-    });
-
-    const success = errors.length === 0;
-    if (success) {
-      auditLog.push(`Assembly complete. Successfully extracted ${totalMatched} unique items satisfying 100% of blueprint metadata specs!`);
-    } else {
-      auditLog.push(`Assembly aborted due to item-bank deficit. ${errors.length} showstoppers detected.`);
-    }
-
-    setAssemblyResult({
-      success,
-      errors,
-      warnings,
-      matchedQuestions,
-      totalMatched,
-      auditLog
-    });
-    setIsAssemblyOpen(true);
-  };
-
-  // Editor Sub-handlers
-  const handleSaveEditor = async () => {
-    if (!currentEditBlueprint) return;
-
-    // Validate fields
-    if (!currentEditBlueprint.code.trim() || !currentEditBlueprint.name.trim()) {
-      alert("Blueprint code and name are required.");
+    if (designerMode === 'edit') {
+      const next = blueprints.map((item) => (item.id === designerDraft.id ? designerDraft : item));
+      saveBlueprints(next);
+      setSelectedBlueprint(designerDraft);
+      setIsDetailsOpen(true);
+      setIsDesignerOpen(false);
       return;
     }
 
-    const isExisting = blueprints.some(b => b.id === currentEditBlueprint.id);
-    const result = isExisting
-      ? await examBlueprintService.updateBlueprint(currentEditBlueprint)
-      : await examBlueprintService.createBlueprint(currentEditBlueprint);
+    saveBlueprints([designerDraft, ...blueprints]);
+    setSelectedBlueprint(designerDraft);
+    setIsDetailsOpen(true);
+    setIsDesignerOpen(false);
+    setExpandedSections({});
+  };
 
-    if (result.ok === false) {
-      alert(result.error.message);
+  const cloneBlueprint = async (blueprint: Blueprint) => {
+    const result = await examBlueprintService.cloneBlueprint(blueprint.id);
+    if (result.ok) {
+      saveBlueprints([result.data, ...blueprints]);
+      setSelectedBlueprint(result.data);
       return;
     }
 
-    const persisted = result.data;
-    const updatedList = isExisting
-      ? blueprints.map(b => b.id === currentEditBlueprint.id ? persisted : b)
-      : [persisted, ...blueprints];
-
-    saveBlueprints(updatedList);
-    setSelectedBlueprint(persisted);
-    setIsEditorOpen(false);
-    setCurrentEditBlueprint(null);
-    addAuditLog(isExisting ? 'BLUEPRINT_UPDATE' : 'BLUEPRINT_CREATE', `${isExisting ? 'Modified' : 'Created'} blueprint ${persisted.code}`);
-    alert("Blueprint draft successfully saved!");
-  };
-
-  // Sections edit helpers within Editor modal
-  const handleAddSectionToEdit = () => {
-    if (!currentEditBlueprint) return;
-    const newSec: BlueprintSection = {
-      id: 'SEC-' + Date.now(),
-      name: `Section ${currentEditBlueprint.sections.length + 1}: Focus Assessment`,
-      subject: 'Science',
-      topics: ['Propulsion'],
-      competencies: ['Compare rocketry and thermal exhaust capabilities'],
-      cognitiveLevels: { remembering: 1, understanding: 1, applying: 0, analyzing: 0, evaluating: 0, creating: 0 },
-      itemCount: 2,
-      marksPerItem: 5,
-      totalMarks: 10,
-      passingScore: 5,
-      timeAllocation: 15,
-      instructions: 'Review theoretical principles carefully.',
-      difficultyDistribution: { easy: 1, moderate: 1, difficult: 0 },
-      itemTypeDistribution: { mcq: 1, tf: 1, essay: 0, fib: 0 }
-    };
-
-    const updatedSections = [...currentEditBlueprint.sections, newSec];
-    updateEditBlueprintAndSum(updatedSections);
-    setEditorExpandedSections(prev => ({ ...prev, [newSec.id]: true }));
-  };
-
-  const handleRemoveSectionFromEdit = (secId: string) => {
-    if (!currentEditBlueprint) return;
-    if (currentEditBlueprint.sections.length <= 1) {
-      alert("A blueprint must contain at least one section.");
-      return;
-    }
-    const updatedSections = currentEditBlueprint.sections.filter(s => s.id !== secId);
-    updateEditBlueprintAndSum(updatedSections);
-  };
-
-  const updateEditSectionField = (secId: string, field: keyof BlueprintSection, value: any) => {
-    if (!currentEditBlueprint) return;
-    const updatedSections = currentEditBlueprint.sections.map(sec => {
-      if (sec.id === secId) {
-        return { ...sec, [field]: value };
-      }
-      return sec;
-    });
-    updateEditBlueprintAndSum(updatedSections);
-  };
-
-  const updateEditSectionDistribution = (secId: string, distType: 'difficulty' | 'type' | 'cognitive', subField: string, val: number) => {
-    if (!currentEditBlueprint) return;
-    const updatedSections = currentEditBlueprint.sections.map(sec => {
-      if (sec.id === secId) {
-        if (distType === 'difficulty') {
-          const newDiff = { ...sec.difficultyDistribution, [subField]: val };
-          return { ...sec, difficultyDistribution: newDiff };
-        } else if (distType === 'type') {
-          const newType = { ...sec.itemTypeDistribution, [subField]: val };
-          return { ...sec, itemTypeDistribution: newType };
-        } else {
-          const newCog = { ...sec.cognitiveLevels, [subField]: val };
-          return { ...sec, cognitiveLevels: newCog };
-        }
-      }
-      return sec;
-    });
-    updateEditBlueprintAndSum(updatedSections);
-  };
-
-  // Auto calculate sums on edit
-  const updateEditBlueprintAndSum = (updatedSections: BlueprintSection[]) => {
-    if (!currentEditBlueprint) return;
-
-    let itemsSum = 0;
-    let marksSum = 0;
-    let timeSum = 0;
-
-    const recalibrated = updatedSections.map(sec => {
-      const computedMarks = sec.itemCount * sec.marksPerItem;
-      itemsSum += sec.itemCount;
-      marksSum += computedMarks;
-      timeSum += sec.timeAllocation;
-
-      return {
-        ...sec,
-        totalMarks: computedMarks
-      };
-    });
-
-    setCurrentEditBlueprint({
-      ...currentEditBlueprint,
-      sections: recalibrated,
+    const cloned: Blueprint = {
+      ...JSON.parse(JSON.stringify(blueprint)) as Blueprint,
+      id: `BP-${Date.now()}`,
+      code: `${blueprint.code}-COPY`,
+      status: 'DRAFT',
+      version: blueprint.version,
+      createdAt: new Date().toISOString(),
+      owner: `${user?.firstName ?? 'Exam'} ${user?.lastName ?? 'Admin'}`,
       rules: {
-        ...currentEditBlueprint.rules,
-        totalItems: itemsSum,
-        totalMarks: marksSum,
-        totalTimeLimit: timeSum
-      }
-    });
+        ...blueprint.rules,
+        accessibilityAccommodations: { ...blueprint.rules.accessibilityAccommodations },
+      },
+    };
+    saveBlueprints([cloned, ...blueprints]);
+    setSelectedBlueprint(cloned);
   };
 
-  // Rollback to historic version logs helper
-  const handleRollbackToLog = (log: BlueprintHistoryEntry) => {
-    if (!selectedBlueprint) return;
-    if (selectedBlueprint.status !== 'DRAFT' && selectedBlueprint.status !== 'REVISION_REQUIRED') {
-      alert("Rollback is only permitted while in DRAFT or REVISION_REQUIRED status.");
+  const deleteDraft = async (blueprint: Blueprint) => {
+    if (blueprint.status !== 'DRAFT') return;
+
+    if (!window.confirm(`Delete draft blueprint "${blueprint.name}"?`)) return;
+
+    const result = await examBlueprintService.deleteBlueprint(blueprint.id);
+    if (!result.ok) {
+      const remaining = blueprints.filter((item) => item.id !== blueprint.id);
+      saveBlueprints(remaining);
+      setSelectedBlueprint(null);
+      setIsDetailsOpen(false);
       return;
     }
 
-    const rollbackLog: BlueprintHistoryEntry = {
-      id: 'LH-' + Date.now(),
-      version: selectedBlueprint.version,
-      action: 'Rollback',
-      updatedBy: `${user?.firstName || 'Admin'} ${user?.lastName || 'Expert'}`,
-      updatedAt: new Date().toISOString(),
-      comments: `Rolled back configuration parameters referencing stage log: [${log.action} v${log.version}]`
-    };
-
-    const updated = blueprints.map(b => {
-      if (b.id === selectedBlueprint.id) {
-        return {
-          ...b,
-          history: [rollbackLog, ...b.history]
-        };
-      }
-      return b;
-    });
-
-    saveBlueprints(updated);
-    addAuditLog('BLUEPRINT_ROLLBACK', `Triggered parameter rollback on blueprint ${selectedBlueprint.code}`);
-    alert("Blueprint parameters successfully restored/rolled-back.");
-    setIsHistoryOpen(false);
-  };
-
-  // Filtering Logic
-  const filteredBlueprints = blueprints.filter(bp => {
-    const matchesSearch = 
-      bp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      bp.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bp.owner.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bp.institution.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'ALL' || bp.status === statusFilter;
-    const matchesType = typeFilter === 'ALL' || bp.examType === typeFilter;
-    const matchesYear = yearFilter === 'ALL' || bp.academicYear === yearFilter;
-
-    return matchesSearch && matchesStatus && matchesType && matchesYear;
-  }).sort((a, b) => {
-    if (sortBy === 'NEWEST') {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    }
-    if (sortBy === 'VERSION') {
-      return parseFloat(b.version) - parseFloat(a.version);
-    }
-    if (sortBy === 'TOTAL_MARKS') {
-      return b.rules.totalMarks - a.rules.totalMarks;
-    }
-    return 0;
-  });
-
-  // Highlight color status badge
-  const getStatusBadgeClass = (status: Blueprint['status']) => {
-    switch (status) {
-      case 'PUBLISHED': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'APPROVED': return 'bg-teal-100 text-teal-800 border-teal-200';
-      case 'ACADEMIC_REVIEW': return 'bg-purple-100 text-purple-800 border-purple-200';
-      case 'SUBMITTED': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'REVISION_REQUIRED': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case 'RETIRED': return 'bg-slate-100 text-slate-800 border-slate-200';
-      case 'ARCHIVED': return 'bg-rose-100 text-rose-800 border-rose-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
-    }
-  };
-
-  const getStatusStepIndex = (status: Blueprint['status']) => {
-    const steps: Blueprint['status'][] = ['DRAFT', 'SUBMITTED', 'ACADEMIC_REVIEW', 'APPROVED', 'PUBLISHED', 'RETIRED'];
-    return steps.indexOf(status);
+    const remaining = blueprints.filter((item) => item.id !== blueprint.id);
+    saveBlueprints(remaining);
+    setSelectedBlueprint(null);
+    setIsDetailsOpen(false);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Dynamic Header & Meta Stats */}
-      <div className="flex flex-col gap-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Exam Management Hub</span>
-          <div className="flex items-center gap-3">
-            <span className="p-2.5 bg-rose-50 text-philsa-red rounded-xl">
-              <Settings className="w-6 h-6 animate-spin-slow" />
-            </span>
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight font-sans">Exam Blueprints</h1>
-              <p className="text-slate-500 text-xs mt-0.5">Curriculum examination specifications and blueprinting.</p>
-            </div>
-          </div>
-        </div>
-
-        <ExamHubTabs activeTab="blueprints" onTabChange={handleHubTabChange} />
-
-        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 pt-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
-              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Active Blueprints</p>
-              <p className="text-lg font-black text-slate-800">{blueprints.filter(b => b.status === 'PUBLISHED').length}</p>
-            </div>
-            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
-              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">In Review Stage</p>
-              <p className="text-lg font-black text-amber-600">{blueprints.filter(b => b.status === 'ACADEMIC_REVIEW' || b.status === 'SUBMITTED').length}</p>
-            </div>
-            <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 min-w-[120px]">
-              <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Item Bank Size</p>
-              <p className="text-lg font-black text-blue-600">{itemBank.filter(q => q.status === 'ACTIVE').length} Active</p>
-            </div>
-          </div>
-
-          <button
-            onClick={handleInitiateCreate}
-            className="bg-philsa-red hover:bg-philsa-red/90 text-white text-xs font-bold uppercase tracking-wider px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-philsa-red/10"
-          >
-            <Plus className="w-4 h-4" /> Design Blueprint
-          </button>
-        </div>
+    <div className="mx-auto flex w-full max-w-[1420px] flex-col gap-5">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <ExamHubTabs activeTab="blueprints" onTabChange={handleHubTabChange} className="border-none" />
       </div>
 
-      {/* Main Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left Search/Filters/Listing Pane - Only visible when no specification is selected */}
-        {!selectedBlueprint && (
-          <div className="lg:col-span-12 flex flex-col gap-4 animate-in fade-in duration-300">
-          
-          {/* Advanced Search & Filtering Controls */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Search code, name, institution..."
-                  className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-philsa-red/20 focus:bg-white transition-all"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
+      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        {!isDesignerOpen ? (
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-rose-50 p-3 text-philsa-red">
+                <ClipboardList className="h-5 w-5" />
               </div>
+              <div>
+                <h1 className="text-[22px] font-extrabold leading-none text-slate-900">Exam Blueprints</h1>
+                <p className="mt-1 text-[12px] text-slate-500">Curriculum examination specifications and blueprinting</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => setShowFilters(!showFilters)}
-                className={cn(
-                  "px-3 py-2 rounded-xl border text-xs font-black uppercase flex items-center gap-1.5 transition-all cursor-pointer select-none",
-                  showFilters 
-                    ? "bg-rose-50 text-philsa-red border-rose-100" 
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                )}
-                title="Toggle filters"
+                onClick={() => openDesigner('create')}
+                className="inline-flex items-center gap-2 rounded-xl bg-philsa-red px-4 py-2.5 text-[13px] font-extrabold uppercase tracking-[0.15em] text-white shadow-sm transition hover:bg-philsa-red/90"
               >
-                <Sliders className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Filters</span>
+                <Plus className="h-4 w-4" />
+                Design Blueprint
               </button>
             </div>
-
-            {showFilters && (
-              <div className={cn(
-                "grid gap-2 pt-2 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-150",
-                selectedBlueprint ? "grid-cols-2" : "grid-cols-2 md:grid-cols-4"
-              )}>
-                <div>
-                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Status</label>
-                  <select
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] font-bold text-slate-700"
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Statuses</option>
-                    <option value="DRAFT">Draft</option>
-                    <option value="SUBMITTED">Submitted</option>
-                    <option value="ACADEMIC_REVIEW">Academic Review</option>
-                    <option value="APPROVED">Approved</option>
-                    <option value="PUBLISHED">Published</option>
-                    <option value="RETIRED">Retired</option>
-                    <option value="ARCHIVED">Archived</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Exam Type</label>
-                  <select
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] font-bold text-slate-700"
-                    value={typeFilter}
-                    onChange={e => setTypeFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Types</option>
-                    {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Academic Year</label>
-                  <select
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] font-bold text-slate-700"
-                    value={yearFilter}
-                    onChange={e => setYearFilter(e.target.value)}
-                  >
-                    <option value="ALL">All Years</option>
-                    {uniqueYears.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Sort By</label>
-                  <select
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] font-bold text-slate-700"
-                    value={sortBy}
-                    onChange={e => setSortBy(e.target.value)}
-                  >
-                    <option value="NEWEST">Newest Created</option>
-                    <option value="VERSION">Highest Version</option>
-                    <option value="TOTAL_MARKS">Total Marks</option>
-                  </select>
-                </div>
-              </div>
-            )}
           </div>
-
-          {/* List of Blueprints */}
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex-1 max-h-[550px] overflow-y-auto">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 select-none">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                Available Blueprint Specifications ({filteredBlueprints.length})
-              </span>
-              {!selectedBlueprint && (
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest bg-slate-150/50 px-2 py-0.5 rounded-md">
-                  Table View • Click row to view details
-                </span>
-              )}
-            </div>
-            
-            {filteredBlueprints.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs font-semibold">
-                No specifications matched current search or criteria.
-              </div>
-            ) : !selectedBlueprint ? (
-              /* Expanded Table View */
-              <div className="overflow-x-auto animate-in fade-in duration-300">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50/75 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider select-none">
-                      <th className="p-4">Spec Code</th>
-                      <th className="p-4">Specification Name</th>
-                      <th className="p-4">Institution / Agency</th>
-                      <th className="p-4">Category</th>
-                      <th className="p-4 text-center">Version</th>
-                      <th className="p-4 text-center">Sections</th>
-                      <th className="p-4 text-center">Total Qs</th>
-                      <th className="p-4 text-center">Total Marks</th>
-                      <th className="p-4 text-center">Academic Year</th>
-                      <th className="p-4 text-center">Status</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                    {filteredBlueprints.map(bp => (
-                      <tr 
-                        key={bp.id} 
-                        onClick={() => {
-                          setSelectedBlueprint(bp);
-                          setIsCompareMode(false);
-                        }}
-                        className="hover:bg-slate-50/70 transition-colors cursor-pointer group"
-                      >
-                        <td className="p-4 font-mono font-bold text-slate-600">
-                          <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] group-hover:bg-philsa-red/10 group-hover:text-philsa-red transition-all">
-                            {bp.code}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className="font-extrabold text-slate-800 uppercase tracking-wide block text-xs group-hover:text-philsa-navy transition-colors">
-                            {bp.name}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-semibold block line-clamp-1 mt-0.5" title={bp.description}>
-                            {bp.description}
-                          </span>
-                        </td>
-                        <td className="p-4 text-slate-600 font-bold">{bp.institution}</td>
-                        <td className="p-4 text-slate-500 font-semibold">{bp.examCategory}</td>
-                        <td className="p-4 text-center font-bold text-slate-500">v{bp.version}</td>
-                        <td className="p-4 text-center font-extrabold text-slate-800">{bp.sections.length}</td>
-                        <td className="p-4 text-center text-slate-600 font-bold">{bp.rules.totalItems}</td>
-                        <td className="p-4 text-center">
-                          <span className="bg-rose-50 text-philsa-red font-black px-2 py-0.5 rounded text-[10px]">
-                            {bp.rules.totalMarks} Marks
-                          </span>
-                        </td>
-                        <td className="p-4 text-center text-slate-500">{bp.academicYear}</td>
-                        <td className="p-4 text-center">
-                          <span className={cn("text-[8px] font-black px-2 py-0.5 rounded-full uppercase border inline-block whitespace-nowrap", getStatusBadgeClass(bp.status))}>
-                            {bp.status.replace('_', ' ')}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right" onClick={e => e.stopPropagation()}>
-                          <div className="flex justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedBlueprint(bp);
-                                setIsCompareMode(false);
-                              }}
-                              className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer shadow-3xs"
-                            >
-                              Details
-                            </button>
-                            {(bp.status === 'DRAFT' || bp.status === 'REVISION_REQUIRED') && (
-                              <button
-                                type="button"
-                                onClick={() => handleInitiateEdit(bp)}
-                                className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-blue-600 hover:bg-blue-50 transition-all cursor-pointer shadow-3xs"
-                              >
-                                Edit
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleCopyAndClone(bp)}
-                              className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-all cursor-pointer shadow-3xs"
-                            >
-                              Clone
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              /* Compact Split/Card View */
-              <div className="divide-y divide-slate-100 animate-in fade-in duration-300">
-                {filteredBlueprints.map(bp => (
-                  <div
-                    key={bp.id}
-                    onClick={() => {
-                      setSelectedBlueprint(bp);
-                      setIsCompareMode(false);
-                    }}
-                    className={cn(
-                      "p-4 transition-all cursor-pointer flex flex-col gap-2 hover:bg-slate-50",
-                      selectedBlueprint?.id === bp.id ? "bg-slate-50/80 border-l-4 border-philsa-red pl-3" : ""
-                    )}
-                  >
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                          {bp.code}
-                        </span>
-                        <span className="text-[9px] font-black text-slate-400">v{bp.version}</span>
-                      </div>
-                      <span className={cn("text-[8px] font-black px-2 py-0.5 rounded-full uppercase border shrink-0", getStatusBadgeClass(bp.status))}>
-                        {bp.status.replace('_', ' ')}
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xs font-extrabold text-slate-800 leading-tight line-clamp-1">{bp.name}</h3>
-                      <p className="text-[10px] text-slate-400 font-bold tracking-tight line-clamp-1 mt-0.5">{bp.institution}</p>
-                    </div>
-
-                    <div className="flex justify-between items-center text-[10px] text-slate-500 font-medium pt-1 border-t border-dashed border-slate-100 mt-1">
-                      <span className="flex items-center gap-1">
-                        <BookOpen className="w-3 h-3 text-slate-400" /> {bp.sections.length} Sections
-                      </span>
-                      <span className="font-extrabold text-slate-700 bg-slate-100/60 px-1.5 py-0.5 rounded">
-                        {bp.rules.totalMarks} Marks
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        )}
-
-        {/* Right Details/Preview Pane - Full screen when active */}
-        {selectedBlueprint && (
-          <div className="lg:col-span-12 animate-in fade-in duration-300">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={selectedBlueprint.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden flex flex-col"
-              >
-                {/* Header Information Card */}
-                <div className="p-6 border-b border-slate-150 bg-slate-50/50 relative">
-                  {/* Absolute Exit Icon Button */}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBlueprint(null)}
-                    className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-full border border-slate-200 bg-white transition-all shadow-3xs cursor-pointer select-none z-10"
-                    title="Close details and return to specifications table"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-
-                  <div className="flex flex-wrap justify-between items-start gap-4 pr-12">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-black text-slate-700 bg-slate-200 px-2.5 py-0.5 rounded-md">
-                          {selectedBlueprint.code}
-                        </span>
-                        <span className="text-xs font-black text-slate-400">Version {selectedBlueprint.version}</span>
-                        <span className={cn("text-[9px] font-black px-2.5 py-0.5 rounded-full border uppercase", getStatusBadgeClass(selectedBlueprint.status))}>
-                          {selectedBlueprint.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <h2 className="text-lg font-black text-slate-900 tracking-tight mt-2">{selectedBlueprint.name}</h2>
-                      <p className="text-[11px] text-slate-500 font-bold mt-0.5">{selectedBlueprint.examCategory} • {selectedBlueprint.academicYear}</p>
-                    </div>
-
-                    {/* Action buttons list */}
-                    <div className="flex flex-wrap gap-1.5">
-                      {/* Edit (Drafts only) */}
-                      {(selectedBlueprint.status === 'DRAFT' || selectedBlueprint.status === 'REVISION_REQUIRED') && (
-                        <button
-                          onClick={() => handleInitiateEdit(selectedBlueprint)}
-                          className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold flex items-center gap-1 transition-all"
-                          title="Edit Specification Draft"
-                        >
-                          <FileText className="w-3.5 h-3.5" /> Edit
-                        </button>
-                      )}
-
-                      {/* Clone / Version Bump options */}
-                      <button
-                        onClick={() => handleCopyAndClone(selectedBlueprint)}
-                        className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 text-xs font-bold flex items-center gap-1 transition-all"
-                        title="Copy configuration parameters to draft"
-                      >
-                        <Copy className="w-3.5 h-3.5" /> Clone Spec
-                      </button>
-
-                      {/* Advanced comparisons toggle */}
-                      <button
-                        onClick={() => {
-                          setCompareTargetId('');
-                          setIsCompareMode(!isCompareMode);
-                        }}
-                        className={cn(
-                          "p-1.5 rounded-lg border text-xs font-bold flex items-center gap-1 transition-all",
-                          isCompareMode 
-                            ? "bg-rose-50 text-philsa-red border-philsa-red/30" 
-                            : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-200"
-                        )}
-                        title="Compare different specifications"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Compare Versions
-                      </button>
-
-                      {/* Delete (Draft only) */}
-                      {selectedBlueprint.status === 'DRAFT' && (
-                        <button
-                          onClick={() => handleDeleteDraft(selectedBlueprint)}
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg border border-rose-100 text-xs font-bold flex items-center gap-1 transition-all"
-                          title="Permanently remove draft"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" /> Delete
-                        </button>
-                      )}
-
-                      {/* Archive/Restore options */}
-                      {selectedBlueprint.status === 'ARCHIVED' ? (
-                        <button
-                          onClick={() => handleUpdateStatusDirect(selectedBlueprint.id, 'RESTORE')}
-                          className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg border border-emerald-100 text-xs font-bold flex items-center gap-1 transition-all"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" /> Restore Spec
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleUpdateStatusDirect(selectedBlueprint.id, 'ARCHIVE')}
-                          className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg border border-slate-200 text-xs font-bold flex items-center gap-1 transition-all"
-                          title="Archive spec to records"
-                        >
-                          <Archive className="w-3.5 h-3.5" /> Archive
-                        </button>
-                      )}
-
-                    </div>
-                  </div>
-
-                  <p className="text-[11px] text-slate-600 leading-relaxed max-w-2xl bg-white p-3 rounded-xl border border-slate-150/80 mt-4">{selectedBlueprint.description}</p>
-                </div>
-
-                {/* Compare Mode Panels */}
-                {isCompareMode && (
-                  <div className="bg-rose-50/50 p-4 border-b border-rose-100 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-rose-900 uppercase tracking-widest flex items-center gap-1.5">
-                        <RefreshCw className="w-3.5 h-3.5 text-philsa-red animate-spin-slow" /> Side-by-Side Version Comparison Engine
-                      </span>
-                      <button onClick={() => setIsCompareMode(false)} className="text-slate-400 hover:text-slate-600">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="flex gap-2 items-center">
-                      <span className="text-[11px] font-bold text-slate-600 shrink-0">Compare with:</span>
-                      <select
-                        className="bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800"
-                        value={compareTargetId}
-                        onChange={e => setCompareTargetId(e.target.value)}
-                      >
-                        <option value="">Choose another blueprint...</option>
-                        {blueprints.filter(b => b.id !== selectedBlueprint.id).map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.code} v{b.version} - {b.name} ({b.status})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {compareTargetId && (
-                      <div className="grid grid-cols-2 gap-4 bg-white p-4 rounded-xl border border-rose-100 text-xs">
-                        {/* Selected Spec */}
-                        <div className="space-y-2 border-r border-slate-100 pr-2">
-                          <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Origin Specification</p>
-                          <p className="font-bold text-slate-800 text-xs">{selectedBlueprint.code} v{selectedBlueprint.version}</p>
-                          <div className="space-y-1 text-[11px] text-slate-600 pt-1">
-                            <p>• Total Items: <span className="font-bold text-slate-900">{selectedBlueprint.rules.totalItems}</span></p>
-                            <p>• Total Marks: <span className="font-bold text-slate-900">{selectedBlueprint.rules.totalMarks}</span></p>
-                            <p>• Time Allocation: <span className="font-bold text-slate-900">{selectedBlueprint.rules.totalTimeLimit} min</span></p>
-                            <p>• Section Count: <span className="font-bold text-slate-900">{selectedBlueprint.sections.length}</span></p>
-                            <p>• Shuffling: <span className="font-bold text-slate-900">{selectedBlueprint.rules.randomizationRules.shuffleQuestions ? 'Enabled' : 'Disabled'}</span></p>
-                          </div>
-                        </div>
-
-                        {/* Compare Target Spec */}
-                        {(() => {
-                          const target = blueprints.find(b => b.id === compareTargetId);
-                          if (!target) return <p className="text-slate-400">Target not found</p>;
-                          return (
-                            <div className="space-y-2">
-                              <p className="font-extrabold text-[10px] text-slate-400 uppercase tracking-wider">Comparison Target</p>
-                              <p className="font-bold text-slate-800 text-xs">{target.code} v{target.version}</p>
-                              <div className="space-y-1 text-[11px] text-slate-600 pt-1">
-                                <p>• Total Items: <span className={cn("font-bold", target.rules.totalItems !== selectedBlueprint.rules.totalItems ? "text-amber-600" : "text-slate-900")}>{target.rules.totalItems}</span></p>
-                                <p>• Total Marks: <span className={cn("font-bold", target.rules.totalMarks !== selectedBlueprint.rules.totalMarks ? "text-amber-600" : "text-slate-900")}>{target.rules.totalMarks}</span></p>
-                                <p>• Time Allocation: <span className={cn("font-bold", target.rules.totalTimeLimit !== selectedBlueprint.rules.totalTimeLimit ? "text-amber-600" : "text-slate-900")}>{target.rules.totalTimeLimit} min</span></p>
-                                <p>• Section Count: <span className={cn("font-bold", target.sections.length !== selectedBlueprint.sections.length ? "text-amber-600" : "text-slate-900")}>{target.sections.length}</span></p>
-                                <p>• Shuffling: <span className="font-bold text-slate-900">{target.rules.randomizationRules.shuffleQuestions ? 'Enabled' : 'Disabled'}</span></p>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Dynamic Live Rules Validation Checker Ribbon */}
-                {(() => {
-                  const validation = runDetailedValidation(selectedBlueprint);
-                  const hasErrors = validation.errors.length > 0;
-                  const hasWarnings = validation.warnings.length > 0;
-                  if (!hasErrors && !hasWarnings) return null;
-
-                  return (
-                    <div className={cn(
-                      "p-3.5 border-b text-[11px] flex items-start gap-2.5",
-                      hasErrors ? "bg-red-50 border-red-100 text-red-900" : "bg-amber-50 border-amber-100 text-amber-900"
-                    )}>
-                      <AlertTriangle className={cn("w-4 h-4 shrink-0 mt-0.5", hasErrors ? "text-red-500" : "text-amber-500")} />
-                      <div className="flex-1 space-y-1">
-                        <p className="font-black uppercase tracking-wider text-[10px]">Real-time Blueprint Validation Rules Diagnostic:</p>
-                        <div className="space-y-0.5 list-disc pl-2 max-h-24 overflow-y-auto">
-                          {validation.errors.map((err, i) => (
-                            <p key={`err-${i}`} className="font-bold text-red-700">• {err}</p>
-                          ))}
-                          {validation.warnings.map((wrn, i) => (
-                            <p key={`wrn-${i}`} className="font-semibold text-amber-700">• {wrn}</p>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Interactive Workflow Progress Steps Tracker */}
-                <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/20 select-none">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex items-center gap-3">
-                      {/* Step Indicator Dot String */}
-                      <div className="flex items-center gap-1.5 shrink-0 bg-slate-200/50 p-1 rounded-full px-2">
-                        {['DRAFT', 'SUBMITTED', 'ACADEMIC_REVIEW', 'APPROVED', 'PUBLISHED'].map((phase, phaseIdx) => {
-                          const currentIndex = getStatusStepIndex(selectedBlueprint.status);
-                          const isPast = phaseIdx < currentIndex;
-                          const isCurrent = phase === selectedBlueprint.status;
-                          return (
-                            <div 
-                              key={phase} 
-                              className={cn(
-                                "w-2.5 h-2.5 rounded-full transition-all duration-300",
-                                isCurrent ? "bg-philsa-red scale-125 ring-2 ring-rose-200" :
-                                isPast ? "bg-emerald-500" :
-                                "bg-slate-300"
-                              )}
-                              title={phase.replace('_', ' ')}
-                            />
-                          );
-                        })}
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-800 uppercase tracking-wide">
-                          Status: <span className="text-philsa-red">{selectedBlueprint.status.replace('_', ' ')}</span>
-                        </p>
-                        <p className="text-[9px] text-slate-400 font-medium">Step {getStatusStepIndex(selectedBlueprint.status) + 1} of 5 in approval pipeline</p>
-                      </div>
-                    </div>
-
-                    {/* Workflow Transition Controllers */}
-                    <div className="flex flex-wrap gap-1.5 self-end">
-                      {selectedBlueprint.status === 'DRAFT' && (
-                        <button
-                          onClick={() => triggerWorkflowTransition('SUBMITTED')}
-                          className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1 shadow-xs"
-                        >
-                          Submit For Review <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {selectedBlueprint.status === 'SUBMITTED' && (
-                        <button
-                          onClick={() => triggerWorkflowTransition('ACADEMIC_REVIEW')}
-                          className="bg-purple-600 hover:bg-purple-700 text-white font-extrabold py-1.5 px-3 rounded-lg text-xs flex items-center gap-1 transition-all"
-                        >
-                          Initiate Academic Review
-                        </button>
-                      )}
-
-                      {selectedBlueprint.status === 'ACADEMIC_REVIEW' && (
-                        <>
-                          <button
-                            onClick={() => triggerWorkflowTransition('REVISION_REQUIRED')}
-                            className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-1.5 px-3 rounded-lg text-xs transition-all"
-                          >
-                            Request Revision
-                          </button>
-                          <button
-                            onClick={() => triggerWorkflowTransition('APPROVED')}
-                            className="bg-teal-600 hover:bg-teal-700 text-white font-extrabold py-1.5 px-3 rounded-lg text-xs transition-all"
-                          >
-                            Approve Blueprint
-                          </button>
-                        </>
-                      )}
-
-                      {selectedBlueprint.status === 'APPROVED' && (
-                        <button
-                          onClick={() => triggerWorkflowTransition('PUBLISHED')}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-1.5 px-3 rounded-lg text-xs flex items-center gap-1 transition-all"
-                        >
-                          Publish to Assembly <Check className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {selectedBlueprint.status === 'PUBLISHED' && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleUpdateStatusDirect(selectedBlueprint.id, 'RETIRE')}
-                            className="bg-slate-500 hover:bg-slate-600 text-white font-extrabold py-1.5 px-3 rounded-lg text-xs transition-all"
-                          >
-                            Retire Specification
-                          </button>
-                          
-                          {/* Main assembly simulation launcher! */}
-                          <button
-                            onClick={() => simulateExamAssembly(selectedBlueprint)}
-                            className="bg-philsa-navy hover:bg-slate-900 text-white font-extrabold py-1.5 px-4 rounded-lg text-xs flex items-center gap-1.5 transition-all shadow-sm"
-                          >
-                            <Database className="w-4 h-4 text-rose-500 animate-pulse" /> Auto-Assemble Examination Form
-                          </button>
-                        </div>
-                      )}
-
-                      {selectedBlueprint.status === 'REVISION_REQUIRED' && (
-                        <button
-                          onClick={() => triggerWorkflowTransition('SUBMITTED')}
-                          className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1"
-                        >
-                          Re-submit Draft <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sub-tabs Selection panel */}
-                <div className="flex border-b border-slate-100 bg-slate-50/30">
-                  <button
-                    onClick={() => setDetailTab('SECTIONS')}
-                    className={cn(
-                      "px-5 py-3 text-xs font-semibold border-b-2 transition-all cursor-pointer",
-                      detailTab === 'SECTIONS' ? "border-philsa-red text-philsa-red bg-white" : "border-transparent text-slate-500 hover:text-slate-800"
-                    )}
-                  >
-                    Examination Structure ({selectedBlueprint.sections.length})
-                  </button>
-                  <button
-                    onClick={() => setDetailTab('RULES')}
-                    className={cn(
-                      "px-5 py-3 text-xs font-semibold border-b-2 transition-all cursor-pointer",
-                      detailTab === 'RULES' ? "border-philsa-red text-philsa-red bg-white" : "border-transparent text-slate-500 hover:text-slate-800"
-                    )}
-                  >
-                    Global Assembly Rules
-                  </button>
-                  <button
-                    onClick={() => setDetailTab('HISTORY')}
-                    className={cn(
-                      "px-5 py-3 text-xs font-semibold border-b-2 transition-all cursor-pointer",
-                      detailTab === 'HISTORY' ? "border-philsa-red text-philsa-red bg-white" : "border-transparent text-slate-500 hover:text-slate-800"
-                    )}
-                  >
-                    Audit Trail & Logs ({selectedBlueprint.history.length})
-                  </button>
-                </div>
-
-                {/* Details Tab Content Panels */}
-                <div className="p-6">
-                  {detailTab === 'SECTIONS' && (
-                    <div className="space-y-4">
-
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2 pb-2 border-b border-slate-100 select-none">
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Curriculum Section Blueprints</span>
-                          <div className="flex bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
-                            <button
-                              type="button"
-                              onClick={() => setStructureViewMode('TABLE')}
-                              className={cn(
-                                "px-2.5 py-1 rounded-md transition-all cursor-pointer",
-                                structureViewMode === 'TABLE' ? "bg-white text-philsa-red shadow-xs font-black" : "text-slate-500 hover:text-slate-800"
-                              )}
-                            >
-                              Table View
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setStructureViewMode('ACCORDION')}
-                              className={cn(
-                                "px-2.5 py-1 rounded-md transition-all cursor-pointer",
-                                structureViewMode === 'ACCORDION' ? "bg-white text-philsa-red shadow-xs font-black" : "text-slate-500 hover:text-slate-800"
-                              )}
-                            >
-                              Detailed Accordions
-                            </button>
-                          </div>
-                        </div>
-
-                        {structureViewMode === 'ACCORDION' && (
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const allExpanded: Record<string, boolean> = {};
-                                selectedBlueprint.sections.forEach(s => { allExpanded[s.id] = true; });
-                                setExpandedSections(allExpanded);
-                              }}
-                              className="text-[9px] font-black text-philsa-red hover:underline uppercase tracking-wider cursor-pointer"
-                            >
-                              Expand All
-                            </button>
-                            <span className="text-slate-300">|</span>
-                            <button
-                              type="button"
-                              onClick={() => setExpandedSections({})}
-                              className="text-[9px] font-black text-slate-400 hover:underline uppercase tracking-wider cursor-pointer"
-                            >
-                              Collapse All
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {structureViewMode === 'TABLE' ? (
-                        <div className="overflow-x-auto border border-slate-200 rounded-2xl bg-white shadow-3xs animate-in fade-in duration-150">
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead>
-                              <tr className="bg-slate-50/75 border-b border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-wider select-none">
-                                <th className="p-4 w-12 text-center">#</th>
-                                <th className="p-4 min-w-[150px]">Section Name</th>
-                                <th className="p-4">Domain / Subject</th>
-                                <th className="p-4 text-center">Items</th>
-                                <th className="p-4 text-center">Marks / Q</th>
-                                <th className="p-4 text-center">Total Pts</th>
-                                <th className="p-4 text-center">Time Limit</th>
-                                <th className="p-4">Complexity (E|M|D)</th>
-                                <th className="p-4">Topics Covered</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-                              {selectedBlueprint.sections.map((sec, idx) => (
-                                <tr key={sec.id} className="hover:bg-slate-50/50 transition-colors">
-                                  <td className="p-4 font-mono text-slate-400 text-center font-bold">{idx + 1}</td>
-                                  <td className="p-4">
-                                    <span className="font-extrabold text-slate-800 uppercase tracking-wide block">{sec.name}</span>
-                                    {sec.instructions && (
-                                      <span className="text-[10px] text-slate-400 italic line-clamp-1 mt-0.5" title={sec.instructions}>
-                                        {sec.instructions}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="p-4">
-                                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">
-                                      {sec.subject}
-                                    </span>
-                                  </td>
-                                  <td className="p-4 text-center font-extrabold text-slate-900">{sec.itemCount}</td>
-                                  <td className="p-4 text-center text-slate-500 font-bold">{sec.marksPerItem}</td>
-                                  <td className="p-4 text-center">
-                                    <span className="bg-rose-50 text-philsa-red font-black px-2 py-0.5 rounded text-[10px]">
-                                      {sec.totalMarks} Pts
-                                    </span>
-                                  </td>
-                                  <td className="p-4 text-center text-slate-600 font-bold">{sec.timeAllocation} mins</td>
-                                  <td className="p-4">
-                                    <div className="flex gap-1.5 text-[10px] font-bold">
-                                      <span className="text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded" title="Easy">
-                                        E: {sec.difficultyDistribution.easy}
-                                      </span>
-                                      <span className="text-amber-600 bg-amber-50 px-1 py-0.5 rounded" title="Moderate">
-                                        M: {sec.difficultyDistribution.moderate}
-                                      </span>
-                                      <span className="text-rose-600 bg-rose-50 px-1 py-0.5 rounded" title="Difficult">
-                                        D: {sec.difficultyDistribution.difficult}
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td className="p-4">
-                                    <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                      {sec.topics.map(t => (
-                                        <span key={t} className="text-[9px] font-black bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-md">
-                                          {t}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {selectedBlueprint.sections.map((sec, idx) => {
-                            const isExpanded = !!expandedSections[sec.id];
-                            return (
-                              <div 
-                                key={sec.id} 
-                                className="border border-slate-200 rounded-2xl shadow-3xs overflow-hidden bg-white transition-all"
-                              >
-                                {/* Header Trigger */}
-                                <button
-                                  type="button"
-                                  onClick={() => setExpandedSections(prev => ({ ...prev, [sec.id]: !prev[sec.id] }))}
-                                  className="w-full p-4 flex items-center justify-between gap-4 text-left hover:bg-slate-50/50 transition-colors select-none focus:outline-none"
-                                >
-                                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <span className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center font-mono font-black text-slate-600 text-[10px] shrink-0">
-                                      {idx + 1}
-                                    </span>
-                                    <div className="min-w-0">
-                                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider truncate">{sec.name}</h4>
-                                      <p className="text-[10px] text-slate-400 font-bold mt-0.5 truncate">
-                                        Domain: <span className="text-slate-700">{sec.subject}</span>
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-3 shrink-0">
-                                    <div className="hidden sm:flex items-center gap-2 text-[10px]">
-                                      <span className="bg-slate-100 text-slate-600 font-black px-2 py-0.5 rounded">
-                                        {sec.itemCount} Qs
-                                      </span>
-                                      <span className="bg-rose-50 text-philsa-red font-black px-2 py-0.5 rounded">
-                                        {sec.totalMarks} Pts
-                                      </span>
-                                      <span className="bg-slate-50 text-slate-500 font-black px-2 py-0.5 rounded flex items-center gap-0.5">
-                                        <Clock className="w-3 h-3" /> {sec.timeAllocation}m
-                                      </span>
-                                    </div>
-                                    {isExpanded ? (
-                                      <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                                    ) : (
-                                      <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                                    )}
-                                  </div>
-                                </button>
-
-                                {/* Collapsible Body */}
-                                {isExpanded && (
-                                  <div className="p-5 border-t border-slate-100 bg-slate-50/10 space-y-4 animate-in fade-in duration-150">
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-150 text-xs">
-                                      <div>
-                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Total Items</p>
-                                        <p className="font-extrabold text-slate-800 mt-0.5">{sec.itemCount} items</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Weighting / Item</p>
-                                        <p className="font-extrabold text-slate-800 mt-0.5">{sec.marksPerItem} marks each</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Time Limit</p>
-                                        <p className="font-extrabold text-slate-800 mt-0.5 flex items-center gap-1">
-                                          <Clock className="w-3.5 h-3.5 text-slate-400" /> {sec.timeAllocation} min
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Complexity</p>
-                                        <p className="font-bold text-slate-600 text-[10px] mt-0.5">
-                                          E: <span className="font-extrabold text-slate-800">{sec.difficultyDistribution.easy}</span> | 
-                                          M: <span className="font-extrabold text-slate-800">{sec.difficultyDistribution.moderate}</span> | 
-                                          D: <span className="font-extrabold text-slate-800">{sec.difficultyDistribution.difficult}</span>
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Configured Topic Coverage</p>
-                                      <div className="flex flex-wrap gap-1">
-                                        {sec.topics.map(t => (
-                                          <span key={t} className="text-[10px] font-bold bg-rose-50 text-philsa-red border border-rose-100/50 px-2.5 py-0.5 rounded-lg">
-                                            {t}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </div>
-
-                                    {sec.competencies && sec.competencies.length > 0 && (
-                                      <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Learning Outcomes / Competencies Met</p>
-                                        <div className="space-y-1">
-                                          {sec.competencies.map(comp => (
-                                            <p key={comp} className="text-xs text-slate-600 font-medium flex items-start gap-1.5 pl-1">
-                                              <CheckCircle className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" /> {comp}
-                                            </p>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {sec.instructions && (
-                                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Section Candidate Instructions</p>
-                                        <p className="text-[11px] font-medium text-slate-700 italic leading-relaxed">{sec.instructions}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {detailTab === 'RULES' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
-                      <div className="p-5 border border-slate-150 rounded-2xl space-y-4 bg-slate-50/50">
-                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                          <Sliders className="w-4 h-4 text-philsa-red" /> Constraint Controls
-                        </h3>
-                        
-                        <div className="space-y-3 pt-1">
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Total Form Items</span>
-                            <span className="font-extrabold text-slate-900 text-sm">{selectedBlueprint.rules.totalItems} questions</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Cumulative Target Weight</span>
-                            <span className="font-extrabold text-slate-900 text-sm">{selectedBlueprint.rules.totalMarks} points</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Form Time Limit Constraint</span>
-                            <span className="font-extrabold text-slate-900 text-sm">{selectedBlueprint.rules.totalTimeLimit} minutes</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Active items requirement</span>
-                            <span className="font-bold text-emerald-600 uppercase bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                              {selectedBlueprint.rules.activeItemOnly ? 'MANDATORY' : 'OPTIONAL'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-5 border border-slate-150 rounded-2xl space-y-4 bg-slate-50/50">
-                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                          <Sparkles className="w-4 h-4 text-yellow-500 animate-pulse" /> Randomization & Overlap Controls
-                        </h3>
-
-                        <div className="space-y-3 pt-1">
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Shuffle Questions sequence</span>
-                            <span className="font-black text-slate-800">{selectedBlueprint.rules.randomizationRules.shuffleQuestions ? 'ENABLED' : 'DISABLED'}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Shuffle Choice choices</span>
-                            <span className="font-black text-slate-800">{selectedBlueprint.rules.randomizationRules.shuffleChoices ? 'ENABLED' : 'DISABLED'}</span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Shared Passage (Stimulus) Rules</span>
-                            <span className="font-black text-slate-800">
-                              {selectedBlueprint.rules.sharedStimulusRequirement.required 
-                                ? `Requires min. ${selectedBlueprint.rules.sharedStimulusRequirement.minCount} stimulus` 
-                                : 'NOT REQUIRED'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center py-2 border-b border-slate-200">
-                            <span className="text-slate-600 font-bold">Maximum Item Reuse limits</span>
-                            <span className="font-extrabold text-slate-800">Max {selectedBlueprint.rules.maxReuseLimit} examinations</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {detailTab === 'HISTORY' && (
-                    <div className="space-y-4">
-                      {selectedBlueprint.history.map((log) => (
-                        <div key={log.id} className="p-4 border border-slate-250 rounded-xl flex items-start gap-3 bg-slate-50/50 relative overflow-hidden">
-                          <span className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 shrink-0 mt-0.5">
-                            <History className="w-4 h-4" />
-                          </span>
-                          
-                          <div className="flex-1 space-y-1 text-xs">
-                            <div className="flex justify-between items-start gap-2">
-                              <span className="font-extrabold text-slate-800 text-xs">Stage transition: [{log.action} v{log.version}]</span>
-                              <span className="text-[10px] text-slate-400 font-bold">{new Date(log.updatedAt).toLocaleString()}</span>
-                            </div>
-                            <p className="text-slate-600 font-semibold leading-relaxed mt-1">"{log.comments}"</p>
-                            <p className="text-[10px] font-extrabold uppercase text-philsa-red tracking-wider pt-1">Initiator: {log.updatedBy}</p>
-                          </div>
-
-                          {/* Historical Rollback restored toggle */}
-                          {(selectedBlueprint.status === 'DRAFT' || selectedBlueprint.status === 'REVISION_REQUIRED') && (
-                            <button
-                              onClick={() => handleRollbackToLog(log)}
-                              className="text-[10px] font-black uppercase text-slate-500 hover:text-philsa-red hover:underline shrink-0"
-                            >
-                              Rollback
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
-
-      {/* MODAL 1: Design / Edit Blueprint Specification Form Wizard */}
-      {isEditorOpen && currentEditBlueprint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-[2rem] shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden text-xs"
-          >
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="p-2 bg-rose-50 text-philsa-red rounded-lg">
-                  <Sliders className="w-4 h-4" />
-                </span>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                    {blueprints.some(b => b.id === currentEditBlueprint.id) ? 'Modify Blueprint Spec Draft' : 'Design New Exam Blueprint Schema'}
-                  </h3>
-                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">AY {currentEditBlueprint.academicYear} • Space Administration Framework</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  setIsEditorOpen(false);
-                  setCurrentEditBlueprint(null);
-                }} 
-                className="p-1.5 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body Scroll */}
-            <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-              
-              {/* Left Column: Metadata Specs - 5/12 width */}
-              <div className="lg:col-span-4 space-y-4 border-r border-slate-100 pr-6">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">1. Metadata Properties</p>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Blueprint Spec Code</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-mono font-bold text-slate-700 focus:bg-white focus:outline-none"
-                      value={currentEditBlueprint.code}
-                      onChange={e => setCurrentEditBlueprint({ ...currentEditBlueprint, code: e.target.value.toUpperCase() })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Blueprint Name</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-extrabold text-slate-700 focus:bg-white focus:outline-none"
-                      value={currentEditBlueprint.name}
-                      onChange={e => setCurrentEditBlueprint({ ...currentEditBlueprint, name: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Description</label>
-                    <textarea
-                      rows={3}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-medium text-slate-700 focus:bg-white focus:outline-none"
-                      value={currentEditBlueprint.description}
-                      onChange={e => setCurrentEditBlueprint({ ...currentEditBlueprint, description: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Academic Year</label>
-                    <input
-                      type="text"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 font-bold text-slate-700 focus:bg-white focus:outline-none"
-                      value={currentEditBlueprint.academicYear}
-                      onChange={e => setCurrentEditBlueprint({ ...currentEditBlueprint, academicYear: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Effective Date</label>
-                      <input
-                        type="date"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold text-slate-700 focus:bg-white focus:outline-none"
-                        value={currentEditBlueprint.effectiveDate}
-                        onChange={e => setCurrentEditBlueprint({ ...currentEditBlueprint, effectiveDate: e.target.value })}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Expiration Date</label>
-                      <input
-                        type="date"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold text-slate-700 focus:bg-white focus:outline-none"
-                        value={currentEditBlueprint.expirationDate}
-                        onChange={e => setCurrentEditBlueprint({ ...currentEditBlueprint, expirationDate: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1 pt-4">2. Overall Rule Metrics</p>
-                
-                <div className="bg-slate-50 p-4 rounded-xl space-y-2 border border-slate-200">
-                  <div className="flex justify-between">
-                    <span className="font-bold text-slate-500">Auto Calculated Items:</span>
-                    <span className="font-black text-slate-800">{currentEditBlueprint.rules.totalItems} questions</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold text-slate-500">Auto Calculated Marks:</span>
-                    <span className="font-black text-slate-800">{currentEditBlueprint.rules.totalMarks} points</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="font-bold text-slate-500">Calculated Time Constraint:</span>
-                    <span className="font-black text-slate-800">{currentEditBlueprint.rules.totalTimeLimit} minutes</span>
-                  </div>
-                </div>
-
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1 pt-4">3. Randomization & Overlap Controls</p>
-
-                <div className="bg-slate-50 p-4 rounded-xl space-y-3 border border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-slate-700">Shuffle Questions</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Randomize item sequence</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextRules = { 
-                          ...currentEditBlueprint.rules, 
-                          randomizationRules: { 
-                            ...currentEditBlueprint.rules.randomizationRules, 
-                            shuffleQuestions: !currentEditBlueprint.rules.randomizationRules.shuffleQuestions 
-                          } 
-                        };
-                        setCurrentEditBlueprint({ ...currentEditBlueprint, rules: nextRules });
-                      }}
-                      className={cn(
-                        "px-2.5 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer border",
-                        currentEditBlueprint.rules.randomizationRules.shuffleQuestions 
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                          : "bg-slate-100 text-slate-500 border-slate-200"
-                      )}
-                    >
-                      {currentEditBlueprint.rules.randomizationRules.shuffleQuestions ? 'On' : 'Off'}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-slate-700">Shuffle Choices</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Randomize multiple choices</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextRules = { 
-                          ...currentEditBlueprint.rules, 
-                          randomizationRules: { 
-                            ...currentEditBlueprint.rules.randomizationRules, 
-                            shuffleChoices: !currentEditBlueprint.rules.randomizationRules.shuffleChoices 
-                          } 
-                        };
-                        setCurrentEditBlueprint({ ...currentEditBlueprint, rules: nextRules });
-                      }}
-                      className={cn(
-                        "px-2.5 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer border",
-                        currentEditBlueprint.rules.randomizationRules.shuffleChoices 
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                          : "bg-slate-100 text-slate-500 border-slate-200"
-                      )}
-                    >
-                      {currentEditBlueprint.rules.randomizationRules.shuffleChoices ? 'On' : 'Off'}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-bold text-slate-700">Active Items Only</p>
-                      <p className="text-[10px] text-slate-400 font-medium">Exclude deprecated items</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextRules = { 
-                          ...currentEditBlueprint.rules, 
-                          activeItemOnly: !currentEditBlueprint.rules.activeItemOnly 
-                        };
-                        setCurrentEditBlueprint({ ...currentEditBlueprint, rules: nextRules });
-                      }}
-                      className={cn(
-                        "px-2.5 py-1 rounded-md text-[10px] font-black uppercase transition-all cursor-pointer border",
-                        currentEditBlueprint.rules.activeItemOnly 
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                          : "bg-slate-100 text-slate-500 border-slate-200"
-                      )}
-                    >
-                      {currentEditBlueprint.rules.activeItemOnly ? 'On' : 'Off'}
-                    </button>
-                  </div>
-
-                  <div className="pt-1">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">Max Item Reuse Limit (Exams)</label>
-                    <input
-                      type="number"
-                      className="w-full bg-white border border-slate-200 rounded-lg p-1.5 font-bold text-slate-700 text-xs focus:outline-none"
-                      value={currentEditBlueprint.rules.maxReuseLimit}
-                      onChange={e => {
-                        const nextRules = { 
-                          ...currentEditBlueprint.rules, 
-                          maxReuseLimit: Math.max(1, parseInt(e.target.value) || 1) 
-                        };
-                        setCurrentEditBlueprint({ ...currentEditBlueprint, rules: nextRules });
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* Validation warnings while typing */}
-                {(() => {
-                  const check = runDetailedValidation(currentEditBlueprint);
-                  if (check.errors.length === 0) return null;
-                  return (
-                    <div className="p-3 bg-red-50 text-red-800 rounded-xl border border-red-100/50 space-y-1">
-                      <p className="font-black text-[9px] uppercase tracking-wider text-red-600">Spec Warnings ({check.errors.length}):</p>
-                      <div className="space-y-0.5 max-h-24 overflow-y-auto">
-                        {check.errors.slice(0, 3).map((err, i) => <p key={i} className="text-[10px] font-semibold leading-tight">• {err}</p>)}
-                        {check.errors.length > 3 && <p className="text-[9px] font-extrabold text-red-500">...and {check.errors.length - 3} more errors.</p>}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Right Column: Dynamic Sections Config - 8/12 width */}
-              <div className="lg:col-span-8 space-y-6">
-                <div className="flex justify-between items-center border-b border-slate-100 pb-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">3. Examination Sections Configuration</p>
-                  <button
-                    type="button"
-                    onClick={handleAddSectionToEdit}
-                    className="p-1 text-xs text-philsa-red hover:underline flex items-center gap-1 font-extrabold cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Add Section Block
-                  </button>
-                </div>
-
-                <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2">
-                  {currentEditBlueprint.sections.map((sec, idx) => {
-                    const isExpanded = !!editorExpandedSections[sec.id];
-                    return (
-                      <div key={sec.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-3xs">
-                        {/* Accordion Header */}
-                        <div className="flex justify-between items-center bg-slate-50/70 p-3 select-none border-b border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => setEditorExpandedSections(prev => ({ ...prev, [sec.id]: !isExpanded }))}
-                            className="flex items-center gap-2 text-left focus:outline-none flex-1 font-bold text-xs text-slate-700 uppercase tracking-wide"
-                          >
-                            <span className="w-5 h-5 rounded-md bg-slate-200 text-slate-600 font-mono text-[9px] font-black flex items-center justify-center">
-                              {idx + 1}
-                            </span>
-                            <span className="truncate">{sec.name || `Section ${idx + 1}`}</span>
-                            <span className="text-[10px] text-slate-400 normal-case font-medium shrink-0 ml-1">
-                              ({sec.subject} • {sec.itemCount} Items)
-                            </span>
-                            {isExpanded ? (
-                              <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSectionFromEdit(sec.id)}
-                            className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                            title="Remove section block"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        {/* Collapsible Content */}
-                        {isExpanded && (
-                          <div className="p-4 space-y-4 bg-white animate-in fade-in duration-100">
-                            <div>
-                              <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Section Name</label>
-                              <input
-                                type="text"
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 mt-1 font-extrabold text-xs"
-                                value={sec.name}
-                                onChange={e => updateEditSectionField(sec.id, 'name', e.target.value)}
-                              />
-                            </div>
-
-                            <div className="pt-1">
-                              <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Subject</label>
-                              <select
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-bold text-slate-800 text-xs mt-1"
-                                value={sec.subject}
-                                onChange={e => updateEditSectionField(sec.id, 'subject', e.target.value)}
-                              >
-                                <option value="Reading Comp (English, Filipino)">Reading Comp (English, Filipino)</option>
-                                <option value="Lang Proficiency (English, Filipino)">Lang Proficiency (English, Filipino)</option>
-                                <option value="Math">Math</option>
-                                <option value="Science">Science</option>
-                              </select>
-                            </div>
-
-                            {/* Topic Tags Input comma separated */}
-                            <div>
-                              <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Topic Constraints (comma separated)</label>
-                              <input
-                                type="text"
-                                placeholder="e.g. Orbital Mechanics, Kepler's Laws"
-                                className="w-full bg-slate-50 border border-slate-200 rounded-lg p-1.5 font-medium text-xs mt-1"
-                                value={sec.topics.join(', ')}
-                                onChange={e => updateEditSectionField(sec.id, 'topics', e.target.value.split(',').map(s => s.trim()))}
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-2 bg-slate-50/50 p-3 rounded-xl border border-slate-200 text-xs">
-                              <div>
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">Item Count</label>
-                                <input
-                                  type="number"
-                                  className="w-full bg-white border border-slate-200 rounded-md p-1 font-bold text-center"
-                                  value={sec.itemCount}
-                                  onChange={e => updateEditSectionField(sec.id, 'itemCount', Math.max(1, parseInt(e.target.value) || 0))}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">Passing Score</label>
-                                <input
-                                  type="number"
-                                  className="w-full bg-white border border-slate-200 rounded-md p-1 font-bold text-center"
-                                  value={sec.passingScore}
-                                  onChange={e => updateEditSectionField(sec.id, 'passingScore', Math.max(0, parseInt(e.target.value) || 0))}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">Time (Min)</label>
-                                <input
-                                  type="number"
-                                  className="w-full bg-white border border-slate-200 rounded-md p-1 font-bold text-center"
-                                  value={sec.timeAllocation}
-                                  onChange={e => updateEditSectionField(sec.id, 'timeAllocation', Math.max(1, parseInt(e.target.value) || 0))}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Difficulties distribution sliders */}
-                            <div>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Difficulty distribution weights (Sum must equal item count: {sec.itemCount})</p>
-                              <div className="grid grid-cols-3 gap-3 bg-slate-50/30 p-3 rounded-lg border border-slate-150 text-center text-xs">
-                                <div>
-                                  <span className="text-[9px] font-black text-emerald-600 block uppercase mb-1">Easy items</span>
-                                  <input
-                                    type="number"
-                                    className="w-full bg-white border border-slate-200 rounded-md p-1 text-center font-bold"
-                                    value={sec.difficultyDistribution.easy}
-                                    onChange={e => updateEditSectionDistribution(sec.id, 'difficulty', 'easy', Math.max(0, parseInt(e.target.value) || 0))}
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[9px] font-black text-amber-600 block uppercase mb-1">Moderate items</span>
-                                  <input
-                                    type="number"
-                                    className="w-full bg-white border border-slate-200 rounded-md p-1 text-center font-bold"
-                                    value={sec.difficultyDistribution.moderate}
-                                    onChange={e => updateEditSectionDistribution(sec.id, 'difficulty', 'moderate', Math.max(0, parseInt(e.target.value) || 0))}
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[9px] font-black text-rose-600 block uppercase mb-1">Difficult items</span>
-                                  <input
-                                    type="number"
-                                    className="w-full bg-white border border-slate-200 rounded-md p-1 text-center font-bold"
-                                    value={sec.difficultyDistribution.difficult}
-                                    onChange={e => updateEditSectionDistribution(sec.id, 'difficulty', 'difficult', Math.max(0, parseInt(e.target.value) || 0))}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Item Type distribution sliders */}
-                            <div>
-                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Question Type distribution weights (Sum must equal item count: {sec.itemCount})</p>
-                              <div className="grid grid-cols-4 gap-2 bg-slate-50/30 p-3 rounded-lg border border-slate-150 text-center text-xs">
-                                <div>
-                                  <span className="text-[8px] font-black text-slate-500 block uppercase mb-1">MCQ</span>
-                                  <input
-                                    type="number"
-                                    className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs"
-                                    value={sec.itemTypeDistribution.mcq}
-                                    onChange={e => updateEditSectionDistribution(sec.id, 'type', 'mcq', Math.max(0, parseInt(e.target.value) || 0))}
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[8px] font-black text-slate-500 block uppercase mb-1">True/False</span>
-                                  <input
-                                    type="number"
-                                    className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs"
-                                    value={sec.itemTypeDistribution.tf}
-                                    onChange={e => updateEditSectionDistribution(sec.id, 'type', 'tf', Math.max(0, parseInt(e.target.value) || 0))}
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[8px] font-black text-slate-500 block uppercase mb-1">Essay</span>
-                                  <input
-                                    type="number"
-                                    className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs"
-                                    value={sec.itemTypeDistribution.essay}
-                                    onChange={e => updateEditSectionDistribution(sec.id, 'type', 'essay', Math.max(0, parseInt(e.target.value) || 0))}
-                                  />
-                                </div>
-                                <div>
-                                  <span className="text-[8px] font-black text-slate-500 block uppercase mb-1">Fill Blanks</span>
-                                  <input
-                                    type="number"
-                                    className="w-full bg-white border border-slate-200 rounded p-1 text-center font-bold text-xs"
-                                    value={sec.itemTypeDistribution.fib}
-                                    onChange={e => updateEditSectionDistribution(sec.id, 'type', 'fib', Math.max(0, parseInt(e.target.value) || 0))}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
-              <button 
+        ) : (
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3">
+              <button
                 type="button"
                 onClick={() => {
-                  setIsEditorOpen(false);
-                  setCurrentEditBlueprint(null);
-                }} 
-                className="btn-secondary !py-2 !px-5 text-xs font-bold"
+                  setIsDesignerOpen(false);
+                  setDesignerDraft(null);
+                }}
+                className="mt-0.5 rounded-2xl border border-slate-200 bg-slate-50 p-2.5 text-slate-600 transition hover:bg-slate-100"
+                title="Back to exam blueprints"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-lg bg-rose-50 p-1.5 text-philsa-red">
+                    <ClipboardList className="h-4 w-4" />
+                  </span>
+                  <h1 className="text-xl font-black tracking-tight text-slate-900">
+                    {designerMode === 'create' ? 'Design New Exam Blueprint Schema' : 'Modify Exam Blueprint Spec'}
+                  </h1>
+                </div>
+                <p className="mt-1 text-xs font-bold text-slate-500">
+                  Academic Year {designerDraft?.academicYear ?? ''} â€¢ PhilSA Framework
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDesignerOpen(false);
+                  setDesignerDraft(null);
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
               >
                 Cancel Draft
               </button>
-              <button 
+              <button
                 type="button"
-                onClick={handleSaveEditor} 
-                className="btn-primary !py-2 !px-6 text-xs font-black shadow-sm"
+                onClick={() => void saveDesigner()}
+                className="inline-flex items-center gap-2 rounded-xl bg-philsa-red px-5 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-philsa-red/90"
               >
+                <Save className="h-4 w-4" />
                 Save Specification Draft
               </button>
             </div>
-          </motion.div>
-        </div>
-      )}
+          </div>
+        )}
+      </section>
 
-      {/* MODAL 2: Workflow Transition Comment Dialogue */}
-      {isWorkflowModalOpen && targetWorkflowStatus && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-3xl shadow-xl w-full max-w-md p-6 text-xs space-y-4"
-          >
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-philsa-red" /> Workflow Phase Transition
-              </h3>
-              <button onClick={() => setIsWorkflowModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-1 bg-slate-50 p-3 rounded-lg">
-              <p className="font-bold text-slate-500">Selected Action:</p>
-              <p className="font-extrabold text-slate-800 uppercase tracking-wider">
-                Transition to: <span className="text-philsa-red">{targetWorkflowStatus.replace('_', ' ')}</span>
-              </p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Audit Remarks / Expert Comments (Optional)</label>
-              <textarea
-                rows={3}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-slate-300"
-                placeholder="Explain key findings or structural validations motivating this change..."
-                value={workflowComment}
-                onChange={e => setWorkflowComment(e.target.value)}
+      {!isDesignerOpen && (
+        <>
+      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search code, name, institution..."
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-[13px] font-medium text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button 
-                onClick={() => setIsWorkflowModalOpen(false)} 
-                className="btn-secondary !py-1.5 !px-4"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={submitWorkflowTransition} 
-                className="btn-primary !py-1.5 !px-5 font-bold"
-              >
-                Confirm Phase Shift
-              </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              className={cn(
+                'inline-flex h-11 items-center gap-2 rounded-2xl border px-4 text-[13px] font-bold uppercase tracking-[0.12em] shadow-sm transition',
+                showFilters
+                  ? 'border-rose-200 bg-rose-50 text-philsa-red hover:bg-rose-100'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+              )}
+            >
+              <Filter className="h-4 w-4" />
+              Filters
+            </button>
+          </div>
+
+          {showFilters && (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <label className="space-y-1.5">
+                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as BlueprintStatusFilter)}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                >
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status === 'ALL' ? 'All Statuses' : statusLabel(status as Blueprint['status'])}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Exam Type</span>
+                <select
+                  value={examTypeFilter}
+                  onChange={(event) => setExamTypeFilter(event.target.value as BlueprintExamTypeFilter)}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                >
+                  {EXAM_TYPE_OPTIONS.map((examType) => (
+                    <option key={examType} value={examType}>
+                      {examType === 'ALL' ? 'All Types' : examType}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Academic Year</span>
+                <select
+                  value={academicYearFilter}
+                  onChange={(event) => setAcademicYearFilter(event.target.value)}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                >
+                  <option value="ALL">All Years</option>
+                  {academicYearOptions.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1.5">
+                <span className="block text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Sort By</span>
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as BlueprintSortOption)}
+                  className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-[13px] font-semibold text-slate-800 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-100"
+                >
+                  {SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-          </motion.div>
+          )}
         </div>
+      </section>
+
+      {!isDetailsOpen && (
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
+          <p className="text-[12px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
+            Available Blueprint Specifications ({filteredBlueprints.length})
+          </p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            Table view • click row to view details
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full border-collapse text-left">
+            <thead className="bg-slate-50">
+              <tr className="border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                <th className="px-5 py-4">Code</th>
+                <th className="px-5 py-4">Exam Blueprint Name</th>
+                <th className="px-5 py-4">Contributor</th>
+                <th className="px-5 py-4">Subjects</th>
+                <th className="px-5 py-4">Total Marks</th>
+                <th className="px-5 py-4">Academic Year</th>
+                <th className="px-5 py-4">Status</th>
+                <th className="px-5 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBlueprints.map((blueprint) => {
+                const editable = blueprint.status === 'DRAFT' || blueprint.status === 'REVISION_REQUIRED';
+
+                return (
+                  <tr
+                    key={blueprint.id}
+                    onClick={() => openDetails(blueprint)}
+                    className="cursor-pointer border-b border-slate-100 transition hover:bg-slate-50/80"
+                  >
+                    <td className="px-5 py-4 align-middle">
+                      <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] font-bold text-slate-700">
+                        {blueprint.code}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 align-middle">
+                      <div>
+                        <p className="text-[13px] font-bold text-slate-900">{blueprint.name}</p>
+                        <p className="mt-0.5 max-w-[420px] truncate text-[12px] text-slate-500">{blueprint.description}</p>
+                      </div>
+                    </td>
+                    <td className="px-5 py-4 align-middle text-[13px] font-semibold text-slate-700">
+                      {blueprint.owner}
+                    </td>
+                    <td className="px-5 py-4 align-middle text-[13px] text-slate-600">
+                      <span className="max-w-[260px] truncate inline-block">{summarizeSubjects(blueprint)}</span>
+                    </td>
+                    <td className="px-5 py-4 align-middle">
+                      <span className="inline-flex rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-[12px] font-bold text-rose-700">
+                        {summarizeCount(blueprint)} pts
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 align-middle text-[13px] font-semibold text-slate-700">
+                      {blueprint.academicYear}
+                    </td>
+                    <td className="px-5 py-4 align-middle">
+                      <span className={cn('inline-flex rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em]', statusTone(blueprint.status))}>
+                        {statusLabel(blueprint.status)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 align-middle">
+                      <div className="flex items-center justify-end gap-2">
+                        {editable && (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openDesigner('edit', blueprint);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-[12px] font-bold text-blue-700 transition hover:bg-blue-100"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                            Edit
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
       )}
 
-      {/* MODAL 3: Auto-Assembly Results Diagnostic Console */}
-      {isAssemblyOpen && assemblyResult && selectedBlueprint && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden text-xs"
-          >
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "p-2.5 rounded-xl text-white",
-                  assemblyResult.success ? "bg-emerald-600" : "bg-red-600"
-                )}>
-                  {assemblyResult.success ? <Check className="w-5 h-5 animate-pulse" /> : <AlertTriangle className="w-5 h-5 animate-bounce" />}
-                </span>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                    Assembly Simulation Payload Report
-                  </h3>
-                  <p className="text-[10px] text-slate-400 font-bold mt-0.5">Blueprint: {selectedBlueprint.code} v{selectedBlueprint.version}</p>
+      {isDetailsOpen && selectedBlueprint && (
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-4 py-4 sm:px-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    {selectedBlueprint.code}
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
+                    Version {selectedBlueprint.version}
+                  </span>
+                  <span className={cn('inline-flex rounded-full border px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em]', statusTone(selectedBlueprint.status))}>
+                    {statusLabel(selectedBlueprint.status)}
+                  </span>
                 </div>
-              </div>
-              <button onClick={() => setIsAssemblyOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-400">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body Scroll */}
-            <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 bg-slate-50/20">
-              
-              {/* Left Column: Logs / Status Checks - 5/12 width */}
-              <div className="lg:col-span-4 space-y-4 border-r border-slate-100 pr-6">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Assembly Diagnostic Trace</p>
-                
-                <div className="bg-slate-900 rounded-xl p-4 text-emerald-400 font-mono text-[10px] leading-relaxed space-y-2 max-h-[40vh] overflow-y-auto shadow-inner">
-                  {assemblyResult.auditLog.map((log, i) => (
-                    <p key={i}>{log}</p>
-                  ))}
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Form Status Check</p>
-                  {assemblyResult.success ? (
-                    <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-emerald-800 space-y-1">
-                      <p className="font-extrabold text-xs">Assembly Successful!</p>
-                      <p className="text-[11px] font-medium leading-relaxed">The Centralized Item Bank matches 100% of defined subject, topic, and difficulty weights. An examination booklet is compiled and ready for deployment.</p>
-                    </div>
-                  ) : (
-                    <div className="bg-red-50 border border-red-100 p-4 rounded-xl text-red-800 space-y-2">
-                      <p className="font-extrabold text-xs">Assembly Aborted Due to Deficits</p>
-                      <p className="text-[11px] font-medium leading-relaxed">The Centralized Item Bank lacks matching active questions for the requested specification. Review deficit alerts below.</p>
-                      
-                      <div className="space-y-1 font-bold text-red-700 text-[10px] pt-1 border-t border-red-100">
-                        {assemblyResult.errors.map((err, idx) => (
-                          <p key={idx}>• {err}</p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <h2 className="mt-2 text-[22px] font-extrabold leading-tight text-slate-900">
+                  {selectedBlueprint.name}
+                </h2>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  {selectedBlueprint.examCategory} • {selectedBlueprint.academicYear}
+                </p>
               </div>
 
-              {/* Right Column: Visual Exam Booklet Preview - 8/12 width */}
-              <div className="lg:col-span-8 space-y-6">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1">Compiled Examination booklet preview</p>
-                
-                {assemblyResult.success ? (
-                  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 min-h-[400px] font-serif space-y-6 max-h-[50vh] overflow-y-auto relative">
-                    
-                    {/* Header sheet design */}
-                    <div className="text-center space-y-1 border-b-2 border-slate-900 pb-4">
-                      <p className="text-xs uppercase font-sans tracking-widest font-black text-slate-500">Official Space Examination Booklet</p>
-                      <h4 className="text-sm font-bold uppercase text-slate-900 tracking-tight">{selectedBlueprint.institution}</h4>
-                      <p className="text-[10px] font-sans font-bold text-slate-500 uppercase tracking-wider">{selectedBlueprint.examCategory} Qualification Test</p>
-                      <p className="text-[9px] font-sans font-black text-slate-400">Spec Ref: {selectedBlueprint.code} • Version {selectedBlueprint.version}</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 text-[10px] font-sans font-bold text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-150">
-                      <div>
-                        <p>Total questions: {assemblyResult.totalMatched} Items</p>
-                        <p>Total time limit: {selectedBlueprint.rules.totalTimeLimit} minutes</p>
-                      </div>
-                      <div className="text-right">
-                        <p>Total possible score: {selectedBlueprint.rules.totalMarks} points</p>
-                        <p>Passing Threshold score: {selectedBlueprint.sections.reduce((acc, s) => acc + s.passingScore, 0)} points</p>
-                      </div>
-                    </div>
-
-                    {/* Listing of selected items section by section */}
-                    {selectedBlueprint.sections.map(sec => {
-                      const questions = assemblyResult.matchedQuestions[sec.id] || [];
-                      return (
-                        <div key={sec.id} className="space-y-4">
-                          <div className="border-b border-slate-400 pb-1 mt-6">
-                            <h5 className="font-sans font-black text-xs text-slate-800 uppercase tracking-wider">{sec.name}</h5>
-                            <p className="text-[10px] text-slate-400 font-sans italic mt-0.5">{sec.instructions}</p>
-                          </div>
-
-                          <div className="space-y-4 divide-y divide-slate-100">
-                            {questions.map((q, idx) => (
-                              <div key={q.id} className="pt-3 space-y-1.5 first:pt-0">
-                                <div className="flex justify-between items-start gap-4">
-                                  <p className="font-bold text-slate-800 leading-relaxed text-xs">
-                                    Question {idx + 1}. <span className="font-medium text-slate-700">{q.text}</span>
-                                  </p>
-                                  <span className="font-sans text-[10px] font-black text-slate-400 uppercase shrink-0">
-                                    ({q.score} pts • {q.difficulty})
-                                  </span>
-                                </div>
-
-                                {/* Custom fields based on question type */}
-                                {q.type === 'MCQ' && (
-                                  <div className="grid grid-cols-2 gap-2 pl-4 font-sans text-slate-500 text-[11px] pt-1">
-                                    <p>A. [ Choice Placeholder A ]</p>
-                                    <p>B. [ Choice Placeholder B ]</p>
-                                    <p>C. [ Choice Placeholder C ]</p>
-                                    <p>D. [ Choice Placeholder D ]</p>
-                                  </div>
-                                )}
-
-                                {q.type === 'TF' && (
-                                  <p className="pl-4 font-sans text-slate-400 text-[11px] font-bold">Options: True / False</p>
-                                )}
-
-                                {q.type === 'ESSAY' && (
-                                  <div className="pl-4 pt-1">
-                                    <div className="h-16 border border-dashed border-slate-200 rounded bg-slate-50" />
-                                    <p className="text-[9px] font-sans text-slate-400 mt-1 font-bold uppercase tracking-wider">Essay Scoring Competency Benchmark: {q.competency}</p>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                    <Database className="w-12 h-12 text-slate-300" />
-                    <p className="text-xs font-bold mt-2">Booklet Compilation Cancelled</p>
-                    <p className="text-[11px] max-w-sm leading-relaxed mt-1">Please author more questions in the Centralized Item Bank, or adjust blueprint weights to fit within the active bank limits.</p>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
-              <button onClick={() => setIsAssemblyOpen(false)} className="btn-secondary !py-2 !px-5 text-xs font-bold">
-                Close Report
-              </button>
-              {assemblyResult.success && (
-                <button 
-                  onClick={() => {
-                    alert("Examination form has been successfully compiled into PDF/DOCX format, and registered to the active Exam Sets module.");
-                    setIsAssemblyOpen(false);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2 px-6 rounded-lg text-xs shadow-sm flex items-center gap-1 transition-all"
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openDesigner('edit', selectedBlueprint)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[13px] font-bold text-slate-700 transition hover:bg-slate-50"
                 >
-                  <FileCode className="w-4 h-4" /> Download Exam Booklet (PDF/DOCX)
+                  <Edit3 className="h-4 w-4" />
+                  Edit
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDetailsOpen(false)}
+                  className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white p-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+                  aria-label="Close blueprint details"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+            <div className="flex items-center justify-end">
+              {selectedBlueprint.status === 'DRAFT' ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl bg-philsa-red px-4 py-2 text-[13px] font-extrabold uppercase tracking-[0.12em] text-white shadow-sm transition hover:bg-philsa-red/90"
+                >
+                  Submit for Review
+                  <ChevronDown className="h-4 w-4 rotate-[-90deg]" />
+                </button>
+              ) : (
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Ready for review workflow</span>
               )}
             </div>
-          </motion.div>
-        </div>
+          </div>
+
+          <div className="px-4 py-4 sm:px-5">
+            <div className="mb-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Examination Structure ({selectedBlueprint.sections.length})</p>
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="min-w-full border-collapse text-left">
+                <thead className="bg-slate-50">
+                  <tr className="border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
+                    <th className="px-4 py-3 text-center">#</th>
+                    <th className="px-4 py-3">Section Name</th>
+                    <th className="px-4 py-3">Subject</th>
+                    <th className="px-4 py-3 text-center">Items</th>
+                    <th className="px-4 py-3 text-center">Marks/Q</th>
+                    <th className="px-4 py-3 text-center">Total Pts</th>
+                    <th className="px-4 py-3 text-center">Time</th>
+                    <th className="px-4 py-3">Difficulty (E/M/D)</th>
+                    <th className="px-4 py-3">Topics Covered</th>
+                    <th className="px-4 py-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-[13px]">
+                  {selectedBlueprint.sections.map((section, index) => (
+                    <tr key={section.id} className="hover:bg-slate-50/70">
+                      <td className="px-4 py-3 text-center font-mono text-slate-400">{index + 1}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-900">{section.name}</p>
+                        <p className="mt-0.5 line-clamp-1 text-[12px] text-slate-500">{section.instructions}</p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">{section.subject}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-slate-800">{section.itemCount}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{section.marksPerItem}</td>
+                      <td className="px-4 py-3 text-center font-semibold text-slate-800">{section.totalMarks} pts</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{section.timeAllocation} min</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {section.difficultyDistribution.easy} / {section.difficultyDistribution.moderate} / {section.difficultyDistribution.difficult}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        <span className="line-clamp-1">{section.topics.join(', ')}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openDesigner('edit', selectedBlueprint)}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => cloneBlueprint(selectedBlueprint)}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] font-bold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+        </>
       )}
 
+      {isDesignerOpen && designerDraft && (
+        <div className="mx-auto flex w-full max-w-[1420px] flex-col gap-6 pb-6">
+            <div className="space-y-6 text-xs">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:p-8">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-rose-50 p-1.5 text-philsa-red">
+                      <ClipboardList className="h-4 w-4" />
+                    </span>
+                    <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">1. Metadata Properties</h2>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase text-slate-600">
+                    Blueprint Identifier & Scope
+                  </span>
+                </div>
+
+                <div className="mt-5 flex flex-wrap gap-5 items-start">
+                  <label className="w-full sm:w-48 space-y-1.5">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Blueprint Spec Code</span>
+                    <input
+                      type="text"
+                      value={designerDraft.code}
+                      onChange={(event) => setDesignerDraft({ ...designerDraft, code: event.target.value.toUpperCase() })}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-philsa-red/20"
+                    />
+                  </label>
+
+                  <label className="w-full sm:w-80 space-y-1.5">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Exam Blueprint Name</span>
+                    <input
+                      type="text"
+                      value={designerDraft.name}
+                      onChange={(event) => setDesignerDraft({ ...designerDraft, name: event.target.value })}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-philsa-red/20"
+                    />
+                  </label>
+
+                  <label className="w-full sm:w-44 space-y-1.5">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Contributor Agency</span>
+                    <select
+                      value={designerDraft.institution}
+                      onChange={(event) => setDesignerDraft({ ...designerDraft, institution: event.target.value })}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-philsa-red/20"
+                    >
+                      {CONTRIBUTOR_AGENCIES.map((agency) => (
+                        <option key={agency} value={agency}>
+                          {agency}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="w-full sm:w-40 space-y-1.5">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Academic Year</span>
+                    <input
+                      type="text"
+                      value={designerDraft.academicYear}
+                      onChange={(event) => setDesignerDraft({ ...designerDraft, academicYear: event.target.value })}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-philsa-red/20"
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5 text-philsa-red" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Overall Calculated Rule Metrics</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <DetailCard label="Total Questions" value={`${designerMetrics.totalItems} questions`} />
+                    <DetailCard label="Total Marks / Points" value={`${designerMetrics.totalMarks} points`} />
+                    <DetailCard label="Time Constraint" value={`${designerMetrics.totalTimeLimit} minutes`} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:p-8">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-rose-50 p-1.5 text-philsa-red">
+                      <Shield className="h-4 w-4" />
+                    </span>
+                    <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">2. Configure Rules & Accessibility</h2>
+                  </div>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase text-emerald-700">
+                    Universal Standard
+                  </span>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+                    <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-5">
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        Delivery & Shuffling Rules
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => setDesignerDraft({
+                          ...designerDraft,
+                          rules: {
+                            ...designerDraft.rules,
+                            randomizationRules: {
+                              ...designerDraft.rules.randomizationRules,
+                              shuffleQuestions: !designerDraft.rules.randomizationRules.shuffleQuestions,
+                            },
+                          },
+                        })}
+                        className="flex w-full items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-left shadow-2xs transition hover:bg-emerald-100/80"
+                      >
+                        <div>
+                          <span className="block text-[11px] font-bold text-emerald-900">Shuffle Question Sequence</span>
+                          <span className="text-[9px] font-medium text-emerald-700/70">Randomize question order for each candidate</span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                          ACTIVE
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDesignerDraft({
+                          ...designerDraft,
+                          rules: {
+                            ...designerDraft.rules,
+                            randomizationRules: {
+                              ...designerDraft.rules.randomizationRules,
+                              shuffleChoices: !designerDraft.rules.randomizationRules.shuffleChoices,
+                            },
+                          },
+                        })}
+                        className="flex w-full items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-left shadow-2xs transition hover:bg-emerald-100/80"
+                      >
+                        <div>
+                          <span className="block text-[11px] font-bold text-emerald-900">Shuffle Choice Options</span>
+                          <span className="text-[9px] font-medium text-emerald-700/70">Randomize answer choices for multiple choice questions</span>
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-emerald-700">
+                          ACTIVE
+                        </span>
+                      </button>
+                    </div>
+
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-5">
+                    <p className="mb-2 flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      <Sparkles className="h-3 w-3 text-amber-500" />
+                      Accessibility Accommodations
+                    </p>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                        <div>
+                          <span className="block text-[11px] font-bold text-slate-800">Screen Reader (NVDA/JAWS)</span>
+                          <span className="text-[9px] font-medium text-slate-400">ARIA tags compliance</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={designerDraft.rules.accessibilityAccommodations.screenReader}
+                          onChange={(event) => setDesignerDraft({
+                            ...designerDraft,
+                            rules: {
+                              ...designerDraft.rules,
+                              accessibilityAccommodations: {
+                                ...designerDraft.rules.accessibilityAccommodations,
+                                screenReader: event.target.checked,
+                              },
+                            },
+                          })}
+                          className="h-4 w-4 cursor-pointer rounded accent-philsa-red"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                        <div>
+                          <span className="block text-[11px] font-bold text-slate-800">Extended Time Allowance</span>
+                          <span className="text-[9px] font-medium text-slate-400">1.5x time extension</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={designerDraft.rules.accessibilityAccommodations.extendedTimeAllowance}
+                          onChange={(event) => setDesignerDraft({
+                            ...designerDraft,
+                            rules: {
+                              ...designerDraft.rules,
+                              accessibilityAccommodations: {
+                                ...designerDraft.rules.accessibilityAccommodations,
+                                extendedTimeAllowance: event.target.checked,
+                              },
+                            },
+                          })}
+                          className="h-4 w-4 cursor-pointer rounded accent-philsa-red"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                        <div>
+                          <span className="block text-[11px] font-bold text-slate-800">High Contrast Mode</span>
+                          <span className="text-[9px] font-medium text-slate-400">WCAG AAA contrast ratio</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={designerDraft.rules.accessibilityAccommodations.highContrastMode}
+                          onChange={(event) => setDesignerDraft({
+                            ...designerDraft,
+                            rules: {
+                              ...designerDraft.rules,
+                              accessibilityAccommodations: {
+                                ...designerDraft.rules.accessibilityAccommodations,
+                                highContrastMode: event.target.checked,
+                              },
+                            },
+                          })}
+                          className="h-4 w-4 cursor-pointer rounded accent-philsa-red"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                        <div>
+                          <span className="block text-[11px] font-bold text-slate-800">Dyslexia Typography</span>
+                          <span className="text-[9px] font-medium text-slate-400">OpenDyslexic font support</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={designerDraft.rules.accessibilityAccommodations.dyslexiaTypography}
+                          onChange={(event) => setDesignerDraft({
+                            ...designerDraft,
+                            rules: {
+                              ...designerDraft.rules,
+                              accessibilityAccommodations: {
+                                ...designerDraft.rules.accessibilityAccommodations,
+                                dyslexiaTypography: event.target.checked,
+                              },
+                            },
+                          })}
+                          className="h-4 w-4 cursor-pointer rounded accent-philsa-red"
+                        />
+                      </label>
+
+                      <label className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs sm:col-span-2">
+                        <div>
+                          <span className="block text-[11px] font-bold text-slate-800">Audio Prompts / Text-To-Speech</span>
+                          <span className="text-[9px] font-medium text-slate-400">Synthetic audio playback for question items</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={designerDraft.rules.accessibilityAccommodations.audioPrompts}
+                          onChange={(event) => setDesignerDraft({
+                            ...designerDraft,
+                            rules: {
+                              ...designerDraft.rules,
+                              accessibilityAccommodations: {
+                                ...designerDraft.rules.accessibilityAccommodations,
+                                audioPrompts: event.target.checked,
+                              },
+                            },
+                          })}
+                          className="h-4 w-4 cursor-pointer rounded accent-philsa-red"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:p-8">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-lg bg-rose-50 p-1.5 text-philsa-red">
+                      <Layers className="h-4 w-4" />
+                    </span>
+                    <h2 className="text-sm font-black uppercase tracking-wide text-slate-900">3. Examination Sections Configuration</h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-2 text-xs font-bold text-philsa-red transition hover:bg-rose-100"
+                    onClick={() => {
+                      const nextSection = buildDefaultSection();
+                      setDesignerDraft({
+                        ...designerDraft,
+                        sections: [...designerDraft.sections, nextSection],
+                      });
+                    }}
+                  >
+                    <Plus className="mr-1 inline h-4 w-4" />
+                    Add Section Block
+                  </button>
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  {designerDraft.sections.map((section, index) => (
+                    <div key={section.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+                      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-slate-200 font-mono text-xs font-black text-slate-700">
+                            {index + 1}
+                          </span>
+                          <div className="font-extrabold uppercase tracking-wide text-slate-800 text-xs">
+                            SECTION I: GENERAL EVALUATION
+                            <span className="ml-2 font-semibold normal-case text-slate-500">
+                              ({section.subject} • {section.itemCount} Items)
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedSections((current) => ({ ...current, [section.id]: !current[section.id] }))}
+                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                            title={expandedSections[section.id] ? 'Collapse section block' : 'Expand section block'}
+                          >
+                            <ChevronDown className={cn('h-4 w-4 transition-transform', expandedSections[section.id] ? 'rotate-180' : '')} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextSections = designerDraft.sections.filter((item) => item.id !== section.id);
+                              setDesignerDraft({ ...designerDraft, sections: nextSections.length ? nextSections : [buildDefaultSection()] });
+                            }}
+                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                            title="Remove section block"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {expandedSections[section.id] !== false && (
+                        <div className="space-y-6 bg-white p-6">
+                          <div className="flex flex-wrap gap-5 items-start">
+                            <label className="w-full sm:w-[320px] space-y-1.5">
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Section Name</span>
+                              <input
+                                type="text"
+                                value={section.name}
+                                onChange={(event) => {
+                                  const nextSections = designerDraft.sections.map((item) =>
+                                    item.id === section.id ? { ...item, name: event.target.value } : item,
+                                  );
+                                  setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-philsa-red/20"
+                              />
+                            </label>
+
+                            <label className="w-full sm:w-[240px] space-y-1.5">
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Subject</span>
+                              <select
+                                value={section.subject}
+                                onChange={(event) => {
+                                  const nextSections = designerDraft.sections.map((item) =>
+                                    item.id === section.id ? { ...item, subject: event.target.value } : item,
+                                  );
+                                  setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-philsa-red/20"
+                              >
+                                <option value="Science">Science</option>
+                                <option value="Math">Math</option>
+                                <option value="Reading Comp (English, Filipino)">Reading Comp (English, Filipino)</option>
+                                <option value="Lang Proficiency (English, Filipino)">Lang Proficiency (English, Filipino)</option>
+                              </select>
+                            </label>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Topic Constraints</span>
+                            </div>
+
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                              <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                Select topics from maintenance table for {section.subject}:
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {(section.subject === 'Science' ? SCIENCE_TOPIC_OPTIONS : [section.subject]).map((topic) => (
+                                  <button
+                                    key={topic}
+                                    type="button"
+                                    onClick={() => {
+                                      const existing = section.topics;
+                                      const nextTopics = existing.includes(topic)
+                                        ? existing.filter((item) => item !== topic)
+                                        : [...existing, topic];
+                                      const nextSections = designerDraft.sections.map((item) =>
+                                        item.id === section.id ? { ...item, topics: nextTopics } : item,
+                                      );
+                                      setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    {topic}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <input
+                              type="text"
+                              value={section.topics.join(', ')}
+                              onChange={(event) => {
+                                const nextSections = designerDraft.sections.map((item) =>
+                                  item.id === section.id
+                                    ? { ...item, topics: event.target.value.split(',').map((topic) => topic.trim()).filter(Boolean) }
+                                    : item,
+                                );
+                                setDesignerDraft({ ...designerDraft, sections: nextSections });
+                              }}
+                              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-philsa-red/20"
+                            />
+                            <p className="text-[10px] text-slate-400">Click topics above from the Exam Blueprint Maintenance table or type topics separated by commas.</p>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+                            <label className="space-y-1.5">
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Item Count (Questions)</span>
+                              <input
+                                type="number"
+                                value={section.itemCount}
+                                onChange={(event) => {
+                                  const nextSections = designerDraft.sections.map((item) =>
+                                    item.id === section.id ? { ...item, itemCount: Number(event.target.value) } : item,
+                                  );
+                                  setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-philsa-red/20"
+                              />
+                            </label>
+
+                            <label className="space-y-1.5">
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Time (Minutes)</span>
+                              <input
+                                type="number"
+                                value={section.timeAllocation}
+                                onChange={(event) => {
+                                  const nextSections = designerDraft.sections.map((item) =>
+                                    item.id === section.id ? { ...item, timeAllocation: Number(event.target.value) } : item,
+                                  );
+                                  setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-philsa-red/20"
+                              />
+                            </label>
+                          </div>
+
+                          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="mb-3">
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                Difficulty Distribution Weights (Sum: {section.itemCount} Items)
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                              <label className="space-y-1.5">
+                                <span className="block text-center text-[10px] font-black uppercase text-emerald-600">Easy Items</span>
+                                <input
+                                  type="number"
+                                  value={section.difficultyDistribution.easy}
+                                  onChange={(event) => {
+                                    const nextSections = designerDraft.sections.map((item) =>
+                                      item.id === section.id
+                                        ? {
+                                            ...item,
+                                            difficultyDistribution: {
+                                              ...item.difficultyDistribution,
+                                              easy: Number(event.target.value),
+                                            },
+                                          }
+                                        : item,
+                                    );
+                                    setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-philsa-red/20"
+                                />
+                              </label>
+
+                              <label className="space-y-1.5">
+                                <span className="block text-center text-[10px] font-black uppercase text-orange-500">Moderate Items</span>
+                                <input
+                                  type="number"
+                                  value={section.difficultyDistribution.moderate}
+                                  onChange={(event) => {
+                                    const nextSections = designerDraft.sections.map((item) =>
+                                      item.id === section.id
+                                        ? {
+                                            ...item,
+                                            difficultyDistribution: {
+                                              ...item.difficultyDistribution,
+                                              moderate: Number(event.target.value),
+                                            },
+                                          }
+                                        : item,
+                                    );
+                                    setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-philsa-red/20"
+                                />
+                              </label>
+
+                              <label className="space-y-1.5">
+                                <span className="block text-center text-[10px] font-black uppercase text-rose-500">Difficult Items</span>
+                                <input
+                                  type="number"
+                                  value={section.difficultyDistribution.difficult}
+                                  onChange={(event) => {
+                                    const nextSections = designerDraft.sections.map((item) =>
+                                      item.id === section.id
+                                        ? {
+                                            ...item,
+                                            difficultyDistribution: {
+                                              ...item.difficultyDistribution,
+                                              difficult: Number(event.target.value),
+                                            },
+                                          }
+                                        : item,
+                                    );
+                                    setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                  }}
+                                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-philsa-red/20"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+  );
+}
+
+function DetailCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</p>
+      <p className="mt-2 text-[13px] font-semibold text-slate-800">{value}</p>
     </div>
   );
 }

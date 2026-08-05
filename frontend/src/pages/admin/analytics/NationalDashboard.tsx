@@ -1,27 +1,66 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Globe, RefreshCw } from 'lucide-react';
-import { 
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend 
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend
 } from 'recharts';
-import { 
-  NATIONAL_STATS, RECENT_INCIDENTS 
+import {
+  NATIONAL_STATS, RECENT_INCIDENTS
 } from '../../../services/analyticsMockData';
-import { 
-  SectionHeader, KPICard, MetricWidget, IncidentTable 
+import {
+  SectionHeader, KPICard, MetricWidget, IncidentTable
 } from '../../../components/analytics/AnalyticsComponents';
+import { analyticsService } from '../../../services/analyticsService';
+import type { NationalOverview } from '../../../services/contracts';
+
+// Metrics with a real backend source (apps.analytics `national_overview()`); the
+// rest (sessions/incidents/testing centers) have no backing data model yet and
+// stay on static mock data -- see docs/api/API-ENDPOINTS.md.
+const BACKED_STAT_LABELS: Record<string, keyof NationalOverview> = {
+  'Total Registered Examinees': 'totalRegisteredExaminees',
+  'Total Verified Examinees': 'totalVerifiedExaminees',
+  'Total Participating Schools': 'totalParticipatingSchools',
+  'Total Participating Universities': 'totalParticipatingUniversities',
+};
 
 export default function NationalDashboard() {
+  const [overview, setOverview] = useState<NationalOverview | null>(null);
+  const [isLoadingOverview, setIsLoadingOverview] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void analyticsService.getNationalOverview().then((result) => {
+      if (cancelled) return;
+      setIsLoadingOverview(false);
+      if (result.ok) {
+        setOverview(result.data);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const stats = NATIONAL_STATS.map((stat) => {
+    const overviewKey = BACKED_STAT_LABELS[stat.label];
+    if (!overviewKey) return stat;
+    if (isLoadingOverview) return { ...stat, value: '…', trend: undefined };
+    if (!overview) return stat;
+    return { ...stat, value: Number(overview[overviewKey]).toLocaleString(), trend: undefined };
+  });
+
   return (
     <div className="space-y-12 pb-20 max-w-[1750px] mx-auto">
-      <SectionHeader 
-        title="National Overview" 
+      <SectionHeader
+        title="National Overview"
         subtitle="Unified National System Monitoring Hub"
         icon={Globe}
         agency="NATIONAL"
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-6">
-        {NATIONAL_STATS.map(stat => (
+        {stats.map(stat => (
           <KPICard key={stat.label} {...stat} />
         ))}
       </div>
@@ -87,6 +126,26 @@ export default function NationalDashboard() {
            </div>
         </div>
       </div>
+
+      <MetricWidget title="Applications by Region" action="Download Data">
+         {overview && overview.regionalBreakdown.length > 0 ? (
+            <ResponsiveContainer width="100%" height={320}>
+               <BarChart data={overview.regionalBreakdown} margin={{ top: 20, bottom: 20 }}>
+                  <XAxis dataKey="region" stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} dy={15} />
+                  <YAxis stroke="#94a3b8" fontSize={10} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(15, 23, 42, 0.02)' }}
+                    contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.25)' }}
+                  />
+                  <Bar dataKey="applicationCount" name="Applications" fill="#0F172A" radius={[8, 8, 0, 0]} barSize={14} />
+               </BarChart>
+            </ResponsiveContainer>
+         ) : (
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center py-16">
+               {isLoadingOverview ? 'Loading regional data…' : 'No regional application data available yet.'}
+            </p>
+         )}
+      </MetricWidget>
 
       <MetricWidget title="National Monitoring Log" className="!p-0 border-none shadow-2xl">
          <IncidentTable incidents={RECENT_INCIDENTS} />

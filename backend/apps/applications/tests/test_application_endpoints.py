@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.cache import cache
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core import mail
 from django.test import TestCase
 from django.urls import reverse
@@ -24,7 +25,9 @@ from apps.applications.models import (
     Step2Verification,
     StudentApplication,
     StudentApplicationAdditionalField,
+    StudentApplicationAdditionalAttachment,
 )
+from apps.configuration.models import ConfigurableField
 
 
 def principal(user, role=PortalRole.STUDENT.value):
@@ -407,6 +410,227 @@ class ApplicationEndpointTests(TestCase):
         self.assertEqual(second_application.school["lrn"], "123456789012")
         self.assertEqual(first_application.personal["identityVerificationStatus"], "MANUAL_PENDING")
 
+    def test_public_submission_requires_configured_high_priority_dynamic_field(self):
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Guardian Contact Number",
+            field_section="Personal Information",
+            input_type="text",
+            priority="High Priority",
+            is_enabled=True,
+        )
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "missing.guardian@example.test"
+        payload["school"]["lrn"] = ""
+        payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
+
+        response = client.post(reverse("applications:create"), payload, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("personal", response.data["error"]["fields"])
+        self.assertFalse(StudentApplication.objects.filter(personal_info__email="missing.guardian@example.test").exists())
+
+    def test_public_submission_flattens_nested_configured_dynamic_fields(self):
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Guardian Contact Number",
+            field_section="Personal Information",
+            input_type="text",
+            priority="High Priority",
+            is_enabled=True,
+        )
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "guardian.present@example.test"
+        payload["personal"]["additionalHighPriorityFields"] = {"Guardian Contact Number": "09170000000"}
+        payload["school"]["lrn"] = ""
+        payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
+
+        response = client.post(reverse("applications:create"), payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["personal"]["Guardian Contact Number"], "09170000000")
+        self.assertTrue(
+            StudentApplicationAdditionalField.objects.filter(
+                application_id=response.data["id"],
+                section="personal",
+                field_key="Guardian Contact Number",
+                field_value="09170000000",
+            ).exists()
+        )
+        self.assertFalse(
+            StudentApplicationAdditionalField.objects.filter(
+                application_id=response.data["id"],
+                field_key="additionalHighPriorityFields",
+            ).exists()
+        )
+
+    def test_public_submission_accepts_school_display_dynamic_field_from_nested_step1_payload(self):
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Campus Type",
+            field_section="School Information",
+            input_type="dropdown",
+            option_values=["Public", "Private"],
+            priority="High Priority",
+            is_enabled=True,
+        )
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "campus.type@example.test"
+        payload["personal"]["additionalHighPriorityFields"] = {"Campus Type": "Public"}
+        payload["school"]["lrn"] = ""
+        payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
+
+        response = client.post(reverse("applications:create"), payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["personal"]["Campus Type"], "Public")
+
+    def test_public_submission_requires_configured_high_priority_attachment(self):
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Guardian Consent Attachment",
+            field_section="Additional Information",
+            input_type="file",
+            priority="High Priority",
+            is_enabled=True,
+        )
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "missing.attachment@example.test"
+        payload["school"]["lrn"] = ""
+        payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
+
+        response = client.post(
+            reverse("applications:create"),
+            payload,
+            format="json",
+            HTTP_X_REGISTRATION_SESSION_ID="REG-ATTACH-MISSING",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("personal", response.data["error"]["fields"])
+
+    def test_public_registration_attachment_upload_links_to_submitted_application(self):
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Guardian Consent Attachment",
+            field_section="Additional Information",
+            input_type="file",
+            priority="High Priority",
+            is_enabled=True,
+        )
+        client = APIClient()
+        session_id = "REG-ATTACH-LINK"
+        upload = client.post(
+            reverse("applications:registration-attachment-upload"),
+            {
+                "fieldName": "Guardian Consent Attachment",
+                "file": SimpleUploadedFile(
+                    "guardian-consent.pdf",
+                    b"%PDF-1.4 guardian consent",
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+            HTTP_X_REGISTRATION_SESSION_ID=session_id,
+        )
+        payload = complete_payload()
+        payload["personal"]["email"] = "attachment.present@example.test"
+        payload["school"]["lrn"] = ""
+        payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
+
+        response = client.post(
+            reverse("applications:create"),
+            payload,
+            format="json",
+            HTTP_X_REGISTRATION_SESSION_ID=session_id,
+        )
+
+        self.assertEqual(upload.status_code, 201)
+        self.assertEqual(response.status_code, 201)
+        attachment = StudentApplicationAdditionalAttachment.objects.get(id=upload.data["id"])
+        self.assertEqual(str(attachment.application_id), response.data["id"])
+        self.assertEqual(response.data["additionalAttachments"][0]["filename"], "guardian-consent.pdf")
+
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+        media_response = self.client.get(
+            reverse("applications:additional-attachment", args=[response.data["id"], attachment.id])
+        )
+        self.assertEqual(media_response.status_code, 200)
+        self.assertEqual(media_response["Content-Type"], "application/pdf")
+
+    def test_public_registration_attachment_upload_rejects_invalid_file_type(self):
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Guardian Consent Attachment",
+            field_section="Additional Information",
+            input_type="file",
+            priority="High Priority",
+            is_enabled=True,
+        )
+
+        response = APIClient().post(
+            reverse("applications:registration-attachment-upload"),
+            {
+                "fieldName": "Guardian Consent Attachment",
+                "file": SimpleUploadedFile(
+                    "guardian-consent.txt",
+                    b"plain text",
+                    content_type="text/plain",
+                ),
+            },
+            format="multipart",
+            HTTP_X_REGISTRATION_SESSION_ID="REG-ATTACH-BAD-TYPE",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("file", response.data["error"]["fields"])
+
+    def test_public_submission_rejects_invalid_configured_dropdown_value(self):
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Scholarship Type",
+            field_section="Additional Information",
+            input_type="dropdown",
+            option_values=["Academic", "Arts"],
+            priority="Low Priority",
+            is_enabled=True,
+        )
+        client = APIClient()
+        payload = complete_payload()
+        payload["personal"]["email"] = "invalid.dropdown@example.test"
+        payload["personal"]["additionalHighPriorityFields"] = {"Scholarship Type": "Sports"}
+        payload["school"]["lrn"] = ""
+        payload["submitOnCreate"] = True
+        payload["emailVerificationToken"] = verify_registration_email(client, payload["personal"]["email"])
+
+        response = client.post(reverse("applications:create"), payload, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("personal", response.data["error"]["fields"])
+
     def test_draft_requires_a_valid_lrn_verification_proof(self):
         response = self.client.post(
             reverse("applications:create"),
@@ -689,6 +913,19 @@ class ApplicationEndpointTests(TestCase):
     def test_student_cannot_list_review_queue(self):
         response = self.client.get(reverse("applications:review-queue"))
         self.assertEqual(response.status_code, 403)
+
+    def test_application_by_lrn_lookup_is_not_exposed(self):
+        StudentApplication.objects.create(
+            owner=self.user,
+            lrn="123456789012",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.SYSTEM_ADMIN.value))
+
+        response = self.client.get("/api/v1/applications/by-lrn/123456789012/")
+
+        self.assertEqual(response.status_code, 404)
 
     def test_reviewer_decision_updates_application_status_in_database(self):
         payload = complete_payload()

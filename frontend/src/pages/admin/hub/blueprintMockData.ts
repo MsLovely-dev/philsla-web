@@ -48,6 +48,13 @@ export interface BlueprintRules {
   maxReuseLimit: number; // Maximum times an item can be reused across different exam forms
   versionCompatibility: string; // e.g., ">= 1.0"
   activeItemOnly: boolean; // Must only select active items
+  accessibilityAccommodations: {
+    screenReader: boolean;
+    extendedTimeAllowance: boolean;
+    highContrastMode: boolean;
+    dyslexiaTypography: boolean;
+    audioPrompts: boolean;
+  };
 }
 
 export interface BlueprintHistoryEntry {
@@ -432,7 +439,14 @@ export const INITIAL_BLUEPRINTS: Blueprint[] = [
       },
       maxReuseLimit: 2,
       versionCompatibility: '>= 1.0',
-      activeItemOnly: true
+      activeItemOnly: true,
+      accessibilityAccommodations: {
+        screenReader: true,
+        extendedTimeAllowance: true,
+        highContrastMode: true,
+        dyslexiaTypography: false,
+        audioPrompts: false
+      }
     },
     history: [
       {
@@ -534,7 +548,14 @@ export const INITIAL_BLUEPRINTS: Blueprint[] = [
       },
       maxReuseLimit: 3,
       versionCompatibility: '>= 1.0',
-      activeItemOnly: true
+      activeItemOnly: true,
+      accessibilityAccommodations: {
+        screenReader: true,
+        extendedTimeAllowance: true,
+        highContrastMode: true,
+        dyslexiaTypography: false,
+        audioPrompts: false
+      }
     },
     history: [
       {
@@ -612,7 +633,14 @@ export const INITIAL_BLUEPRINTS: Blueprint[] = [
       },
       maxReuseLimit: 1,
       versionCompatibility: '>= 0.8',
-      activeItemOnly: true
+      activeItemOnly: true,
+      accessibilityAccommodations: {
+        screenReader: true,
+        extendedTimeAllowance: false,
+        highContrastMode: true,
+        dyslexiaTypography: false,
+        audioPrompts: false
+      }
     },
     history: [
       {

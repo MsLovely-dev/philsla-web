@@ -523,6 +523,17 @@ def registration_selfie_upload_to(instance, filename):
     return f"private/registration-selfies/{owner_id}/{uuid.uuid4().hex}{extension}"
 
 
+def registration_attachment_upload_to(instance, filename):
+    extensions = {
+        "application/pdf": ".pdf",
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+    }
+    owner_id = instance.application_id or instance.registration_session_id or "unlinked"
+    extension = extensions.get(instance.content_type, "")
+    return f"private/registration-attachments/{owner_id}/{uuid.uuid4().hex}{extension}"
+
+
 class ApplicationIdentityMedia(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     verification = models.ForeignKey(Step2Verification, on_delete=models.CASCADE, related_name="media")
@@ -564,5 +575,43 @@ class RegistrationSelfieMedia(models.Model):
             models.CheckConstraint(
                 condition=models.Q(verification__isnull=False) | models.Q(application__isnull=False),
                 name="registration_selfie_has_owner",
+            ),
+        ]
+
+
+class StudentApplicationAdditionalAttachment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    application = models.ForeignKey(
+        StudentApplication,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="additional_attachments",
+    )
+    registration_session_id = models.CharField(max_length=120, blank=True, default="")
+    section = models.CharField(max_length=40)
+    field_key = models.CharField(max_length=120)
+    file = models.FileField(upload_to=registration_attachment_upload_to)
+    original_filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=32)
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(application__isnull=False) | ~models.Q(registration_session_id=""),
+                name="additional_attachment_has_owner",
+            ),
+            models.UniqueConstraint(
+                fields=("application", "section", "field_key"),
+                condition=models.Q(application__isnull=False),
+                name="unique_application_additional_attachment",
+            ),
+            models.UniqueConstraint(
+                fields=("registration_session_id", "section", "field_key"),
+                condition=~models.Q(registration_session_id=""),
+                name="unique_session_additional_attachment",
             ),
         ]

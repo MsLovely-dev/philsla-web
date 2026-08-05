@@ -2,13 +2,7 @@
 
 ## Status
 
-Django migrations now implement initial account, student-application, configurable-field, and university-registry slices. This is not a complete platform schema. PostgreSQL-compatible storage is the accepted application database engine in [ADR-006](../decisions/ADR-006-DATABASE-ENGINE-AND-LOCAL-DEVELOPMENT.md), Supabase Postgres is the accepted database provider in [ADR-007](../decisions/ADR-007-SUPABASE-POSTGRES-DATABASE-PROVIDER.md), and private S3-compatible object storage is the accepted file/evidence storage approach in [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md). Django production settings read the database connection from `DATABASE_URL` without committed credentials. The complete ownership model, remaining schemas, and persistence boundaries remain `TBD`.
-
-## Implemented university registry slice
-
-The `configuration` capability owns `University` and `CollegeCourse`. Both use opaque UUID primary keys, mutable-record timestamps, creator references, status choices, and integer versions for optimistic API concurrency. A university owns zero or more college courses through `CollegeCourse.university`; deleting the university cascades to those child rows. University code is globally unique, and program code is unique within a university. The migration, index definitions, constraints, and reversible table creation are in `backend/apps/configuration/migrations/0007_university_collegecourse_and_more.py`. No production seed data is included.
-
-The current `UNIVERSITY_ADMIN` object boundary uses server-owned `AccountProfile.scopes.universityIds` UUID values for writes. The broader tenant/institution assignment workflow and provisioning UI remain `TBD`.
+The backend now includes persistence for authentication, student registration/application slices, configuration, and Score Management. PostgreSQL-compatible storage is the accepted application database engine in [ADR-006](../decisions/ADR-006-DATABASE-ENGINE-AND-LOCAL-DEVELOPMENT.md), Supabase Postgres is the accepted database provider in [ADR-007](../decisions/ADR-007-SUPABASE-POSTGRES-DATABASE-PROVIDER.md), and private S3-compatible object storage is the accepted file/evidence storage approach in [ADR-008](../decisions/ADR-008-FILE-OBJECT-STORAGE-APPROACH.md). Django production settings read the database connection from `DATABASE_URL` without committed credentials. Some ownership model, schema, and persistence boundaries remain `TBD`.
 
 ## Candidate domain data
 
@@ -152,6 +146,19 @@ Seed data:
 - Required reference data should be represented through migrations, fixtures, or management commands only after the owning capability is defined.
 - Demo or local-only data must be clearly labeled and must not be required for production startup.
 - Seed commands must be safe to rerun or must fail clearly before creating duplicates.
+
+## Implemented scoring and results schema
+
+The `results` capability owns Score Management persistence:
+
+- `ExaminationSession`: examination batch/session status and score-processing lifecycle.
+- `RankingPopulation`: independent ranking cohorts, such as regular and separate PWD-specific examinations.
+- `ExamSet`: exam set assignment within a session and ranking population.
+- `CandidateScore`: read-only raw/final score inputs from review plus computed `overall_rank`, `percentile`, processing batch, and release state.
+- `ScoreProcessingBatch`: processing audit metadata, actor identifier, counts, and timestamps.
+- `ScoreReleaseAuditLog`: release actor identifier and released count.
+
+Indexes are defined for session/status reads, ranking population final-score sorting, session rank paging, and release-status filtering. Database constraints reject impossible candidate score values, including non-positive maximum scores, raw scores above maximum scores, final scores outside 0-100, and percentiles outside 0-100. The initial migration is additive and creates only `results` tables and indexes; the second migration adds non-destructive check constraints. Rollback for local/development environments is `python manage.py migrate results zero`; for shared or production environments, prefer forward recovery after review because dropping the initial migration removes score-processing history.
 
 ## Pending decisions
 

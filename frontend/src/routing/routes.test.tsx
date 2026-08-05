@@ -21,6 +21,8 @@ describe('APP_ROUTES', () => {
   it('restricts representative role-specific modules', () => {
     expect(APP_ROUTES.find((route) => route.path === '/student/application')?.allowedRoles).toEqual(['STUDENT']);
     expect(APP_ROUTES.find((route) => route.path === '/admin/users')?.allowedRoles).toEqual(['SYSTEM_ADMIN']);
+    expect(APP_ROUTES.find((route) => route.path === '/admin/results/scores')?.allowedRoles).toEqual(['SYSTEM_ADMIN']);
+    expect(APP_ROUTES.find((route) => route.path === '/admin/results/scores/:batchId/:candidateId')?.allowedRoles).toEqual(['SYSTEM_ADMIN']);
     expect(APP_ROUTES.find((route) => route.path === '/grader/queue')?.allowedRoles).toContain('GRADER');
     expect(APP_ROUTES.find((route) => route.path === '/support/dashboard')?.allowedRoles).toContain('TECH_SUPPORT');
   });

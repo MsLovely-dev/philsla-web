@@ -144,10 +144,12 @@ Complete these before expanding individual modules.
 
 ### 13. Executive reporting
 
+- [x] National dashboard's registered/verified examinee, participating school/university, and applications-by-region KPIs are backend-sourced (`GET /api/v1/analytics/national/overview/`) with loading and failure-fallback states.
 - [ ] Complete national, regional, school, and cohort filters with empty and insufficient-data states.
 - [ ] Verify chart accessibility and provide tabular alternatives.
-- [ ] Use synthetic aggregate data and avoid implying that prototype analytics are official.
+- [x] Use synthetic aggregate data and avoid implying that prototype analytics are official, for the remaining unbacked widgets: National dashboard's session/incident/testing-center metrics, and all of the CHED/DEPED/TESDA agency dashboards.
 - [ ] Defer official metrics, aggregation rules, and export authorization until approved (`TBD`).
+- [ ] Agency-scoped (CHED/DEPED/TESDA) real data requires an agency dimension in the data model -- `TBD`, not started.
 
 ## Cross-module completion gate
 
