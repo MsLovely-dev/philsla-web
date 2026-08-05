@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
 import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './services/contracts';
@@ -23,7 +23,7 @@ export interface MaintenanceModule {
   status: string;
 }
 
-const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1']);
+const RETIRED_MAINTENANCE_MODULE_IDS = new Set(['1', '40', '41', '42', '43', '44', '45']);
 
 export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   // Student Portal
@@ -86,15 +86,9 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
 
   // Sub-modules of Maintenance & Protocols
   { id: '36', name: 'Student Registration', path: '/admin/maintenance/registration', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '37', name: 'Application Status', path: '/admin/maintenance/application-status', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '38', name: 'Testing Centers', path: '/admin/maintenance/testing-center', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '39', name: 'Batch Config', path: '/admin/maintenance/batch', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '40', name: 'Device Validation', path: '/admin/maintenance/device', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '41', name: 'Attendance Rules', path: '/admin/maintenance/attendance', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '42', name: 'Exam Integrity', path: '/admin/maintenance/integrity', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '43', name: 'Question Config', path: '/admin/maintenance/question-bank', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '44', name: 'Proctor Roles', path: '/admin/maintenance/proctor', category: 'Maintenance & Protocols', status: 'ACTIVE' },
-  { id: '45', name: 'Degree Programs', path: '/admin/maintenance/degree-programs', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '37', name: 'List of Schools', path: '/admin/maintenance/schools', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '38', name: 'List of Universities', path: '/admin/maintenance/universities', category: 'Maintenance & Protocols', status: 'ACTIVE' },
+  { id: '39', name: 'Exam Blueprint', path: '/admin/maintenance/exam-blueprint', category: 'Maintenance & Protocols', status: 'ACTIVE' },
 
   // Testing Center Logistics
   { id: '35', name: 'Center Management', path: '/admin/center-control', category: 'Testing Center Logistics', status: 'ACTIVE' },
@@ -104,6 +98,19 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
 
 function pruneRetiredMaintenanceModules(modules: MaintenanceModule[]) {
   return modules.filter((module) => !RETIRED_MAINTENANCE_MODULE_IDS.has(module.id));
+}
+
+function reconcileMaintenanceModules(modules: MaintenanceModule[]) {
+  const initialModulesById = new Map(INITIAL_MAINTENANCE_MODULES.map((module) => [module.id, module]));
+  const reconciled = pruneRetiredMaintenanceModules(modules).map((module) => {
+    const initialModule = initialModulesById.get(module.id);
+    return initialModule ? { ...module, ...initialModule, status: module.status } : module;
+  });
+  const reconciledIds = new Set(reconciled.map((module) => module.id));
+  return [
+    ...reconciled,
+    ...INITIAL_MAINTENANCE_MODULES.filter((module) => !reconciledIds.has(module.id)),
+  ];
 }
 
 interface PhilSAContextType {
@@ -122,6 +129,8 @@ interface PhilSAContextType {
   logout: () => void;
   auditLogs: AuditLog[];
   addAuditLog: (action: string, details: string) => void;
+  initializeAuth: () => Promise<void>;
+  isAuthInitialized: boolean;
   isLoading: boolean;
   maintenanceModules: any[];
   setMaintenanceModules: (modules: any[]) => void;
@@ -140,10 +149,12 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const [maintenanceModules, setMaintenanceModulesInternal] = useState<any[]>([]);
   const [inputModules, setInputModulesInternal] = useState<InputModuleControl[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthInitialized, setIsAuthInitialized] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const authInitializationRef = useRef<Promise<void> | null>(null);
 
   const setMaintenanceModules = (modules: any[]) => {
-    const activeModules = pruneRetiredMaintenanceModules(modules);
+    const activeModules = reconcileMaintenanceModules(modules);
     setMaintenanceModulesInternal(activeModules);
     localStorage.setItem('philsa_maintenance_modules', JSON.stringify(activeModules));
   };
@@ -153,19 +164,23 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('philsa_input_modules', JSON.stringify(modules));
   };
 
-  useEffect(() => {
-    let isMounted = true;
+  const initializeAuth = useCallback(() => {
+    if (authInitializationRef.current) return authInitializationRef.current;
 
-    void authService.getCurrentSession().then((result) => {
-      if (isMounted && result.ok) {
+    setIsLoading(true);
+    const initialization = authService.getCurrentSession().then((result) => {
+      if (result.ok) {
         setUser(result.data?.user ?? null);
       }
     }).finally(() => {
-      if (isMounted) {
-        setIsLoading(false);
-      }
+      setIsAuthInitialized(true);
+      setIsLoading(false);
     });
-    
+    authInitializationRef.current = initialization;
+    return initialization;
+  }, []);
+
+  useEffect(() => {
     const savedLogs = localStorage.getItem('philsa_logs');
     if (savedLogs) {
       setAuditLogs(JSON.parse(savedLogs));
@@ -176,20 +191,14 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
 
     if (savedMaintenance) {
       try {
-        const parsed = pruneRetiredMaintenanceModules(JSON.parse(savedMaintenance));
+        const parsed = reconcileMaintenanceModules(JSON.parse(savedMaintenance));
         if (parsed.length < 25) {
           // Force override if old schema is found
           setMaintenanceModulesInternal(initialModules);
           localStorage.setItem('philsa_maintenance_modules', JSON.stringify(initialModules));
         } else {
-          // Dynamic merge of any missing ones
-          const ids = parsed.map((item: any) => item.id);
-          const merged = [
-            ...parsed,
-            ...initialModules.filter(item => !ids.includes(item.id))
-          ];
-          setMaintenanceModulesInternal(merged);
-          localStorage.setItem('philsa_maintenance_modules', JSON.stringify(merged));
+          setMaintenanceModulesInternal(parsed);
+          localStorage.setItem('philsa_maintenance_modules', JSON.stringify(parsed));
         }
       } catch (e) {
         setMaintenanceModulesInternal(initialModules);
@@ -292,9 +301,6 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('philsa_tickets', JSON.stringify(initialTickets));
     }
     
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   const login = async (email: string, password?: string): Promise<boolean> => {
@@ -302,6 +308,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
 
     if (result.ok) {
       setUser(result.data.user);
+      setIsAuthInitialized(true);
       addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
       return true;
     }
@@ -369,6 +376,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     const result = await authService.completeLoginSelfie(selfiePendingAuthToken, file);
     if (result.ok) {
       setUser(result.data.user);
+      setIsAuthInitialized(true);
       addAuditLog('LOGIN', `User ${result.data.user.email} logged in as ${result.data.user.role}`);
     }
     return result;
@@ -412,6 +420,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
     }
     await authService.logout();
     setUser(null);
+    setIsAuthInitialized(true);
   };
 
   const addAuditLog = (action: string, details: string) => {
@@ -454,7 +463,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery, inspectPasswordRecovery, completePasswordRecovery, logout, auditLogs, addAuditLog, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery, inspectPasswordRecovery, completePasswordRecovery, logout, auditLogs, addAuditLog, initializeAuth, isAuthInitialized, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

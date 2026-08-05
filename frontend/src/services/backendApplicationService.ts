@@ -82,6 +82,23 @@ export interface StudentRegistrationFieldConfig {
 
 export type StudentRegistrationFieldInput = Omit<StudentRegistrationFieldConfig, 'id' | 'createdAt' | 'updatedAt'>;
 
+export interface PaginatedResult<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+export interface StudentRegistrationFieldListParams {
+  page?: number;
+  pageSize?: number;
+  type?: string;
+  search?: string;
+  status?: boolean;
+  priority?: string;
+  inputType?: string;
+}
+
 export interface Step2VerificationResult {
   id: string;
   status: 'IN_PROGRESS' | 'PASSED' | 'MANUAL_REVIEW' | 'REJECTED';
@@ -110,11 +127,22 @@ export interface BackendApplication {
   reviewStep: Record<string, unknown>;
   lrnProfile?: Record<string, unknown>;
   photoUrl?: string;
+  additionalAttachments?: RegistrationAttachment[];
   examCycleId: string;
   version: number;
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface RegistrationAttachment {
+  id: string;
+  section: string;
+  fieldKey: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  url?: string;
 }
 
 export interface BackendApplicationDraftInput {
@@ -259,6 +287,23 @@ export class BackendApplicationService {
     });
   }
 
+  async uploadRegistrationAttachment(
+    fieldName: string,
+    file: File,
+    options: ApplicationRequestOptions = {},
+  ): Promise<ServiceResult<RegistrationAttachment>> {
+    const body = new FormData();
+    body.append('fieldName', fieldName);
+    body.append('file', file);
+    return this.apiClient.request<RegistrationAttachment>('/api/v1/applications/registration/attachments/', {
+      method: 'POST',
+      headers: {
+        ...(options.registrationSessionId ? { 'X-Registration-Session-Id': options.registrationSessionId } : {}),
+      },
+      body,
+    });
+  }
+
   async listStep2Configurations(): Promise<ServiceResult<Array<Step2Configuration & { id: number; status: boolean }>>> {
     return this.apiClient.request<Array<Step2Configuration & { id: number; status: boolean }>>('/api/v1/applications/configuration/step-2/');
   }
@@ -275,6 +320,23 @@ export class BackendApplicationService {
 
   async listStudentRegistrationFields(): Promise<ServiceResult<StudentRegistrationFieldConfig[]>> {
     return this.apiClient.request<StudentRegistrationFieldConfig[]>('/api/v1/configuration/admin/fields/?module=student_registration');
+  }
+
+  async listStudentRegistrationFieldsPage(
+    params: StudentRegistrationFieldListParams,
+  ): Promise<ServiceResult<PaginatedResult<StudentRegistrationFieldConfig>>> {
+    const searchParams = new URLSearchParams({ module: 'student_registration' });
+    if (params.page) searchParams.set('page', String(params.page));
+    if (params.pageSize) searchParams.set('pageSize', String(params.pageSize));
+    if (params.type) searchParams.set('type', params.type);
+    if (params.search) searchParams.set('search', params.search);
+    if (typeof params.status === 'boolean') searchParams.set('status', String(params.status));
+    if (params.priority) searchParams.set('priority', params.priority);
+    if (params.inputType) searchParams.set('inputType', params.inputType);
+
+    return this.apiClient.request<PaginatedResult<StudentRegistrationFieldConfig>>(
+      `/api/v1/configuration/admin/fields/?${searchParams.toString()}`,
+    );
   }
 
   async createStudentRegistrationField(input: StudentRegistrationFieldInput): Promise<ServiceResult<StudentRegistrationFieldConfig>> {
@@ -449,7 +511,11 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
   const school = application.school;
   const preferences = application.coursePreferences;
   const lrnProfile = application.lrnProfile ?? {};
-  const additionalHighPriorityFields = normalizeStringRecord(personal.additionalHighPriorityFields);
+  const additionalHighPriorityFields = {
+    ...extractAdditionalStep1Fields(personal, PERSONAL_APPLICATION_KEYS),
+    ...extractAdditionalStep1Fields(school, SCHOOL_APPLICATION_KEYS),
+    ...normalizeStringRecord(personal.additionalHighPriorityFields),
+  };
   const firstNonEmpty = (...values: unknown[]) => {
     for (const value of values) {
       if (value === null || value === undefined) continue;
@@ -516,6 +582,61 @@ function normalizeStringRecord(value: unknown): Record<string, string> {
   return Object.entries(value).reduce<Record<string, string>>((record, [key, entry]) => {
     if (entry === null || entry === undefined) return record;
     const stringValue = String(entry).trim();
+    if (stringValue) record[key] = stringValue;
+    return record;
+  }, {});
+}
+
+const PERSONAL_APPLICATION_KEYS = new Set([
+  'firstName',
+  'middleName',
+  'lastName',
+  'suffix',
+  'extensionName',
+  'dateOfBirth',
+  'dob',
+  'sex',
+  'gender',
+  'email',
+  'emailAddress',
+  'mobile',
+  'mobileNumber',
+  'phoneNumber',
+  'identityVerificationStatus',
+  'photoUrl',
+  'selfiePhotoUrl',
+  'studentIdPhotoUrl',
+  'birthPlace',
+  'placeOfBirth',
+  'nationality',
+  'nationalId',
+  'philSysId',
+  'additionalHighPriorityFields',
+]);
+
+const SCHOOL_APPLICATION_KEYS = new Set([
+  'lrn',
+  'schoolId',
+  'name',
+  'schoolName',
+  'highSchoolName',
+  'address',
+  'schoolAddress',
+  'highSchoolAddress',
+  'academicTrack',
+  'track',
+  'gradeLevel',
+  'enrollmentStatus',
+  'schoolYear',
+  'gwa',
+  'generalWeightedAverage',
+  'average',
+]);
+
+function extractAdditionalStep1Fields(source: Record<string, unknown>, knownKeys: Set<string>): Record<string, string> {
+  return Object.entries(source).reduce<Record<string, string>>((record, [key, value]) => {
+    if (knownKeys.has(key) || value === null || value === undefined) return record;
+    const stringValue = String(value).trim();
     if (stringValue) record[key] = stringValue;
     return record;
   }, {});

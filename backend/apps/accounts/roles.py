@@ -4,6 +4,8 @@ from enum import StrEnum
 class PortalRole(StrEnum):
     STUDENT = "STUDENT"
     ADMISSIONS_REVIEWER = "ADMISSIONS_REVIEWER"
+    ITEM_WRITER = "ITEM_WRITER"
+    ACADEMIC_REVIEWER = "ACADEMIC_REVIEWER"
     PROCTOR = "PROCTOR"
     PROCTOR_ADMIN = "PROCTOR_ADMIN"
     UNIVERSITY_ADMIN = "UNIVERSITY_ADMIN"
@@ -21,6 +23,8 @@ PORTAL_ROLES = frozenset(role.value for role in PortalRole)
 ROLE_SECURITY_TIERS = {
     PortalRole.STUDENT.value: 1,
     PortalRole.ADMISSIONS_REVIEWER.value: 2,
+    PortalRole.ITEM_WRITER.value: 3,
+    PortalRole.ACADEMIC_REVIEWER.value: 3,
     PortalRole.PROCTOR.value: 2,
     PortalRole.UNIVERSITY_ADMIN.value: 2,
     PortalRole.TESTING_CENTER_ADMIN.value: 2,

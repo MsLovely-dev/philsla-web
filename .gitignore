@@ -18,6 +18,7 @@ db.sqlite3
 media/
 backend/private-media/
 staticfiles/
+artifacts/*.zip
 
 # Local tooling
 .pytest_cache/
@@ -27,3 +28,4 @@ staticfiles/
 # Claude Code local setup
 .claude/*
 CLAUDE.md
+local/
