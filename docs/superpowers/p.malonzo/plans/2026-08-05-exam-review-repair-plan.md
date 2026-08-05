@@ -12,7 +12,7 @@
 
 **Execution record:** `../implement/p.malonzo.implement.md`
 
-**Status:** Awaiting P.Malonzo review; no application task is authorized until this plan is approved.
+**Status:** Approved and executed; latest-main integration and verification limitations are recorded in the implementation log.
 
 ## Global Constraints
 

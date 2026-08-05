@@ -12,7 +12,7 @@
 
 **Execution branch:** `p.malonzo/exam-review`
 
-**Status:** Code repair implemented and verified; publication authorized; local database recovery requires owner choice
+**Status:** Code repair implemented; latest main integrated; publication authorized with disclosed upstream failures
 
 ## Objective
 
@@ -193,6 +193,8 @@ Updated:
 
 ### Task 7 — final verification
 
+Before integrating the latest `origin/main`:
+
 Backend:
 
 ```text
@@ -213,12 +215,27 @@ npm run lint: failed with 38 TypeScript errors in unrelated existing modules
 Exam Review production files changed: none
 ```
 
+After fetching `origin/main` at `ccd8435`, the branch integrated the updated BUILD_PLAN, A.Depositar's Score Management merge, deployment changes, and the other owners' latest work. Five `apps.results` conflicts were resolved with blobs verified identical to canonical Score Management commit `9f49e3b`; Exam Review remains in `apps.exam_reviews`.
+
+Post-integration verification:
+
+```text
+focused Exam Review/Score Management and boundary suite: 55 passed
+complete backend suite: 285 run, 2 errors
+  - both errors are NameError: ApplicationIdentityMedia in applications endpoint tests
+complete frontend suite: 119 run, 1 failure
+  - RouteGuards permission test renders protected content instead of unauthorized
+```
+
+The three failing test/source files are byte-identical to `origin/main` and outside P.Malonzo's Exam Review scope. The owner reviewed this disclosure and explicitly instructed publication of `p.malonzo/exam-review` despite those upstream failures.
+
 Diff hygiene:
 
 ```text
 git diff --check: exit 0
 git diff --cached --check: exit 0 before final unstage
-publication commit: this scoped Exam Review repair commit
+Exam Review publication commit: `1b917b0`
+latest-main merge commit: `0b6a7d2`
 push target: `origin/p.malonzo/exam-review`
 ```
 
@@ -228,6 +245,7 @@ push target: `origin/p.malonzo/exam-review`
 - PostgreSQL-backed migration verification was not run; isolated tests used the configured SQLite test database.
 - The existing local `backend/db.sqlite3` has an incompatible historical `results.0001` record and old `results_examreview*` tables. Do not run local migrations until the owner chooses either an archive-and-fresh-database path or a reviewed data-preserving migration path.
 - Repository-wide `npm run lint` remains red with 38 unrelated TypeScript errors, including Command Center, Question Bank, Student Application, and other modules. No failing diagnostic points to the unchanged Exam Review frontend files.
+- After latest-main integration, the complete backend suite has two upstream application-test errors and the complete frontend suite has one upstream RouteGuards failure. The corresponding files match `origin/main`; focused Exam Review verification remains green.
 - The production build reports an existing large-chunk warning.
 - A real Exam Review-to-Score Management handoff remains out of scope and `TBD`.
 - Answer-sheet template selection does not perform CSV, OCR, or OMR recognition.

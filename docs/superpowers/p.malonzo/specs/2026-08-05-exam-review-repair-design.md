@@ -8,7 +8,7 @@
 
 **Target branch:** `p.malonzo/exam-review`
 
-**Status:** Approved and implemented; changes intentionally uncommitted
+**Status:** Approved and implemented; GitHub branch publication authorized
 
 ## Problem
 
