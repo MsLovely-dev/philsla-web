@@ -433,7 +433,7 @@ export default function UniversitiesListMaintenance() {
         )}
       </div>
 
-      {error && (
+      {error && !isUniModalOpen && !isCourseModalOpen && (
         <div className="card-philsa bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-4">
           {error}
         </div>
@@ -901,12 +901,18 @@ export default function UniversitiesListMaintenance() {
                 {editingUniversity ? 'Edit University Details' : 'Add New University'}
               </h3>
               <button
-                onClick={() => setIsUniModalOpen(false)}
+                onClick={() => { setIsUniModalOpen(false); setError(null); }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-3 rounded-xl">
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSaveUni} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
@@ -1038,7 +1044,7 @@ export default function UniversitiesListMaintenance() {
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsUniModalOpen(false)}
+                  onClick={() => { setIsUniModalOpen(false); setError(null); }}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer"
                 >
                   Cancel
@@ -1066,12 +1072,18 @@ export default function UniversitiesListMaintenance() {
                 {editingCourse ? 'Edit College Course' : `Add Course to ${selectedUniversity?.code}`}
               </h3>
               <button
-                onClick={() => setIsCourseModalOpen(false)}
+                onClick={() => { setIsCourseModalOpen(false); setError(null); }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-3 rounded-xl">
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSaveCourse} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
@@ -1179,7 +1191,7 @@ export default function UniversitiesListMaintenance() {
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsCourseModalOpen(false)}
+                  onClick={() => { setIsCourseModalOpen(false); setError(null); }}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer"
                 >
                   Cancel
