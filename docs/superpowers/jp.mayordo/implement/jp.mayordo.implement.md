@@ -116,3 +116,13 @@ Applied the same duplicate-validation treatment to the Universities & Courses ma
 - **Frontend** (`UniversitiesListMaintenance.tsx`): mirrored the Schools polish — errors now render inside both the university and course modals, the page banner is gated to `!isUniModalOpen && !isCourseModalOpen`, and closing a modal clears the error.
 - **Tests:** +6 (`apps.universities` now **19 passed**) — university: same-region dup rejected, different-region allowed, update-collision; course: same-university dup rejected, different-university allowed, update-collision.
 - **Fixed a pre-existing collision surfaced by running the suite:** `seed_universities` was defined in **both** `apps.universities` and `apps.configuration`; Django resolves the duplicate command name to `configuration`, so `call_command("seed_universities")` seeded the wrong table and the `apps.universities` seed test saw 0 rows (this failed on `main` too). Renamed the `apps.universities` command to **`seed_university_registry`** (and pointed its test at the new name), leaving `configuration`'s `seed_universities` untouched. Both apps' seed tests now pass. (Full two-backend reconciliation remains a separate story.)
+
+## Schools ⇄ Universities UI/UX consistency (2026-08-06)
+
+Audited the two Maintenance screens and closed the portable feature gaps so Schools matches Universities:
+
+- **Table ⇄ Grid Cards toggle** on Schools (mirrors Universities' `viewMode`): grid mode renders each school as a card (icon tile, code chip, status pill, region, classification, capacity footer).
+- **4th summary stat card** — "Total Examinee Capacity" (sum), stat row widened to `grid-cols-2 sm:grid-cols-4`.
+- **Status (Active/Inactive)** — new `status` field on the `School` model (`ActivationStatus` TextChoices, default Active) + migration `schools/0003_school_status`, serializer field, frontend service types/mapping, a Status column + pill in the table, a pill on grid cards, and a Status dropdown in the modal.
+- Tests: `apps.schools` now **9** (added status default/set test); frontend **9** (component 5 + service 4, updated for `status`).
+- Not ported (Universities-only, no Schools equivalent): college-course drill-down, president/email/phone/established-year/city fields, city search. Documented for the audit trail.
