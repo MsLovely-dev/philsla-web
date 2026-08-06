@@ -150,6 +150,7 @@ export default function SchoolsListMaintenance() {
 
     setSchoolRecord(result.data);
     setIsModalOpen(false);
+    setViewingSchool(null); // a completed save closes the details modal too
   };
 
   const handleConfirmDelete = async () => {
@@ -165,6 +166,7 @@ export default function SchoolsListMaintenance() {
     }
     removeSchoolRecord(pendingDelete.id);
     setPendingDelete(null);
+    setViewingSchool(null); // the record is gone, so close the details modal too
   };
 
   const handleExport = ({ columns, scope }: ExportSelection) => {
@@ -528,7 +530,11 @@ export default function SchoolsListMaintenance() {
       )}
 
       {/* Add / Edit School Modal */}
-      <ModalShell isOpen={isModalOpen} className="max-w-xl p-6 space-y-6">
+      <ModalShell
+        isOpen={isModalOpen}
+        onClose={() => { setIsModalOpen(false); setError(null); }}
+        className="max-w-xl p-6 space-y-6"
+      >
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <SchoolIcon className="w-5 h-5 text-philsa-navy" />
@@ -646,8 +652,14 @@ export default function SchoolsListMaintenance() {
             </form>
       </ModalShell>
 
-      {/* School Details Modal */}
-      <ModalShell isOpen={viewingSchool !== null} className="max-w-lg p-6 space-y-5">
+      {/* School Details Modal — sits under the edit/delete modals so cancelling returns here */}
+      <ModalShell
+        isOpen={viewingSchool !== null}
+        onClose={() => setViewingSchool(null)}
+        backdrop={!isModalOpen && pendingDelete === null}
+        zClass="z-40"
+        className="max-w-lg p-6 space-y-5"
+      >
         {viewingSchool && (
           <>
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -706,13 +718,13 @@ export default function SchoolsListMaintenance() {
 
             <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
               <button
-                onClick={() => { const school = viewingSchool; setViewingSchool(null); setPendingDelete(school); }}
+                onClick={() => setPendingDelete(viewingSchool)}
                 className="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer flex items-center gap-1.5"
               >
                 <Trash2 className="w-4 h-4" /> Delete
               </button>
               <button
-                onClick={() => { const school = viewingSchool; setViewingSchool(null); handleOpenEditModal(school); }}
+                onClick={() => handleOpenEditModal(viewingSchool)}
                 className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
               >
                 <Edit3 className="w-4 h-4" /> Edit

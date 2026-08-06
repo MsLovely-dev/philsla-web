@@ -7,16 +7,33 @@ interface ModalShellProps {
   children: ReactNode;
   /** Extra classes for the white panel (e.g. max width, padding, spacing). */
   className?: string;
+  /** Called when the backdrop is clicked. Omit to disable click-outside dismissal. */
+  onClose?: () => void;
+  /**
+   * Whether this shell paints its own dimmed/blurred backdrop. Set `false` when
+   * the shell sits *underneath* another open modal, so backdrops don't stack and
+   * double the blur/opacity. Defaults to `true`.
+   */
+  backdrop?: boolean;
+  /** z-index utility for the overlay. Lower it (e.g. `z-40`) for a modal that another modal stacks on top of. Defaults to `z-[100]`. */
+  zClass?: string;
 }
 
 /**
- * Animated modal container shared by the maintenance add/edit/export modals.
- * Gives them the same smooth fade + scale open/close transition (and
- * reduced-motion fallback) as ConfirmationDialog, instead of appearing and
- * vanishing instantly. Dismissal stays with the Cancel/X controls inside
- * `children` so a partially-filled form is never lost to a stray backdrop click.
+ * Animated modal container shared by the maintenance add/edit/export/details
+ * modals. Gives them the same smooth fade + scale open/close transition (and
+ * reduced-motion fallback) as ConfirmationDialog. Clicking the backdrop calls
+ * `onClose`; a stacked (underneath) modal passes `backdrop={false}` so only the
+ * topmost modal dims the screen.
  */
-export function ModalShell({ isOpen, children, className }: ModalShellProps) {
+export function ModalShell({
+  isOpen,
+  children,
+  className,
+  onClose,
+  backdrop = true,
+  zClass = 'z-[100]',
+}: ModalShellProps) {
   const prefersReducedMotion = useReducedMotion();
   const panelMotion = prefersReducedMotion
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } }
@@ -30,14 +47,17 @@ export function ModalShell({ isOpen, children, className }: ModalShellProps) {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-          />
+        <div className={cn('fixed inset-0 flex items-center justify-center p-4', zClass)}>
+          {backdrop && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={onClose}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+          )}
           <motion.div
             {...panelMotion}
             className={cn('relative w-full bg-white rounded-3xl shadow-2xl border border-slate-100', className)}

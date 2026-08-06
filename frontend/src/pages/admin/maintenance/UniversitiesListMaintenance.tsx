@@ -968,7 +968,11 @@ export default function UniversitiesListMaintenance() {
       )}
 
       {/* University Add / Edit Modal */}
-      <ModalShell isOpen={isUniModalOpen} className="max-w-xl p-6 space-y-6">
+      <ModalShell
+        isOpen={isUniModalOpen}
+        onClose={() => { setIsUniModalOpen(false); setError(null); }}
+        className="max-w-xl p-6 space-y-6"
+      >
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <GraduationCap className="w-5 h-5 text-philsa-navy" />
@@ -1135,7 +1139,11 @@ export default function UniversitiesListMaintenance() {
       </ModalShell>
 
       {/* College Course Add / Edit Modal */}
-      <ModalShell isOpen={isCourseModalOpen} className="max-w-xl p-6 space-y-6">
+      <ModalShell
+        isOpen={isCourseModalOpen}
+        onClose={() => { setIsCourseModalOpen(false); setError(null); }}
+        className="max-w-xl p-6 space-y-6"
+      >
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-philsa-navy" />

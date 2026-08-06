@@ -120,6 +120,8 @@ describe('SchoolsListMaintenance', () => {
 
     await user.click(screen.getByRole('button', { name: /^edit$/i }));
     expect(await screen.findByText('Edit Accredited School')).toBeInTheDocument();
+    // The details modal stays mounted underneath, so cancelling the edit returns to it.
+    expect(screen.getByText('School Details')).toBeInTheDocument();
   });
 
   it('opens the delete confirmation from the details modal', async () => {

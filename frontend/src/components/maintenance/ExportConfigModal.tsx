@@ -56,7 +56,7 @@ export function ExportConfigModal({
   const chosen = columns.filter((c) => selected[c.key]).map((c) => c.key);
 
   return (
-    <ModalShell isOpen={isOpen} className="max-w-md p-6 space-y-5">
+    <ModalShell isOpen={isOpen} onClose={onCancel} className="max-w-md p-6 space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
             <Download className="w-5 h-5 text-philsa-navy" /> {title}
