@@ -998,6 +998,7 @@ class ApplicationEndpointTests(TestCase):
 
     def test_reviewer_reject_clears_pending_password_hash(self):
         payload = complete_payload()
+        payload["personal"]["email"] = "rejected.student@example.test"
         application = StudentApplication.objects.create(
             owner=None,
             lrn="123456789012",
@@ -1022,6 +1023,51 @@ class ApplicationEndpointTests(TestCase):
         application.refresh_from_db()
         self.assertEqual(application.status, ApplicationStatus.REJECTED)
         self.assertEqual(application.password_hash, "")
+        self.assertIsNone(application.owner_id)
+        self.assertFalse(get_user_model().objects.filter(email=payload["personal"]["email"]).exists())
+        self.assertFalse(AccountProfile.objects.filter(lrn="123456789012", role=PortalRole.STUDENT.value).exists())
+
+    def test_system_admin_can_reject_submitted_application(self):
+        payload = complete_payload()
+        application = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.SYSTEM_ADMIN.value))
+
+        response = self.client.post(
+            reverse("applications:review-decision", args=[application.id]),
+            {"decision": "REJECT", "reason": "Rejected by system admin."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.REJECTED)
+        self.assertEqual(application.review_step["reviewerDecision"], "REJECT")
+        self.assertEqual(application.password_hash, "")
+
+    def test_reviewer_decision_rejects_invalid_current_state(self):
+        application = StudentApplication.objects.create(status=ApplicationStatus.APPROVED)
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.post(
+            reverse("applications:review-decision", args=[application.id]),
+            {"decision": "REJECT", "reason": "Too late."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.APPROVED)
 
     def test_student_cannot_decide_application(self):
         application = StudentApplication.objects.create(status=ApplicationStatus.SUBMITTED)

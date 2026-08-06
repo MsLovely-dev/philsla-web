@@ -1,8 +1,8 @@
 # L.Chavez Task Brief
 
 Owner: L.Chavez
-Sprint branch in local checkout: `l.chavez/student-reg`
-Branch named in `build_plan.md`: `l.chavez/student-registration`
+Sprint branch in local checkout: `l.chavez/review-application`
+Branch named in `build_plan.md`: `l.chavez/review-application`
 Primary story: Student Registration
 Secondary stories: User Account Creation (RBAC), Review Student Application
 
@@ -46,4 +46,24 @@ Reasoning:
 
 ## Later Story Notes
 
-RBAC and Review Student Application remain active sprint stories, but they are outside this Student Registration plan. They need separate specs and reviewed plans before execution.
+Student Registration and RBAC are complete for the Thursday required scope. Review Student Application is the Friday AM follow-up story from `build_plan.md`.
+
+## Review Student Application Scope
+
+Verify the admissions reviewer decision flow:
+
+- `APPROVE` changes a submitted application to `APPROVED`.
+- `APPROVE` creates/activates and links the Student account when pending registration credentials exist.
+- `REJECT` changes an eligible application to `REJECTED` and clears pending credentials without creating an account.
+- `REQUEST_CORRECTION` / `FOR_CORRECTION` is not part of this Friday task.
+- Invalid actors, invalid states, and unsafe side effects remain denied.
+
+## Review Student Application Pending Tasks
+
+- [x] Get human approval for `docs/superpowers/l.chavez/specs/2026-08-07-review-student-application.md`.
+- [x] Get human approval for `docs/superpowers/l.chavez/plans/2026-08-07-review-student-application.md`.
+- [x] Inspect existing backend decision service, endpoint, serializers, and tests.
+- [x] Add or strengthen focused tests for approve, reject, invalid state, and auth boundary behavior.
+- [x] Implement only if tests expose a real gap.
+- [x] Run focused backend application tests.
+- [x] Log implementation results in `docs/superpowers/l.chavez/implement/l.chavez.implement-review-application.md`.
