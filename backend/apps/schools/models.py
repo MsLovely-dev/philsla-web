@@ -12,6 +12,11 @@ class SchoolClassification(models.TextChoices):
     PRIVATE = "Private", "Private"
 
 
+class ActivationStatus(models.TextChoices):
+    ACTIVE = "Active", "Active"
+    INACTIVE = "Inactive", "Inactive"
+
+
 class PhilippineRegion(models.TextChoices):
     NCR = "NCR", "National Capital Region (NCR)"
     CAR = "CAR", "Cordillera Administrative Region (CAR)"
@@ -52,6 +57,11 @@ class School(models.Model):
     name = models.CharField(max_length=200)
     examinee_capacity = models.PositiveIntegerField(default=0)
     region = models.CharField(max_length=20, choices=PhilippineRegion.choices)
+    status = models.CharField(
+        max_length=10,
+        choices=ActivationStatus.choices,
+        default=ActivationStatus.ACTIVE,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

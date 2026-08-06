@@ -17,6 +17,7 @@ class SchoolSerializer(serializers.ModelSerializer):
             "name",
             "examineeCapacity",
             "region",
+            "status",
             "createdAt",
             "updatedAt",
         )

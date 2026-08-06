@@ -112,6 +112,19 @@ class SchoolApiTests(APITestCase):
         )
         self.assertContains(collision, "already exists", status_code=400)
 
+    def test_status_defaults_to_active_and_can_be_set(self) -> None:
+        default_school = self.client.post(reverse("schools:school_list"), self.payload, format="json")
+        self.assertEqual(default_school.status_code, 201)
+        self.assertEqual(default_school.data["status"], "Active")
+
+        inactive = self.client.post(
+            reverse("schools:school_list"),
+            {**self.payload, "name": "Inactive Campus", "status": "Inactive"},
+            format="json",
+        )
+        self.assertEqual(inactive.status_code, 201)
+        self.assertEqual(inactive.data["status"], "Inactive")
+
     def test_unprivileged_role_cannot_manage_schools(self) -> None:
         User = get_user_model()
         student = User.objects.create_user(
