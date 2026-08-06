@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ScoreCandidateDetail from './ScoreCandidateDetail';
@@ -76,5 +77,20 @@ describe('ScoreCandidateDetail', () => {
     expect(screen.queryByText('OTP Verification Successful')).toBeNull();
     expect(screen.queryByText('Account Credentials Created')).toBeNull();
     expect(screen.queryByText('Biometric Liveness Verification')).toBeNull();
+  });
+
+  it('returns to score management with the selected batch in the URL', async () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/results/scores/SESSION-2027-STEM/PHL-2027-STEM-000001']}>
+        <Routes>
+          <Route path="/admin/results/scores/:batchId/:candidateId" element={<ScoreCandidateDetail />} />
+          <Route path="/admin/results/scores" element={<div>Score Management List</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /back to score management/i }));
+
+    expect(screen.getByText('Score Management List')).not.toBeNull();
   });
 });

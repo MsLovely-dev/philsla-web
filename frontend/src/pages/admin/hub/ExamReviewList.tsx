@@ -25,6 +25,15 @@ const templateSources: Array<{
   { value: 'OMR_TEMPLATE_PAPER', label: 'OMR Template Paper', description: 'Direct hardware sheet recognition', icon: ScanLine },
 ];
 
+function gradingActionTitle(attempt: ExamReviewQueueItem): string {
+  if (attempt.status === 'FINALIZED') return 'Released records are locked';
+  if (attempt.pendingSubjectiveItems > 0) {
+    const noun = attempt.pendingSubjectiveItems === 1 ? 'item' : 'items';
+    return `Score ${attempt.pendingSubjectiveItems} pending subjective ${noun} before marking this exam as Graded`;
+  }
+  return 'Check and mark as Graded';
+}
+
 export default function ExamReviewList() {
   const navigate = useNavigate();
   const [examAttempts, setExamAttempts] = useState<ExamReviewQueueItem[]>([]);
@@ -280,8 +289,8 @@ export default function ExamReviewList() {
                         <button
                           type="button"
                           onClick={() => setPendingAction({ attempt, status: 'GRADED' })}
-                          disabled={attempt.status === 'GRADED' || attempt.status === 'FINALIZED' || updatingAttemptId === attempt.id}
-                          title={attempt.status === 'FINALIZED' ? 'Released records are locked' : 'Check and mark as Graded'}
+                          disabled={attempt.status === 'GRADED' || attempt.status === 'FINALIZED' || attempt.pendingSubjectiveItems > 0 || updatingAttemptId === attempt.id}
+                          title={gradingActionTitle(attempt)}
                           aria-label={`Mark ${attempt.candidateName} as Graded`}
                           className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-35"
                         >

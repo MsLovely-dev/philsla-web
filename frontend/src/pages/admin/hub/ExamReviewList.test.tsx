@@ -63,7 +63,9 @@ describe('ExamReviewList grading confirmations', () => {
 
   it('requires confirmation before checking an exam', async () => {
     const user = userEvent.setup();
-    setGradingStatusMock.mockResolvedValue({ ok: true, data: { ...pendingAttempt, status: 'GRADED' } });
+    const completedAttempt = { ...pendingAttempt, pendingSubjectiveItems: 0 };
+    listMock.mockResolvedValue({ ok: true, data: [completedAttempt, gradedAttempt] });
+    setGradingStatusMock.mockResolvedValue({ ok: true, data: { ...completedAttempt, status: 'GRADED' } });
     renderList();
 
     const checkButton = await screen.findByRole('button', { name: 'Mark Demo Candidate 004 as Graded' });
@@ -74,6 +76,20 @@ describe('ExamReviewList grading confirmations', () => {
     await user.click(screen.getByRole('button', { name: 'Confirm Check' }));
 
     await waitFor(() => expect(setGradingStatusMock).toHaveBeenCalledWith('pending-review', 'GRADED'));
+  });
+
+  it('prevents grading while subjective items are pending', async () => {
+    renderList();
+
+    const gradeButton = await screen.findByRole('button', { name: 'Mark Demo Candidate 004 as Graded' });
+
+    expect(gradeButton).toBeDisabled();
+    expect(gradeButton).toHaveAttribute(
+      'title',
+      'Score 3 pending subjective items before marking this exam as Graded',
+    );
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(setGradingStatusMock).not.toHaveBeenCalled();
   });
 
   it('requires confirmation before rejecting grading and returning an exam to pending', async () => {

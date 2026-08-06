@@ -40,13 +40,26 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Logo } from './Logo';
+import { canAccessStudentRegistrationMaintenance } from '../routing/roleAccess';
+import type { User as AppUser } from '../types';
+
+interface SidebarSubItem {
+  label: string;
+  href: string;
+  roles?: string[];
+  /**
+   * When set, this is the exclusive visibility check for this sub-item:
+   * `roles` and the module-permission fallback are both bypassed.
+   */
+  strictAccess?: (user: AppUser) => boolean;
+}
 
 interface SidebarItem {
   icon: any;
   label: string;
   href: string;
   roles?: string[];
-  subItems?: { label: string; href: string; roles?: string[] }[];
+  subItems?: SidebarSubItem[];
 }
 
 interface SidebarGroup {
@@ -60,6 +73,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
     label: 'Student Portal',
     roles: ['STUDENT'],
     items: [
+      { icon: User, label: 'Profile', href: '/student/profile' },
       { icon: FileText, label: 'Application', href: '/student/application' },
       { icon: ClipboardList, label: 'Exam Permit', href: '/student/permit' },
       { icon: CheckCircle, label: 'Results', href: '/student/results' },
@@ -109,14 +123,8 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { 
         icon: Database, 
         label: 'Question Bank', 
-        href: '/admin/questions', 
-        roles: ['SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR'] 
-      },
-      { 
-        icon: Database, 
-        label: 'Question Bank', 
         href: '/admin/hub/questions', 
-        roles: ['ITEM_WRITER', 'ACADEMIC_REVIEWER'] 
+        roles: ['ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR', 'SYSTEM_ADMIN'] 
       },
       { icon: CheckCircle, label: 'Exam Review', href: '/admin/hub/review', roles: ['SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN'] },
       { icon: CheckCircle, label: 'Results Release', href: '/admin/hub/results-release' },
@@ -179,7 +187,7 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
         label: 'Maintenance Center', 
         href: '/admin/maintenance',
         subItems: [
-          { label: 'Student Registration', href: '/admin/maintenance/registration', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'Student Registration', href: '/admin/maintenance/registration', roles: ['SYSTEM_ADMIN'], strictAccess: canAccessStudentRegistrationMaintenance },
           { label: 'List of Schools', href: '/admin/maintenance/schools', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
           { label: 'List of Universities', href: '/admin/maintenance/universities', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
           { label: 'Exam Blueprint', href: '/admin/maintenance/exam-blueprint', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
@@ -285,6 +293,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       if (hasAnyModulePermission(user.permissions, itemModule)) return true;
 
       return item.subItems?.some((sub) => {
+        if (sub.strictAccess) return sub.strictAccess(user);
         const subModule = findModuleForNavigation(modules, sub.href, sub.label);
         return hasAnyModulePermission(user.permissions, subModule);
       });
@@ -336,6 +345,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       if (item.subItems?.some((sub) => {
         const matchedSub = findModuleForNavigation(modules, sub.href, sub.label);
         if (matchedSub?.status === 'MAINTENANCE') return false;
+        if (sub.strictAccess) return sub.strictAccess(user);
         return hasAnyModulePermission(user.permissions, matchedSub);
       })) return true;
 
@@ -345,11 +355,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       if (item.subItems) {
         const activeSub = item.subItems.filter(sub => {
           const matchedSub = findModuleForNavigation(modules, sub.href, sub.label);
+
+          if (matchedSub && matchedSub.status === 'MAINTENANCE') return false;
+
+          if (sub.strictAccess) return sub.strictAccess(user);
+
           const hasSubPermission = hasAnyModulePermission(user.permissions, matchedSub);
 
           if (sub.roles && !sub.roles.includes(user.role) && !hasSubPermission) return false;
-
-          if (matchedSub && matchedSub.status === 'MAINTENANCE') return false;
 
           return hasSubPermission || !sub.roles || sub.roles.includes(user.role);
         });

@@ -32,3 +32,5 @@ CLAUDE.md
 local/
 worktrees/
 .worktrees/
+
+backend/.env.example

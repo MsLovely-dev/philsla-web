@@ -1,3 +1,5 @@
+import type { BackendPortalRole, User, UserRole } from '../types';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
 import type { User, UserRole } from '../types';
 import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthPasswordResult, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
 import { sharedApiClient, type ApiClient } from './apiClient';
@@ -239,8 +241,30 @@ export class BackendAuthService implements AuthService {
       firstName: 'Backend',
       lastName: 'User',
       role: this.mapRole(response.user.role),
+      backendRole: this.mapBackendRole(response.user.role),
       permissions: response.user.permissions,
     };
+  }
+
+  private mapBackendRole(role: string | null): BackendPortalRole | undefined {
+    const backendRoles: BackendPortalRole[] = [
+      'STUDENT',
+      'ADMISSIONS_REVIEWER',
+      'ITEM_WRITER',
+      'ACADEMIC_REVIEWER',
+      'PROCTOR',
+      'PROCTOR_ADMIN',
+      'UNIVERSITY_ADMIN',
+      'TESTING_CENTER_ADMIN',
+      'EXAM_ADMINISTRATOR',
+      'SYSTEM_ADMIN',
+      'CHED_ADMIN',
+      'DEPED_ADMIN',
+      'TESDA_ADMIN',
+      'EXECUTIVE',
+    ];
+
+    return backendRoles.includes(role as BackendPortalRole) ? (role as BackendPortalRole) : undefined;
   }
 
   private mapRole(role: string | null): UserRole {

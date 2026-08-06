@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "django_rq",
     "apps.accounts",
     "apps.applications",
     "apps.analytics",
@@ -208,6 +209,18 @@ BREVO_SMTP_USE_TLS = env_bool("BREVO_SMTP_USE_TLS", True)
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "PhilSA Admissions <no-reply@example.test>")
 FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000")
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+RQ_QUEUES = {
+    "default": {
+        "URL": REDIS_URL,
+        "DEFAULT_TIMEOUT": env_int("RQ_DEFAULT_TIMEOUT_SECONDS", 300),
+    },
+}
+SCORE_RELEASE_EMAIL_AUTO_ENQUEUE = env_bool("SCORE_RELEASE_EMAIL_AUTO_ENQUEUE", True)
+SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE = env_int("SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE", 500)
+SCORE_RELEASE_EMAIL_DISPATCH_MAX_BATCHES = env_int("SCORE_RELEASE_EMAIL_DISPATCH_MAX_BATCHES", 1000)
+SCORE_RELEASE_EMAIL_MAX_ATTEMPTS = env_int("SCORE_RELEASE_EMAIL_MAX_ATTEMPTS", 3)
+SCORE_RELEASE_EMAIL_QUEUE_CHUNK_SIZE = env_int("SCORE_RELEASE_EMAIL_QUEUE_CHUNK_SIZE", 5000)
 if AUTH_EMAIL_PROVIDER == "azure_communication_services_smtp":
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = AZURE_COMMUNICATION_EMAIL_SMTP_HOST

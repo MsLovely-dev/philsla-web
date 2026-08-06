@@ -19,6 +19,6 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS(
-                f"Seeded {len(seed_data.score_records)} score records for {seed_data.exam_sessions[0].id}.",
+                f"Seeded {len(seed_data.score_records)} score records across {len(seed_data.exam_sessions)} score batches.",
             ),
         )

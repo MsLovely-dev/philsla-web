@@ -9,7 +9,7 @@ function renderRouteElement(route: AppRouteDefinition) {
   if (route.access === 'exam') return <ExamRoute>{route.element}</ExamRoute>;
   if (route.access === 'protected') {
     return (
-      <ProtectedRoute allowedRoles={route.allowedRoles ?? []} layout={route.layout}>
+      <ProtectedRoute allowedRoles={route.allowedRoles ?? []} layout={route.layout} strictAccess={route.strictAccess}>
         {route.element}
       </ProtectedRoute>
     );

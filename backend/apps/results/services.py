@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import hashlib
+import logging
 import random
 from collections import defaultdict
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Sequence
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.core.mail import EmailMultiAlternatives
+from django.db import connection, transaction
 from django.utils import timezone
 
 from .models import (
@@ -19,9 +24,13 @@ from .models import (
     ScoreBatchStatus,
     ScoreProcessingBatch,
     ScoreReleaseAuditLog,
+    ScoreReleaseNotification,
+    ScoreReleaseNotificationStatus,
     ScoreReleaseStatus,
     ScoreReviewStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 ReviewStatus = Literal["APPROVED", "PENDING", "REJECTED"]
@@ -30,6 +39,21 @@ ReleaseStatus = Literal["NOT_RELEASED", "RELEASED"]
 
 class ScoreProcessingError(ValueError):
     """Raised when a score processing precondition is not satisfied."""
+
+
+class ScoreIntakeConflict(ValueError):
+    """Raised when an Exam Review score cannot safely enter Score Management."""
+
+
+@dataclass(frozen=True)
+class ExamReviewScoreInput:
+    review_id: UUID
+    exam_set_code: str
+    candidate_id: str
+    lrn: str
+    candidate_name: str
+    raw_score: int
+    max_score: int
 
 
 @dataclass(frozen=True)
@@ -102,6 +126,27 @@ class ScoreProcessingResult:
 
 
 @dataclass(frozen=True)
+class ScoreReleaseQueueResult:
+    queued_count: int
+    skipped_count: int
+    failed_count: int
+
+
+@dataclass(frozen=True)
+class ScoreReleaseDispatchResult:
+    sent_count: int
+    failed_count: int
+
+
+@dataclass(frozen=True)
+class ScoreReleaseResult:
+    released_count: int
+    notification_queued_count: int
+    notification_skipped_count: int
+    notification_failed_count: int
+
+
+@dataclass(frozen=True)
 class ScoreSeedData:
     exam_sessions: tuple[ExamSessionSeed, ...]
     ranking_populations: tuple[RankingPopulationSeed, ...]
@@ -110,12 +155,150 @@ class ScoreSeedData:
 
 
 REGULAR_SESSION_ID = "SESSION-2027-REGULAR"
+STEM_SESSION_ID = "SESSION-2027-STEM"
+SPECIAL_SESSION_ID = "SESSION-2027-SPECIAL"
 REGULAR_POPULATION_ID = "POP-REGULAR-2027"
 PWD_POPULATION_ID = "POP-PWD-2027"
 REGULAR_EXAM_SETS = ("ES-BP0001", "ES-BP0002", "ES-BP0003", "ES-BP0004")
 PWD_EXAM_SETS = ("ES-PWD0001",)
+DEMO_SCORE_SESSIONS = (
+    {
+        "id": REGULAR_SESSION_ID,
+        "name": "PhilSA Regular Examination 2027",
+        "candidate_prefix": "PHL-2027",
+        "lrn_prefix": "109",
+        "regular_population_id": REGULAR_POPULATION_ID,
+        "pwd_population_id": PWD_POPULATION_ID,
+        "regular_exam_sets": REGULAR_EXAM_SETS,
+        "pwd_exam_sets": PWD_EXAM_SETS,
+    },
+    {
+        "id": STEM_SESSION_ID,
+        "name": "PhilSA STEM Scholarship Examination 2027",
+        "candidate_prefix": "PHL-2027-STEM",
+        "lrn_prefix": "119",
+        "regular_population_id": "POP-STEM-2027",
+        "pwd_population_id": "POP-STEM-PWD-2027",
+        "regular_exam_sets": ("ES-STEM0001", "ES-STEM0002", "ES-STEM0003", "ES-STEM0004"),
+        "pwd_exam_sets": ("ES-STEM-PWD0001",),
+    },
+    {
+        "id": SPECIAL_SESSION_ID,
+        "name": "PhilSA Special Examination 2027",
+        "candidate_prefix": "PHL-2027-SPC",
+        "lrn_prefix": "129",
+        "regular_population_id": "POP-SPECIAL-2027",
+        "pwd_population_id": "POP-SPECIAL-PWD-2027",
+        "regular_exam_sets": ("ES-SPC0001", "ES-SPC0002", "ES-SPC0003", "ES-SPC0004"),
+        "pwd_exam_sets": ("ES-SPC-PWD0001",),
+    },
+)
+DEMO_SCORE_SESSION_IDS = tuple(session["id"] for session in DEMO_SCORE_SESSIONS)
 FIRST_NAMES = ("Alon", "Bituin", "Clara", "Diego", "Elena", "Francis", "Gio", "Hana")
 LAST_NAMES = ("Reyes", "Santos", "Cruz", "Garcia", "Ramos", "Torres", "Mendoza", "Flores")
+
+
+def _validate_exam_review_score_input(payload: ExamReviewScoreInput) -> None:
+    if not payload.exam_set_code.strip():
+        raise ScoreIntakeConflict("The Exam Review does not identify an Exam Set.")
+    if not payload.candidate_id.strip() or len(payload.candidate_id) > 40:
+        raise ScoreIntakeConflict("The Exam Review candidate ID is invalid.")
+    if len(payload.lrn) != 12 or not payload.lrn.isdigit():
+        raise ScoreIntakeConflict("The Exam Review candidate must have a valid 12-digit LRN.")
+    if not payload.candidate_name.strip() or len(payload.candidate_name) > 180:
+        raise ScoreIntakeConflict("The Exam Review candidate name is invalid.")
+    if (
+        isinstance(payload.raw_score, bool)
+        or isinstance(payload.max_score, bool)
+        or payload.raw_score < 0
+        or payload.max_score <= 0
+        or payload.raw_score > payload.max_score
+        or payload.raw_score > 32767
+        or payload.max_score > 32767
+    ):
+        raise ScoreIntakeConflict("The Exam Review score is outside the supported range.")
+
+
+def _score_has_processing_data(score: CandidateScore) -> bool:
+    return any(
+        (
+            score.overall_rank is not None,
+            score.percentile is not None,
+            score.processing_batch_id is not None,
+            score.processed_at is not None,
+            score.released_at is not None,
+            score.release_status == ScoreReleaseStatus.RELEASED,
+        )
+    )
+
+
+@transaction.atomic
+def accept_exam_review_score(*, payload: ExamReviewScoreInput) -> CandidateScore:
+    _validate_exam_review_score_input(payload)
+    exam_sets = list(
+        ExamSet.objects.select_for_update()
+        .select_related("session", "ranking_population")
+        .filter(code=payload.exam_set_code)[:2],
+    )
+    if len(exam_sets) != 1:
+        raise ScoreIntakeConflict("Exam Review must match exactly one Score Management Exam Set.")
+
+    exam_set = exam_sets[0]
+    session = ExaminationSession.objects.select_for_update().get(pk=exam_set.session_id)
+    if session.scoring_status != ScoreBatchStatus.READY_FOR_PROCESSING:
+        raise ScoreIntakeConflict("This Score Management session has already entered processing.")
+
+    final_score = (
+        (Decimal(payload.raw_score) / Decimal(payload.max_score)) * Decimal("100")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    existing = (
+        CandidateScore.objects.select_for_update()
+        .filter(session=session, candidate_id=payload.candidate_id)
+        .first()
+    )
+    if existing is None:
+        return CandidateScore.objects.create(
+            id=f"EXAM-REVIEW-{payload.review_id}",
+            session=session,
+            ranking_population=exam_set.ranking_population,
+            exam_set=exam_set,
+            candidate_id=payload.candidate_id,
+            lrn=payload.lrn,
+            candidate_name=payload.candidate_name.strip(),
+            raw_score=payload.raw_score,
+            max_score=payload.max_score,
+            final_score=final_score,
+            review_status=ScoreReviewStatus.APPROVED,
+            release_status=ScoreReleaseStatus.NOT_RELEASED,
+        )
+
+    if _score_has_processing_data(existing):
+        raise ScoreIntakeConflict("This candidate score has already entered processing or release.")
+
+    existing.ranking_population = exam_set.ranking_population
+    existing.exam_set = exam_set
+    existing.lrn = payload.lrn
+    existing.candidate_name = payload.candidate_name.strip()
+    existing.raw_score = payload.raw_score
+    existing.max_score = payload.max_score
+    existing.final_score = final_score
+    existing.review_status = ScoreReviewStatus.APPROVED
+    existing.release_status = ScoreReleaseStatus.NOT_RELEASED
+    existing.save(
+        update_fields=(
+            "ranking_population",
+            "exam_set",
+            "lrn",
+            "candidate_name",
+            "raw_score",
+            "max_score",
+            "final_score",
+            "review_status",
+            "release_status",
+            "updated_at",
+        ),
+    )
+    return existing
 
 
 def process_score_batch(
@@ -160,64 +343,71 @@ def generate_score_seed_data(
     applications: list[CandidateApplicationSeed] = []
     score_records: list[ApprovedScoreSeedRecord] = []
 
-    for index in range(candidate_count):
-        sequence = index + 1
-        candidate_id = f"PHL-2027-{sequence:06d}"
-        first_name = FIRST_NAMES[index % len(FIRST_NAMES)]
-        last_name = LAST_NAMES[(index // len(FIRST_NAMES)) % len(LAST_NAMES)]
-        candidate_name = f"{first_name} {last_name}"
-        lrn = application_lrns[index] if index < len(application_lrns) else f"109{sequence:09d}"
-        uses_pwd_population = sequence % 50 == 0
-        ranking_population_id = PWD_POPULATION_ID if uses_pwd_population else REGULAR_POPULATION_ID
-        exam_set_ids = PWD_EXAM_SETS if uses_pwd_population else REGULAR_EXAM_SETS
-        raw_score = _raw_score_for(randomizer, sequence)
-        max_score = 200
+    for batch_index, session_config in enumerate(DEMO_SCORE_SESSIONS):
+        for index in range(candidate_count):
+            sequence = index + 1
+            lrn_index = batch_index * candidate_count + index
+            candidate_id = f"{session_config['candidate_prefix']}-{sequence:06d}"
+            first_name = FIRST_NAMES[index % len(FIRST_NAMES)]
+            last_name = LAST_NAMES[(index // len(FIRST_NAMES)) % len(LAST_NAMES)]
+            candidate_name = f"{first_name} {last_name}"
+            lrn = application_lrns[lrn_index] if lrn_index < len(application_lrns) else f"{session_config['lrn_prefix']}{sequence:09d}"
+            uses_pwd_population = sequence % 50 == 0
+            ranking_population_id = session_config["pwd_population_id"] if uses_pwd_population else session_config["regular_population_id"]
+            exam_set_ids = session_config["pwd_exam_sets"] if uses_pwd_population else session_config["regular_exam_sets"]
+            raw_score = _raw_score_for(randomizer, lrn_index + 1)
+            max_score = 200
 
-        applications.append(
-            CandidateApplicationSeed(
-                id=candidate_id,
-                candidate_id=candidate_id,
-                lrn=lrn,
-                candidate_name=candidate_name,
-                session_id=REGULAR_SESSION_ID,
-            ),
-        )
-        score_records.append(
-            ApprovedScoreSeedRecord(
-                id=f"SCORE-{candidate_id}",
-                candidate_id=candidate_id,
-                candidate_name=candidate_name,
-                lrn=lrn,
-                session_id=REGULAR_SESSION_ID,
-                ranking_population_id=ranking_population_id,
-                exam_set_id=exam_set_ids[index % len(exam_set_ids)],
-                raw_score=raw_score,
-                max_score=max_score,
-                final_score=round((raw_score / max_score) * 100, 1),
-                review_status=_review_status_for(sequence),
-            ),
-        )
+            applications.append(
+                CandidateApplicationSeed(
+                    id=candidate_id,
+                    candidate_id=candidate_id,
+                    lrn=lrn,
+                    candidate_name=candidate_name,
+                    session_id=session_config["id"],
+                ),
+            )
+            score_records.append(
+                ApprovedScoreSeedRecord(
+                    id=f"SCORE-{candidate_id}",
+                    candidate_id=candidate_id,
+                    candidate_name=candidate_name,
+                    lrn=lrn,
+                    session_id=session_config["id"],
+                    ranking_population_id=ranking_population_id,
+                    exam_set_id=exam_set_ids[index % len(exam_set_ids)],
+                    raw_score=raw_score,
+                    max_score=max_score,
+                    final_score=round((raw_score / max_score) * 100, 1),
+                    review_status=_review_status_for(sequence),
+                ),
+            )
 
     return ScoreSeedData(
-        exam_sessions=(
+        exam_sessions=tuple(
             ExamSessionSeed(
-                id=REGULAR_SESSION_ID,
-                name="PhilSA Regular Examination 2027",
+                id=session_config["id"],
+                name=session_config["name"],
                 is_closed=True,
                 already_processed=False,
-            ),
+            )
+            for session_config in DEMO_SCORE_SESSIONS
         ),
-        ranking_populations=(
-            RankingPopulationSeed(
-                id=REGULAR_POPULATION_ID,
-                name="Regular Examination",
-                exam_set_ids=REGULAR_EXAM_SETS,
-            ),
-            RankingPopulationSeed(
-                id=PWD_POPULATION_ID,
-                name="PWD Examination",
-                exam_set_ids=PWD_EXAM_SETS,
-            ),
+        ranking_populations=tuple(
+            population
+            for session_config in DEMO_SCORE_SESSIONS
+            for population in (
+                RankingPopulationSeed(
+                    id=session_config["regular_population_id"],
+                    name=f"{session_config['name']} - Regular",
+                    exam_set_ids=session_config["regular_exam_sets"],
+                ),
+                RankingPopulationSeed(
+                    id=session_config["pwd_population_id"],
+                    name=f"{session_config['name']} - PWD",
+                    exam_set_ids=session_config["pwd_exam_sets"],
+                ),
+            )
         ),
         applications=tuple(applications),
         score_records=tuple(score_records),
@@ -238,27 +428,32 @@ def seed_score_management_data(candidate_count: int = 500, seed: int = 2027, *, 
     seed_data = generate_score_seed_data(candidate_count=candidate_count, seed=seed, application_lrns=application_lrns)
 
     if reset:
-        ScoreReleaseAuditLog.objects.filter(session_id=REGULAR_SESSION_ID).delete()
-        CandidateScore.objects.filter(session_id=REGULAR_SESSION_ID).delete()
-        ScoreProcessingBatch.objects.filter(session_id=REGULAR_SESSION_ID).delete()
-        ExamSet.objects.filter(session_id=REGULAR_SESSION_ID).delete()
-        RankingPopulation.objects.filter(session_id=REGULAR_SESSION_ID).delete()
-        ExaminationSession.objects.filter(id=REGULAR_SESSION_ID).delete()
+        ScoreReleaseNotification.objects.filter(session_id__in=DEMO_SCORE_SESSION_IDS).delete()
+        ScoreReleaseAuditLog.objects.filter(session_id__in=DEMO_SCORE_SESSION_IDS).delete()
+        CandidateScore.objects.filter(session_id__in=DEMO_SCORE_SESSION_IDS).delete()
+        ScoreProcessingBatch.objects.filter(session_id__in=DEMO_SCORE_SESSION_IDS).delete()
+        ExamSet.objects.filter(session_id__in=DEMO_SCORE_SESSION_IDS).delete()
+        RankingPopulation.objects.filter(session_id__in=DEMO_SCORE_SESSION_IDS).delete()
+        ExaminationSession.objects.filter(id__in=DEMO_SCORE_SESSION_IDS).delete()
 
-    if ExaminationSession.objects.filter(id=REGULAR_SESSION_ID).exists():
+    if ExaminationSession.objects.filter(id__in=DEMO_SCORE_SESSION_IDS).exists():
         return seed_data
 
-    session_seed = seed_data.exam_sessions[0]
-    ExaminationSession.objects.create(
-        id=session_seed.id,
-        name=session_seed.name,
-        status=ExaminationSessionStatus.CLOSED,
-        scoring_status=ScoreBatchStatus.READY_FOR_PROCESSING,
+    ExaminationSession.objects.bulk_create(
+        [
+            ExaminationSession(
+                id=session_seed.id,
+                name=session_seed.name,
+                status=ExaminationSessionStatus.CLOSED,
+                scoring_status=ScoreBatchStatus.READY_FOR_PROCESSING,
+            )
+            for session_seed in seed_data.exam_sessions
+        ],
     )
 
     RankingPopulation.objects.bulk_create(
         [
-            RankingPopulation(id=population.id, session_id=REGULAR_SESSION_ID, name=population.name)
+            RankingPopulation(id=population.id, session_id=_session_id_for_population(population.id), name=population.name)
             for population in seed_data.ranking_populations
         ],
     )
@@ -269,7 +464,7 @@ def seed_score_management_data(candidate_count: int = 500, seed: int = 2027, *, 
             exam_sets.append(
                 ExamSet(
                     id=exam_set_id,
-                    session_id=REGULAR_SESSION_ID,
+                    session_id=_session_id_for_population(population.id),
                     ranking_population_id=population.id,
                     code=exam_set_id,
                 ),
@@ -376,7 +571,7 @@ def process_score_session(
 
 
 @transaction.atomic
-def release_score_session(*, session_id: str, released_by) -> int:
+def release_score_session(*, session_id: str, released_by) -> ScoreReleaseResult:
     try:
         session = ExaminationSession.objects.select_for_update().get(id=session_id)
     except ExaminationSession.DoesNotExist as exc:
@@ -407,7 +602,171 @@ def release_score_session(*, session_id: str, released_by) -> int:
         released_by_identifier=_actor_identifier(released_by),
         released_count=released_count,
     )
-    return released_count
+    notification_result = queue_released_score_candidate_notifications(
+        session=session,
+        portal_url=f"{settings.FRONTEND_BASE_URL.rstrip('/')}/student/results",
+    )
+    if notification_result.queued_count and settings.SCORE_RELEASE_EMAIL_AUTO_ENQUEUE:
+        transaction.on_commit(
+            lambda: _enqueue_score_release_notification_dispatch_safely(
+                limit=settings.SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE,
+            ),
+        )
+    return ScoreReleaseResult(
+        released_count=released_count,
+        notification_queued_count=notification_result.queued_count,
+        notification_skipped_count=notification_result.skipped_count,
+        notification_failed_count=notification_result.failed_count,
+    )
+
+
+def queue_released_score_candidate_notifications(*, session: ExaminationSession, portal_url: str) -> ScoreReleaseQueueResult:
+    from apps.applications.models import ApplicationStatus, StudentApplication
+
+    chunk_size = max(1, settings.SCORE_RELEASE_EMAIL_QUEUE_CHUNK_SIZE)
+    queued_count = 0
+    skipped_count = 0
+    score_rows = CandidateScore.objects.filter(
+        session=session,
+        review_status=ScoreReviewStatus.APPROVED,
+        release_status=ScoreReleaseStatus.RELEASED,
+        overall_rank__isnull=False,
+    ).order_by("candidate_id").values("id", "lrn").iterator(chunk_size=chunk_size)
+
+    for score_chunk in _chunks(score_rows, chunk_size):
+        applications_by_lrn = defaultdict(list)
+        lrns = {row["lrn"] for row in score_chunk}
+
+        if lrns:
+            for application in (
+                StudentApplication.objects.filter(lrn__in=lrns)
+                .exclude(status__in=[ApplicationStatus.DRAFT, ApplicationStatus.REJECTED])
+                .select_related("personal_info")
+                .only("lrn", "submitted_at", "created_at", "personal_info")
+                .order_by("lrn", "-submitted_at", "-created_at")
+            ):
+                applications_by_lrn[str(application.lrn)].append(application)
+
+        notifications: list[ScoreReleaseNotification] = []
+        for score in score_chunk:
+            applications = applications_by_lrn.get(str(score["lrn"]), [])
+            if len(applications) != 1:
+                skipped_count += 1
+                continue
+
+            application = applications[0]
+            recipient_email = _application_email(application)
+            if not recipient_email or _is_seeded_synthetic_email(recipient_email):
+                skipped_count += 1
+                continue
+
+            notifications.append(
+                ScoreReleaseNotification(
+                    session=session,
+                    score_id=str(score["id"]),
+                    recipient_email=recipient_email,
+                    recipient_name=_application_display_name(application),
+                    portal_url=portal_url,
+                ),
+            )
+
+        created_notifications = ScoreReleaseNotification.objects.bulk_create(
+            notifications,
+            batch_size=chunk_size,
+            ignore_conflicts=True,
+        )
+        queued_count += len(created_notifications)
+
+    return ScoreReleaseQueueResult(
+        queued_count=queued_count,
+        skipped_count=skipped_count,
+        failed_count=0,
+    )
+
+
+def dispatch_score_release_notifications(
+    *,
+    limit: int = 100,
+    include_failed: bool = False,
+    max_attempts: int | None = None,
+) -> ScoreReleaseDispatchResult:
+    if limit <= 0:
+        raise ValueError("limit must be positive")
+
+    max_attempts = max_attempts or settings.SCORE_RELEASE_EMAIL_MAX_ATTEMPTS
+    statuses = [ScoreReleaseNotificationStatus.PENDING]
+    if include_failed:
+        statuses.append(ScoreReleaseNotificationStatus.FAILED)
+
+    sent_count = 0
+    failed_count = 0
+    now = timezone.now()
+
+    with transaction.atomic():
+        notifications = list(_dispatch_notification_queryset(statuses=statuses, max_attempts=max_attempts)[:limit])
+
+        for notification in notifications:
+            notification.attempts += 1
+            try:
+                email_message = EmailMultiAlternatives(
+                    subject="Your PhilSLA Examination Results Are Now Available",
+                    body=_score_release_email_body(
+                        recipient_name=notification.recipient_name,
+                        portal_url=notification.portal_url,
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[notification.recipient_email],
+                )
+                email_message.attach_alternative(
+                    _score_release_email_html_body(
+                        recipient_name=notification.recipient_name,
+                        portal_url=notification.portal_url,
+                    ),
+                    "text/html",
+                )
+                email_message.send(fail_silently=False)
+            except Exception as exc:
+                notification.status = ScoreReleaseNotificationStatus.FAILED
+                notification.failure_reason = str(exc)[:240]
+                notification.save(update_fields=["attempts", "status", "failure_reason", "updated_at"])
+                failed_count += 1
+            else:
+                notification.status = ScoreReleaseNotificationStatus.SENT
+                notification.failure_reason = ""
+                notification.sent_at = now
+                notification.save(update_fields=["attempts", "status", "failure_reason", "sent_at", "updated_at"])
+                sent_count += 1
+
+    return ScoreReleaseDispatchResult(sent_count=sent_count, failed_count=failed_count)
+
+
+def _dispatch_notification_queryset(*, statuses: list[str], max_attempts: int):
+    queryset = ScoreReleaseNotification.objects.filter(status__in=statuses, attempts__lt=max_attempts).order_by("queued_at", "id")
+    if connection.features.has_select_for_update_skip_locked:
+        return queryset.select_for_update(skip_locked=True)
+    if connection.features.has_select_for_update:
+        return queryset.select_for_update()
+    return queryset
+
+
+def _enqueue_score_release_notification_dispatch_safely(*, limit: int) -> None:
+    from .jobs import enqueue_score_release_notification_dispatch
+
+    try:
+        enqueue_score_release_notification_dispatch(limit=limit)
+    except Exception:
+        logger.exception("Failed to enqueue Score Management release email dispatch job.")
+
+
+def _chunks(items, chunk_size: int):
+    chunk = []
+    for item in items:
+        chunk.append(item)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
 
 
 def _score_model_to_seed_record(score: CandidateScore) -> ApprovedScoreSeedRecord:
@@ -424,6 +783,101 @@ def _score_model_to_seed_record(score: CandidateScore) -> ApprovedScoreSeedRecor
         final_score=float(score.final_score),
         review_status=score.review_status,
     )
+
+
+def _application_email(application) -> str:
+    personal = _application_personal(application)
+    email = personal.get("email", "")
+    if isinstance(email, str):
+        return email.strip()
+    return ""
+
+
+def _is_seeded_synthetic_email(email: str) -> bool:
+    return email.lower().endswith("@philsa.example.test")
+
+
+def _application_display_name(application) -> str:
+    personal = _application_personal(application)
+    parts = [
+        personal.get("firstName", ""),
+        personal.get("middleName", ""),
+        personal.get("lastName", ""),
+        personal.get("suffix", ""),
+    ]
+    name = " ".join(part.strip() for part in parts if isinstance(part, str) and part.strip())
+    return name or "Student"
+
+
+def _application_personal(application) -> dict:
+    if isinstance(application, dict):
+        personal = application.get("personal") or {}
+    else:
+        personal = application.personal or {}
+    return personal if isinstance(personal, dict) else {}
+
+
+def _score_release_email_body(*, recipient_name: str, portal_url: str) -> str:
+    return (
+        f"Dear {recipient_name},\n\n"
+        "Your PhilSLA examination results have been released.\n\n"
+        "To securely view your official results, including your score, subject breakdown, "
+        "and qualification status, please log in to the Student Portal.\n\n"
+        f"View Results: {portal_url}\n"
+    )
+
+
+def _score_release_email_html_body(*, recipient_name: str, portal_url: str) -> str:
+    display_name = recipient_name
+    return f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#FAFAFA;font-family:Arial,Helvetica,sans-serif;color:#111111;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#FAFAFA;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #E2E8F0;border-radius:16px;overflow:hidden;">
+            <tr>
+              <td style="padding:34px 42px 18px;text-align:center;border-bottom:1px solid #E2E8F0;">
+                <div style="font-size:46px;line-height:1;font-weight:800;font-family:Arial Black,Arial,Helvetica,sans-serif;letter-spacing:0;">
+                  <span style="color:#111111;">Phil</span><span style="color:#8A1538;">SLA</span>
+                </div>
+                <p style="margin:14px 0 0;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#555555;">Results Released</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:34px 42px 40px;font-size:14px;line-height:1.65;text-align:left;">
+                <p style="margin:0 0 18px;">Dear {display_name},</p>
+                <p style="margin:0 0 18px;">Your PhilSLA examination results have been released.</p>
+                <p style="margin:0 0 26px;">
+                  To securely view your official results, including your score, subject breakdown, and qualification status, please log in to the Student Portal.
+                </p>
+                <p style="margin:0 0 26px;">
+                  <a href="{portal_url}" style="display:inline-block;background:#8A1538;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px;font-size:12px;text-transform:uppercase;letter-spacing:0.08em;">
+                    View Results
+                  </a>
+                </p>
+                <p style="margin:0 0 20px;color:#555555;">This notice does not contain your examination score for security reasons.</p>
+                <p style="margin:0;">
+                  Best regards,<br>
+                  The PhilSLA Team
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _session_id_for_population(population_id: str) -> str:
+    for session_config in DEMO_SCORE_SESSIONS:
+        if population_id in {session_config["regular_population_id"], session_config["pwd_population_id"]}:
+            return session_config["id"]
+    raise ScoreProcessingError("seed ranking population does not match a demo session")
 
 
 def _validate_score_relationships(records: Sequence[CandidateScore]) -> None:

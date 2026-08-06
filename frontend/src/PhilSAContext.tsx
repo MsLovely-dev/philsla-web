@@ -51,7 +51,6 @@ export const INITIAL_MAINTENANCE_MODULES: MaintenanceModule[] = [
   { id: '16', name: 'Overview', path: '/admin/hub/overview', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '49', name: 'Exam Blueprints', path: '/admin/blueprints', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '19', name: 'Exam Sets', path: '/admin/hub/exam-sets', category: 'Exam Management Hub', status: 'ACTIVE' },
-  { id: '17', name: 'Question Bank', path: '/admin/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '18', name: 'Question Bank', path: '/admin/hub/questions', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '20', name: 'Exam Review', path: '/admin/hub/review', category: 'Exam Management Hub', status: 'ACTIVE' },
   { id: '21', name: 'Bulk Upload Center', path: '/admin/hub/upload', category: 'Exam Management Hub', status: 'ACTIVE' },

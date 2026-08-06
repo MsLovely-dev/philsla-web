@@ -40,6 +40,10 @@ The baseline health and authentication boundaries, the first student-application
 | `GET` | `/api/v1/applications/bulk-upload/{batchId}/` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Read stored validation/import summary and row errors | Implemented |
 | `GET` | `/api/v1/applications/bulk-upload/{batchId}/errors.csv` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Download stored row errors as CSV for correction | Implemented |
 | `POST` | `/api/v1/applications/bulk-upload/{batchId}/confirm/` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Confirm a validated batch and import only eligible rows | Implemented |
+| `GET`, `PATCH` | `/api/v1/applications/profile/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Read pending profile requirements and save draft profile/application changes | Implemented |
+| `POST` | `/api/v1/applications/profile/attachments/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Upload one private PDF/JPEG/PNG file for a configured pending profile file field | Implemented |
+| `POST` | `/api/v1/applications/profile/selfie/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Upload the required profile biometric selfie after server-side face validation | Implemented |
+| `POST` | `/api/v1/applications/profile/submit/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Validate and complete the profile so the application can enter normal admissions review | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
 | `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
@@ -65,7 +69,7 @@ The baseline health and authentication boundaries, the first student-application
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
 | `GET` | `/api/v1/results/exam-reviews/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | List persisted Exam Review queue summaries | Implemented |
 | `GET` | `/api/v1/results/exam-reviews/{reviewId}/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Read one persisted Exam Review summary | Implemented |
-| `POST` | `/api/v1/results/exam-reviews/{reviewId}/release/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Finalize a graded Exam Review record without creating a Score Management row | Implemented |
+| `POST` | `/api/v1/results/exam-reviews/{reviewId}/release/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Atomically hand off a completed graded review to Score Management and finalize it | Implemented |
 | `POST` | `/api/v1/results/exam-reviews/{reviewId}/grading-status/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Mark an unreleased Exam Review as `GRADED` or return it to `SUBMITTED` | Implemented |
 | `POST` | `/api/v1/results/exam-reviews/{reviewId}/answer-sheets/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Upload a private student answer sheet for Exam Review | Implemented |
 | `POST` | `/api/v1/results/exam-reviews/{reviewId}/items/{itemId}/score/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Save the official score for an unreleased subjective Exam Review item | Implemented |
@@ -74,7 +78,7 @@ The baseline health and authentication boundaries, the first student-application
 
 `GET /api/v1/results/exam-reviews/` returns persisted review summaries ordered by latest submission. Queue rows include `id`, `attemptCode`, `candidateId`, `candidateName`, `examSetCode`, `submittedAt`, `status`, aggregate score fields, `pendingSubjectiveItems`, and reviewer metadata, while intentionally excluding assessment content, answer keys, and student answers. `GET /api/v1/results/exam-reviews/{reviewId}/` adds the authorized `examItems` detail: subject, item number and type, synthetic question, choices, student response, response duration and timestamp, expected answer, rubric, automated proposed score, official points, and derived review status. Local developers may create seven repeatable synthetic exams, including five pending submissions and 20 review items per exam, with `python manage.py seed_exam_reviews --settings=config.settings.local` after applying migrations. Local settings permit an unauthenticated prototype frontend to read only records in the `DEMO-2026` seed cycle; this exception is disabled in base and production settings, and non-demo records always remain behind role authentication. Exam Review endpoints are implemented by `apps.exam_reviews` while retaining the public `/api/v1/results/exam-reviews/` prefix. Migration `exam_reviews.0001_initial` owns its three persisted models and depends on `applications.StudentApplication`; `apps.results` and its migration chain remain owned by Score Management. Synthetic rows can be recreated by migrating forward and rerunning the seed command.
 
-`POST /api/v1/results/exam-reviews/{reviewId}/release/` changes a `GRADED` record to `FINALIZED` and records the releasing role and timestamp. It does not create or update a Score Management candidate score, batch, rank, percentile, or release row. Pending or already-finalized records return `409`. Local prototype access is limited to the synthetic `DEMO-2026` cycle; production and non-demo releases require an authorized role.
+`POST /api/v1/results/exam-reviews/{reviewId}/release/` matches exactly one Score Management ExamSet by `exam_set_code`, creates or safely updates the candidate's unprocessed approved score, then changes the review from `GRADED` to `FINALIZED` and records the releasing role and timestamp in the same database transaction. The handoff copies the application identity snapshot, raw/max score, and two-decimal percentage into the matched ExamSet's session and ranking population. Missing or ambiguous ExamSet configuration, invalid candidate identity, pending subjective scoring, or any processed/released target returns `409` and leaves both records unchanged. This endpoint does not calculate ranks or percentiles and does not release results to students. Local prototype access is limited to the synthetic `DEMO-2026` cycle; production and non-demo releases require an authorized role.
 
 `POST /api/v1/results/exam-reviews/{reviewId}/grading-status/` accepts `{ "status": "GRADED" }` or `{ "status": "SUBMITTED" }`. Marking a record graded stores reviewer metadata; returning it to pending clears that metadata. `FINALIZED` records are locked and return `409`.
 
@@ -169,7 +173,40 @@ Successful response:
 }
 ```
 
-`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, and records a release audit row. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues no-score availability email notifications in chunks for released candidates with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend attempts to enqueue a Django RQ dispatch job after the release transaction commits; if Redis is unavailable, release remains successful and notifications stay `PENDING`. The worker drains pending notifications across multiple batches. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. SMTP delivery failures are recorded later by the notification dispatch job on the outbox row and can be retried while below the configured attempt limit. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+
+Successful release response:
+
+```json
+{
+  "id": "SESSION-2027-REGULAR",
+  "status": "RESULTS_RELEASED",
+  "releasedCount": 188394,
+  "notificationQueuedCount": 188000,
+  "notificationSkippedCount": 394,
+  "notificationFailedCount": 0
+}
+```
+
+Queued student release emails are dispatched out-of-band by the Django RQ worker:
+
+```powershell
+..\venv\Scripts\python.exe manage.py rqworker default --worker-class rq.SimpleWorker --settings=config.settings.local
+```
+
+On Windows, use `rq.SimpleWorker`; the default RQ worker uses `os.fork()`, which is not available on Windows.
+
+If the worker is unavailable, use the manual fallback:
+
+```powershell
+..\venv\Scripts\python.exe manage.py dispatch_score_release_notifications --limit 100 --settings=config.settings.local
+```
+
+Failed notifications can be retried explicitly:
+
+```powershell
+..\venv\Scripts\python.exe manage.py dispatch_score_release_notifications --limit 100 --retry-failed --max-attempts 3 --settings=config.settings.local
+```
 
 `GET /api/v1/results/score-management/batches/{sessionId}/export/` streams processed approved scores as `text/csv`. The CSV includes candidate ID, candidate name, exam set, raw score, maximum score, final score, percentile, overall rank, and release status. Text cells that could be interpreted as spreadsheet formulas are prefixed before streaming.
 
@@ -336,6 +373,10 @@ templateVersion,firstName,middleName,lastName,suffix,dateOfBirth,sex,email,mobil
 ```
 
 `POST /api/v1/applications/bulk-upload/{batchId}/confirm/` is idempotent. It imports only rows still marked valid, rechecks LRN/email conflicts before each row is created, marks newly conflicting rows without blocking other rows, and returns the same summary shape plus `importedRows` and `rejectedRows`. Imported applications are created with `status = SUBMITTED`, `completionStatus = PENDING_STUDENT_COMPLETION`, `submissionSource = ADMISSIONS_BULK_UPLOAD`, `submittedByUserId`, `bulkUploadBatchId`, and `bulkUploadRowNumber`. Confirmed bulk-upload rows create active Student accounts immediately, generate a temporary password, require password change on first login, and send an activation email containing the login email, temporary password, a direct `/login?activation=bulk&email=...` first-login link, and first-login instructions. Bulk upload does not accept selfie/student-ID/document files, and approval is blocked while `completionStatus = PENDING_STUDENT_COMPLETION`.
+
+Bulk-uploaded students complete missing application requirements through `/api/v1/applications/profile/`. `GET` returns `{application, fields, progress}` for the authenticated student's latest non-rejected admissions-bulk-upload application with `completionStatus = PENDING_STUDENT_COMPLETION`. `fields` is the current enabled Student Registration configuration, including dynamic file rows; `progress` contains `{completed, total, percent, remaining}` where each remaining item includes `section`, `fieldKey`, `label`, `type`, and `required`.
+
+`PATCH /api/v1/applications/profile/` accepts the same editable sections as owned application updates plus optimistic concurrency: `{version, personal?, address?, school?, coursePreferences?, reviewStep?}`. Draft saves keep the application submitted for review intake but do not clear `PENDING_STUDENT_COMPLETION`. `POST /api/v1/applications/profile/attachments/` accepts multipart `{fieldName, file}` for enabled dynamic file rows and replaces the student's prior file for that field. `POST /api/v1/applications/profile/selfie/` accepts multipart `{file}`, validates the captured JPEG/PNG selfie with the same server-side face checks used by Student Registration, and replaces the student's prior profile selfie. `POST /api/v1/applications/profile/submit/` accepts `{version}`, validates the required selfie, static required fields, enabled high-priority dynamic fields, required dynamic file uploads, course preferences, consent/declaration, and business rules, then sets `completionStatus = COMPLETE`. Student portal routes that require a complete application redirect pending students to `/student/profile` until this transition succeeds.
 
 The applicant registration audit log displays:
 
@@ -1151,7 +1192,7 @@ authorization or authoritative Exam Set state.
 | Assessments and question banks | `/api/v1/assessments` | `TBD` |
 | Exam schedules, attempts, responses | `/api/v1/exams` | `TBD` |
 | Proctoring sessions and incidents | `/api/v1/proctoring` | `TBD` |
-| Scores and result release | `/api/v1/results` | Partially implemented: Exam Review queue/detail, grading, answer-sheet upload, and finalization plus Score Management processing, ranking, batch release, and CSV export; cross-module handoff and broader audit history remain `TBD` |
+| Scores and result release | `/api/v1/results` | Partially implemented: Exam Review queue/detail, grading, answer-sheet upload, atomic Score Management handoff/finalization, plus Score Management processing, ranking, batch release, and CSV export; broader audit history and external distribution remain `TBD` |
 | Administrative users/configuration | `/api/v1/administration` | `TBD` |
 | External integrations | `/api/v1/integrations` | `TBD` |
 | Authorized audit queries | `/api/v1/audit-events` | `TBD` |
