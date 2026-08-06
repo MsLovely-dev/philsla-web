@@ -376,11 +376,21 @@ class Step2ConfigurationEndpointTests(TestCase):
         import numpy as np
 
         class FakeDetector:
+            def __init__(self, detections):
+                self.detections = detections
+
             def empty(self):
                 return False
 
             def detectMultiScale(self, *args, **kwargs):
-                return np.array([[220, 120, 150, 150]])
+                return np.array(self.detections)
+
+        def cascade_classifier(path):
+            if "eye" in path:
+                return FakeDetector([[30, 25, 24, 24], [92, 25, 24, 24]])
+            if "smile" in path:
+                return FakeDetector([[48, 54, 42, 18]])
+            return FakeDetector([[220, 120, 150, 150]])
 
         registration = APIClient()
         verified = registration.post(
@@ -403,7 +413,7 @@ class Step2ConfigurationEndpointTests(TestCase):
         _, encoded = cv2.imencode(".jpg", image_data)
         image = SimpleUploadedFile("webcam-selfie.jpg", encoded.tobytes(), content_type="image/jpeg")
 
-        with patch("cv2.CascadeClassifier", return_value=FakeDetector()):
+        with patch("cv2.CascadeClassifier", side_effect=cascade_classifier):
             response = registration.post(
                 reverse("applications:registration-identity-selfie-face"),
                 {"file": image},
@@ -598,11 +608,21 @@ class Step2ConfigurationEndpointTests(TestCase):
         import numpy as np
 
         class FakeDetector:
+            def __init__(self, detections):
+                self.detections = detections
+
             def empty(self):
                 return False
 
             def detectMultiScale(self, *args, **kwargs):
-                return np.array([[105, 155, 150, 150]])
+                return np.array(self.detections)
+
+        def cascade_classifier(path):
+            if "eye" in path:
+                return FakeDetector([[30, 25, 24, 24], [92, 25, 24, 24]])
+            if "smile" in path:
+                return FakeDetector([[48, 54, 42, 18]])
+            return FakeDetector([[105, 155, 150, 150]])
 
         registration = APIClient()
         verified = registration.post(
@@ -625,7 +645,7 @@ class Step2ConfigurationEndpointTests(TestCase):
         _, encoded = cv2.imencode(".jpg", image_data)
         image = SimpleUploadedFile("portrait-webcam-selfie.jpg", encoded.tobytes(), content_type="image/jpeg")
 
-        with patch("cv2.CascadeClassifier", return_value=FakeDetector()):
+        with patch("cv2.CascadeClassifier", side_effect=cascade_classifier):
             response = registration.post(
                 reverse("applications:registration-identity-selfie-face"),
                 {"file": image},

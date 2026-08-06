@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("accounts", "0004_passwordrecoverytoken"),
+        ("accounts", "0006_remove_accountprofile_api_permissions"),
         ("exams", "0001_initial"),
     ]
 

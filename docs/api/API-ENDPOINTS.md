@@ -47,6 +47,127 @@ The baseline health and authentication boundaries plus the first student-applica
 | `PUT`, `PATCH`, `DELETE` | `/api/v1/configuration/admin/fields/{fieldId}/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | Update or delete a configurable field maintenance row | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
+| `GET` | `/api/v1/results/exam-reviews/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | List persisted Exam Review queue summaries | Implemented |
+| `GET` | `/api/v1/results/exam-reviews/{reviewId}/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Read one persisted Exam Review summary | Implemented |
+| `POST` | `/api/v1/results/exam-reviews/{reviewId}/release/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Finalize a graded Exam Review record without creating a Score Management row | Implemented |
+| `POST` | `/api/v1/results/exam-reviews/{reviewId}/grading-status/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Mark an unreleased Exam Review as `GRADED` or return it to `SUBMITTED` | Implemented |
+| `POST` | `/api/v1/results/exam-reviews/{reviewId}/answer-sheets/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Upload a private student answer sheet for Exam Review | Implemented |
+| `POST` | `/api/v1/results/exam-reviews/{reviewId}/items/{itemId}/score/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | Save the official score for an unreleased subjective Exam Review item | Implemented |
+
+### Exam Review queue
+
+`GET /api/v1/results/exam-reviews/` returns persisted review summaries ordered by latest submission. Queue rows include `id`, `attemptCode`, `candidateId`, `candidateName`, `examSetCode`, `submittedAt`, `status`, aggregate score fields, `pendingSubjectiveItems`, and reviewer metadata, while intentionally excluding assessment content, answer keys, and student answers. `GET /api/v1/results/exam-reviews/{reviewId}/` adds the authorized `examItems` detail: subject, item number and type, synthetic question, choices, student response, response duration and timestamp, expected answer, rubric, automated proposed score, official points, and derived review status. Local developers may create seven repeatable synthetic exams, including five pending submissions and 20 review items per exam, with `python manage.py seed_exam_reviews --settings=config.settings.local` after applying migrations. Local settings permit an unauthenticated prototype frontend to read only records in the `DEMO-2026` seed cycle; this exception is disabled in base and production settings, and non-demo records always remain behind role authentication. Exam Review endpoints are implemented by `apps.exam_reviews` while retaining the public `/api/v1/results/exam-reviews/` prefix. Migration `exam_reviews.0001_initial` owns its three persisted models and depends on `applications.StudentApplication`; `apps.results` and its migration chain remain owned by Score Management. Synthetic rows can be recreated by migrating forward and rerunning the seed command.
+
+`POST /api/v1/results/exam-reviews/{reviewId}/release/` changes a `GRADED` record to `FINALIZED` and records the releasing role and timestamp. It does not create or update a Score Management candidate score, batch, rank, percentile, or release row. Pending or already-finalized records return `409`. Local prototype access is limited to the synthetic `DEMO-2026` cycle; production and non-demo releases require an authorized role.
+
+`POST /api/v1/results/exam-reviews/{reviewId}/grading-status/` accepts `{ "status": "GRADED" }` or `{ "status": "SUBMITTED" }`. Marking a record graded stores reviewer metadata; returning it to pending clears that metadata. `FINALIZED` records are locked and return `409`.
+
+`POST /api/v1/results/exam-reviews/{reviewId}/answer-sheets/` accepts `multipart/form-data` with one `file` and optional `templateSource`: `STANDARD_CSV`, `HANDWRITTEN_OCR`, or `OMR_TEMPLATE_PAPER` (default `STANDARD_CSV`). The backend validates the file bytes and accepts PDF, JPEG, or PNG up to 10 MB. Uploads and their selected template source are stored under generated private paths as immutable versions; the queue/detail response exposes only safe metadata for the latest version and never exposes a public file URL. A `FINALIZED` record rejects additional uploads with `409`. The local prototype exception is limited to synthetic `DEMO-2026` records and remains disabled outside local settings. Uploading records the requested recognition path but does not yet parse, map, or score answer content.
+
+`POST /api/v1/results/exam-reviews/{reviewId}/items/{itemId}/score/` accepts `{ "points": 8 }` for a subjective item. The backend rejects objective-item overrides, scores above the item's maximum, item/review mismatches, and changes to `FINALIZED` records. A successful save recalculates the aggregate total and remaining pending-subjective count from persisted item scores.
+| `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` | List examination sessions with score-processing status and candidate counts | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` | Return paginated approved candidate score records, with rank and percentile populated after processing | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` | Bearer token | `SYSTEM_ADMIN` | Return a score-anchored read-only candidate profile for a candidate in the selected score batch | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `SYSTEM_ADMIN` | Release already processed examination results | Implemented |
+| `GET` | `/api/v1/results/score-management/batches/{sessionId}/export/` | Bearer token | `SYSTEM_ADMIN` | Stream processed approved score results as CSV | Implemented |
+
+### Score Management
+
+Score Management is backend-owned. The frontend may trigger processing and release, but it must not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
+
+`GET /api/v1/results/score-management/batches/` returns persisted examination sessions:
+
+```json
+{
+  "count": 1,
+  "results": [
+    {
+      "id": "SESSION-2027-REGULAR",
+      "name": "PhilSA Regular Examination 2027",
+      "status": "READY_FOR_PROCESSING",
+      "isClosed": true,
+      "totalCandidates": 200000,
+      "approvedScores": 188394,
+      "excludedScores": 11606,
+      "processingBatchId": "SCORE-PROC-ABC123DEF456",
+      "processedAt": "2026-08-03T08:00:00+00:00",
+      "processedBy": "42",
+      "processedCount": 188394,
+      "processingProgress": 100
+    }
+  ]
+}
+```
+
+`POST /api/v1/results/score-management/batches/{sessionId}/process/` accepts:
+
+```json
+{
+  "allowReprocessing": false
+}
+```
+
+The backend validates that `allowReprocessing` is a boolean, the session exists, the session is closed, approved scores are present, and the session has not already been processed unless `allowReprocessing` is true. Processing uses approved records only, groups by ranking population, applies competition ranking, computes percentile as the percent of approved candidates in the same population with lower final scores, writes `overallRank`, `percentile`, processing timestamp, processing batch, and leaves release status as `NOT_RELEASED`.
+
+Successful response:
+
+```json
+{
+  "id": "SESSION-2027-REGULAR",
+  "status": "SCORING_PROCESSED",
+  "processingBatchId": "SCORE-PROC-ABC123DEF456",
+  "processedBy": "42",
+  "processedCount": 188394,
+  "excludedCount": 11606
+}
+```
+
+`GET /api/v1/results/score-management/batches/{sessionId}/results/?page=1&pageSize=25&sortKey=finalScore&sortDirection=desc` returns approved score records for the selected batch. Before processing, `overallRank` and `percentile` are `null`; after processing, they contain the computed ranking values. If no sort is provided, results default to highest final score first. `page` must be a positive integer and `pageSize` must be between 1 and 100. `sortKey` supports `candidateId`, `candidateName`, `examName`, `finalScore`, `percentile`, `rank`, and `releaseStatus`; `sortDirection` supports `asc` or `desc`. Optional `search` filters by candidate name and by candidate ID or LRN prefix. Optional `releaseStatus` filters to `NOT_RELEASED` or `RELEASED`.
+
+`GET /api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` returns the selected approved score record plus a read-only application profile when the score record's LRN matches a non-draft application. The profile includes whitelisted personal, address, school, course preference, PWD/accommodation, reviewer directive, student photo URL, and registration activity log fields for display. The endpoint is anchored to the selected `sessionId` and `candidateId`; it must not expose arbitrary LRN lookup. The profile is display-only in Score Management and must not include application decision actions.
+
+```json
+{
+  "count": 188394,
+  "page": 1,
+  "pageSize": 25,
+  "results": [
+    {
+      "id": "SCORE-PHL-2027-000001",
+      "candidateId": "PHL-2027-000001",
+      "lrn": "109000000001",
+      "candidateName": "Alon Reyes",
+      "sessionId": "SESSION-2027-REGULAR",
+      "rankingPopulationId": "POP-REGULAR-2027",
+      "examSetId": "ES-BP0001",
+      "rawScore": 193,
+      "maxScore": 200,
+      "finalScore": 96.5,
+      "overallRank": 1,
+      "percentile": 99.1234,
+      "releaseStatus": "NOT_RELEASED",
+      "processingBatchId": "SCORE-PROC-ABC123DEF456"
+    }
+  ]
+}
+```
+
+`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, and records a release audit row. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+
+`GET /api/v1/results/score-management/batches/{sessionId}/export/` streams processed approved scores as `text/csv`. The CSV includes candidate ID, candidate name, exam set, raw score, maximum score, final score, percentile, overall rank, and release status. Text cells that could be interpreted as spreadsheet formulas are prefixed before streaming.
+
+Synthetic local/demo data can be loaded with:
+
+```bash
+python manage.py seed_score_management --count 200000 --seed 2027 --reset
+```
+
+Test coverage:
+
+- Domain tests: `backend/apps/results/tests/test_score_processing.py`.
+- API tests: `backend/apps/results/tests/test_score_management_api.py`.
+- Seed command tests: `backend/apps/results/tests/test_score_management_seed_command.py`.
 | `GET` | `/api/v1/analytics/national/overview/` | Required bearer access token | `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, or `SYSTEM_ADMIN` | Return aggregated national registration metrics computed from real `StudentApplication` data | Implemented |
 | `GET` | `/api/v1/applications/{applicationId}/attachments/{attachmentId}/` | Bearer token | Application owner for editable own records, or `SYSTEM_ADMIN`/`ADMISSIONS_REVIEWER` for non-draft review records | Stream a private dynamic registration attachment | Implemented |
 
@@ -83,7 +204,7 @@ The primary local test learner (`123456789012`, birthdate `2008-05-15`) is Lovel
 
 Unknown LRNs return `400 LRN_VERIFICATION_FAILED`; an unavailable registry returns `503 LRN_REGISTRY_UNAVAILABLE`; an existing active application in `ACTIVE_EXAM_CYCLE_ID` returns `409 CONFLICT`. Five failed attempts for one LRN start a 15-minute `429 LRN_COOLDOWN`. A separate device/network throttle applies on top. A conditional database uniqueness constraint protects both LRN/cycle and owner/cycle against concurrent non-rejected registrations. LRN values and dates of birth are not written to request or audit logs.
 
-Application request and response bodies use five public sections: `personal` (object), `address` (object), `school` (object), `coursePreferences` (array of `{university, course}` objects), and `reviewStep` (object). The backend persists those sections in structured student-application holding tables, not JSON columns, so review, validation, reporting, and account activation can query stable fields. Responses include a backend-generated, read-only `candidateId` in `PS-YYYY-XXXX-XXXX` format, where `YYYY` is the registration year and the final eight characters are a unique random code. Responses also include read-only `lrnProfile` when the application was created from a verified LRN token, allowing admissions review screens to display the registry-sourced identity and school values used during registration. Responses include read-only `photoUrl` when stored identity media exists; it points to the enrolled selfie first and falls back to the Student ID front image when no selfie is available. Responses include `additionalAttachments`, an array of `{id, section, fieldKey, filename, contentType, size, url}` for dynamic registration attachment fields linked to the application. Create accepts either a successful LRN verification token or manual Step 1 high-priority information when LRN/PhilSys verification is unavailable. Manual Step 1 account creation requires first name, last name, birth date, sex, school ID, school name, grade level, enrollment status, school year, email, mobile number, and password. Manual records are marked `MANUAL_PENDING` so the student can later add LRN or PhilSys ID for identity verification. Initial registration does not require an existing account before submission. When submission succeeds, the backend stores the pending registration credentials on the application but does not create or activate the Student account. The account is created, activated, linked as `owner`, and cleared of the pending password hash only after an admissions reviewer or system admin approves the application. The registration password is accepted only as a write-only top-level `password` field and is never returned in the JSON payload or API response. A second active/non-rejected registration for the same non-blank LRN and exam cycle returns `409 CONFLICT`; blank manual LRN values do not collide with one another, but each submitted registration still requires a unique account email.
+Application request and response bodies use five public sections: `personal` (object), `address` (object), `school` (object), `coursePreferences` (array of `{university, course}` objects), and `reviewStep` (object). The backend persists those sections in structured student-application holding tables, not JSON columns, so review, validation, reporting, and account activation can query stable fields. Responses include a backend-generated, read-only `candidateId` in `PHL-YYYY-XXXXXX` format, where `YYYY` is the registration year and the final six characters are a unique random code. Responses also include read-only `lrnProfile` when the application was created from a verified LRN token, allowing admissions review screens to display the registry-sourced identity and school values used during registration. Responses include read-only `photoUrl` when stored identity media exists; it points to the enrolled selfie first and falls back to the Student ID front image when no selfie is available. Create accepts either a successful LRN verification token or manual Step 1 high-priority information when LRN/PhilSys verification is unavailable. Manual Step 1 account creation requires first name, last name, birth date, sex, school ID, school name, grade level, enrollment status, school year, email, mobile number, and password. Manual records are marked `MANUAL_PENDING` so the student can later add LRN or PhilSys ID for identity verification. Initial registration does not require an existing account before submission. When submission succeeds, the backend stores the pending registration credentials on the application but does not create or activate the Student account. The account is created, activated, linked as `owner`, and cleared of the pending password hash only after an admissions reviewer or system admin approves the application. The registration password is accepted only as a write-only top-level `password` field and is never returned in the JSON payload or API response. A second active/non-rejected registration for the same non-blank LRN and exam cycle returns `409 CONFLICT`; blank manual LRN values do not collide with one another, but each submitted registration still requires a unique account email.
 
 Final public registration submission is performed by adding `submitOnCreate: true` to the create request:
 
@@ -855,7 +976,7 @@ Test coverage:
 | Assessments and question banks | `/api/v1/assessments` | `TBD` |
 | Exam schedules, attempts, responses | `/api/v1/exams` | `TBD` |
 | Proctoring sessions and incidents | `/api/v1/proctoring` | `TBD` |
-| Scores and result release | `/api/v1/results` | `TBD` |
+| Scores and result release | `/api/v1/results` | Partially implemented: Exam Review queue/detail, grading, answer-sheet upload, and finalization plus Score Management processing, ranking, batch release, and CSV export; cross-module handoff and broader audit history remain `TBD` |
 | Administrative users/configuration | `/api/v1/administration` | `TBD` |
 | External integrations | `/api/v1/integrations` | `TBD` |
 | Authorized audit queries | `/api/v1/audit-events` | `TBD` |

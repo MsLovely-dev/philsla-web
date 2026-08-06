@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
-  Search, 
+  Search,
+  Filter,
   Layers, 
   Clock, 
   Shuffle, 
@@ -213,6 +214,118 @@ const INITIAL_ASSEMBLIES: ExamAssemblyForm[] = [
   }
 ];
 
+interface PublishedTestingCenter {
+  id: string;
+  name: string;
+  code: string;
+  classification: 'PUBLIC' | 'PRIVATE';
+  region: string;
+  city: string;
+  administrator: string;
+  email: string;
+  phone: string;
+  capacity: string;
+}
+
+const PUBLISHED_TESTING_CENTERS: PublishedTestingCenter[] = [
+  {
+    id: 'upd-ncr',
+    name: 'University of the Philippines Diliman',
+    code: 'UPD-NCR',
+    classification: 'PUBLIC',
+    region: 'NCR - National Capital Region',
+    city: 'Quezon City',
+    administrator: 'Dr. Ramon Santos',
+    email: 'r.santos@up.edu.ph',
+    phone: '0917-111-2233',
+    capacity: '2,500 Seats'
+  },
+  {
+    id: 'pup-ncr',
+    name: 'Polytechnic University of the Philippines',
+    code: 'PUP-NCR',
+    classification: 'PUBLIC',
+    region: 'NCR - National Capital Region',
+    city: 'Manila',
+    administrator: 'Prof. Maria Theresa Reyes',
+    email: 'mt.reyes@pup.edu.ph',
+    phone: '0918-222-3344',
+    capacity: '3,000 Seats'
+  },
+  {
+    id: 'admu-ncr',
+    name: 'Ateneo de Manila University',
+    code: 'ADMU-NCR',
+    classification: 'PRIVATE',
+    region: 'NCR - National Capital Region',
+    city: 'Quezon City',
+    administrator: 'Fr. Roberto Yap, SJ',
+    email: 'ryap@ateneo.edu',
+    phone: '0919-333-4455',
+    capacity: '1,800 Seats'
+  },
+  {
+    id: 'dlsu-ncr',
+    name: 'De La Salle University',
+    code: 'DLSU-NCR',
+    classification: 'PRIVATE',
+    region: 'NCR - National Capital Region',
+    city: 'Manila',
+    administrator: 'Dr. Jose Maria Cruz',
+    email: 'jm.cruz@dlsu.edu.ph',
+    phone: '0920-444-5566',
+    capacity: '2,000 Seats'
+  },
+  {
+    id: 'ust-ncr',
+    name: 'University of Santo Tomas',
+    code: 'UST-NCR',
+    classification: 'PRIVATE',
+    region: 'NCR - National Capital Region',
+    city: 'Manila',
+    administrator: 'Prof. Clarita Dela Cruz',
+    email: 'c.delacruz@ust.edu.ph',
+    phone: '0921-555-6677',
+    capacity: '2,800 Seats'
+  },
+  {
+    id: 'plm-ncr',
+    name: 'Pamantasan ng Lungsod ng Maynila',
+    code: 'PLM-NCR',
+    classification: 'PUBLIC',
+    region: 'NCR - National Capital Region',
+    city: 'Manila',
+    administrator: 'Atty. Fernando Garcia',
+    email: 'f.garcia@plm.edu.ph',
+    phone: '0922-666-7788',
+    capacity: '1,500 Seats'
+  },
+  {
+    id: 'qcu-ncr',
+    name: 'Quezon City University',
+    code: 'QCU-NCR',
+    classification: 'PUBLIC',
+    region: 'NCR - National Capital Region',
+    city: 'Quezon City',
+    administrator: 'Dr. Belen Mercado',
+    email: 'b.mercado@qcu.edu.ph',
+    phone: '0923-777-8899',
+    capacity: '1,200 Seats'
+  },
+  {
+    id: 'feu-ncr',
+    name: 'Far Eastern University',
+    code: 'FEU-NCR',
+    classification: 'PRIVATE',
+    region: 'NCR - National Capital Region',
+    city: 'Manila',
+    administrator: 'Prof. Alejandro Santos',
+    email: 'a.santos@feu.edu.ph',
+    phone: '0924-888-9900',
+    capacity: '1,600 Seats'
+  }
+];
+
 export default function ExamSets() {
   // Global States
   const [activeTab, setActiveTab] = useState<'dashboard' | 'assembly' | 'packages' | 'audit'>('dashboard');
@@ -226,6 +339,10 @@ export default function ExamSets() {
   const [syncingCenters, setSyncingCenters] = useState<Record<string, 'IDLE' | 'SYNCING' | 'SUCCESS' | 'ERROR'>>({});
   const [syncLogs, setSyncLogs] = useState<string[]>([]);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [centerSearchQuery, setCenterSearchQuery] = useState('');
+  const [centerClassificationFilter, setCenterClassificationFilter] = useState<'ALL' | 'PUBLIC' | 'PRIVATE'>('ALL');
+  const [centerRegionFilter, setCenterRegionFilter] = useState('ALL');
+  const [centerCityFilter, setCenterCityFilter] = useState('ALL');
   const [centerSyncRegistry, setCenterSyncRegistry] = useState<Record<string, string[]>>(() => {
     const saved = localStorage.getItem('philsa_exam_sync_registry');
     return saved ? JSON.parse(saved) : {};
@@ -356,7 +473,7 @@ export default function ExamSets() {
     name: '',
     code: '',
     blueprintId: INITIAL_BLUEPRINTS[0]?.id || '',
-    examPeriod: 'AY 2026-2027 Nationwide Admissions',
+    batch: 'Batch 1 - AY 2026-2027',
     examType: 'Scholarship',
     academicYear: '2026-2027',
     instructions: 'Answer all questions according to rules.',
@@ -406,7 +523,7 @@ export default function ExamSets() {
 
   const hubActiveTab: ExamHubTabKey =
     activeTab === 'dashboard' ? 'setAssembly' :
-    activeTab === 'assembly' ? 'builder' :
+    activeTab === 'assembly' ? 'setAssembly' :
     activeTab === 'packages' ? 'published' :
     'audit';
 
@@ -418,24 +535,18 @@ export default function ExamSets() {
 
     if (tab === 'setAssembly') {
       setActiveTab('dashboard');
-      navigate('/admin/hub/exam-sets#dashboard');
-      return;
-    }
-
-    if (tab === 'builder') {
-      setActiveTab('assembly');
-      navigate('/admin/hub/exam-sets#assembly');
+      navigate('/admin/hub/exam-sets/content#dashboard');
       return;
     }
 
     if (tab === 'published') {
       setActiveTab('packages');
-      navigate('/admin/hub/exam-sets#packages');
+      navigate('/admin/hub/exam-sets/content#packages');
       return;
     }
 
     setActiveTab('audit');
-    navigate('/admin/hub/exam-sets#audit');
+    navigate('/admin/hub/exam-sets/content#audit');
   };
 
   // Log an audit entry helper
@@ -514,6 +625,31 @@ export default function ExamSets() {
       warnings
     };
   };
+
+  const filteredPublishedTestingCenters = PUBLISHED_TESTING_CENTERS.filter((center) => {
+    const matchesQuery =
+      center.name.toLowerCase().includes(centerSearchQuery.toLowerCase()) ||
+      center.code.toLowerCase().includes(centerSearchQuery.toLowerCase()) ||
+      center.administrator.toLowerCase().includes(centerSearchQuery.toLowerCase()) ||
+      center.city.toLowerCase().includes(centerSearchQuery.toLowerCase()) ||
+      center.region.toLowerCase().includes(centerSearchQuery.toLowerCase());
+    const matchesClassification =
+      centerClassificationFilter === 'ALL' || center.classification === centerClassificationFilter;
+    const matchesRegion = centerRegionFilter === 'ALL' || center.region === centerRegionFilter;
+    const matchesCity = centerCityFilter === 'ALL' || center.city === centerCityFilter;
+    return matchesQuery && matchesClassification && matchesRegion && matchesCity;
+  });
+
+  const auditTrailEntries = assemblies
+    .flatMap((asm) =>
+      asm.auditLog.map((entry) => ({
+        ...entry,
+        examName: asm.name,
+        examCode: asm.code,
+        examPeriod: asm.examPeriod,
+      })),
+    )
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
   // Auto-assembly algorithm
   const handleAutoAssemble = (assemblyId: string, blueprintId: string) => {
@@ -600,23 +736,23 @@ export default function ExamSets() {
     const bp = INITIAL_BLUEPRINTS.find(b => b.id === wizardMeta.blueprintId);
     if (!bp) return;
 
-    const newAssembly: ExamAssemblyForm = {
-      id: `ASM-2026-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
-      code: wizardMeta.code,
-      name: wizardMeta.name,
-      blueprintId: wizardMeta.blueprintId,
-      blueprintVersion: bp.version,
-      examVersion: '1.0-Draft',
-      examPeriod: wizardMeta.examPeriod,
-      examType: wizardMeta.examType,
-      academicYear: wizardMeta.academicYear,
-      status: 'DRAFT',
-      questions: [],
-      instructions: wizardMeta.instructions,
-      timeLimit: wizardMeta.timeLimit,
-      totalMarks: 0,
-      auditLog: []
-    };
+      const newAssembly: ExamAssemblyForm = {
+        id: `ASM-2026-${Math.random().toString(36).substr(2, 4).toUpperCase()}`,
+        code: wizardMeta.code,
+        name: bp.name,
+        blueprintId: wizardMeta.blueprintId,
+        blueprintVersion: bp.version,
+        examVersion: '1.0-Draft',
+        examPeriod: wizardMeta.batch,
+        examType: wizardMeta.examType,
+        academicYear: wizardMeta.academicYear,
+        status: 'DRAFT',
+        questions: [],
+        instructions: wizardMeta.instructions,
+        timeLimit: bp.rules.totalTimeLimit,
+        totalMarks: 0,
+        auditLog: []
+      };
 
     setAssemblies(prev => [newAssembly, ...prev]);
     setIsFormOpen(false);
@@ -780,6 +916,92 @@ export default function ExamSets() {
     showToast(`Duplicated Form ${asm.code} successfully.`, 'success');
   };
 
+  const handleDeleteAssembly = (asm: ExamAssemblyForm) => {
+    if (!confirm(`Delete ${asm.name}? This cannot be undone.`)) return;
+
+    setAssemblies((prev) => prev.filter((item) => item.id !== asm.id));
+
+    if (selectedAssembly?.id === asm.id) {
+      setSelectedAssembly(null);
+      setActiveTab('dashboard');
+    }
+
+    logAudit(
+      asm.id,
+      'DELETE',
+      asm.name,
+      'Deleted',
+      'Removed the exam set assembly from local workspace.',
+    );
+    showToast(`Deleted ${asm.name}.`, 'info');
+  };
+
+  const openAssemblyBuilder = (asm: ExamAssemblyForm) => {
+    setSelectedAssembly(asm);
+    setActiveTab('assembly');
+
+    window.requestAnimationFrame(() => {
+      document.getElementById('exam-builder-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const openPublishedUploadWorkspace = (pack: ExamAssemblyForm) => {
+    setUploadTargetPackage(pack);
+    setSelectedCenters(PUBLISHED_TESTING_CENTERS.map((center) => center.id));
+    setIsUploadModalOpen(true);
+    setSyncingCenters({});
+    setSyncLogs([]);
+    setCenterSearchQuery('');
+    setCenterClassificationFilter('ALL');
+    setCenterRegionFilter('ALL');
+    setCenterCityFilter('ALL');
+  };
+
+  const closePublishedUploadWorkspace = () => {
+    setIsUploadModalOpen(false);
+    setUploadTargetPackage(null);
+    setSyncingCenters({});
+    setSyncLogs([]);
+    setIsSyncingAll(false);
+  };
+
+  const handleStartSecureUpload = async () => {
+    if (!uploadTargetPackage || selectedCenters.length === 0) return;
+
+    setIsSyncingAll(true);
+    const logs: string[] = [];
+    const addLog = (msg: string) => {
+      const timestamp = new Date().toLocaleTimeString();
+      logs.push(`[${timestamp}] ${msg}`);
+      setSyncLogs([...logs]);
+    };
+
+    addLog(`Initializing exam broadcast protocol for package: ${uploadTargetPackage.code}`);
+    addLog(`Selected hubs: ${selectedCenters.map(c => c.toUpperCase()).join(', ')}`);
+
+    for (const centerKey of selectedCenters) {
+      setSyncingCenters(prev => ({ ...prev, [centerKey]: 'SYNCING' }));
+      addLog(`Connecting to secure endpoint for center [${centerKey.toUpperCase()}]...`);
+
+      await new Promise(r => setTimeout(r, 800));
+      addLog(`Connected. Performing RSA-2048 handshakes and signature integrity check...`);
+
+      await new Promise(r => setTimeout(r, 600));
+      addLog(`Broadcasting encrypted form payload with package hash ${uploadTargetPackage.hash || '0xAB9E...'}`);
+
+      await new Promise(r => setTimeout(r, 1000));
+      addLog(`Upload completed. Verifying storage seals at ${centerKey.toUpperCase()} database...`);
+
+      await new Promise(r => setTimeout(r, 500));
+      setSyncingCenters(prev => ({ ...prev, [centerKey]: 'SUCCESS' }));
+      addLog(`SUCCESS: ${centerKey.toUpperCase()} synchronized and active.`);
+      saveSyncStatus(uploadTargetPackage.id, [centerKey]);
+    }
+
+    addLog(`Secure multi-cast upload broadcast complete. All target terminals locked and verified.`);
+    setIsSyncingAll(false);
+  };
+
   // Archive or Retire an assembly
   const handleUpdateStatus = (asmId: string, newStatus: ExamAssemblyForm['status'], actionType: AuditEntry['action'], comment: string) => {
     setAssemblies(prev => prev.map(asm => {
@@ -937,7 +1159,7 @@ export default function ExamSets() {
   };
 
   return (
-    <div className="space-y-6 text-philsa-navy">
+    <div className="mx-auto flex w-full max-w-[1420px] flex-col gap-5 text-philsa-navy">
       
       {/* Toast Alert Banner */}
       {toast && (
@@ -954,38 +1176,6 @@ export default function ExamSets() {
       )}
 
       {/* Control Control Bar with Security Personas */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5 bg-white border border-philsa-border rounded-3xl shadow-sm">
-        <div className="space-y-1">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase bg-philsa-navy/5 text-philsa-navy">
-            <Lock className="w-2.5 h-2.5 text-philsa-red" /> PHILSA SECURE EXAMINATION FRAMEWORK
-          </span>
-          <h2 className="text-2xl font-black tracking-tight text-philsa-navy">Examination Assembly & Control</h2>
-          <p className="text-xs font-medium text-philsa-gray">Auto-generation and manual calibration of blueprint-compliant national assessment packages.</p>
-        </div>
-
-        {/* Security Role Switcher */}
-        <div className="flex items-center gap-2 bg-philsa-bg p-1.5 rounded-2xl border border-philsa-border/40 shrink-0">
-          <span className="text-[10px] font-black uppercase tracking-wider text-philsa-gray px-3">Role:</span>
-          {(['EXAM_ADMINISTRATOR', 'ACADEMIC_REVIEWER', 'SYSTEM_ADMIN'] as UserRole[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => {
-                setCurrentRole(r);
-                showToast(`Switched persona to ${r.replace('_', ' ')}`, 'info');
-              }}
-              className={`px-3 py-2 text-[10px] font-bold rounded-xl transition-all cursor-pointer ${
-                currentRole === r 
-                  ? 'bg-philsa-navy text-white shadow-sm font-black' 
-                  : 'text-philsa-gray hover:text-philsa-navy hover:bg-philsa-border/20'
-              }`}
-            >
-              {r === 'EXAM_ADMINISTRATOR' ? 'Exam Admin' : 
-               r === 'ACADEMIC_REVIEWER' ? 'Reviewer' : 'SysAdmin'}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <ExamHubTabs activeTab={hubActiveTab} onTabChange={handleHubTabChange} />
 
       {/* TAB CONTENT: DASHBOARD */}
@@ -1028,10 +1218,10 @@ export default function ExamSets() {
           </div>
 
           {/* Quick Start Assembly CTA & Draft Forms List */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             
             {/* Left: Active Assembly Workflows */}
-            <div className="lg:col-span-2 card-philsa bg-white space-y-4">
+            <div className="card-philsa bg-white space-y-4">
               <div className="flex justify-between items-center border-b border-philsa-border pb-3">
                 <div>
                   <h3 className="font-extrabold text-lg text-philsa-navy">Examination Assemblies</h3>
@@ -1077,168 +1267,107 @@ export default function ExamSets() {
               {/* Assemblies List Table */}
               <div className="overflow-x-auto border border-philsa-border rounded-2xl">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-philsa-bg font-black uppercase tracking-widest text-[9px] text-philsa-gray border-b border-philsa-border">
-                    <tr>
-                      <th className="p-4">Exam Code & Title</th>
-                      <th className="p-4">Blueprint Ref</th>
-                      <th className="p-4">Bound Items</th>
-                      <th className="p-4">Status</th>
-                      <th className="p-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-philsa-border">
-                    {assemblies
-                      .filter(asm => {
-                        const matchesSearch = asm.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                                              asm.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                              asm.academicYear.toLowerCase().includes(searchQuery.toLowerCase());
-                        const matchesFilter = statusFilter === 'ALL' || asm.status === statusFilter;
-                        return matchesSearch && matchesFilter;
-                      })
-                      .map((asm) => {
-                        const complianceChecks = evaluateValidationRules(asm);
-                        const hasErrors = complianceChecks.some(c => c.status === 'FAIL');
-                        
-                        return (
-                          <tr key={asm.id} className="hover:bg-philsa-bg/45 transition-colors">
-                            <td className="p-4 space-y-1">
-                              <div className="flex items-center gap-1.5 font-bold text-philsa-navy">
-                                <span>{asm.name}</span>
-                              </div>
-                              <div className="flex gap-2 text-[9px] font-mono text-philsa-gray">
-                                <span>{asm.code}</span>
-                                <span>•</span>
-                                <span>{asm.examPeriod}</span>
-                              </div>
-                            </td>
-                            <td className="p-4 font-mono text-[10px] text-philsa-navy">
-                              {asm.blueprintId} (v{asm.blueprintVersion})
-                            </td>
-                            <td className="p-4 space-y-1">
-                              <p className="font-bold">{asm.questions.length} questions</p>
-                              <div className="flex items-center gap-1">
-                                {hasErrors ? (
-                                  <span className="text-[9px] text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
-                                    <AlertTriangle className="w-2.5 h-2.5" /> Fail
-                                  </span>
-                                ) : (
-                                  <span className="text-[9px] text-green-600 bg-green-50 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
-                                    <Check className="w-2.5 h-2.5" /> Compliant
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="p-4">
-                              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                asm.status === 'PUBLISHED' ? 'bg-green-100 text-green-700 border border-green-200' :
-                                asm.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' :
-                                asm.status === 'ACADEMIC_REVIEW' ? 'bg-sky-100 text-sky-700 border border-sky-200' :
-                                asm.status === 'REVISION_REQUIRED' ? 'bg-red-100 text-red-700 border border-red-200' :
-                                asm.status === 'VALIDATING' ? 'bg-violet-100 text-violet-700 border border-violet-200' :
-                                'bg-slate-100 text-slate-700 border border-slate-200'
-                              }`}>
-                                {asm.status.replace('_', ' ')}
-                              </span>
-                            </td>
-                            <td className="p-4 text-right space-x-1.5 shrink-0 whitespace-nowrap">
-                              <button
-                                onClick={() => {
-                                  setSelectedAssembly(asm);
-                                  setActiveTab('assembly');
-                                }}
-                                className="bg-philsa-bg hover:bg-philsa-navy hover:text-white border border-philsa-border px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all cursor-pointer"
-                              >
-                                View
-                              </button>
+  <thead className="bg-philsa-bg font-black uppercase tracking-widest text-[9px] text-philsa-gray border-b border-philsa-border">
+    <tr>
+      <th className="px-5 py-4">Exam Set Name</th>
+      <th className="px-5 py-4">Subjects Covered</th>
+      <th className="px-5 py-4">Bound Items</th>
+      <th className="px-5 py-4">Status</th>
+      <th className="px-5 py-4 text-right">Actions</th>
+    </tr>
+  </thead>
+  <tbody className="divide-y divide-philsa-border">
+    {assemblies
+      .filter(asm => {
+        const matchesSearch = asm.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              asm.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              asm.academicYear.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesFilter = statusFilter === 'ALL' || asm.status === statusFilter;
+        return matchesSearch && matchesFilter;
+      })
+      .map((asm) => {
+        const complianceChecks = evaluateValidationRules(asm);
+        const hasErrors = complianceChecks.some(c => c.status === 'FAIL');
+        const subjectsCovered = Array.from(new Set(asm.questions.map((q) => q.subject)));
 
-                              <button
-                                onClick={() => handleDuplicateAssembly(asm)}
-                                title="Duplicate Form"
-                                className="bg-white border border-philsa-border p-1.5 rounded-xl text-philsa-navy hover:bg-philsa-bg transition-all cursor-pointer inline-flex items-center"
-                              >
-                                <Copy className="w-3.5 h-3.5" />
-                              </button>
-
-                              {asm.status !== 'PUBLISHED' && (
-                                <button
-                                  onClick={() => {
-                                    if (confirm("Confirm archiving this exam set assembly?")) {
-                                      handleUpdateStatus(asm.id, 'RETIRED', 'RETIRE', 'Archived examination form.');
-                                    }
-                                  }}
-                                  title="Archive/Retire Form"
-                                  className="bg-white border border-red-100 p-1.5 rounded-xl text-red-500 hover:bg-red-50 transition-all cursor-pointer inline-flex items-center"
-                                >
-                                  <Archive className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Right Side: Quick Statistics & Analytics */}
-            <div className="space-y-6">
-              
-              {/* Central Item Bank Coverage Summary */}
-              <div className="card-philsa bg-white p-5 space-y-4">
-                <div>
-                  <h3 className="font-extrabold text-sm text-philsa-navy">Central Item Bank Inventory</h3>
-                  <p className="text-[10px] text-philsa-gray font-semibold uppercase tracking-widest">Active Pool Depth metrics</p>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { subject: 'Reading Comp (English, Filipino)', count: itemBank.filter(q => q.subject === 'Reading Comp (English, Filipino)').length, color: 'bg-indigo-600' },
-                    { subject: 'Lang Proficiency (English, Filipino)', count: itemBank.filter(q => q.subject === 'Lang Proficiency (English, Filipino)').length, color: 'bg-green-600' },
-                    { subject: 'Math', count: itemBank.filter(q => q.subject === 'Math').length, color: 'bg-amber-500' },
-                    { subject: 'Science', count: itemBank.filter(q => q.subject === 'Science').length, color: 'bg-philsa-red' }
-                  ].map((inv) => (
-                    <div key={inv.subject} className="space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span>{inv.subject}</span>
-                        <span>{inv.count} items</span>
-                      </div>
-                      <div className="h-2 w-full bg-philsa-bg rounded-full overflow-hidden">
-                        <div className={`h-full ${inv.color}`} style={{ width: `${(inv.count / itemBank.length) * 100}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                <div className="pt-3 border-t border-philsa-border/60 text-center">
-                  <span className="text-[10px] font-black text-philsa-navy uppercase tracking-widest bg-philsa-bg py-2 px-3 rounded-xl inline-block">
-                    Total Bank Size: {itemBank.length} Approved Items
+        return (
+          <tr key={asm.id} className="border-b border-philsa-border/60 hover:bg-philsa-bg/45 transition-colors">
+            <td className="px-5 py-5 align-top">
+              <p className="text-[15px] font-semibold text-philsa-navy">{asm.name}</p>
+              <p className="mt-1 text-[10px] font-mono text-philsa-gray">
+                {asm.code} - {asm.examPeriod}
+              </p>
+            </td>
+            <td className="px-5 py-5 align-top">
+              <div className="flex flex-wrap gap-2">
+                {subjectsCovered.map((subject) => (
+                  <span
+                    key={subject}
+                    className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-700"
+                  >
+                    {subject}
                   </span>
-                </div>
+                ))}
               </div>
-
-              {/* Core Quality Compliance Alerts */}
-              <div className="card-philsa bg-white p-5 space-y-3">
-                <h3 className="font-extrabold text-sm text-philsa-navy">National Security Checkpoints</h3>
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-start gap-2.5 p-3 bg-green-50 border border-green-100 rounded-xl">
-                    <CheckCircle className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-green-950">Approved Sources Sealing</p>
-                      <p className="text-[11px] text-green-800">Only Item Writers with certified security keys can authorize question insertion.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-                    <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-amber-950">Linked Shared Stimulus Rules</p>
-                      <p className="text-[11px] text-amber-800">Linked questions must always be assembled into a sequential single subset.</p>
-                    </div>
-                  </div>
-                </div>
+            </td>
+            <td className="px-5 py-5 align-top">
+              <p className="text-[16px] font-semibold text-slate-900">{asm.questions.length} questions</p>
+              <div className="mt-1 flex items-center gap-1">
+                {hasErrors ? (
+                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold text-red-600 bg-red-50">
+                    <AlertTriangle className="h-2.5 w-2.5" /> Fail
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold text-green-600 bg-green-50">
+                    <Check className="h-2.5 w-2.5" /> Compliant
+                  </span>
+                )}
               </div>
+            </td>
+            <td className="px-5 py-5 align-top">
+              <span
+                className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${
+                  asm.status === 'PUBLISHED'
+                    ? 'border border-green-200 bg-green-100 text-green-700'
+                    : asm.status === 'APPROVED'
+                      ? 'border border-emerald-200 bg-emerald-100 text-emerald-700'
+                      : asm.status === 'ACADEMIC_REVIEW'
+                        ? 'border border-sky-200 bg-sky-100 text-sky-700'
+                        : asm.status === 'REVISION_REQUIRED'
+                          ? 'border border-red-200 bg-red-100 text-red-700'
+                          : asm.status === 'VALIDATING'
+                            ? 'border border-violet-200 bg-violet-100 text-violet-700'
+                            : 'border border-slate-200 bg-slate-100 text-slate-700'
+                }`}
+              >
+                {asm.status.replace('_', ' ')}
+              </span>
+            </td>
+            <td className="px-5 py-5 align-top">
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => openAssemblyBuilder(asm)}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-[10px] font-black uppercase text-white transition hover:bg-slate-800"
+                >
+                  <Edit className="h-3.5 w-3.5" />
+                  Edit
+                </button>
 
+                <button
+                  onClick={() => handleDeleteAssembly(asm)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3.5 py-2 text-[10px] font-black uppercase text-red-600 transition hover:bg-red-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+        );
+      })}
+  </tbody>
+</table>
+              </div>
             </div>
           </div>
         </div>
@@ -1247,6 +1376,30 @@ export default function ExamSets() {
       {/* TAB CONTENT: ASSEMBLY WORKSPACE LAB */}
       {activeTab === 'assembly' && (
         <div className="space-y-6 animate-in fade-in duration-500">
+          {selectedAssembly && (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm sm:px-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('dashboard');
+                    }}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Exam Sets
+                  </button>
+
+                  <div className="h-8 w-px bg-slate-200" />
+
+                  <p className="text-[14px] font-semibold text-slate-900">
+                    Exam Builder - {selectedAssembly.code} ({selectedAssembly.name})
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
@@ -1451,7 +1604,7 @@ export default function ExamSets() {
             </div>
 
             {/* Middle & Right: Active Form Items Editor */}
-            <div className="lg:col-span-2 card-philsa bg-white p-6 space-y-6">
+            <div id="exam-builder-panel" className="lg:col-span-2 card-philsa bg-white p-6 space-y-6">
               
               {selectedAssembly ? (
                 <div className="space-y-6">
@@ -1593,7 +1746,7 @@ export default function ExamSets() {
                                   <div className="space-y-1">
                                     <p className="text-xs font-bold text-philsa-navy leading-relaxed">{q.text}</p>
                                     <p className="text-[10px] text-philsa-gray italic font-medium">
-                                      Topic: <b className="text-slate-700">{q.topic}</b> • Competency: <b className="text-slate-700">{q.competency}</b>
+                                      Topic: <b className="text-slate-700">{q.topic}</b> - Competency: <b className="text-slate-700">{q.competency}</b>
                                     </p>
                                   </div>
 
@@ -1605,19 +1758,25 @@ export default function ExamSets() {
                                         <button
                                           onClick={() => moveQuestion(idx, 'UP')}
                                           disabled={idx === 0}
-                                          className="p-1.5 rounded-lg border border-philsa-border text-philsa-gray hover:text-philsa-navy hover:bg-white disabled:opacity-40 cursor-pointer"
+                                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-philsa-border text-philsa-gray hover:text-philsa-navy hover:bg-white disabled:opacity-40 cursor-pointer"
                                           title="Move Up"
                                         >
-                                          ▲
+                                          <span
+                                            className="block h-0 w-0 border-l-[6px] border-r-[6px] border-b-[10px] border-l-transparent border-r-transparent border-b-current"
+                                            aria-hidden="true"
+                                          />
                                         </button>
                                         {/* Down button */}
                                         <button
                                           onClick={() => moveQuestion(idx, 'DOWN')}
                                           disabled={idx === selectedAssembly.questions.length - 1}
-                                          className="p-1.5 rounded-lg border border-philsa-border text-philsa-gray hover:text-philsa-navy hover:bg-white disabled:opacity-40 cursor-pointer"
+                                          className="flex h-8 w-8 items-center justify-center rounded-lg border border-philsa-border text-philsa-gray hover:text-philsa-navy hover:bg-white disabled:opacity-40 cursor-pointer"
                                           title="Move Down"
                                         >
-                                          ▼
+                                          <span
+                                            className="block h-0 w-0 border-l-[6px] border-r-[6px] border-t-[10px] border-l-transparent border-r-transparent border-t-current"
+                                            aria-hidden="true"
+                                          />
                                         </button>
                                       </div>
 
@@ -1669,8 +1828,275 @@ export default function ExamSets() {
 
       {/* TAB CONTENT: PUBLISHED MUTABLE PACKAGES */}
       {activeTab === 'packages' && (
-        <div className="space-y-6 animate-in fade-in duration-500">
-          
+        isUploadModalOpen && uploadTargetPackage ? (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="card-philsa bg-white p-6 space-y-5">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-philsa-border pb-4">
+                <div className="space-y-1">
+                  <button
+                    onClick={closePublishedUploadWorkspace}
+                    className="inline-flex items-center gap-2 rounded-xl border border-philsa-border bg-white px-3 py-2 text-[12px] font-bold text-philsa-navy transition hover:bg-philsa-bg cursor-pointer"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to Published Exams
+                  </button>
+                  <h3 className="text-2xl font-black text-philsa-navy flex items-center gap-2">
+                    <CloudLightning className="h-6 w-6 text-green-600" />
+                    Upload Examination Set to School Testing Centers
+                  </h3>
+                  <p className="text-xs text-philsa-gray max-w-3xl">
+                    Multi-select accredited schools nationwide, filter by classification, region, and city, and broadcast encrypted exam set payloads.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={closePublishedUploadWorkspace}
+                    className="rounded-2xl border border-philsa-border bg-white px-5 py-3 text-sm font-semibold text-philsa-navy transition hover:bg-philsa-bg cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleStartSecureUpload}
+                    disabled={isSyncingAll || selectedCenters.length === 0}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-green-600 px-5 py-3 text-sm font-bold uppercase tracking-wider text-white shadow-lg shadow-green-600/15 transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                  >
+                    <CloudLightning className="h-4 w-4" />
+                    Upload to {selectedCenters.length} Selected Schools
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-philsa-border bg-slate-50/60 p-4 lg:grid-cols-4">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Exam Set Name</p>
+                  <p className="mt-1 text-[16px] font-black text-philsa-navy truncate">{uploadTargetPackage.name}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Exam Code</p>
+                  <p className="mt-1 font-mono text-[14px] font-bold text-philsa-navy">{uploadTargetPackage.code} (v{uploadTargetPackage.examVersion})</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Questions & Duration</p>
+                  <p className="mt-1 font-mono text-[14px] font-bold text-philsa-navy">{uploadTargetPackage.questions.length} Items • {uploadTargetPackage.timeLimit} Mins</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Sealed Crypto Hash</p>
+                  <p className="mt-1 break-all font-mono text-[12px] font-bold text-green-700">{uploadTargetPackage.hash || '0xAB9E...'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="card-philsa bg-white p-6 space-y-4">
+              <div className="flex flex-col gap-4 border-b border-philsa-border pb-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="space-y-1">
+                  <h4 className="text-lg font-black text-philsa-navy flex items-center gap-2">
+                    <Filter className="h-5 w-5 text-philsa-red" />
+                    Filter School Testing Centers
+                  </h4>
+                  <p className="text-xs text-philsa-gray">
+                    Search and narrow the list by classification, region, and city before broadcasting.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-philsa-gray">Showing <b>{filteredPublishedTestingCenters.length}</b> of <b>{PUBLISHED_TESTING_CENTERS.length}</b> Schools</span>
+                  <span className="rounded-full bg-green-50 px-3 py-1 font-bold text-green-700 border border-green-200">{selectedCenters.length} Selected</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Search School / Administrator</label>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-philsa-gray" />
+                    <input
+                      value={centerSearchQuery}
+                      onChange={(e) => setCenterSearchQuery(e.target.value)}
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-9 pr-4 text-[14px] outline-none focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                      placeholder="Search name, city, admin..."
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">School Classification</label>
+                  <select
+                    value={centerClassificationFilter}
+                    onChange={(e) => setCenterClassificationFilter(e.target.value as 'ALL' | 'PUBLIC' | 'PRIVATE')}
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] outline-none focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                  >
+                    <option value="ALL">All Classifications (Public & Private)</option>
+                    <option value="PUBLIC">Public</option>
+                    <option value="PRIVATE">Private</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Region</label>
+                  <select
+                    value={centerRegionFilter}
+                    onChange={(e) => setCenterRegionFilter(e.target.value)}
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] outline-none focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                  >
+                    <option value="ALL">All Regions of the Philippines</option>
+                    {Array.from(new Set(PUBLISHED_TESTING_CENTERS.map((center) => center.region))).map((region) => (
+                      <option key={region} value={region}>{region}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">City / Municipality</label>
+                  <select
+                    value={centerCityFilter}
+                    onChange={(e) => setCenterCityFilter(e.target.value)}
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-[14px] outline-none focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                  >
+                    <option value="ALL">All Cities ({PUBLISHED_TESTING_CENTERS.length} Available)</option>
+                    {Array.from(new Set(PUBLISHED_TESTING_CENTERS.map((center) => center.city))).map((city) => (
+                      <option key={city} value={city}>{city}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-philsa-border/70 pt-4 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCenters(filteredPublishedTestingCenters.map((center) => center.id))}
+                  className="rounded-xl bg-slate-100 px-4 py-2 font-bold text-slate-700 transition hover:bg-slate-200 cursor-pointer"
+                >
+                  Deselect All Filtered Schools
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCenters([])}
+                  className="font-medium text-philsa-navy transition hover:underline cursor-pointer"
+                >
+                  Clear Selection
+                </button>
+                <span className="ml-auto text-[10px] text-philsa-gray">Tip: Click any school checkbox or row to toggle selection</span>
+              </div>
+            </div>
+
+            <div className="card-philsa bg-white p-0 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full border-collapse text-left">
+                  <thead className="bg-slate-50">
+                    <tr className="border-b border-slate-200 text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-500">
+                      <th className="px-5 py-4 w-12">
+                        <input
+                          type="checkbox"
+                          checked={filteredPublishedTestingCenters.length > 0 && filteredPublishedTestingCenters.every((center) => selectedCenters.includes(center.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedCenters(filteredPublishedTestingCenters.map((center) => center.id));
+                            } else {
+                              setSelectedCenters([]);
+                            }
+                          }}
+                          className="h-4 w-4 rounded border-slate-300 text-philsa-red focus:ring-philsa-red"
+                        />
+                      </th>
+                      <th className="px-5 py-4">School ID & Name</th>
+                      <th className="px-5 py-4">Classification</th>
+                      <th className="px-5 py-4">Region & City</th>
+                      <th className="px-5 py-4">Assigned Testing Center Administrator</th>
+                      <th className="px-5 py-4">Upload Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredPublishedTestingCenters.map((center) => {
+                      const checked = selectedCenters.includes(center.id);
+                      const syncState = syncingCenters[center.id] || 'IDLE';
+                      const alreadySynced = (centerSyncRegistry[uploadTargetPackage.id] || []).includes(center.id);
+                      return (
+                        <tr
+                          key={center.id}
+                          onClick={() => setSelectedCenters((prev) => prev.includes(center.id) ? prev.filter((item) => item !== center.id) : [...prev, center.id])}
+                          className={`cursor-pointer border-b border-slate-100 transition hover:bg-slate-50 ${checked ? 'bg-green-50/30' : 'bg-white'}`}
+                        >
+                          <td className="px-5 py-4">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setSelectedCenters((prev) => prev.includes(center.id) ? prev.filter((item) => item !== center.id) : [...prev, center.id])}
+                              className="h-4 w-4 rounded border-slate-300 text-philsa-red focus:ring-philsa-red"
+                            />
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <p className="font-black text-slate-900">{center.name}</p>
+                                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-mono text-slate-500">{center.code}</span>
+                              </div>
+                              <p className="text-[10px] text-slate-400">Examinee Capacity: {center.capacity}</p>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${center.classification === 'PUBLIC' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-violet-200 bg-violet-50 text-violet-700'}`}>
+                              {center.classification}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="space-y-0.5">
+                              <p className="font-semibold text-slate-900">{center.city}</p>
+                              <p className="text-[10px] text-slate-400">{center.region}</p>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="space-y-0.5">
+                              <p className="font-semibold text-slate-900">{center.administrator}</p>
+                              <p className="text-[10px] text-slate-400">{center.email} | {center.phone}</p>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            {syncState === 'SYNCING' ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-3 py-1 text-[10px] font-bold text-amber-700 border border-amber-200">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Syncing
+                              </span>
+                            ) : alreadySynced ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-3 py-1 text-[10px] font-bold text-green-700 border border-green-200">
+                                <CheckCircle className="h-3.5 w-3.5" /> Synced
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold text-slate-500 border border-slate-200">
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredPublishedTestingCenters.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-10 text-center text-xs text-philsa-gray">
+                          No testing centers match your search criteria.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {syncLogs.length > 0 && (
+              <div className="card-philsa bg-white p-6 space-y-3">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+                  <span>Upload & Connection Log</span>
+                  {isSyncingAll && <span className="text-green-600 animate-pulse">Broadcasting packet...</span>}
+                </div>
+                <div className="h-40 space-y-1 overflow-y-auto rounded-2xl bg-slate-900 p-4 font-mono text-[10px] text-slate-200">
+                  {syncLogs.map((log, i) => (
+                    <div key={i} className="leading-snug">
+                      <span className="text-green-500">{'->'}</span> {log}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
           <div className="card-philsa bg-white p-6 space-y-4">
             <div className="border-b border-philsa-border pb-3">
               <h3 className="font-black text-lg text-philsa-navy flex items-center gap-1.5">
@@ -1689,7 +2115,6 @@ export default function ExamSets() {
                   .filter(a => a.status === 'PUBLISHED')
                   .map((pack) => (
                     <div key={pack.id} className="border border-philsa-border rounded-3xl p-6 bg-white hover:shadow-lg transition-all space-y-4 relative overflow-hidden">
-                      {/* Secure digital watermark badge */}
                       <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/5 rounded-full flex items-center justify-center translate-x-4 -translate-y-4">
                         <Lock className="w-12 h-12 text-green-500/10" />
                       </div>
@@ -1724,7 +2149,6 @@ export default function ExamSets() {
                         </div>
                       </div>
 
-                      {/* Centers Sync Status */}
                       <div className="border-t border-dashed border-philsa-border/60 pt-3 space-y-1">
                         <span className="text-[10px] font-black uppercase text-philsa-gray tracking-wider">Sync Status</span>
                         <div className="flex flex-wrap gap-1.5">
@@ -1732,13 +2156,9 @@ export default function ExamSets() {
                             const centerKey = centerName.toLowerCase();
                             const isSynced = (centerSyncRegistry[pack.id] || []).includes(centerKey);
                             return (
-                              <span 
+                              <span
                                 key={centerName}
-                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                                  isSynced 
-                                    ? 'bg-green-50 text-green-700 border border-green-200/50' 
-                                    : 'bg-slate-50 text-slate-400 border border-slate-200/50'
-                                }`}
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${isSynced ? 'bg-green-50 text-green-700 border border-green-200/50' : 'bg-slate-50 text-slate-400 border border-slate-200/50'}`}
                               >
                                 <span className={`w-1.5 h-1.5 rounded-full ${isSynced ? 'bg-green-500' : 'bg-slate-300'}`} />
                                 {centerName}
@@ -1748,11 +2168,9 @@ export default function ExamSets() {
                         </div>
                       </div>
 
-                      {/* Package inspector buttons */}
                       <div className="grid grid-cols-2 gap-2 pt-2">
                         <button
                           onClick={() => {
-                            // Render details
                             setSelectedAssembly(pack);
                             setActiveTab('assembly');
                           }}
@@ -1760,10 +2178,9 @@ export default function ExamSets() {
                         >
                           <Eye className="w-3.5 h-3.5" /> View Details
                         </button>
-                        
+
                         <button
                           onClick={() => {
-                            // Show JSON structure payload
                             const cleanPayload = {
                               packageHeader: {
                                 packageId: pack.id,
@@ -1793,35 +2210,19 @@ export default function ExamSets() {
                           <FileJson className="w-3.5 h-3.5" /> Schema
                         </button>
 
-                        {currentRole === 'SYSTEM_ADMIN' ? (
-                          <button
-                            onClick={() => {
-                              setUploadTargetPackage(pack);
-                              setSelectedCenters(['manila', 'cebu', 'davao', 'quezon']);
-                              setIsUploadModalOpen(true);
-                              setSyncingCenters({});
-                              setSyncLogs([]);
-                            }}
-                            className="col-span-2 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-green-600/15"
-                          >
-                            <CloudLightning className="w-4 h-4" /> Upload to Testing Centers
-                          </button>
-                        ) : (
-                          <div className="col-span-2 text-center p-2 bg-slate-50 border border-dashed border-slate-200 rounded-xl">
-                            <span className="text-[10px] font-semibold text-slate-400">
-                              System Admin Role Required to Broadcast
-                            </span>
-                          </div>
-                        )}
+                        <button
+                          onClick={() => openPublishedUploadWorkspace(pack)}
+                          className="col-span-2 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md shadow-green-600/15"
+                        >
+                          <CloudLightning className="w-4 h-4" /> Upload to Testing Centers
+                        </button>
                       </div>
-
                     </div>
                   ))
               )}
             </div>
           </div>
-
-        </div>
+        )
       )}
 
       {/* TAB CONTENT: AUDIT TRAIL */}
@@ -1842,261 +2243,97 @@ export default function ExamSets() {
               </span>
             </div>
 
-            {/* List of actions captured dynamically */}
-            <div className="overflow-x-auto border border-philsa-border rounded-2xl">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-philsa-bg font-black uppercase tracking-widest text-[9px] text-philsa-gray border-b border-philsa-border">
-                  <tr>
-                    <th className="p-4 w-40">Timestamp</th>
-                    <th className="p-4 w-48">Operator / User</th>
-                    <th className="p-4 w-32">Action Triggered</th>
-                    <th className="p-4">Context Modifications</th>
-                    <th className="p-4">Comments</th>
-                    <th className="p-4 text-right">Security Meta</th>
+            {/* Audit log table */}
+            <div className="overflow-x-auto rounded-2xl border border-philsa-border bg-white">
+              <table className="w-full min-w-[1200px] text-left">
+                <thead className="border-b border-philsa-border bg-white">
+                  <tr className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    <th className="px-5 py-4">Timestamp</th>
+                    <th className="px-5 py-4">Operator / User</th>
+                    <th className="px-5 py-4">Action Triggered</th>
+                    <th className="px-5 py-4">Context Modifications</th>
+                    <th className="px-5 py-4">Comments</th>
+                    <th className="px-5 py-4 text-right">Security Meta</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-philsa-border">
-                  {assemblies
-                    .flatMap(asm => asm.auditLog.map(log => ({ ...log, asmName: asm.name, asmCode: asm.code })))
-                    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                    .map((log) => (
-                      <tr key={log.id} className="hover:bg-philsa-bg/40 transition-colors">
-                        <td className="p-4 font-mono text-[10px] text-philsa-navy">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </td>
-                        <td className="p-4 font-bold text-philsa-navy">
-                          {log.user}
-                        </td>
-                        <td className="p-4">
-                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
-                            log.action === 'CREATE' ? 'bg-green-100 text-green-700' :
-                            log.action === 'ASSEMBLE' ? 'bg-sky-100 text-sky-700' :
-                            log.action === 'REPLACE_QUESTION' ? 'bg-amber-100 text-amber-700' :
-                            log.action === 'PUBLISH' ? 'bg-purple-100 text-purple-700 font-bold border border-purple-200' :
-                            'bg-slate-100 text-slate-700'
-                          }`}>
-                            {log.action}
-                          </span>
-                        </td>
-                        <td className="p-4 space-y-1">
-                          <p className="font-bold text-[11px]">{log.asmName} ({log.asmCode})</p>
-                          <div className="grid grid-cols-1 gap-0.5 text-[10px] text-philsa-gray font-mono">
-                            <div>Prev: <span className="font-semibold">{log.previousValue}</span></div>
-                            <div>New: <span className="font-semibold text-philsa-navy">{log.newValue}</span></div>
-                          </div>
-                        </td>
-                        <td className="p-4 text-xs italic text-slate-600">
-                          "{log.comments}"
-                        </td>
-                        <td className="p-4 text-right text-[10px] text-philsa-gray font-mono">
-                          <p>{log.ipAddress}</p>
-                          <p className="text-[9px] truncate max-w-[120px] ml-auto" title={log.device}>{log.device}</p>
-                        </td>
-                      </tr>
-                    ))}
+                  {auditTrailEntries.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-14 text-center text-xs text-philsa-gray">
+                        No audit entries captured yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    auditTrailEntries.map((entry) => {
+                      const actionTone =
+                        entry.action === 'PUBLISH' ? 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200' :
+                        entry.action === 'APPROVE' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                        entry.action === 'ASSEMBLE' ? 'bg-sky-100 text-sky-700 border-sky-200' :
+                        entry.action === 'CREATE' ? 'bg-green-100 text-green-700 border-green-200' :
+                        entry.action === 'DELETE' ? 'bg-red-100 text-red-700 border-red-200' :
+                        'bg-slate-100 text-slate-700 border-slate-200';
+
+                      return (
+                        <tr key={entry.id} className="border-b border-philsa-border/60 hover:bg-slate-50/80 transition-colors">
+                          <td className="px-5 py-5 align-top">
+                            <div className="space-y-0.5">
+                              <p className="text-[10px] font-mono font-bold text-slate-900">
+                                {new Date(entry.timestamp).toLocaleString()}
+                              </p>
+                              <p className="text-[9px] text-slate-400">
+                                {entry.examPeriod}
+                              </p>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-5 align-top">
+                            <p className="max-w-[200px] break-words text-[13px] font-bold text-slate-900">
+                              {entry.user}
+                            </p>
+                          </td>
+
+                          <td className="px-5 py-5 align-top">
+                            <span className={`inline-flex rounded-md border px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] ${actionTone}`}>
+                              {entry.action}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-5 align-top">
+                            <div className="space-y-1">
+                              <p className="max-w-[320px] break-words text-[13px] font-bold text-slate-900">
+                                {entry.examName} ({entry.examCode})
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                Prev: <span className="font-mono font-bold text-slate-700">{entry.previousValue}</span>
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                New: <span className="font-mono font-bold text-slate-700">{entry.newValue}</span>
+                              </p>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-5 align-top">
+                            <p className="max-w-[260px] italic leading-relaxed text-[12px] text-slate-700">
+                              "{entry.comments}"
+                            </p>
+                          </td>
+
+                          <td className="px-5 py-5 align-top text-right">
+                            <div className="space-y-1">
+                              <p className="text-[10px] font-mono text-slate-700">{entry.ipAddress}</p>
+                              <p className="text-[9px] text-slate-500">{entry.device}</p>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
 
           </div>
 
-        </div>
-      )}
-
-
-
-      {/* UPLOAD TO TESTING CENTERS MODAL */}
-      {isUploadModalOpen && uploadTargetPackage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => {
-              if (!isSyncingAll) setIsUploadModalOpen(false);
-            }}
-          />
-          
-          <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in duration-200">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-philsa-border flex justify-between items-center bg-philsa-bg/40">
-              <div>
-                <h4 className="font-extrabold text-sm text-philsa-navy uppercase flex items-center gap-2">
-                  <CloudLightning className="w-5 h-5 text-green-600 animate-pulse" />
-                  Upload Exam to Testing Centers
-                </h4>
-                <p className="text-[11px] text-philsa-gray">
-                  Secure broadcast of <span className="font-bold text-philsa-navy">{uploadTargetPackage.name}</span> to regional hubs.
-                </p>
-              </div>
-              {!isSyncingAll && (
-                <button 
-                  onClick={() => setIsUploadModalOpen(false)}
-                  className="p-1.5 rounded-full hover:bg-philsa-bg border border-philsa-border text-philsa-gray hover:text-philsa-navy transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-5 text-xs">
-              
-              {/* Target Package Summary */}
-              <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-mono text-[10px] text-philsa-gray">Package ID: {uploadTargetPackage.id.substring(0, 8)}...</span>
-                  <span className="text-[9px] font-mono bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded font-black">
-                    SHA-256 SECURED
-                  </span>
-                </div>
-                <h5 className="font-black text-philsa-navy text-sm">{uploadTargetPackage.name}</h5>
-                <p className="text-[11px] text-philsa-gray leading-relaxed">
-                  Contains <span className="font-bold text-philsa-navy">{uploadTargetPackage.questions.length} questions</span>, 
-                  configured for <span className="font-bold text-philsa-navy">{uploadTargetPackage.timeLimit} minutes</span>, 
-                  and signed with hash <span className="font-mono bg-slate-200/60 px-1 py-0.5 rounded text-[10px] text-slate-700">{uploadTargetPackage.hash || '0xAB9E...'}</span>.
-                </p>
-              </div>
-
-              {/* Testing Centers Selector */}
-              <div className="space-y-3">
-                <span className="text-[10px] font-black uppercase text-philsa-gray tracking-wider">Select Regional Target Hubs</span>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { key: 'manila', name: 'Luzon Central Terminal', loc: 'Manila' },
-                    { key: 'cebu', name: 'Visayas Regional Hub', loc: 'Cebu' },
-                    { key: 'davao', name: 'Mindanao Southern Base', loc: 'Davao' },
-                    { key: 'quezon', name: 'PhilSA Core HQ', loc: 'Quezon City' },
-                  ].map(center => {
-                    const isSelected = selectedCenters.includes(center.key);
-                    const syncState = syncingCenters[center.key] || 'IDLE';
-                    const alreadySynced = (centerSyncRegistry[uploadTargetPackage.id] || []).includes(center.key);
-
-                    return (
-                      <div 
-                        key={center.key}
-                        onClick={() => {
-                          if (isSyncingAll) return;
-                          if (isSelected) {
-                            setSelectedCenters(selectedCenters.filter(c => c !== center.key));
-                          } else {
-                            setSelectedCenters([...selectedCenters, center.key]);
-                          }
-                        }}
-                        className={`p-3.5 border rounded-2xl cursor-pointer select-none transition-all space-y-2 ${
-                          isSyncingAll ? 'opacity-70 pointer-events-none' : ''
-                        } ${
-                          isSelected 
-                            ? 'bg-green-50/40 border-green-500 shadow-xs shadow-green-500/5' 
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <span className="font-black text-xs text-philsa-navy">{center.loc}</span>
-                          {syncState === 'SYNCING' && <Loader2 className="w-3.5 h-3.5 text-green-600 animate-spin" />}
-                          {syncState === 'SUCCESS' && <Check className="w-4 h-4 text-green-600" />}
-                          {syncState === 'ERROR' && <AlertCircle className="w-4 h-4 text-red-600" />}
-                          {syncState === 'IDLE' && (
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center ${
-                              isSelected ? 'border-green-500 bg-green-500 text-white' : 'border-slate-300 bg-white'
-                            }`}>
-                              {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-0.5">
-                          <p className="text-[10px] font-bold text-slate-700 leading-tight">{center.name}</p>
-                          <p className="text-[9px] text-philsa-gray">
-                            {alreadySynced ? '✓ Synced previously' : 'Pending upload'}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Progress and Logs Section */}
-              {(isSyncingAll || syncLogs.length > 0) && (
-                <div className="space-y-2.5">
-                  <div className="flex justify-between items-center text-[10px] font-black uppercase text-philsa-gray tracking-wider">
-                    <span>Upload & Connection Log</span>
-                    {isSyncingAll && <span className="text-green-600 animate-pulse">Broadcasting packet...</span>}
-                  </div>
-                  
-                  <div className="bg-slate-900 rounded-2xl p-4 font-mono text-[10px] text-slate-200 space-y-1.5 h-40 overflow-y-auto scrollbar-thin">
-                    {syncLogs.map((log, i) => (
-                      <div key={i} className="leading-snug">
-                        <span className="text-green-500">➜</span> {log}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-6 bg-philsa-bg/30 border-t border-philsa-border flex justify-end gap-3">
-              <button
-                disabled={isSyncingAll}
-                onClick={() => setIsUploadModalOpen(false)}
-                className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold uppercase px-4 py-2.5 rounded-xl cursor-pointer disabled:opacity-50 transition-all"
-              >
-                Close
-              </button>
-              
-              <button
-                disabled={isSyncingAll || selectedCenters.length === 0}
-                onClick={async () => {
-                  setIsSyncingAll(true);
-                  const logs: string[] = [];
-                  const addLog = (msg: string) => {
-                    const timestamp = new Date().toLocaleTimeString();
-                    logs.push(`[${timestamp}] ${msg}`);
-                    setSyncLogs([...logs]);
-                  };
-
-                  addLog(`Initializing exam broadcast protocol for package: ${uploadTargetPackage.code}`);
-                  addLog(`Selected hubs: ${selectedCenters.map(c => c.toUpperCase()).join(', ')}`);
-
-                  // Loop through selected centers and sync them sequentially or concurrently with delay
-                  for (const centerKey of selectedCenters) {
-                    setSyncingCenters(prev => ({ ...prev, [centerKey]: 'SYNCING' }));
-                    addLog(`Connecting to secure endpoint for center [${centerKey.toUpperCase()}]...`);
-                    
-                    await new Promise(r => setTimeout(r, 800));
-                    addLog(`Connected. Performing RSA-2048 handshakes and signature integrity check...`);
-                    
-                    await new Promise(r => setTimeout(r, 600));
-                    addLog(`Broadcasting encrypted form payload with package hash ${uploadTargetPackage.hash || '0xAB9E...'}`);
-                    
-                    await new Promise(r => setTimeout(r, 1000));
-                    addLog(`Upload completed. Verifying storage seals at ${centerKey.toUpperCase()} database...`);
-                    
-                    await new Promise(r => setTimeout(r, 500));
-                    setSyncingCenters(prev => ({ ...prev, [centerKey]: 'SUCCESS' }));
-                    addLog(`SUCCESS: ${centerKey.toUpperCase()} synchronized and active.`);
-                    saveSyncStatus(uploadTargetPackage.id, [centerKey]);
-                  }
-
-                  addLog(`Secure multi-cast upload broadcast complete. All target terminals locked and verified.`);
-                  setIsSyncingAll(false);
-                }}
-                className="col-span-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold uppercase px-6 py-2.5 rounded-xl cursor-pointer disabled:opacity-50 flex items-center gap-1.5 transition-all shadow-md shadow-green-600/15"
-              >
-                {isSyncingAll ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Uploading...
-                  </>
-                ) : (
-                  <>
-                    <CloudLightning className="w-4 h-4" /> Start Secure Upload
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
@@ -2110,7 +2347,7 @@ export default function ExamSets() {
             onClick={() => setIsReplaceDrawerOpen(false)}
           />
           
-          <div className="relative bg-white w-full max-w-xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+          <div className="relative bg-white w-full max-w-[680px] rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
             <div className="p-6 border-b border-philsa-border flex justify-between items-center bg-philsa-bg/40">
               <div>
                 <h4 className="font-extrabold text-sm text-philsa-navy uppercase">
@@ -2198,138 +2435,121 @@ export default function ExamSets() {
             onClick={() => setIsFormOpen(false)}
           />
 
-          <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-philsa-border flex justify-between items-center bg-philsa-bg/40">
+          <div className="relative w-full max-w-[680px] overflow-hidden rounded-[28px] bg-white shadow-2xl shadow-slate-950/20 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between border-b border-slate-200 px-8 py-7">
               <div>
-                <h4 className="font-extrabold text-sm text-philsa-navy uppercase flex items-center gap-1.5">
-                  <ClipboardList className="w-4 h-4 text-philsa-red" /> Create Examination Assembly
+                <h4 className="flex items-center gap-2 text-[18px] font-extrabold uppercase tracking-[0.02em] text-slate-900">
+                  <ClipboardList className="w-5 h-5 text-philsa-red" />
+                  Create Exam Set
                 </h4>
-                <p className="text-[10px] text-philsa-gray mt-0.5">Initialize a blank college entrance examination form based on a blueprint.</p>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Initialize a blank examination form based on an approved blueprint.
+                </p>
               </div>
               <button 
                 onClick={() => setIsFormOpen(false)}
-                className="p-1.5 hover:bg-philsa-bg rounded-xl transition-colors cursor-pointer"
+                className="rounded-full p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                aria-label="Close dialog"
               >
-                <X className="w-5 h-5 text-philsa-gray" />
+                <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateAssembly} className="p-6 space-y-4 text-xs">
-              
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Examination Title Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., National Space Science Fellowship - Form A"
-                  className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none focus:ring-1 focus:ring-philsa-red"
-                  value={wizardMeta.name}
-                  onChange={(e) => setWizardMeta({ ...wizardMeta, name: e.target.value })}
-                  required
-                />
-              </div>
+            <form onSubmit={handleCreateAssembly} className="px-8 py-7">
+              <div className="grid grid-cols-1 gap-5">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Examination Code</label>
+                    <input
+                      type="text"
+                      placeholder="ES-004-2027A"
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-[14px] text-slate-800 outline-none transition focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                      value={wizardMeta.code}
+                      onChange={(e) => setWizardMeta({ ...wizardMeta, code: e.target.value })}
+                      required
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Select Approved Blueprint</label>
+                    <select
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-[14px] text-slate-800 outline-none transition focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                      value={wizardMeta.blueprintId}
+                      onChange={(e) => setWizardMeta({ ...wizardMeta, blueprintId: e.target.value })}
+                    >
+                      {INITIAL_BLUEPRINTS.map(bp => (
+                        <option key={bp.id} value={bp.id}>
+                          {bp.status === 'PUBLISHED' ? '[PUBLISHED] ' : bp.status === 'APPROVED' ? '[APPROVED] ' : ''}
+                          {bp.code} - {bp.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Select Batch</label>
+                    <input
+                      type="text"
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-[14px] text-slate-800 outline-none transition focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                      value={wizardMeta.batch}
+                      onChange={(e) => setWizardMeta({ ...wizardMeta, batch: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Examination Type</label>
+                    <select
+                      className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-[14px] text-slate-800 outline-none transition focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                      value={wizardMeta.examType}
+                      onChange={(e) => setWizardMeta({ ...wizardMeta, examType: e.target.value })}
+                    >
+                      <option value="Scholarship">Scholarship</option>
+                      <option value="Admission">Admission</option>
+                      <option value="Technical">Technical</option>
+                      <option value="Specialization">Specialization</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Examination Code</label>
+                  <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Academic Year</label>
                   <input
                     type="text"
-                    placeholder="e.g., EXAM-2026-SPACE-01A"
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none focus:ring-1 focus:ring-philsa-red font-mono"
-                    value={wizardMeta.code}
-                    onChange={(e) => setWizardMeta({ ...wizardMeta, code: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Select Approved Blueprint</label>
-                  <select
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none cursor-pointer"
-                    value={wizardMeta.blueprintId}
-                    onChange={(e) => setWizardMeta({ ...wizardMeta, blueprintId: e.target.value })}
-                  >
-                    {INITIAL_BLUEPRINTS.map(bp => (
-                      <option key={bp.id} value={bp.id}>{bp.code} - {bp.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Examination Period</label>
-                  <input
-                    type="text"
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none focus:ring-1 focus:ring-philsa-red"
-                    value={wizardMeta.examPeriod}
-                    onChange={(e) => setWizardMeta({ ...wizardMeta, examPeriod: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Examination Type</label>
-                  <select
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none cursor-pointer"
-                    value={wizardMeta.examType}
-                    onChange={(e) => setWizardMeta({ ...wizardMeta, examType: e.target.value })}
-                  >
-                    <option value="Scholarship">Scholarship</option>
-                    <option value="Admission">Admission</option>
-                    <option value="Technical">Technical</option>
-                    <option value="Specialization">Specialization</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Time Limit (Minutes)</label>
-                  <input
-                    type="number"
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none focus:ring-1 focus:ring-philsa-red"
-                    value={wizardMeta.timeLimit}
-                    onChange={(e) => setWizardMeta({ ...wizardMeta, timeLimit: parseInt(e.target.value) || 0 })}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Academic Year</label>
-                  <input
-                    type="text"
-                    className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none focus:ring-1 focus:ring-philsa-red"
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-[14px] text-slate-800 outline-none transition focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
                     value={wizardMeta.academicYear}
                     onChange={(e) => setWizardMeta({ ...wizardMeta, academicYear: e.target.value })}
                     required
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase tracking-wider text-philsa-navy">Form Instructions</label>
-                <textarea
-                  className="w-full bg-philsa-bg border border-philsa-border rounded-xl p-3 text-xs font-bold text-philsa-navy outline-none focus:ring-1 focus:ring-philsa-red h-20 resize-none"
-                  value={wizardMeta.instructions}
-                  onChange={(e) => setWizardMeta({ ...wizardMeta, instructions: e.target.value })}
-                  required
-                />
-              </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Form Instructions (Optional)</label>
+                  <textarea
+                    className="min-h-28 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[14px] text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-philsa-red focus:ring-2 focus:ring-philsa-red/10"
+                    value={wizardMeta.instructions}
+                    onChange={(e) => setWizardMeta({ ...wizardMeta, instructions: e.target.value })}
+                    placeholder="Answer all questions according to rules."
+                  />
+                </div>
 
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="flex-1 bg-philsa-bg hover:bg-philsa-border/55 text-philsa-navy py-3 rounded-xl font-bold uppercase tracking-wider cursor-pointer transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-philsa-red hover:bg-philsa-red/90 text-white py-3 rounded-xl font-bold uppercase tracking-wider cursor-pointer transition-all shadow-md shadow-philsa-red/10"
-                >
-                  Initialize Layout
-                </button>
+                <div className="pt-2 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsFormOpen(false)}
+                    className="flex-1 rounded-2xl bg-slate-50 px-5 py-4 text-[14px] font-extrabold uppercase tracking-[0.18em] text-slate-700 transition hover:bg-slate-100 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 rounded-2xl bg-philsa-red px-5 py-4 text-[14px] font-extrabold uppercase tracking-[0.18em] text-white shadow-lg shadow-philsa-red/15 transition hover:bg-philsa-red/90 cursor-pointer"
+                  >
+                    Setup Exam Set
+                  </button>
+                </div>
               </div>
 
             </form>

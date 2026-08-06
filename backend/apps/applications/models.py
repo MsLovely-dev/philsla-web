@@ -12,8 +12,8 @@ MEDIA_ONLY_APPLICATION_FIELDS = {"selfiePhotoUrl"}
 
 def generate_candidate_id(year: int | None = None) -> str:
     registration_year = year or timezone.now().year
-    code = "".join(choice(CANDIDATE_CODE_ALPHABET) for _ in range(8))
-    return f"PS-{registration_year}-{code[:4]}-{code[4:]}"
+    code = "".join(choice(CANDIDATE_CODE_ALPHABET) for _ in range(6))
+    return f"PHL-{registration_year}-{code}"
 
 
 class ApplicationStatus(models.TextChoices):
