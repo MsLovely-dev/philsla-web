@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GraduationCap,
   Search,
@@ -35,8 +35,8 @@ import {
   type UniversityRecord,
 } from '../../../services/backendUniversityService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Select, StatusToggle } from '../../../components/ui';
-import { useMaintenanceData } from '../../../services/maintenanceDataContext';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Pagination, Select, StatusToggle } from '../../../components/ui';
+import { MAINTENANCE_PAGE_SIZE, useMaintenanceData } from '../../../services/maintenanceDataContext';
 import {
   ExportConfigModal,
   type ExportColumnOption,
@@ -108,12 +108,14 @@ const EXPORT_SCOPE_OPTIONS = [
 export default function UniversitiesListMaintenance() {
   const {
     universities,
+    universityCount,
+    universityQuery,
     universitiesLoaded,
     universitiesError,
+    universitySummary,
     ensureUniversities,
+    setUniversityQuery,
     reloadUniversities,
-    setUniversityRecord,
-    removeUniversityRecord,
     adjustCourseCount,
     courses: coursesByUniversity,
     coursesError,
@@ -134,10 +136,9 @@ export default function UniversitiesListMaintenance() {
   const courses = courseList ?? [];
   const isLoadingCourses = Boolean(selectedUniversity) && courseList === undefined && !coursesError;
 
-  // Search & Filter for Universities
-  const [uniSearch, setUniSearch] = useState('');
-  const [uniRegionFilter, setUniRegionFilter] = useState('ALL');
-  const [uniClassFilter, setUniClassFilter] = useState('ALL');
+  // Search input (debounced) drives the server-side query held in the provider.
+  const [searchInput, setSearchInput] = useState(universityQuery.search);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   // Search & Filter for Courses (inside selected university)
@@ -180,29 +181,15 @@ export default function UniversitiesListMaintenance() {
     return universities.find((u) => u.id === uniId)?.courseCount ?? 0;
   };
 
-  const totalCourses = useMemo(
-    () => universities.reduce((sum, u) => sum + u.courseCount, 0),
-    [universities],
+  const hasActiveFilters = Boolean(
+    universityQuery.search || universityQuery.classification || universityQuery.region || universityQuery.status,
   );
 
-  const uniqueUniRegions = useMemo(() => {
-    return Array.from(new Set(universities.map(u => u.region))).sort();
-  }, [universities]);
-
-  const filteredUniversities = useMemo(() => {
-    return universities.filter(u => {
-      if (uniClassFilter !== 'ALL' && u.classification !== uniClassFilter) return false;
-      if (uniRegionFilter !== 'ALL' && u.region !== uniRegionFilter) return false;
-      if (uniSearch.trim()) {
-        const q = uniSearch.toLowerCase();
-        const matchName = u.name.toLowerCase().includes(q);
-        const matchCode = u.code.toLowerCase().includes(q);
-        const matchCity = u.city.toLowerCase().includes(q);
-        if (!matchName && !matchCode && !matchCity) return false;
-      }
-      return true;
-    });
-  }, [universities, uniClassFilter, uniRegionFilter, uniSearch]);
+  const handleSearchInput = (value: string) => {
+    setSearchInput(value);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => setUniversityQuery({ search: value.trim() }), 300);
+  };
 
   // Courses filtered for selected university
   const universityCourses = useMemo(() => {
@@ -232,7 +219,7 @@ export default function UniversitiesListMaintenance() {
   const handleOpenAddUniModal = () => {
     setEditingUniversity(null);
     setError(null);
-    setUniFormData({ ...EMPTY_UNI_FORM, region: uniqueUniRegions[0] ?? PHILIPPINE_REGIONS[0].code });
+    setUniFormData({ ...EMPTY_UNI_FORM });
     setIsUniModalOpen(true);
   };
 
@@ -270,7 +257,7 @@ export default function UniversitiesListMaintenance() {
       return;
     }
 
-    setUniversityRecord(result.data);
+    reloadUniversities();
     if (editingUniversity && selectedUniversity?.id === result.data.id) {
       setSelectedUniversity(result.data);
     }
@@ -297,7 +284,7 @@ export default function UniversitiesListMaintenance() {
     }
 
     const removedId = pendingDelete.id;
-    removeUniversityRecord(removedId);
+    reloadUniversities();
     if (selectedUniversity?.id === removedId) {
       setSelectedUniversity(null);
     }
@@ -380,19 +367,37 @@ export default function UniversitiesListMaintenance() {
     setPendingCourseDelete(null);
   };
 
-  const handleExport = ({ columns, scope }: ExportSelection) => {
+  const handleExport = async ({ columns, scope }: ExportSelection) => {
     setIsExportModalOpen(false);
     if (selectedUniversity) {
+      // Courses are held client-side; export straight from the cache.
       const cols = COURSE_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
       const source = scope === 'all' ? universityCourses : filteredCourses;
       const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
       downloadCsv(`${selectedUniversity.code}_College_Courses.csv`, csv);
-    } else {
-      const cols = UNIVERSITY_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
-      const source = scope === 'all' ? universities : filteredUniversities;
-      const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
-      downloadCsv('philSA_List_of_Universities.csv', csv);
+      return;
     }
+    // Universities are paginated: page through the server so the export covers
+    // every matching row, not just the visible page.
+    const base =
+      scope === 'all'
+        ? {}
+        : {
+            search: universityQuery.search,
+            classification: universityQuery.classification,
+            region: universityQuery.region,
+            status: universityQuery.status,
+          };
+    const rows: UniversityRecord[] = [];
+    for (let page = 1; ; page += 1) {
+      const result = await universityService.listUniversitiesPage({ ...base, page, pageSize: 100 });
+      if (!result.ok) break;
+      rows.push(...result.data.results);
+      if (!result.data.next) break;
+    }
+    const cols = UNIVERSITY_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
+    const csv = toCsv(cols.map((c) => c.label), rows.map((row) => cols.map((c) => c.get(row))));
+    downloadCsv('philSA_List_of_Universities.csv', csv);
   };
 
   // First load shows a distinct loading/error state; when cached it is already loaded.
@@ -498,23 +503,23 @@ export default function UniversitiesListMaintenance() {
               </div>
             </div>
 
-            {/* Quick Summary Cards */}
+            {/* Quick Summary Cards (registry-wide totals) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Accredited Universities</div>
-                <div className="text-2xl font-black text-philsa-navy mt-1">{universities.length}</div>
+                <div className="text-2xl font-black text-philsa-navy mt-1">{universitySummary.total.toLocaleString()}</div>
               </div>
               <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public / State</div>
-                <div className="text-2xl font-black text-blue-900 mt-1">{universities.filter(u => u.classification === 'Public').length}</div>
+                <div className="text-2xl font-black text-blue-900 mt-1">{universitySummary.public.toLocaleString()}</div>
               </div>
               <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private</div>
-                <div className="text-2xl font-black text-purple-900 mt-1">{universities.filter(u => u.classification === 'Private').length}</div>
+                <div className="text-2xl font-black text-purple-900 mt-1">{universitySummary.private.toLocaleString()}</div>
               </div>
               <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
-                <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Degree Courses</div>
-                <div className="text-2xl font-black text-emerald-900 mt-1">{totalCourses}</div>
+                <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Active Universities</div>
+                <div className="text-2xl font-black text-emerald-900 mt-1">{universitySummary.active.toLocaleString()}</div>
               </div>
             </div>
           </div>
@@ -522,7 +527,7 @@ export default function UniversitiesListMaintenance() {
           {/* Filter and Search Bar */}
           <div className="card-philsa bg-white p-5 space-y-4">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
                 {/* Search */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Search University / City</label>
@@ -530,8 +535,8 @@ export default function UniversitiesListMaintenance() {
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      value={uniSearch}
-                      onChange={e => setUniSearch(e.target.value)}
+                      value={searchInput}
+                      onChange={e => handleSearchInput(e.target.value)}
                       placeholder="Name, code, city..."
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     />
@@ -542,10 +547,10 @@ export default function UniversitiesListMaintenance() {
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
                   <Select
-                    value={uniClassFilter}
-                    onChange={e => setUniClassFilter(e.target.value)}
+                    value={universityQuery.classification}
+                    onChange={e => setUniversityQuery({ classification: e.target.value as UniversityClassification | '' })}
                   >
-                    <option value="ALL">All Classifications</option>
+                    <option value="">All Classifications</option>
                     <option value="Public">Public</option>
                     <option value="Private">Private</option>
                   </Select>
@@ -555,13 +560,26 @@ export default function UniversitiesListMaintenance() {
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region</label>
                   <Select
-                    value={uniRegionFilter}
-                    onChange={e => setUniRegionFilter(e.target.value)}
+                    value={universityQuery.region}
+                    onChange={e => setUniversityQuery({ region: e.target.value })}
                   >
-                    <option value="ALL">All Regions</option>
-                    {uniqueUniRegions.map(r => (
-                      <option key={r} value={r}>{regionLabel(r)}</option>
+                    <option value="">All Regions</option>
+                    {PHILIPPINE_REGIONS.map((region) => (
+                      <option key={region.code} value={region.code}>{region.label}</option>
                     ))}
+                  </Select>
+                </div>
+
+                {/* Status */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Status</label>
+                  <Select
+                    value={universityQuery.status}
+                    onChange={e => setUniversityQuery({ status: e.target.value as UniversityRecord['status'] | '' })}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
                   </Select>
                 </div>
               </div>
@@ -592,8 +610,8 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* LIST DISPLAY: empty-registry CTA, otherwise table or grid */}
-          {universities.length === 0 ? (
+          {/* LIST DISPLAY: empty-registry CTA, no-match, otherwise table/grid + pagination */}
+          {universityCount === 0 && !hasActiveFilters ? (
             <div className="flex justify-center py-16">
             <EmptyState
               title="No universities yet"
@@ -608,7 +626,12 @@ export default function UniversitiesListMaintenance() {
               }
             />
             </div>
+          ) : universityCount === 0 ? (
+            <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
+              No universities match your search and filter criteria.
+            </div>
           ) : viewMode === 'table' ? (
+            <div className="space-y-6">
             <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -625,14 +648,7 @@ export default function UniversitiesListMaintenance() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredUniversities.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
-                          No universities match your search and filter criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredUniversities.map((uni) => {
+                    {universities.map((uni) => {
                         const count = getCourseCountForUniversity(uni.id);
                         return (
                           <tr
@@ -706,20 +722,23 @@ export default function UniversitiesListMaintenance() {
                             </td>
                           </tr>
                         );
-                      })
-                    )}
+                      })}
                   </tbody>
                 </table>
               </div>
             </div>
-          ) : filteredUniversities.length === 0 ? (
-            <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
-              No universities match your search and filter criteria.
+            <Pagination
+              page={universityQuery.page}
+              pageSize={MAINTENANCE_PAGE_SIZE}
+              totalCount={universityCount}
+              onPageChange={(page) => setUniversityQuery({ page })}
+            />
             </div>
           ) : (
-            /* GRID VIEW DISPLAY */
+            <div className="space-y-6">
+            {/* GRID VIEW DISPLAY */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {filteredUniversities.map((uni) => {
+              {universities.map((uni) => {
                 const count = getCourseCountForUniversity(uni.id);
                 return (
                   <div
@@ -791,6 +810,13 @@ export default function UniversitiesListMaintenance() {
                   </div>
                 );
               })}
+            </div>
+            <Pagination
+              page={universityQuery.page}
+              pageSize={MAINTENANCE_PAGE_SIZE}
+              totalCount={universityCount}
+              onPageChange={(page) => setUniversityQuery({ page })}
+            />
             </div>
           )}
         </>

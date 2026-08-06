@@ -9,32 +9,84 @@ import {
 } from 'react';
 import {
   universityService,
+  type ActivationStatus,
   type CollegeCourseRecord,
+  type UniversityClassification,
   type UniversityRecord,
 } from './backendUniversityService';
-import { schoolService, type SchoolRecord } from './backendSchoolService';
+import {
+  schoolService,
+  type SchoolClassification,
+  type SchoolRecord,
+  type SchoolStatus,
+} from './backendSchoolService';
 import type { ServiceFailure } from './serviceResult';
 
+/** Rows per page for the paginated registry tables. */
+export const MAINTENANCE_PAGE_SIZE = 20;
+
+export interface UniversityQuery {
+  page: number;
+  search: string;
+  classification: UniversityClassification | '';
+  region: string;
+  status: ActivationStatus | '';
+}
+
+export interface SchoolQuery {
+  page: number;
+  search: string;
+  classification: SchoolClassification | '';
+  region: string;
+  status: SchoolStatus | '';
+}
+
+/** Global (unfiltered) totals for the summary stat cards. */
+export interface RegistrySummary {
+  total: number;
+  public: number;
+  private: number;
+  active: number;
+}
+
+const DEFAULT_UNIVERSITY_QUERY: UniversityQuery = {
+  page: 1,
+  search: '',
+  classification: '',
+  region: '',
+  status: '',
+};
+const DEFAULT_SCHOOL_QUERY: SchoolQuery = {
+  page: 1,
+  search: '',
+  classification: '',
+  region: '',
+  status: '',
+};
+const EMPTY_SUMMARY: RegistrySummary = { total: 0, public: 0, private: 0, active: 0 };
+
 /**
- * App-level cache for the Maintenance Center registries. Because this provider
- * is mounted above the router, fetched data survives navigation between the
- * "List of Universities" and "List of Schools" tabs — so switching tabs reads
- * cached data instantly instead of remounting from empty and refetching (the
- * previous "empty-then-filled" flash).
+ * App-level state for the Maintenance Center registries. Mounted above the
+ * router, so a tab's page/search/filters and the fetched page survive
+ * navigation: returning to "List of Universities" / "List of Schools" restores
+ * the exact view instantly, and a fetch only happens when a query param changes
+ * or a mutation reloads the current page.
  *
- * College courses are cached per-university (`courses[universityId]`): the first
- * drill-down fetches, and re-opening the same university is instant with no
- * refetch. `coursesLoaded` records which universities have been fetched so the
- * UI can distinguish "loading" from "genuinely empty".
+ * Registries are paginated server-side (see `listUniversitiesPage` /
+ * `listSchoolsPage`). College courses are the exception: they stay client-side,
+ * cached per-university (`courses[universityId]`) for instant re-open.
  */
 interface MaintenanceDataContextValue {
   universities: UniversityRecord[];
+  universityCount: number;
+  universityQuery: UniversityQuery;
+  universitiesLoading: boolean;
   universitiesLoaded: boolean;
   universitiesError: string | null;
+  universitySummary: RegistrySummary;
   ensureUniversities: () => void;
+  setUniversityQuery: (partial: Partial<UniversityQuery>) => void;
   reloadUniversities: () => void;
-  setUniversityRecord: (record: UniversityRecord) => void;
-  removeUniversityRecord: (id: string) => void;
   adjustCourseCount: (universityId: string, delta: number) => void;
 
   courses: Record<string, CollegeCourseRecord[]>;
@@ -45,32 +97,64 @@ interface MaintenanceDataContextValue {
   removeCourseRecord: (universityId: string, courseId: string) => void;
 
   schools: SchoolRecord[];
+  schoolCount: number;
+  schoolQuery: SchoolQuery;
+  schoolsLoading: boolean;
   schoolsLoaded: boolean;
   schoolsError: string | null;
+  schoolSummary: RegistrySummary;
   ensureSchools: () => void;
+  setSchoolQuery: (partial: Partial<SchoolQuery>) => void;
   reloadSchools: () => void;
-  setSchoolRecord: (record: SchoolRecord) => void;
-  removeSchoolRecord: (id: string) => void;
 }
 
 const MaintenanceDataContext = createContext<MaintenanceDataContextValue | null>(null);
 
+function isPageOnlyChange(partial: object): boolean {
+  const keys = Object.keys(partial);
+  return keys.length === 1 && keys[0] === 'page';
+}
+
 export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
-  // --- Universities ---
+  // --- Universities (paginated) ---
+  const [universityQuery, setUniversityQueryState] = useState<UniversityQuery>(DEFAULT_UNIVERSITY_QUERY);
+  const universityQueryRef = useRef(universityQuery);
   const [universities, setUniversities] = useState<UniversityRecord[]>([]);
+  const [universityCount, setUniversityCount] = useState(0);
+  const [universitiesLoading, setUniversitiesLoading] = useState(false);
   const [universitiesLoaded, setUniversitiesLoaded] = useState(false);
   const [universitiesError, setUniversitiesError] = useState<string | null>(null);
-  const universitiesInFlight = useRef(false);
+  const [universitySummary, setUniversitySummary] = useState<RegistrySummary>(EMPTY_SUMMARY);
   const universitiesLoadedRef = useRef(false);
+  const universityRequestId = useRef(0);
 
-  const loadUniversities = useCallback(() => {
-    if (universitiesInFlight.current) return;
-    universitiesInFlight.current = true;
+  const loadUniversitySummary = useCallback(() => {
+    Promise.all([
+      universityService.listUniversitiesPage({ page: 1, pageSize: 1 }),
+      universityService.listUniversitiesPage({ page: 1, pageSize: 1, classification: 'Public' }),
+      universityService.listUniversitiesPage({ page: 1, pageSize: 1, classification: 'Private' }),
+      universityService.listUniversitiesPage({ page: 1, pageSize: 1, status: 'Active' }),
+    ]).then(([total, pub, priv, active]) => {
+      setUniversitySummary({
+        total: total.ok ? total.data.count : 0,
+        public: pub.ok ? pub.data.count : 0,
+        private: priv.ok ? priv.data.count : 0,
+        active: active.ok ? active.data.count : 0,
+      });
+    });
+  }, []);
+
+  const loadUniversities = useCallback((query: UniversityQuery) => {
+    universityQueryRef.current = query;
+    const requestId = ++universityRequestId.current;
+    setUniversitiesLoading(true);
     setUniversitiesError(null);
-    universityService.listUniversities().then((result) => {
-      universitiesInFlight.current = false;
+    universityService.listUniversitiesPage({ ...query, pageSize: MAINTENANCE_PAGE_SIZE }).then((result) => {
+      if (requestId !== universityRequestId.current) return; // ignore stale responses
+      setUniversitiesLoading(false);
       if (result.ok) {
-        setUniversities(result.data);
+        setUniversities(result.data.results);
+        setUniversityCount(result.data.count);
         universitiesLoadedRef.current = true;
         setUniversitiesLoaded(true);
       } else {
@@ -81,28 +165,25 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
 
   const ensureUniversities = useCallback(() => {
     if (universitiesLoadedRef.current) return;
-    loadUniversities();
+    loadUniversities(universityQueryRef.current);
+    loadUniversitySummary();
+  }, [loadUniversities, loadUniversitySummary]);
+
+  const setUniversityQuery = useCallback((partial: Partial<UniversityQuery>) => {
+    const next: UniversityQuery = {
+      ...universityQueryRef.current,
+      ...partial,
+      page: isPageOnlyChange(partial) ? (partial.page ?? 1) : 1,
+    };
+    universityQueryRef.current = next;
+    setUniversityQueryState(next);
+    loadUniversities(next);
   }, [loadUniversities]);
 
-  const setUniversityRecord = useCallback((record: UniversityRecord) => {
-    setUniversities((prev) =>
-      prev.some((u) => u.id === record.id)
-        ? prev.map((u) => (u.id === record.id ? record : u))
-        : [record, ...prev],
-    );
-  }, []);
-
-  const removeUniversityRecord = useCallback((id: string) => {
-    setUniversities((prev) => prev.filter((u) => u.id !== id));
-    // Drop the deleted university's cached courses too.
-    coursesLoadedRef.current.delete(id);
-    setCourses((prev) => {
-      if (!(id in prev)) return prev;
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }, []);
+  const reloadUniversities = useCallback(() => {
+    loadUniversities(universityQueryRef.current);
+    loadUniversitySummary();
+  }, [loadUniversities, loadUniversitySummary]);
 
   const adjustCourseCount = useCallback((universityId: string, delta: number) => {
     setUniversities((prev) =>
@@ -112,7 +193,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  // --- College courses (cached per university) ---
+  // --- College courses (cached per university, client-side) ---
   const [courses, setCourses] = useState<Record<string, CollegeCourseRecord[]>>({});
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const coursesLoadedRef = useRef<Set<string>>(new Set());
@@ -155,21 +236,45 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  // --- Schools ---
+  // --- Schools (paginated) ---
+  const [schoolQuery, setSchoolQueryState] = useState<SchoolQuery>(DEFAULT_SCHOOL_QUERY);
+  const schoolQueryRef = useRef(schoolQuery);
   const [schools, setSchools] = useState<SchoolRecord[]>([]);
+  const [schoolCount, setSchoolCount] = useState(0);
+  const [schoolsLoading, setSchoolsLoading] = useState(false);
   const [schoolsLoaded, setSchoolsLoaded] = useState(false);
   const [schoolsError, setSchoolsError] = useState<string | null>(null);
-  const schoolsInFlight = useRef(false);
+  const [schoolSummary, setSchoolSummary] = useState<RegistrySummary>(EMPTY_SUMMARY);
   const schoolsLoadedRef = useRef(false);
+  const schoolRequestId = useRef(0);
 
-  const loadSchools = useCallback(() => {
-    if (schoolsInFlight.current) return;
-    schoolsInFlight.current = true;
+  const loadSchoolSummary = useCallback(() => {
+    Promise.all([
+      schoolService.listSchoolsPage({ page: 1, pageSize: 1 }),
+      schoolService.listSchoolsPage({ page: 1, pageSize: 1, classification: 'Public' }),
+      schoolService.listSchoolsPage({ page: 1, pageSize: 1, classification: 'Private' }),
+      schoolService.listSchoolsPage({ page: 1, pageSize: 1, status: 'Active' }),
+    ]).then(([total, pub, priv, active]) => {
+      setSchoolSummary({
+        total: total.ok ? total.data.count : 0,
+        public: pub.ok ? pub.data.count : 0,
+        private: priv.ok ? priv.data.count : 0,
+        active: active.ok ? active.data.count : 0,
+      });
+    });
+  }, []);
+
+  const loadSchools = useCallback((query: SchoolQuery) => {
+    schoolQueryRef.current = query;
+    const requestId = ++schoolRequestId.current;
+    setSchoolsLoading(true);
     setSchoolsError(null);
-    schoolService.listSchools().then((result) => {
-      schoolsInFlight.current = false;
+    schoolService.listSchoolsPage({ ...query, pageSize: MAINTENANCE_PAGE_SIZE }).then((result) => {
+      if (requestId !== schoolRequestId.current) return;
+      setSchoolsLoading(false);
       if (result.ok) {
-        setSchools(result.data);
+        setSchools(result.data.results);
+        setSchoolCount(result.data.count);
         schoolsLoadedRef.current = true;
         setSchoolsLoaded(true);
       } else {
@@ -180,30 +285,38 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
 
   const ensureSchools = useCallback(() => {
     if (schoolsLoadedRef.current) return;
-    loadSchools();
+    loadSchools(schoolQueryRef.current);
+    loadSchoolSummary();
+  }, [loadSchools, loadSchoolSummary]);
+
+  const setSchoolQuery = useCallback((partial: Partial<SchoolQuery>) => {
+    const next: SchoolQuery = {
+      ...schoolQueryRef.current,
+      ...partial,
+      page: isPageOnlyChange(partial) ? (partial.page ?? 1) : 1,
+    };
+    schoolQueryRef.current = next;
+    setSchoolQueryState(next);
+    loadSchools(next);
   }, [loadSchools]);
 
-  const setSchoolRecord = useCallback((record: SchoolRecord) => {
-    setSchools((prev) =>
-      prev.some((s) => s.id === record.id)
-        ? prev.map((s) => (s.id === record.id ? record : s))
-        : [record, ...prev],
-    );
-  }, []);
-
-  const removeSchoolRecord = useCallback((id: string) => {
-    setSchools((prev) => prev.filter((s) => s.id !== id));
-  }, []);
+  const reloadSchools = useCallback(() => {
+    loadSchools(schoolQueryRef.current);
+    loadSchoolSummary();
+  }, [loadSchools, loadSchoolSummary]);
 
   const value = useMemo<MaintenanceDataContextValue>(
     () => ({
       universities,
+      universityCount,
+      universityQuery,
+      universitiesLoading,
       universitiesLoaded,
       universitiesError,
+      universitySummary,
       ensureUniversities,
-      reloadUniversities: loadUniversities,
-      setUniversityRecord,
-      removeUniversityRecord,
+      setUniversityQuery,
+      reloadUniversities,
       adjustCourseCount,
       courses,
       coursesError,
@@ -212,21 +325,27 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       setCourseRecord,
       removeCourseRecord,
       schools,
+      schoolCount,
+      schoolQuery,
+      schoolsLoading,
       schoolsLoaded,
       schoolsError,
+      schoolSummary,
       ensureSchools,
-      reloadSchools: loadSchools,
-      setSchoolRecord,
-      removeSchoolRecord,
+      setSchoolQuery,
+      reloadSchools,
     }),
     [
       universities,
+      universityCount,
+      universityQuery,
+      universitiesLoading,
       universitiesLoaded,
       universitiesError,
+      universitySummary,
       ensureUniversities,
-      loadUniversities,
-      setUniversityRecord,
-      removeUniversityRecord,
+      setUniversityQuery,
+      reloadUniversities,
       adjustCourseCount,
       courses,
       coursesError,
@@ -235,12 +354,15 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       setCourseRecord,
       removeCourseRecord,
       schools,
+      schoolCount,
+      schoolQuery,
+      schoolsLoading,
       schoolsLoaded,
       schoolsError,
+      schoolSummary,
       ensureSchools,
-      loadSchools,
-      setSchoolRecord,
-      removeSchoolRecord,
+      setSchoolQuery,
+      reloadSchools,
     ],
   );
 

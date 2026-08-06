@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   School as SchoolIcon,
   Search,
@@ -23,8 +23,8 @@ import {
   type SchoolRecord,
 } from '../../../services/backendSchoolService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Select, StatusToggle } from '../../../components/ui';
-import { useMaintenanceData } from '../../../services/maintenanceDataContext';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Pagination, Select, StatusToggle } from '../../../components/ui';
+import { MAINTENANCE_PAGE_SIZE, useMaintenanceData } from '../../../services/maintenanceDataContext';
 import {
   ExportConfigModal,
   type ExportColumnOption,
@@ -62,19 +62,20 @@ const EXPORT_SCOPE_OPTIONS = [
 export default function SchoolsListMaintenance() {
   const {
     schools,
+    schoolCount,
+    schoolQuery,
     schoolsLoaded,
     schoolsError,
+    schoolSummary,
     ensureSchools,
+    setSchoolQuery,
     reloadSchools,
-    setSchoolRecord,
-    removeSchoolRecord,
   } = useMaintenanceData();
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [classificationFilter, setClassificationFilter] = useState<'ALL' | SchoolClassification>('ALL');
-  const [regionFilter, setRegionFilter] = useState<string>('ALL');
+  const [searchInput, setSearchInput] = useState(schoolQuery.search);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -86,36 +87,25 @@ export default function SchoolsListMaintenance() {
   const [pendingDelete, setPendingDelete] = useState<SchoolRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Load the school list once into the shared cache; instant on tab re-entry.
+  // Load the current page once; instant on tab re-entry (query state lives in the provider).
   useEffect(() => {
     ensureSchools();
   }, [ensureSchools]);
 
-  const uniqueRegions = useMemo(() => {
-    return Array.from(new Set(schools.map((s) => s.region))).sort();
-  }, [schools]);
-
-  const filteredSchools = useMemo(() => {
-    return schools.filter((s) => {
-      if (classificationFilter !== 'ALL' && s.classification !== classificationFilter) return false;
-      if (regionFilter !== 'ALL' && s.region !== regionFilter) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        if (!s.name.toLowerCase().includes(q) && !s.code.toLowerCase().includes(q)) return false;
-      }
-      return true;
-    });
-  }, [schools, classificationFilter, regionFilter, searchQuery]);
-
-  const totalCapacity = useMemo(
-    () => schools.reduce((sum, s) => sum + s.examineeCapacity, 0),
-    [schools],
+  const hasActiveFilters = Boolean(
+    schoolQuery.search || schoolQuery.classification || schoolQuery.region || schoolQuery.status,
   );
+
+  const handleSearchInput = (value: string) => {
+    setSearchInput(value);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => setSchoolQuery({ search: value.trim() }), 300);
+  };
 
   const handleOpenAddModal = () => {
     setEditingSchool(null);
     setError(null);
-    setFormData({ ...EMPTY_FORM, region: uniqueRegions[0] ?? PHILIPPINE_REGIONS[0].code });
+    setFormData({ ...EMPTY_FORM });
     setIsModalOpen(true);
   };
 
@@ -148,7 +138,7 @@ export default function SchoolsListMaintenance() {
       return;
     }
 
-    setSchoolRecord(result.data);
+    reloadSchools();
     setIsModalOpen(false);
     setViewingSchool(null); // a completed save closes the details modal too
   };
@@ -164,16 +154,32 @@ export default function SchoolsListMaintenance() {
       setPendingDelete(null);
       return;
     }
-    removeSchoolRecord(pendingDelete.id);
+    reloadSchools();
     setPendingDelete(null);
     setViewingSchool(null); // the record is gone, so close the details modal too
   };
 
-  const handleExport = ({ columns, scope }: ExportSelection) => {
+  const handleExport = async ({ columns, scope }: ExportSelection) => {
     setIsExportModalOpen(false);
+    const base =
+      scope === 'all'
+        ? {}
+        : {
+            search: schoolQuery.search,
+            classification: schoolQuery.classification,
+            region: schoolQuery.region,
+            status: schoolQuery.status,
+          };
+    // Page through the server so the export covers every matching row, not just the visible page.
+    const rows: SchoolRecord[] = [];
+    for (let page = 1; ; page += 1) {
+      const result = await schoolService.listSchoolsPage({ ...base, page, pageSize: 100 });
+      if (!result.ok) break;
+      rows.push(...result.data.results);
+      if (!result.data.next) break;
+    }
     const cols = SCHOOL_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
-    const source = scope === 'all' ? schools : filteredSchools;
-    const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
+    const csv = toCsv(cols.map((c) => c.label), rows.map((row) => cols.map((c) => c.get(row))));
     downloadCsv(`philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
 
@@ -250,23 +256,23 @@ export default function SchoolsListMaintenance() {
           </div>
         </div>
 
-        {/* Quick Stat Cards */}
+        {/* Quick Stat Cards (registry-wide totals) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Total Schools</div>
-            <div className="text-2xl font-black text-philsa-navy mt-1">{schools.length}</div>
+            <div className="text-2xl font-black text-philsa-navy mt-1">{schoolSummary.total.toLocaleString()}</div>
           </div>
           <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public / State</div>
-            <div className="text-2xl font-black text-blue-900 mt-1">{schools.filter((s) => s.classification === 'Public').length}</div>
+            <div className="text-2xl font-black text-blue-900 mt-1">{schoolSummary.public.toLocaleString()}</div>
           </div>
           <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private Schools</div>
-            <div className="text-2xl font-black text-purple-900 mt-1">{schools.filter((s) => s.classification === 'Private').length}</div>
+            <div className="text-2xl font-black text-purple-900 mt-1">{schoolSummary.private.toLocaleString()}</div>
           </div>
           <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
-            <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Examinee Capacity</div>
-            <div className="text-2xl font-black text-emerald-900 mt-1">{totalCapacity.toLocaleString()}</div>
+            <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Active Schools</div>
+            <div className="text-2xl font-black text-emerald-900 mt-1">{schoolSummary.active.toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -280,7 +286,7 @@ export default function SchoolsListMaintenance() {
       {/* Filter and Search Bar */}
       <div className="card-philsa bg-white p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
           {/* Search */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Search School / Code</label>
@@ -288,8 +294,8 @@ export default function SchoolsListMaintenance() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => handleSearchInput(e.target.value)}
                 placeholder="Name or code..."
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
               />
@@ -300,13 +306,10 @@ export default function SchoolsListMaintenance() {
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
             <Select
-              value={classificationFilter}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === 'ALL' || isSchoolClassification(value)) setClassificationFilter(value);
-              }}
+              value={schoolQuery.classification}
+              onChange={(e) => setSchoolQuery({ classification: e.target.value as SchoolClassification | '' })}
             >
-              <option value="ALL">All Classifications</option>
+              <option value="">All Classifications</option>
               <option value="Public">Public Schools</option>
               <option value="Private">Private Schools</option>
             </Select>
@@ -316,13 +319,26 @@ export default function SchoolsListMaintenance() {
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region/Municipality/City</label>
             <Select
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value)}
+              value={schoolQuery.region}
+              onChange={(e) => setSchoolQuery({ region: e.target.value })}
             >
-              <option value="ALL">All Regions</option>
-              {uniqueRegions.map((r) => (
-                <option key={r} value={r}>{regionLabel(r)}</option>
+              <option value="">All Regions</option>
+              {PHILIPPINE_REGIONS.map((region) => (
+                <option key={region.code} value={region.code}>{region.label}</option>
               ))}
+            </Select>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Status</label>
+            <Select
+              value={schoolQuery.status}
+              onChange={(e) => setSchoolQuery({ status: e.target.value as SchoolRecord['status'] | '' })}
+            >
+              <option value="">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
             </Select>
           </div>
           </div>
@@ -353,8 +369,8 @@ export default function SchoolsListMaintenance() {
         </div>
       </div>
 
-      {/* Schools List: empty-registry CTA, otherwise table or grid */}
-      {schools.length === 0 ? (
+      {/* Schools List: empty-registry CTA, no-match, otherwise table/grid + pagination */}
+      {schoolCount === 0 && !hasActiveFilters ? (
         <div className="flex justify-center py-16">
         <EmptyState
           title="No schools yet"
@@ -369,7 +385,12 @@ export default function SchoolsListMaintenance() {
           }
         />
         </div>
+      ) : schoolCount === 0 ? (
+        <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
+          No schools match your search and filter criteria.
+        </div>
       ) : viewMode === 'table' ? (
+        <div className="space-y-6">
         <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -385,14 +406,7 @@ export default function SchoolsListMaintenance() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredSchools.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
-                      No schools match your search and filter criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredSchools.map((s) => (
+                {schools.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50/80 transition-all">
                       <td className="py-3.5 px-4">
                         <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block whitespace-nowrap">
@@ -445,20 +459,23 @@ export default function SchoolsListMaintenance() {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
+                  ))}
               </tbody>
             </table>
           </div>
         </div>
-      ) : filteredSchools.length === 0 ? (
-        <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
-          No schools match your search and filter criteria.
+        <Pagination
+          page={schoolQuery.page}
+          pageSize={MAINTENANCE_PAGE_SIZE}
+          totalCount={schoolCount}
+          onPageChange={(page) => setSchoolQuery({ page })}
+        />
         </div>
       ) : (
-        /* GRID CARD VIEW */
+        <div className="space-y-6">
+        {/* GRID CARD VIEW */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {filteredSchools.map((s) => (
+          {schools.map((s) => (
             <div
               key={s.id}
               className="card-philsa bg-white p-6 hover:shadow-xl hover:border-philsa-navy/40 transition-all group space-y-4 relative overflow-hidden border border-slate-200"
@@ -524,6 +541,13 @@ export default function SchoolsListMaintenance() {
               </div>
             </div>
           ))}
+        </div>
+        <Pagination
+          page={schoolQuery.page}
+          pageSize={MAINTENANCE_PAGE_SIZE}
+          totalCount={schoolCount}
+          onPageChange={(page) => setSchoolQuery({ page })}
+        />
         </div>
       )}
 
