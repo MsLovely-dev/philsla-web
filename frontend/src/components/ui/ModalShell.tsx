@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
@@ -44,7 +45,12 @@ export function ModalShell({
         transition: { duration: 0.18, ease: 'easeOut' as const },
       };
 
-  return (
+  // Render at the document body via a portal so the overlay escapes any
+  // transformed/scrolling ancestor (e.g. the animated page wrapper in
+  // DashboardLayout). A `position: fixed` element inside a transformed ancestor
+  // resolves against that ancestor, not the viewport, which clips/offsets the
+  // backdrop; portalling to <body> makes `fixed inset-0` cover the real viewport.
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div className={cn('fixed inset-0 flex items-center justify-center p-4', zClass)}>
@@ -66,6 +72,7 @@ export function ModalShell({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }
