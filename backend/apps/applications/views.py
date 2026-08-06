@@ -1,5 +1,7 @@
 from django.shortcuts import get_object_or_404
 from django.http import FileResponse, Http404
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -10,7 +12,7 @@ from apps.accounts.permissions import ObjectScopePermission, RoleRequiredPermiss
 from apps.accounts.roles import PortalRole, get_user_role
 
 from .audit import record_application_event
-from .models import StudentApplication
+from .models import ApplicationStatus, StudentApplication
 from .models import ApplicationAuditLog
 from .serializers import (
     ApplicationAuditLogSerializer,
@@ -258,8 +260,44 @@ class ApplicationReviewQueueView(APIView):
     def get(self, request) -> Response:
         applications = (
             StudentApplication.objects.exclude(status__in=["DRAFT"])
+            .select_related("personal_info", "school_info")
+            .prefetch_related("course_preference_rows")
             .order_by("-submitted_at", "-created_at")
         )
+        status_filter = request.query_params.get("status", "").strip().upper()
+        school_id = request.query_params.get("schoolId", "").strip()
+        school_name = request.query_params.get("schoolName", "").strip()
+        submitted_filter = request.query_params.get("submitted", "").strip().lower()
+        search = request.query_params.get("search", "").strip()
+
+        if status_filter:
+            status_map = {
+                "PENDING": [ApplicationStatus.SUBMITTED, ApplicationStatus.RESUBMITTED],
+                "ACCEPTED": [ApplicationStatus.APPROVED],
+                "APPROVED": [ApplicationStatus.APPROVED],
+                "REJECTED": [ApplicationStatus.REJECTED],
+                "FOR_CORRECTION": [ApplicationStatus.FOR_CORRECTION],
+            }
+            applications = applications.filter(status__in=status_map.get(status_filter, [status_filter]))
+
+        if school_id:
+            applications = applications.filter(school_info__school_id=school_id)
+        elif school_name:
+            applications = applications.filter(school_info__name__iexact=school_name)
+
+        if submitted_filter == "today":
+            applications = applications.filter(submitted_at__date=timezone.localdate())
+
+        if search:
+            applications = applications.filter(
+                Q(candidate_id__icontains=search)
+                | Q(personal_info__first_name__icontains=search)
+                | Q(personal_info__middle_name__icontains=search)
+                | Q(personal_info__last_name__icontains=search)
+                | Q(personal_info__mobile__icontains=search)
+                | Q(school_info__name__icontains=search)
+                | Q(course_preference_rows__university__icontains=search)
+            ).distinct()
         return Response(ApplicationSerializer(applications, many=True, context={"request": request}).data)
 
 

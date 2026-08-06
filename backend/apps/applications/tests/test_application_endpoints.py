@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import re
+from datetime import timedelta
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
@@ -742,6 +743,90 @@ class ApplicationEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual([item["id"] for item in response.data], [str(submitted.id)])
+
+    def test_admissions_reviewer_can_filter_registration_queue_for_export(self):
+        payload = complete_payload()
+        target_payload = {
+            **payload,
+            "personal": {**payload["personal"], "firstName": "Target", "lastName": "Applicant"},
+            "school": {**payload["school"], "schoolId": "301234", "name": "Target National High School"},
+        }
+        target = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal=target_payload["personal"],
+            address=target_payload["address"],
+            school=target_payload["school"],
+            course_preferences=target_payload["coursePreferences"],
+            review_step=target_payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        same_school_payload = {
+            **payload,
+            "personal": {**payload["personal"], "firstName": "Target", "lastName": "Same School"},
+            "school": {**payload["school"], "schoolId": "301235", "name": "Target National High School"},
+        }
+        same_school = StudentApplication.objects.create(
+            owner=None,
+            lrn="777777777777",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal=same_school_payload["personal"],
+            address=same_school_payload["address"],
+            school=same_school_payload["school"],
+            course_preferences=same_school_payload["coursePreferences"],
+            review_step=same_school_payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        other_school_payload = {
+            **payload,
+            "personal": {**payload["personal"], "firstName": "Target", "lastName": "Other"},
+            "school": {**payload["school"], "schoolId": "999999", "name": "Other School"},
+        }
+        StudentApplication.objects.create(
+            owner=None,
+            lrn="999999999999",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal=other_school_payload["personal"],
+            address=other_school_payload["address"],
+            school=other_school_payload["school"],
+            course_preferences=other_school_payload["coursePreferences"],
+            review_step=other_school_payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        old_payload = {
+            **payload,
+            "personal": {**payload["personal"], "firstName": "Target", "lastName": "Old"},
+            "school": {**payload["school"], "schoolId": "301234", "name": "Target National High School"},
+        }
+        StudentApplication.objects.create(
+            owner=None,
+            lrn="888888888888",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now() - timedelta(days=1),
+            personal=old_payload["personal"],
+            address=old_payload["address"],
+            school=old_payload["school"],
+            course_preferences=old_payload["coursePreferences"],
+            review_step=old_payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(
+            reverse("applications:review-queue"),
+            {"search": "Target", "status": "PENDING", "schoolName": "Target National High School", "submitted": "today"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertCountEqual([item["id"] for item in response.data], [str(target.id), str(same_school.id)])
 
     def test_admissions_reviewer_django_session_can_list_submitted_registration_queue(self):
         payload = complete_payload()
