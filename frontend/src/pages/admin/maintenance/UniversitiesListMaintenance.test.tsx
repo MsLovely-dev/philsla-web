@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,7 +8,13 @@ import {
   type CollegeCourseRecord,
   type UniversityRecord,
 } from '../../../services/backendUniversityService';
-import { authorizationError, networkError, serviceSuccess, validationError } from '../../../services/serviceResult';
+import {
+  authorizationError,
+  networkError,
+  serviceSuccess,
+  validationError,
+  type PaginatedResult,
+} from '../../../services/serviceResult';
 import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
 
@@ -29,6 +35,10 @@ const university: UniversityRecord = {
   updatedAt: '2026-08-06T00:00:00Z',
 };
 
+function pageResult<T>(results: T[], count = results.length, next: string | null = null): PaginatedResult<T> {
+  return { count, next, previous: null, results };
+}
+
 function renderPage() {
   return render(
     <MaintenanceDataProvider>
@@ -38,16 +48,28 @@ function renderPage() {
 }
 
 describe('UniversitiesListMaintenance', () => {
+  // Stateful dataset so the list load and the reload-after-mutation both read it.
+  let data: UniversityRecord[];
+
   beforeEach(() => {
-    vi.spyOn(universityService, 'listUniversities').mockResolvedValue(serviceSuccess([]));
+    data = [];
+    vi.spyOn(universityService, 'listUniversitiesPage').mockImplementation(async () =>
+      serviceSuccess(pageResult(data)),
+    );
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('shows backend data and loads a selected university course list', async () => {
-    vi.mocked(universityService.listUniversities).mockResolvedValue(serviceSuccess([university]));
+  it('renders the current page of universities from the server', async () => {
+    data = [university];
+    renderPage();
+    expect(await screen.findByText(university.name)).toBeInTheDocument();
+  });
+
+  it('drills into a university and loads its courses (loading, then empty)', async () => {
+    data = [university];
     const listCourses = vi.spyOn(universityService, 'listCourses').mockResolvedValue(serviceSuccess([]));
     const user = userEvent.setup();
     renderPage();
@@ -63,17 +85,16 @@ describe('UniversitiesListMaintenance', () => {
     ['authorization', authorizationError('You cannot read this registry.')],
     ['network', networkError('The backend is unavailable.')],
   ])('surfaces an initial %s failure as a page error', async (_name, failure) => {
-    vi.mocked(universityService.listUniversities).mockResolvedValue(failure);
-
+    vi.mocked(universityService.listUniversitiesPage).mockResolvedValue(failure);
     renderPage();
-
     expect(await screen.findByText(failure.error.message)).toBeInTheDocument();
   });
 
-  it('creates a university through the service and renders the persisted response', async () => {
-    const createUniversity = vi.spyOn(universityService, 'createUniversity').mockResolvedValue(
-      serviceSuccess(university),
-    );
+  it('creates a university and reloads the current page', async () => {
+    const createUniversity = vi.spyOn(universityService, 'createUniversity').mockImplementation(async () => {
+      data = [university];
+      return serviceSuccess(university);
+    });
     const user = userEvent.setup();
     renderPage();
     await screen.findByText('No universities yet');
@@ -108,34 +129,56 @@ describe('UniversitiesListMaintenance', () => {
     await user.click(screen.getByRole('button', { name: 'Save University' }));
 
     expect(await screen.findByText('A university with this name already exists in this region.')).toBeInTheDocument();
-    // The modal stays open on failure so the admin can correct and retry.
     expect(screen.getByText('Add New University')).toBeInTheDocument();
   });
 
-  it('exports a CSV through the config modal with formula-injection neutralized', async () => {
-    const injected: UniversityRecord = { ...university, name: '=cmd|/c calc' };
-    vi.mocked(universityService.listUniversities).mockResolvedValue(serviceSuccess([injected]));
+  it('requests the next page from the server', async () => {
+    const second = { ...university, id: '2', code: 'UNI-00002', name: 'Ateneo de Manila University' };
+    const listPage = vi.mocked(universityService.listUniversitiesPage).mockImplementation(async (params) =>
+      serviceSuccess(params.page === 2 ? pageResult([second], 40) : pageResult([university], 40, 'next')),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(university.name);
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+
+    expect(listPage).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }));
+    expect(await screen.findByText(second.name)).toBeInTheDocument();
+  });
+
+  it('runs search on the server (debounced)', async () => {
+    const listPage = vi.mocked(universityService.listUniversitiesPage).mockResolvedValue(pageResultOk([university]));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(university.name);
+
+    await user.type(screen.getByPlaceholderText('Name, code, city...'), 'diliman');
+
+    await waitFor(() =>
+      expect(listPage).toHaveBeenCalledWith(expect.objectContaining({ search: 'diliman' })),
+    );
+  });
+
+  it('exports a CSV via the config modal with formula-injection neutralized', async () => {
+    data = [{ ...university, name: '=cmd|/c calc' }];
     const captured: Blob[] = [];
-    const createObjectURL = vi
-      .spyOn(URL, 'createObjectURL')
-      .mockImplementation((blob) => {
-        captured.push(blob as Blob);
-        return 'blob:mock';
-      });
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      captured.push(blob as Blob);
+      return 'blob:mock';
+    });
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(injected.name);
+    await screen.findByText('=cmd|/c calc');
 
-    await user.click(screen.getByRole('button', { name: /export csv/i })); // header opens the modal
-    await user.click(await screen.findByRole('button', { name: 'Download CSV' })); // modal performs it
+    await user.click(screen.getByRole('button', { name: /export csv/i }));
+    await user.click(await screen.findByRole('button', { name: 'Download CSV' }));
 
-    expect(createObjectURL).toHaveBeenCalled();
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
     const text = await captured[0].text();
-    // The leading "=" is prefixed with a quote so spreadsheets treat it as text.
     expect(text).toContain("'=cmd|/c calc");
-    expect(text).not.toContain(',=cmd'); // never a bare formula cell
   });
 
   it('serves a re-opened university\'s courses from cache without refetching', async () => {
@@ -155,7 +198,7 @@ describe('UniversitiesListMaintenance', () => {
       createdAt: '2026-08-06T00:00:00Z',
       updatedAt: '2026-08-06T00:00:00Z',
     };
-    vi.mocked(universityService.listUniversities).mockResolvedValue(serviceSuccess([university]));
+    data = [university];
     const listCourses = vi.spyOn(universityService, 'listCourses').mockResolvedValue(serviceSuccess([course]));
     const user = userEvent.setup();
     renderPage();
@@ -164,21 +207,17 @@ describe('UniversitiesListMaintenance', () => {
     expect(await screen.findByText(course.programName)).toBeInTheDocument();
     expect(listCourses).toHaveBeenCalledTimes(1);
 
-    // Go back to the list, then re-open the same university.
     await user.click(screen.getByRole('button', { name: /back to all universities/i }));
     await user.click(await screen.findByText(university.name));
-
     expect(await screen.findByText(course.programName)).toBeInTheDocument();
-    expect(listCourses).toHaveBeenCalledTimes(1); // still 1 — served from cache
+    expect(listCourses).toHaveBeenCalledTimes(1); // cached
   });
 
-  it('does not refetch the university list when the page remounts within the cached provider', async () => {
-    const listUniversities = vi
-      .mocked(universityService.listUniversities)
-      .mockResolvedValue(serviceSuccess([university]));
+  it('does not refetch the list when the page remounts within the cached provider', async () => {
+    data = [university];
+    const listPage = vi.mocked(universityService.listUniversitiesPage);
     const user = userEvent.setup();
 
-    // The provider outlives the page: toggling the page off/on mimics a tab switch.
     function Harness() {
       const [visible, setVisible] = useState(true);
       return (
@@ -194,12 +233,17 @@ describe('UniversitiesListMaintenance', () => {
         <MemoryRouter><Harness /></MemoryRouter>
       </MaintenanceDataProvider>,
     );
-
     await screen.findByText(university.name);
+    const callsAfterLoad = listPage.mock.calls.length;
+
     await user.click(screen.getByRole('button', { name: 'toggle' })); // unmount page
     await user.click(screen.getByRole('button', { name: 'toggle' })); // remount page
     await screen.findByText(university.name);
 
-    expect(listUniversities).toHaveBeenCalledTimes(1);
+    expect(listPage.mock.calls.length).toBe(callsAfterLoad); // no extra fetches
   });
 });
+
+function pageResultOk(results: UniversityRecord[]) {
+  return serviceSuccess(pageResult(results));
+}

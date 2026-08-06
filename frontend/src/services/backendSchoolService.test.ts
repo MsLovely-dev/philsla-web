@@ -93,4 +93,30 @@ describe('MockSchoolService', () => {
     const list = await service.listSchools();
     expect(list.ok && list.data.map((s) => s.name)).toEqual(['Beta']);
   });
+
+  it('paginates, filters, and searches listSchoolsPage', async () => {
+    const service = new MockSchoolService();
+    for (let index = 0; index < 25; index += 1) {
+      await service.createSchool({
+        classification: index % 2 === 0 ? 'Public' : 'Private',
+        name: `School ${String(index).padStart(2, '0')}`,
+        examineeCapacity: 1000 + index,
+        region: 'NCR',
+        status: 'Active',
+      });
+    }
+
+    const firstPage = await service.listSchoolsPage({ page: 1, pageSize: 20 });
+    expect(firstPage.ok && firstPage.data.count).toBe(25);
+    expect(firstPage.ok && firstPage.data.results).toHaveLength(20);
+
+    const secondPage = await service.listSchoolsPage({ page: 2, pageSize: 20 });
+    expect(secondPage.ok && secondPage.data.results).toHaveLength(5);
+
+    const privateOnly = await service.listSchoolsPage({ page: 1, pageSize: 100, classification: 'Private' });
+    expect(privateOnly.ok && privateOnly.data.results.every((s) => s.classification === 'Private')).toBe(true);
+
+    const searched = await service.listSchoolsPage({ page: 1, pageSize: 100, search: 'School 07' });
+    expect(searched.ok && searched.data.count).toBe(1);
+  });
 });

@@ -7,8 +7,12 @@ import StudentRegistrationMaintenance from './StudentRegistrationMaintenance';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
 import { universityService } from '../../../services/backendUniversityService';
 import { schoolService } from '../../../services/backendSchoolService';
-import { serviceSuccess } from '../../../services/serviceResult';
+import { serviceSuccess, type PaginatedResult } from '../../../services/serviceResult';
 import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
+
+function emptyPage<T>(): PaginatedResult<T> {
+  return { count: 0, next: null, previous: null, results: [] };
+}
 
 describe('active Maintenance Center tables', () => {
   beforeEach(() => {
@@ -31,7 +35,7 @@ describe('active Maintenance Center tables', () => {
   it('starts the schools table empty and ignores saved browser data', async () => {
     localStorage.setItem('philsa_maintenance_schools_list', JSON.stringify([{ name: 'Saved Mock School' }]));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
-    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([]));
+    vi.spyOn(schoolService, 'listSchoolsPage').mockResolvedValue(serviceSuccess(emptyPage()));
 
     render(<MaintenanceDataProvider><MemoryRouter><SchoolsListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 
@@ -44,7 +48,7 @@ describe('active Maintenance Center tables', () => {
   it('loads an empty universities table from the backend and ignores saved browser data', async () => {
     localStorage.setItem('philsa_maintenance_universities_list', JSON.stringify([{ name: 'Saved Mock University' }]));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
-    vi.spyOn(universityService, 'listUniversities').mockResolvedValue(serviceSuccess([]));
+    vi.spyOn(universityService, 'listUniversitiesPage').mockResolvedValue(serviceSuccess(emptyPage()));
 
     render(<MaintenanceDataProvider><MemoryRouter><UniversitiesListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 

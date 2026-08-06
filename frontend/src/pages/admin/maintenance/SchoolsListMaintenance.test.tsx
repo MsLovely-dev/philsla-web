@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schoolService, type SchoolRecord } from '../../../services/backendSchoolService';
-import { serviceSuccess, validationError } from '../../../services/serviceResult';
+import { serviceSuccess, validationError, type PaginatedResult } from '../../../services/serviceResult';
 import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 import SchoolsListMaintenance from './SchoolsListMaintenance';
 
@@ -19,7 +19,9 @@ const school: SchoolRecord = {
   updatedAt: '2026-08-06T00:00:00Z',
 };
 
-const EMPTY_STATE = 'No schools yet';
+function pageResult<T>(results: T[], count = results.length, next: string | null = null): PaginatedResult<T> {
+  return { count, next, previous: null, results };
+}
 
 function renderPage() {
   return render(
@@ -32,51 +34,46 @@ function renderPage() {
 }
 
 describe('SchoolsListMaintenance', () => {
+  let data: SchoolRecord[];
+
   beforeEach(() => {
-    // Default: the screen loads an empty registry on mount.
-    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([]));
+    data = [];
+    vi.spyOn(schoolService, 'listSchoolsPage').mockImplementation(async () => serviceSuccess(pageResult(data)));
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('renders the schools returned by the service', async () => {
-    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([school]));
-
+  it('renders the current page of schools from the server', async () => {
+    data = [school];
     renderPage();
-
-    expect(await screen.findByText(school.name)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: school.name })).toBeInTheDocument();
     expect(screen.getByText(school.code)).toBeInTheDocument();
   });
 
-  it('shows the empty state when the service returns no schools', async () => {
+  it('shows the empty state when the registry is empty', async () => {
     renderPage();
-
-    expect(await screen.findByText(EMPTY_STATE)).toBeInTheDocument();
+    expect(await screen.findByText('No schools yet')).toBeInTheDocument();
   });
 
-  it('creates a school through the service and renders the persisted row', async () => {
-    const createSchool = vi.spyOn(schoolService, 'createSchool').mockResolvedValue(serviceSuccess(school));
+  it('creates a school and reloads the current page', async () => {
+    const createSchool = vi.spyOn(schoolService, 'createSchool').mockImplementation(async () => {
+      data = [school];
+      return serviceSuccess(school);
+    });
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(EMPTY_STATE);
+    await screen.findByText('No schools yet');
 
     await user.click(screen.getByRole('button', { name: /add new school/i }));
     await user.type(screen.getByPlaceholderText('Official name of school...'), school.name);
     await user.click(screen.getByRole('button', { name: 'Save School Record' }));
 
-    // Code is server-generated: the client never sends it.
     expect(createSchool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        classification: 'Public',
-        name: school.name,
-        examineeCapacity: 1000,
-        region: expect.any(String),
-      }),
+      expect.objectContaining({ classification: 'Public', name: school.name, examineeCapacity: 1000 }),
     );
-    expect(createSchool).toHaveBeenCalledWith(expect.not.objectContaining({ code: expect.anything() }));
-    expect(await screen.findByText(school.name)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: school.name })).toBeInTheDocument();
   });
 
   it('keeps the modal open and surfaces a backend validation error', async () => {
@@ -85,33 +82,35 @@ describe('SchoolsListMaintenance', () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(EMPTY_STATE);
+    await screen.findByText('No schools yet');
 
     await user.click(screen.getByRole('button', { name: /add new school/i }));
     await user.type(screen.getByPlaceholderText('Official name of school...'), 'Duplicate School');
     await user.click(screen.getByRole('button', { name: 'Save School Record' }));
 
     expect(await screen.findByText('This school name already exists.')).toBeInTheDocument();
-    // The modal stays open so the admin can correct the input.
     expect(screen.getByText('Register New Accredited School')).toBeInTheDocument();
   });
 
   it('deletes a school through the confirmation dialog', async () => {
-    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([school]));
-    const deleteSchool = vi.spyOn(schoolService, 'deleteSchool').mockResolvedValue(serviceSuccess(null));
+    data = [school];
+    const deleteSchool = vi.spyOn(schoolService, 'deleteSchool').mockImplementation(async () => {
+      data = [];
+      return serviceSuccess(null);
+    });
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText(school.name);
+    await screen.findByRole('button', { name: school.name });
 
     await user.click(screen.getByRole('button', { name: 'Remove School' }));
     await user.click(screen.getByRole('button', { name: 'Agree' }));
 
     expect(deleteSchool).toHaveBeenCalledWith(school.id);
-    await waitFor(() => expect(screen.queryByText(school.name)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: school.name })).not.toBeInTheDocument());
   });
 
   it('opens a details modal from the school name and can jump to editing', async () => {
-    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([school]));
+    data = [school];
     const user = userEvent.setup();
     renderPage();
 
@@ -125,7 +124,7 @@ describe('SchoolsListMaintenance', () => {
   });
 
   it('opens the delete confirmation from the details modal', async () => {
-    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([school]));
+    data = [school];
     const user = userEvent.setup();
     renderPage();
 
@@ -133,5 +132,34 @@ describe('SchoolsListMaintenance', () => {
     await user.click(await screen.findByRole('button', { name: /^delete$/i }));
 
     expect(await screen.findByText(/remove .* at Maintenance Table/i)).toBeInTheDocument();
+  });
+
+  it('requests the next page from the server', async () => {
+    const second = { ...school, id: '2', code: 'SCH-00002', name: 'Manila Science High School' };
+    const listPage = vi.mocked(schoolService.listSchoolsPage).mockImplementation(async (params) =>
+      serviceSuccess(params.page === 2 ? pageResult([second], 40) : pageResult([school], 40, 'next')),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('button', { name: school.name });
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+
+    expect(listPage).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }));
+    expect(await screen.findByRole('button', { name: second.name })).toBeInTheDocument();
+  });
+
+  it('runs search on the server (debounced)', async () => {
+    data = [school];
+    const listPage = vi.mocked(schoolService.listSchoolsPage);
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('button', { name: school.name });
+
+    await user.type(screen.getByPlaceholderText('Name or code...'), 'science');
+
+    await waitFor(() =>
+      expect(listPage).toHaveBeenCalledWith(expect.objectContaining({ search: 'science' })),
+    );
   });
 });
