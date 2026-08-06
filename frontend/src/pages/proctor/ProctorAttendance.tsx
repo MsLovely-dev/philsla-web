@@ -40,6 +40,7 @@ interface StudentPC {
   device?: 'COMPATIBLE' | 'INCOMPATIBLE' | 'PENDING' | 'N/A';
   battery?: number;
   distStatus: 'Pending' | 'Received' | 'Failed';
+  qrCode: string;
   correctedFromAbsent?: boolean;
   correctionReasonCode?: string;
   correctionRemarks?: string;
@@ -50,20 +51,20 @@ interface StudentPC {
 const getInitialStudentPCs = (schId: string): StudentPC[] => {
   if (schId === 'sch1') {
     return [
-      { id: 'ST-001', name: 'Juan Carlos Villanueva', seat: 'A01', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-002', name: 'Maria Cristina Santos', seat: 'A02', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-003', name: 'Enrique S. Gatus', seat: 'A03', attendance: 'Pending', device: 'INCOMPATIBLE', battery: 15, distStatus: 'Pending' },
-      { id: 'ST-004', name: 'Liza Monica Bautista', seat: 'A04', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-005', name: 'Daniel S. Reyes', seat: 'A05', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-006', name: 'Kathrine B. Mercado', seat: 'A06', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
+      { id: 'ST-001', name: 'Juan Carlos Villanueva', seat: 'A01', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-001' },
+      { id: 'ST-002', name: 'Maria Cristina Santos', seat: 'A02', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-002' },
+      { id: 'ST-003', name: 'Enrique S. Gatus', seat: 'A03', attendance: 'Pending', device: 'INCOMPATIBLE', battery: 15, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-003' },
+      { id: 'ST-004', name: 'Liza Monica Bautista', seat: 'A04', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-004' },
+      { id: 'ST-005', name: 'Daniel S. Reyes', seat: 'A05', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-005' },
+      { id: 'ST-006', name: 'Kathrine B. Mercado', seat: 'A06', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-006' },
     ];
   } else {
     return [
-      { id: 'ST-101', name: 'Patricia Alcaraz', seat: 'B01', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-102', name: 'Ramon Macaraeg', seat: 'B02', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-103', name: 'Isabella Dela Cruz', seat: 'B03', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-104', name: 'Gabriela Silang II', seat: 'B04', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
-      { id: 'ST-105', name: 'Miguel De Guzman', seat: 'B05', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending' },
+      { id: 'ST-101', name: 'Patricia Alcaraz', seat: 'B01', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-101' },
+      { id: 'ST-102', name: 'Ramon Macaraeg', seat: 'B02', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-102' },
+      { id: 'ST-103', name: 'Isabella Dela Cruz', seat: 'B03', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-103' },
+      { id: 'ST-104', name: 'Gabriela Silang II', seat: 'B04', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-104' },
+      { id: 'ST-105', name: 'Miguel De Guzman', seat: 'B05', attendance: 'Pending', device: 'PENDING', battery: 0, distStatus: 'Pending', qrCode: 'SAMPLE_QR_ST-105' },
     ];
   }
 };

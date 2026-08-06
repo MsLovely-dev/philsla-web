@@ -67,7 +67,7 @@ function canReadCurrentModule(user: User, pathname: string, maintenanceModules: 
   if (!module) return true;
 
   const permissions = new Set(user.permissions);
-  return user.permissions.some((permission) => permission.startsWith(`MOD_${module.id}_`)) || permissions.has(moduleKey(module.name));
+  return permissions.has(`MOD_${module.id}_READ`) || permissions.has(moduleKey(module.name));
 }
 
 function canAccessRouteByModulePermission(user: User, pathname: string, maintenanceModules: typeof INITIAL_MAINTENANCE_MODULES) {

@@ -5,7 +5,8 @@ from rest_framework.test import APIClient, APITestCase
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 
-from .models import AcademicYear, Agency, BlueprintCategory, BlueprintVersion, ExamBlueprint, ExamSet, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
+from .models import AcademicYear, Agency, BlueprintCategory, BlueprintSection, BlueprintVersion, ExamBlueprint, ExamSet, ExamSetStatus, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
+from .services import ExamSetLifecycleConflict, create_or_update_exam_set, transition_exam_set
 
 
 class ExamBlueprintApiTests(APITestCase):
@@ -116,10 +117,15 @@ class ExamBlueprintApiTests(APITestCase):
         self.assertEqual(response.data["code"], "BP-2026-ADM-01")
         self.assertEqual(response.data["status"], "DRAFT")
         self.assertEqual(response.data["sections"][0]["item_count"], 2)
+        self.assertEqual(
+            response.data["current_version_id"],
+            str(BlueprintVersion.objects.get(blueprint_id=response.data["id"]).pk),
+        )
 
         list_response = self.client.get(reverse("exams:blueprint_list"))
         self.assertEqual(list_response.status_code, 200)
         self.assertGreaterEqual(len(list_response.data), 1)
+        self.assertEqual(list_response.data[0]["current_version_id"], response.data["current_version_id"])
 
     def test_blueprint_forward_transitions_record_history(self) -> None:
         creator, _ = self.create_profile("blueprint_creator", PortalRole.ITEM_WRITER.value)
@@ -366,6 +372,14 @@ class ExamSetApiTests(APITestCase):
 
         transition_response = self.client.post(
             reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id}),
+            {"status": "ACADEMIC_REVIEW", "remarks": "Ready for review"},
+            format="json",
+        )
+        self.assertEqual(transition_response.status_code, 200)
+        self.assertEqual(transition_response.data["status"], "ACADEMIC_REVIEW")
+
+        transition_response = self.client.post(
+            reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id}),
             {"status": "APPROVED", "remarks": "Ready for publication"},
             format="json",
         )
@@ -375,3 +389,191 @@ class ExamSetApiTests(APITestCase):
         clone_response = self.client.post(reverse("exams:exam_set_clone", kwargs={"exam_set_id": exam_set_id}))
         self.assertEqual(clone_response.status_code, 201)
         self.assertTrue(clone_response.data["exam_code"])
+
+    def test_rejects_invalid_lifecycle_transitions_and_locked_updates(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        exam_set_id = created.data["id"]
+        transition_url = reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id})
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": exam_set_id})
+
+        direct_approval = self.client.post(transition_url, {"status": "APPROVED"}, format="json")
+        self.assertEqual(direct_approval.status_code, 409)
+        self.assertEqual(direct_approval.data["error"]["code"], "EXAM_SET_LIFECYCLE_CONFLICT")
+
+        self.assertEqual(self.client.post(transition_url, {"status": "ACADEMIC_REVIEW"}, format="json").status_code, 200)
+        self.assertEqual(self.client.post(transition_url, {"status": "PUBLISHED"}, format="json").status_code, 409)
+        self.assertEqual(self.client.post(transition_url, {"status": "APPROVED"}, format="json").status_code, 200)
+
+        locked_update = self.client.put(detail_url, {**self.payload, "title": "Changed after approval"}, format="json")
+        self.assertEqual(locked_update.status_code, 409)
+
+        self.assertEqual(self.client.post(transition_url, {"status": "PUBLISHED"}, format="json").status_code, 200)
+        self.assertEqual(self.client.post(transition_url, {"status": "ARCHIVED"}, format="json").status_code, 200)
+        self.assertEqual(self.client.post(transition_url, {"status": "DRAFT"}, format="json").status_code, 409)
+
+    def test_rejects_submission_of_an_empty_exam_set(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), {**self.payload, "items": []}, format="json")
+        response = self.client.post(
+            reverse("exams:exam_set_transition", kwargs={"exam_set_id": created.data["id"]}),
+            {"status": "ACADEMIC_REVIEW"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["code"], "EXAM_SET_VALIDATION_CONFLICT")
+
+    def test_denies_unauthenticated_and_unapproved_roles(self) -> None:
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get(reverse("exams:exam_set_list")).status_code, 401)
+
+        User = get_user_model()
+        university_user = User.objects.create_user(
+            username="university_admin",
+            email="university.admin@example.test",
+            password="Password1!",
+        )
+        AccountProfile.objects.create(user=university_user, role=PortalRole.UNIVERSITY_ADMIN.value)
+        self.client.force_authenticate(university_user)
+
+        self.assertEqual(self.client.get(reverse("exams:exam_set_list")).status_code, 403)
+
+    def test_rejects_invalid_item_references_without_replacing_existing_items(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": created.data["id"]})
+
+        unknown_question = self.client.put(
+            detail_url,
+            {**self.payload, "title": "Must roll back", "items": [{"question_id": 999999, "display_order": 1}]},
+            format="json",
+        )
+        self.assertEqual(unknown_question.status_code, 400)
+        self.assertEqual(unknown_question.data["error"]["code"], "VALIDATION_FAILED")
+
+        duplicate_question = self.client.put(
+            detail_url,
+            {
+                **self.payload,
+                "items": [
+                    {"question_id": self.question.id, "display_order": 1},
+                    {"question_id": self.question.id, "display_order": 2},
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(duplicate_question.status_code, 400)
+
+        other_version = BlueprintVersion.objects.create(
+            blueprint=self.blueprint,
+            version_number="2.00",
+            name="Another synthetic Blueprint Version",
+            academic_year=self.academic_year,
+            status="approved",
+            shuffle_questions=True,
+            shuffle_choices=True,
+            active_items_only=True,
+            shared_stimulus_required=False,
+            shared_stimulus_min_count=0,
+            shared_stimulus_questions_per_stimulus=0,
+            max_item_reuse_count=0,
+            version_compatibility=">= 1.0",
+            created_by=self.profile,
+            approved_by=self.profile,
+        )
+        foreign_section = BlueprintSection.objects.create(
+            blueprint_version=other_version,
+            section_number=1,
+            section_name="Foreign synthetic section",
+            subject=self.subject,
+            item_count=1,
+            total_marks="5.00",
+            passing_score="3.00",
+            time_limit_minutes=10,
+            display_order=1,
+        )
+        cross_version_section = self.client.put(
+            detail_url,
+            {
+                **self.payload,
+                "items": [{
+                    "question_id": self.question.id,
+                    "blueprint_section_id": foreign_section.id,
+                    "display_order": 1,
+                }],
+            },
+            format="json",
+        )
+        self.assertEqual(cross_version_section.status_code, 400)
+
+        preserved = self.client.get(detail_url)
+        self.assertEqual(preserved.data["title"], self.payload["title"])
+        self.assertEqual([item["question"]["id"] for item in preserved.data["items"]], [str(self.question.id)])
+
+    def test_rejects_unknown_blueprint_and_academic_year_with_safe_validation_errors(self) -> None:
+        unknown_blueprint = self.client.post(
+            reverse("exams:exam_set_list"),
+            {**self.payload, "blueprint_version_id": 999999},
+            format="json",
+        )
+        self.assertEqual(unknown_blueprint.status_code, 400)
+        self.assertEqual(unknown_blueprint.data["error"]["code"], "VALIDATION_FAILED")
+
+        unknown_academic_year = self.client.post(
+            reverse("exams:exam_set_list"),
+            {**self.payload, "academic_year_id": 999999},
+            format="json",
+        )
+        self.assertEqual(unknown_academic_year.status_code, 400)
+        self.assertEqual(unknown_academic_year.data["error"]["code"], "VALIDATION_FAILED")
+
+    def test_updates_academic_year_by_name_and_rejects_unknown_or_conflicting_references(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": created.data["id"]})
+        next_year = AcademicYear.objects.create(name="2027-2028")
+        by_name_payload = {**self.payload, "academic_year": next_year.name}
+        by_name_payload.pop("academic_year_id")
+
+        changed = self.client.put(detail_url, by_name_payload, format="json")
+        self.assertEqual(changed.status_code, 200)
+        self.assertEqual(changed.data["academic_year"], next_year.name)
+
+        unknown_name = self.client.put(
+            detail_url,
+            {**by_name_payload, "academic_year": "2099-2100"},
+            format="json",
+        )
+        self.assertEqual(unknown_name.status_code, 400)
+        self.assertEqual(unknown_name.data["error"]["code"], "VALIDATION_FAILED")
+
+        conflicting = self.client.put(
+            detail_url,
+            {**self.payload, "academic_year": next_year.name},
+            format="json",
+        )
+        self.assertEqual(conflicting.status_code, 400)
+
+        invalid_id_with_valid_name = self.client.put(
+            detail_url,
+            {**self.payload, "academic_year_id": 999999, "academic_year": next_year.name},
+            format="json",
+        )
+        self.assertEqual(invalid_id_with_valid_name.status_code, 400)
+
+    def test_stale_instances_cannot_overwrite_or_bypass_the_current_lifecycle(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        stale_exam_set = ExamSet.objects.get(pk=created.data["id"])
+        ExamSet.objects.filter(pk=stale_exam_set.pk).update(status=ExamSetStatus.ACADEMIC_REVIEW)
+
+        with self.assertRaises(ExamSetLifecycleConflict):
+            create_or_update_exam_set(
+                payload={**self.payload, "title": "Stale overwrite"},
+                actor_profile=self.profile,
+                exam_set=stale_exam_set,
+            )
+
+        transitioned = transition_exam_set(
+            exam_set=stale_exam_set,
+            target_status=ExamSetStatus.APPROVED,
+            actor_profile=self.profile,
+        )
+        self.assertEqual(transitioned.status, ExamSetStatus.APPROVED)
+        self.assertEqual(ExamSet.objects.get(pk=stale_exam_set.pk).status, ExamSetStatus.APPROVED)

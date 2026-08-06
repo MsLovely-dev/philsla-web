@@ -4,7 +4,7 @@
 
 **Goal:** Preserve the current sprint's full focus on the Exam Sets narrative while defining a secure, review-gated path for eventually delivering the Exam Blueprint maintenance table.
 
-**Architecture:** Work is split into two horizons. The current authorized horizon is documentation and scope control only. The future horizon is conditional and backend-first: approve the Blueprint-versus-Exam-Set boundary and security model, implement an authoritative Django REST Framework contract, then connect the React UI through an isolated service module.
+**Architecture:** Ticket 001 remains limited to documentation and scope control. A separate reviewed plan has since aligned the Django/DRF Exam Sets foundation and connected the React UI through isolated typed service and hook layers; that completed integration does not reopen the deferred maintenance-table ticket.
 
 **Tech Stack:** Markdown planning artifacts now; proposed future implementation uses the repository's Django/DRF backend and React/TypeScript/Vite frontend after approval.
 
@@ -12,7 +12,7 @@
 
 - Ticket 001 remains **Deferred — confirmed**.
 - The target iteration remains **TBD — requires explicit sprint reprioritization**.
-- Current sprint bandwidth goes to the Exam Sets narrative; Ticket 001 has no coding deliverable.
+- Ticket 001 has no coding deliverable. Exam Sets application work was authorized and executed under its separate reviewed plan.
 - No application code, configuration, schema, endpoint, migration, or test change is authorized by this plan.
 - The user must approve this plan before any later implementation-planning or execution step.
 - Never place real exam questions, answer keys, assessment packages, candidate/student data, credentials, tokens, or other sensitive information in planning, demo, test, log, screenshot, or narrative artifacts.
@@ -26,8 +26,8 @@
 
 Use a **gated, backend-first delivery strategy** and keep three concerns separate:
 
-1. **Exam Sets narrative and architecture decision** — current priority; explain what exists, what is simulated, and what decisions block production delivery.
-2. **Exam Sets backend foundation** — a separate future story because the repository currently has no Exam Set model or endpoint.
+1. **Exam Sets integration and architecture record** — implemented under a separate reviewed plan; explain what is verified and which release caveats remain.
+2. **Exam Sets release readiness** — resolve or accept the frontend baseline failures and rehearse the rebased migrations against PostgreSQL-compatible storage before a release claim.
 3. **Exam Blueprint maintenance table** — reopen Ticket 001 only after the relevant domain ownership and API contract are approved.
 
 Do not combine all three into one implementation ticket. That would make review, testing, rollback, and authorization boundaries too broad. Do not connect the maintenance UI directly to ad hoc storage or treat browser state as authoritative.
@@ -40,51 +40,52 @@ Do not combine all three into one implementation ticket. That would make review,
 - **Application-code authorization:** None
 - **Completed artifact:** Exam Sets narrative below
 - **Remaining manual action:** Ian Chris Sandoval must rehearse the talk track and obtain reviewer acceptance before the Phase 1 exit gate is complete.
+- **Superseding Exam Sets status (2026-08-05):** The user separately reviewed and approved `docs/superpowers/i.sandoval/plans/2026-08-05-exam-sets-api-integration.md`. That plan has been implemented in the Python 3.13 worktree environment; current commands and caveats are recorded in `docs/superpowers/i.sandoval/implement/i.sandoval.implement.md`. The historical narrative below is retained as evidence of the earlier scope decision, not as the current repository state.
 
 ## Exam Sets Narrative Deliverable
 
-> **Status:** Content ready for presentation; owner rehearsal and reviewer acceptance remain pending.
+> **Status:** Historical pre-integration narrative, updated with the implemented outcome. Use the superseding implementation log for current verification evidence.
 
 ### One-slide copy
 
-**Title: Exam Sets — Prototype Today, Secure Platform Next**
+**Title: Exam Sets — API Integration Implemented, Release Gates Open**
 
 **What exists now**
 
-- A React-based Exam Sets prototype demonstrates the intended administration experience.
-- The current screen uses mock data and browser `localStorage`.
-- The backend exposes blueprint and question routes, but it has no Exam Set model or `/exam-sets/` API route.
+- The Django/DRF backend provides the `ExamSet` model, related assembly/history/validation records, and versioned list, detail, clone, and transition routes.
+- The model relates an Exam Set to a `BlueprintVersion`, and Blueprint responses expose the authoritative current version identifier.
+- The React Exam Sets screen consumes the typed API service for list, create, edit, clone, transition, and delete; mock/browser-local state is no longer authoritative.
 
 **What is missing for production**
 
-- An approved Exam Set domain model, relationship to Exam Blueprints, lifecycle, versioning, and mutability rules.
-- Authoritative backend persistence, validation, authentication, role/permission enforcement, object-level authorization, and audit events.
-- A reviewed API contract, failure behavior, migration/rollback approach, and sensitive-assessment data controls.
-- Production-grade package integrity and signing controls; the current hash/signature behavior is illustrative mock behavior, not cryptography.
+- Resolution or explicit acceptance of the recorded unrelated frontend test and type-check baseline failures.
+- PostgreSQL-compatible rehearsal of the rebased `apps.results` migration graph before deployment to any database that may contain history from the previously independent Exam Review branch.
+- Release review of the implemented global Exam Administrator/System Administrator scope; narrower object-level ownership remains `TBD` because no assignment model exists.
+- Package delivery, testing-center synchronization, and package signing remain outside the approved Exam Sets scope.
 
 **What must be decided next**
 
 - Approve the Blueprint-versus-Exam-Set boundary and ownership.
 - Approve lifecycle, permissions, audit, storage, and threat controls.
-- Deliver the Exam Sets backend foundation as a separate story.
+- Keep future Exam Sets changes under separately reviewed, test-first stories.
 - Reopen Ticket 001 only after those dependencies and a test-first implementation plan are approved.
 
 ### Presenter talk track
 
-“The current Exam Sets screen is a prototype of the intended workflow, not a production-backed capability. It demonstrates how administrators may work with exam sets, but its state is mock/browser-local and the backend currently supports blueprints and questions only. Before implementation, PhilSLA must approve the boundary between a blueprint and an exam set, then define lifecycle, permissions, persistence, auditing, and package-integrity controls. Our recommendation is to build that backend foundation as a separate reviewed story and keep the Exam Blueprint maintenance table deferred until its dependencies are stable.”
+“The Exam Sets screen now uses the versioned Django/DRF API through typed frontend services. The backend enforces the supported lifecycle and the approved Exam Administrator/System Administrator endpoint roles, while the UI preserves server-owned Blueprint and question metadata. Focused backend, component, and browser checks cover the workflow. Release readiness still requires handling the recorded repository-wide frontend baseline failures and rehearsing the rebased results migrations against PostgreSQL-compatible storage. The Exam Blueprint maintenance table remains deferred until its independent catalog and authorization decisions are stable.”
 
 ### Demo guardrails
 
-- Display an explicit **Prototype** label in presentation material.
+- Describe the workflow as **implemented with open release gates**, not as production-ready.
 - Use synthetic labels and aggregate counts only.
 - Do not include real questions, answers, candidates, schedules, packages, identifiers, credentials, or operational secrets.
-- Do not describe browser storage, mock hashes, or mock signatures as security controls.
+- Do not describe browser storage, removed mock hashes, or removed mock signatures as security controls.
 - Separate “built UI,” “simulated behavior,” and “approved future work” in every explanation.
 
 ### Recommended follow-up work items
 
 1. **Architecture decision:** define and approve the Blueprint-versus-Exam-Set domain boundary and security model.
-2. **Exam Sets backend foundation:** implement the approved entity, lifecycle, API, permissions, audit behavior, and persistence under a separate test-first plan.
+2. **Exam Sets release readiness:** review the implemented contract and verification log, resolve or accept baseline failures, and complete the PostgreSQL-compatible migration rehearsal.
 3. **Ticket 001 reopening:** plan the Exam Blueprint maintenance table only after the backend contract and maintenance-catalog ownership are approved.
 
 ## Phase Summary
@@ -116,17 +117,17 @@ Do not combine all three into one implementation ticket. That would make review,
 
 **Purpose:** Produce an honest demo narrative without implying that mock behavior is production-ready.
 
-- [x] State that `backend/apps/exams/urls.py` has blueprint and question routes but no `/exam-sets/` route.
-- [x] State that `backend/apps/exams/models.py` has no Exam Set model/entity.
-- [x] State that `frontend/src/pages/admin/hub/ExamSets.tsx` currently uses mock data and browser `localStorage`.
+- [x] Record the historical absence of Exam Set routes; the separate integration now provides `/api/v1/exams/exam-sets/` routes.
+- [x] Record the historical absence of an Exam Set entity; the backend now provides the authoritative model and related workflow records.
+- [x] Record that `frontend/src/pages/admin/hub/ExamSets.tsx` used mock data and browser `localStorage` at the time of the original narrative; this was superseded by the separate integration plan.
 - [x] Organize the narrative into three parts: **what exists**, **what is missing**, and **what must be decided next**.
-- [x] Label the current Exam Sets experience as a **prototype**, not a production workflow.
+- [x] Label the original Exam Sets experience as a **prototype**; the integrated workflow is now described as implemented with open release gates.
 - [x] Explain that mock hash/signature behavior is illustrative and is not production cryptography.
 - [x] Use only synthetic labels and counts; include no real questions, answers, candidates, schedules, packages, identifiers, or credentials.
 - [x] Present the open Blueprint-versus-Exam-Set boundary as a decision requiring product, architecture, and security approval.
 - [ ] Rehearse the narrative and confirm it clearly separates built UI, simulated behavior, and future work.
 
-**Exit criteria:** A reviewer can identify the current prototype boundary, missing backend foundation, open architecture decision, and next gated step without seeing sensitive content or being told that mock controls are secure.
+**Exit criteria:** A reviewer can identify the historical prototype boundary, the superseding API integration, the remaining release questions, and the next gated step without seeing sensitive content or being told that mock controls are secure.
 
 ## Phase 2 — Ticket Parking and Backlog Package
 

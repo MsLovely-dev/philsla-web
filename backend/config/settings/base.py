@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.exams",
     "apps.schools",
+    "apps.universities",
+    "apps.attendance",
 ]
 
 MIDDLEWARE = [
@@ -137,7 +139,7 @@ REST_FRAMEWORK = {
         "registration_email_otp": "5/min",
         "registration_selfie_face": "30/min",
     },
-    "PAGE_SIZE": 25,
+    "PAGE_SIZE": 10,
 }
 
 AUTH_ACCESS_TOKEN_LIFETIME_MINUTES = env_int("AUTH_ACCESS_TOKEN_LIFETIME_MINUTES", 20)

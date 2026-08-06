@@ -162,7 +162,7 @@ class ApiContractTests(TestCase):
         endpoint_docs = API_ENDPOINTS_DOC.read_text(encoding="utf-8")
 
         for contract in IMPLEMENTED_ENDPOINT_CONTRACTS:
-            table_path = f"| `{contract['method']}` | `{contract['path']}` |"
+            table_path = f"| `{contract['method']}` | `{contract.get('doc_path', contract['path'])}` |"
 
             self.assertIn(table_path, endpoint_docs)
             self.assertIn(contract["doc_heading"], endpoint_docs)
