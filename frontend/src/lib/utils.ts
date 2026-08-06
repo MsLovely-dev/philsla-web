@@ -27,7 +27,7 @@ function hashToCandidateCode(value: string) {
 
   let code = '';
   let state = hash >>> 0;
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     state = Math.imul(state ^ (state >>> 15), 2246822519) >>> 0;
     code += CANDIDATE_CODE_ALPHABET[state % CANDIDATE_CODE_ALPHABET.length];
   }
@@ -35,19 +35,14 @@ function hashToCandidateCode(value: string) {
   return code;
 }
 
-function splitCandidateCode(code: string) {
-  const normalizedCode = code.slice(0, 8).padEnd(8, '0');
-  return `${normalizedCode.slice(0, 4)}-${normalizedCode.slice(4, 8)}`;
-}
-
 export function formatCandidateId(applicationId: string, submittedAt?: string | null) {
-  if (/^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(applicationId)) return applicationId;
+  if (/^PHL-\d{4}-[A-Z0-9]{6}$/.test(applicationId)) return applicationId;
 
   const year = getRegistrationYear(submittedAt);
   const seed = toCandidateCodeSeed(applicationId);
-  const code = /^[A-Z0-9]{8}$/.test(seed) ? seed : hashToCandidateCode(applicationId || `${year}`);
+  const code = seed.length >= 6 ? seed : hashToCandidateCode(applicationId || `${year}`);
 
-  return `PS-${year}-${splitCandidateCode(code)}`;
+  return `PHL-${year}-${code.slice(0, 6).padEnd(6, '0')}`;
 }
 
 export const PHILSA_COLORS = {

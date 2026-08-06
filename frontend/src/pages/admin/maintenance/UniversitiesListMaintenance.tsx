@@ -1,21 +1,21 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { 
-  GraduationCap, 
-  Search, 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  BookOpen, 
-  Building2, 
-  ChevronRight, 
-  ArrowLeft, 
-  Check, 
-  X, 
-  MapPin, 
-  Mail, 
-  Phone, 
-  Award, 
-  Download, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  GraduationCap,
+  Search,
+  Plus,
+  Edit3,
+  Trash2,
+  BookOpen,
+  Building2,
+  ChevronRight,
+  ArrowLeft,
+  Check,
+  X,
+  MapPin,
+  Mail,
+  Phone,
+  Award,
+  Download,
   Layers,
   Sparkles,
   ExternalLink,
@@ -24,118 +24,55 @@ import {
   LayoutGrid
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { ErrorState, LoadingState } from '../../../components/ui/StateDisplay';
-import { NotificationRegion, NotificationToast, type NotificationTone } from '../../../components/ui/NotificationToast';
+import { PHILIPPINE_REGIONS, regionLabel } from '../../../data/philippineRegions';
 import {
-  backendUniversityService,
-  type CollegeCourse,
-  type CollegeCourseInput,
-  type PaginationMetadata,
-  type UniversityInput,
-  type UniversityItem,
-  type UniversityPaginationMetadata,
+  universityService,
+  type CollegeCoursePayload,
+  type CollegeCourseRecord,
+  DEGREE_TYPE_SUGGESTIONS,
+  type UniversityClassification,
+  type UniversityPayload,
+  type UniversityRecord,
 } from '../../../services/backendUniversityService';
+import type { ServiceFailure } from '../../../services/serviceResult';
+import { ConfirmationDialog } from '../../../components/ui';
 
-interface PageNotification {
-  title: string;
-  message: string;
-  tone: NotificationTone;
-}
-
-const INITIAL_UNIVERSITY_PAGINATION: UniversityPaginationMetadata = {
-  count: 0,
-  next: null,
-  previous: null,
-  page: 1,
-  pageSize: 10,
-  summary: {
-    totalUniversities: 0,
-    publicUniversities: 0,
-    privateUniversities: 0,
-    totalDegreeCourses: 0,
-  },
-};
-
-const INITIAL_COURSE_PAGINATION: PaginationMetadata = {
-  count: 0,
-  next: null,
-  previous: null,
-  page: 1,
-  pageSize: 10,
-};
-
-interface PaginationControlsProps {
-  metadata: PaginationMetadata;
-  isLoading: boolean;
-  previousLabel: string;
-  nextLabel: string;
-  onPrevious: () => void;
-  onNext: () => void;
-}
-
-function PaginationControls({
-  metadata,
-  isLoading,
-  previousLabel,
-  nextLabel,
-  onPrevious,
-  onNext,
-}: PaginationControlsProps) {
-  const pageCount = Math.max(1, Math.ceil(metadata.count / metadata.pageSize));
-  return (
-    <nav className="flex items-center justify-between gap-3 text-xs" aria-label="Registry pagination">
-      <span className="font-medium text-slate-500">Page {metadata.page} of {pageCount}</span>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          aria-label={previousLabel}
-          disabled={isLoading || !metadata.previous}
-          onClick={onPrevious}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Previous
-        </button>
-        <button
-          type="button"
-          aria-label={nextLabel}
-          disabled={isLoading || !metadata.next}
-          onClick={onNext}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-bold text-philsa-navy disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Next
-        </button>
-      </div>
-    </nav>
-  );
-}
-
-function isUniversityClassification(value: string): value is UniversityItem['classification'] {
+function isUniversityClassification(value: string): value is UniversityClassification {
   return value === 'Public' || value === 'Private';
 }
 
-function isDegreeType(value: string): value is CollegeCourse['degreeType'] {
-  return ['Bachelor of Science', 'Bachelor of Arts', 'Bachelor of Fine Arts', 'Associate'].includes(value);
-}
+const EMPTY_COURSE_FORM: CollegeCoursePayload = {
+  collegeName: '',
+  programCode: '',
+  programName: '',
+  degreeType: '',
+  majorSpecialization: '',
+  durationYears: 4,
+  totalUnits: 150,
+  cutoffPercentile: 80.0,
+  status: 'Active',
+};
 
-function isRegistryStatus(value: string): value is UniversityItem['status'] {
-  return value === 'Active' || value === 'Inactive';
-}
+const EMPTY_UNI_FORM: UniversityPayload = {
+  classification: 'Public',
+  name: '',
+  region: PHILIPPINE_REGIONS[0].code,
+  city: '',
+  presidentRector: '',
+  email: '',
+  phone: '',
+  establishedYear: null,
+  status: 'Active',
+};
 
 export default function UniversitiesListMaintenance() {
-  const [universities, setUniversities] = useState<UniversityItem[]>([]);
-  const [courses, setCourses] = useState<CollegeCourse[]>([]);
-  const [universityPagination, setUniversityPagination] = useState<UniversityPaginationMetadata>(INITIAL_UNIVERSITY_PAGINATION);
-  const [coursePagination, setCoursePagination] = useState<PaginationMetadata>(INITIAL_COURSE_PAGINATION);
-  const [isLoadingUniversities, setIsLoadingUniversities] = useState(true);
-  const [universitiesLoadError, setUniversitiesLoadError] = useState<string | null>(null);
-  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
-  const [coursesLoadError, setCoursesLoadError] = useState<string | null>(null);
+  const [universities, setUniversities] = useState<UniversityRecord[]>([]);
+  const [courses, setCourses] = useState<CollegeCourseRecord[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [notification, setNotification] = useState<PageNotification | null>(null);
-  const courseRequestId = useRef(0);
 
   // Selected University State (drill-down into College Courses)
-  const [selectedUniversity, setSelectedUniversity] = useState<UniversityItem | null>(null);
+  const [selectedUniversity, setSelectedUniversity] = useState<UniversityRecord | null>(null);
 
   // Search & Filter for Universities
   const [uniSearch, setUniSearch] = useState('');
@@ -149,90 +86,71 @@ export default function UniversitiesListMaintenance() {
 
   // Modals
   const [isUniModalOpen, setIsUniModalOpen] = useState(false);
-  const [editingUniversity, setEditingUniversity] = useState<UniversityItem | null>(null);
-  const [uniFormData, setUniFormData] = useState<Partial<UniversityItem>>({});
+  const [editingUniversity, setEditingUniversity] = useState<UniversityRecord | null>(null);
+  const [uniFormData, setUniFormData] = useState<UniversityPayload>(EMPTY_UNI_FORM);
+
+  const [pendingDelete, setPendingDelete] = useState<UniversityRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
-  const [editingCourse, setEditingCourse] = useState<CollegeCourse | null>(null);
-  const [courseFormData, setCourseFormData] = useState<Partial<CollegeCourse>>({});
-
-  const loadUniversities = useCallback(async (page = 1) => {
-    setIsLoadingUniversities(true);
-    setUniversitiesLoadError(null);
-    const result = await backendUniversityService.listUniversities(page);
-    if (result.ok === true) {
-      setUniversities(result.data);
-      if (result.meta) setUniversityPagination(result.meta);
-    } else {
-      setUniversitiesLoadError(result.error.message);
-    }
-    setIsLoadingUniversities(false);
-  }, []);
+  const [editingCourse, setEditingCourse] = useState<CollegeCourseRecord | null>(null);
+  const [courseFormData, setCourseFormData] = useState<CollegeCoursePayload>(EMPTY_COURSE_FORM);
+  const [isSavingCourse, setIsSavingCourse] = useState(false);
+  const [pendingCourseDelete, setPendingCourseDelete] = useState<CollegeCourseRecord | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
 
   useEffect(() => {
-    void loadUniversities(1);
-  }, [loadUniversities]);
-
-  const notify = (title: string, message: string, tone: NotificationTone) => {
-    setNotification({ title, message, tone });
-  };
-
-  const loadCourses = useCallback(async (university: UniversityItem, page = 1) => {
-    const requestId = ++courseRequestId.current;
-    setCourses([]);
-    setCoursesLoadError(null);
-    setIsLoadingCourses(true);
-    const result = await backendUniversityService.listCourses(university.id, page);
-    if (courseRequestId.current !== requestId) return;
-    if (result.ok === true) {
-      setCourses(result.data);
-      if (result.meta) setCoursePagination(result.meta);
-    } else {
-      setCoursesLoadError(result.error.message);
-    }
-    setIsLoadingCourses(false);
+    let active = true;
+    universityService.listUniversities().then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setUniversities(result.data);
+      } else {
+        setError((result as ServiceFailure).error.message);
+      }
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const handleSelectUniversity = (university: UniversityItem) => {
-    setSelectedUniversity(university);
-    setCourseSearch('');
-    setCollegeFilter('ALL');
-    void loadCourses(university, 1);
+  // Load the selected university's courses from the nested endpoint on drill-down.
+  useEffect(() => {
+    if (!selectedUniversity) {
+      setCourses([]);
+      return;
+    }
+    let active = true;
+    universityService.listCourses(selectedUniversity.id).then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setCourses(result.data);
+      } else {
+        setError((result as ServiceFailure).error.message);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedUniversity]);
+
+  // Keep the in-memory university list's course count in step with course changes,
+  // so the list-view column and totals stay accurate without a full refetch.
+  const applyCourseCountDelta = (universityId: string, delta: number) => {
+    setUniversities((prev) =>
+      prev.map((u) => (u.id === universityId ? { ...u, courseCount: Math.max(0, u.courseCount + delta) } : u)),
+    );
   };
 
-  const handleBackToUniversities = () => {
-    courseRequestId.current += 1;
-    setSelectedUniversity(null);
-    setCourses([]);
-    setCoursePagination(INITIAL_COURSE_PAGINATION);
-    setCoursesLoadError(null);
-    setIsLoadingCourses(false);
-  };
-
-  // Helper to count courses for each university
+  // Helper to count courses for each university (server-provided on the list payload).
   const getCourseCountForUniversity = (uniId: string) => {
-    return universities.find(university => university.id === uniId)?.courseCount ?? 0;
+    return universities.find((u) => u.id === uniId)?.courseCount ?? 0;
   };
 
-  const adjustCourseCount = (universityId: string, change: number) => {
-    setUniversities(current => current.map(university => (
-      university.id === universityId
-        ? { ...university, courseCount: Math.max(0, university.courseCount + change) }
-        : university
-    )));
-    setSelectedUniversity(current => (
-      current?.id === universityId
-        ? { ...current, courseCount: Math.max(0, current.courseCount + change) }
-        : current
-    ));
-    setUniversityPagination(current => ({
-      ...current,
-      summary: {
-        ...current.summary,
-        totalDegreeCourses: Math.max(0, current.summary.totalDegreeCourses + change),
-      },
-    }));
-  };
+  const totalCourses = useMemo(
+    () => universities.reduce((sum, u) => sum + u.courseCount, 0),
+    [universities],
+  );
 
   const uniqueUniRegions = useMemo(() => {
     return Array.from(new Set(universities.map(u => u.region))).sort();
@@ -280,199 +198,160 @@ export default function UniversitiesListMaintenance() {
   // Handle University Add / Edit / Delete
   const handleOpenAddUniModal = () => {
     setEditingUniversity(null);
-    setUniFormData({
-      code: '',
-      name: '',
-      classification: 'Public',
-      region: uniqueUniRegions[0] || 'NCR - National Capital Region',
-      city: '',
-      presidentRector: '',
-      email: '',
-      phone: '',
-      establishedYear: new Date().getFullYear(),
-      status: 'Active'
-    });
+    setError(null);
+    setUniFormData({ ...EMPTY_UNI_FORM, region: uniqueUniRegions[0] ?? PHILIPPINE_REGIONS[0].code });
     setIsUniModalOpen(true);
   };
 
-  const handleOpenEditUniModal = (uni: UniversityItem, e: React.MouseEvent) => {
+  const handleOpenEditUniModal = (uni: UniversityRecord, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingUniversity(uni);
-    setUniFormData({ ...uni });
+    setError(null);
+    setUniFormData({
+      classification: uni.classification,
+      name: uni.name,
+      region: uni.region,
+      city: uni.city,
+      presidentRector: uni.presidentRector,
+      email: uni.email,
+      phone: uni.phone,
+      establishedYear: uni.establishedYear,
+      status: uni.status,
+    });
     setIsUniModalOpen(true);
   };
 
   const handleSaveUni = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uniFormData.name || !uniFormData.code || !uniFormData.city || !uniFormData.region) return;
+    if (!uniFormData.name.trim() || !uniFormData.city.trim() || isSaving) return;
 
-    const input: UniversityInput = {
-      code: uniFormData.code,
-      name: uniFormData.name,
-      classification: uniFormData.classification ?? 'Public',
-      region: uniFormData.region,
-      city: uniFormData.city,
-      presidentRector: uniFormData.presidentRector ?? '',
-      email: uniFormData.email ?? '',
-      phone: uniFormData.phone ?? '',
-      establishedYear: Number(uniFormData.establishedYear),
-      status: uniFormData.status ?? 'Active',
-    };
     setIsSaving(true);
+    setError(null);
     const result = editingUniversity
-      ? await backendUniversityService.updateUniversity(editingUniversity.id, input, editingUniversity.version)
-      : await backendUniversityService.createUniversity(input);
+      ? await universityService.updateUniversity(editingUniversity.id, uniFormData)
+      : await universityService.createUniversity(uniFormData);
     setIsSaving(false);
 
-    if (result.ok === false) {
-      notify('University not saved', result.error.message, 'error');
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
       return;
     }
 
-    setUniversities(current => editingUniversity
-      ? current.map(university => university.id === result.data.id ? result.data : university)
-      : [result.data, ...current]);
-    if (!editingUniversity) {
-      setUniversityPagination(current => ({
-        ...current,
-        count: current.count + 1,
-        summary: {
-          ...current.summary,
-          totalUniversities: current.summary.totalUniversities + 1,
-          publicUniversities: current.summary.publicUniversities + (result.data.classification === 'Public' ? 1 : 0),
-          privateUniversities: current.summary.privateUniversities + (result.data.classification === 'Private' ? 1 : 0),
-        },
-      }));
-    } else if (editingUniversity.classification !== result.data.classification) {
-      setUniversityPagination(current => ({
-        ...current,
-        summary: {
-          ...current.summary,
-          publicUniversities: current.summary.publicUniversities + (result.data.classification === 'Public' ? 1 : -1),
-          privateUniversities: current.summary.privateUniversities + (result.data.classification === 'Private' ? 1 : -1),
-        },
-      }));
+    if (editingUniversity) {
+      setUniversities((prev) => prev.map((u) => (u.id === result.data.id ? result.data : u)));
+      if (selectedUniversity?.id === result.data.id) {
+        setSelectedUniversity(result.data);
+      }
+    } else {
+      setUniversities((prev) => [result.data, ...prev]);
     }
-    setSelectedUniversity(current => current?.id === result.data.id ? result.data : current);
+
     setIsUniModalOpen(false);
-    notify(
-      editingUniversity ? 'University updated' : 'University added',
-      `${result.data.code} was saved to the university registry.`,
-      'success',
-    );
   };
 
-  const handleDeleteUni = async (id: string, e: React.MouseEvent) => {
+  const requestDeleteUni = (uni: UniversityRecord, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isSaving) return;
-    const university = universities.find(item => item.id === id);
-    if (!university || !confirm('Are you sure you want to delete this university? All associated college courses will also be removed.')) return;
+    setError(null);
+    setPendingDelete(uni);
+  };
 
-    setIsSaving(true);
-    const result = await backendUniversityService.deleteUniversity(university.id, university.version);
-    setIsSaving(false);
-    if (result.ok === false) {
-      notify('University not deleted', result.error.message, 'error');
+  const handleConfirmDeleteUni = async () => {
+    if (!pendingDelete) return;
+    setIsDeleting(true);
+    const result = await universityService.deleteUniversity(pendingDelete.id);
+    setIsDeleting(false);
+
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      setPendingDelete(null);
       return;
     }
-    setUniversities(current => current.filter(item => item.id !== id));
-    setUniversityPagination(current => ({
-      ...current,
-      count: Math.max(0, current.count - 1),
-      summary: {
-        totalUniversities: Math.max(0, current.summary.totalUniversities - 1),
-        publicUniversities: Math.max(0, current.summary.publicUniversities - (university.classification === 'Public' ? 1 : 0)),
-        privateUniversities: Math.max(0, current.summary.privateUniversities - (university.classification === 'Private' ? 1 : 0)),
-        totalDegreeCourses: Math.max(0, current.summary.totalDegreeCourses - university.courseCount),
-      },
-    }));
-    if (selectedUniversity?.id === id) handleBackToUniversities();
-    notify('University deleted', `${university.code} and its college courses were removed.`, 'success');
+
+    const removedId = pendingDelete.id;
+    setUniversities((prev) => prev.filter((u) => u.id !== removedId));
+    setCourses((prev) => prev.filter((c) => c.universityId !== removedId));
+    if (selectedUniversity?.id === removedId) {
+      setSelectedUniversity(null);
+    }
+    setPendingDelete(null);
   };
 
   // Handle Course Add / Edit / Delete
   const handleOpenAddCourseModal = () => {
     if (!selectedUniversity) return;
     setEditingCourse(null);
+    setError(null);
     setCourseFormData({
-      universityId: selectedUniversity.id,
-      universityCode: selectedUniversity.code,
-      collegeName: uniqueCollegesInUniversity[0] || 'College of Science',
-      programCode: 'BSCS',
-      programName: '',
-      degreeType: 'Bachelor of Science',
-      majorSpecialization: 'General',
-      durationYears: 4,
-      totalUnits: 150,
-      cutoffPercentile: 80.0,
-      status: 'Active'
+      ...EMPTY_COURSE_FORM,
+      collegeName: uniqueCollegesInUniversity[0] || '',
     });
     setIsCourseModalOpen(true);
   };
 
-  const handleOpenEditCourseModal = (course: CollegeCourse) => {
+  const handleOpenEditCourseModal = (course: CollegeCourseRecord) => {
     setEditingCourse(course);
-    setCourseFormData({ ...course });
+    setError(null);
+    setCourseFormData({
+      collegeName: course.collegeName,
+      programCode: course.programCode,
+      programName: course.programName,
+      degreeType: course.degreeType,
+      majorSpecialization: course.majorSpecialization,
+      durationYears: course.durationYears,
+      totalUnits: course.totalUnits,
+      cutoffPercentile: course.cutoffPercentile,
+      status: course.status,
+    });
     setIsCourseModalOpen(true);
   };
 
   const handleSaveCourse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUniversity || !courseFormData.programName || !courseFormData.programCode || !courseFormData.collegeName) return;
-
-    const input: CollegeCourseInput = {
-      collegeName: courseFormData.collegeName,
-      programCode: courseFormData.programCode,
-      programName: courseFormData.programName,
-      degreeType: courseFormData.degreeType ?? 'Bachelor of Science',
-      majorSpecialization: courseFormData.majorSpecialization ?? '',
-      durationYears: Number(courseFormData.durationYears),
-      totalUnits: Number(courseFormData.totalUnits),
-      cutoffPercentile: Number(courseFormData.cutoffPercentile),
-      status: courseFormData.status ?? 'Active',
-    };
-    setIsSaving(true);
-    const result = editingCourse
-      ? await backendUniversityService.updateCourse(selectedUniversity.id, editingCourse.id, input, editingCourse.version)
-      : await backendUniversityService.createCourse(selectedUniversity.id, input);
-    setIsSaving(false);
-
-    if (result.ok === false) {
-      notify('College course not saved', result.error.message, 'error');
+    if (
+      !selectedUniversity ||
+      !courseFormData.programName.trim() ||
+      !courseFormData.programCode.trim() ||
+      isSavingCourse
+    ) {
       return;
     }
 
-    setCourses(current => editingCourse
-      ? current.map(course => course.id === result.data.id ? result.data : course)
-      : [...current, result.data]);
-    if (!editingCourse) {
-      adjustCourseCount(selectedUniversity.id, 1);
-      setCoursePagination(current => ({ ...current, count: current.count + 1 }));
+    setIsSavingCourse(true);
+    setError(null);
+    const result = editingCourse
+      ? await universityService.updateCourse(selectedUniversity.id, editingCourse.id, courseFormData)
+      : await universityService.createCourse(selectedUniversity.id, courseFormData);
+    setIsSavingCourse(false);
+
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      return;
+    }
+
+    if (editingCourse) {
+      setCourses((prev) => prev.map((c) => (c.id === result.data.id ? result.data : c)));
+    } else {
+      setCourses((prev) => [...prev, result.data]);
+      applyCourseCountDelta(selectedUniversity.id, 1);
     }
     setIsCourseModalOpen(false);
-    notify(
-      editingCourse ? 'College course updated' : 'College course added',
-      `${result.data.programCode} was saved for ${selectedUniversity.code}.`,
-      'success',
-    );
   };
 
-  const handleDeleteCourse = async (id: string) => {
-    if (!selectedUniversity || isSaving) return;
-    const course = courses.find(item => item.id === id);
-    if (!course || !confirm('Are you sure you want to delete this college course?')) return;
+  const handleConfirmDeleteCourse = async () => {
+    if (!pendingCourseDelete || !selectedUniversity) return;
+    setIsDeletingCourse(true);
+    const result = await universityService.deleteCourse(selectedUniversity.id, pendingCourseDelete.id);
+    setIsDeletingCourse(false);
 
-    setIsSaving(true);
-    const result = await backendUniversityService.deleteCourse(selectedUniversity.id, course.id, course.version);
-    setIsSaving(false);
-    if (result.ok === false) {
-      notify('College course not deleted', result.error.message, 'error');
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      setPendingCourseDelete(null);
       return;
     }
-    setCourses(current => current.filter(item => item.id !== id));
-    adjustCourseCount(selectedUniversity.id, -1);
-    setCoursePagination(current => ({ ...current, count: Math.max(0, current.count - 1) }));
-    notify('College course deleted', `${course.programCode} was removed.`, 'success');
+    const removedId = pendingCourseDelete.id;
+    setCourses((prev) => prev.filter((c) => c.id !== removedId));
+    applyCourseCountDelta(selectedUniversity.id, -1);
+    setPendingCourseDelete(null);
   };
 
   const exportCSV = () => {
@@ -503,11 +382,11 @@ export default function UniversitiesListMaintenance() {
         `"${u.code}"`,
         `"${u.name}"`,
         `"${u.classification}"`,
-        `"${u.region}"`,
+        `"${regionLabel(u.region)}"`,
         `"${u.city}"`,
         `"${u.presidentRector}"`,
         `"${u.email}"`,
-        u.establishedYear,
+        u.establishedYear ?? '',
         getCourseCountForUniversity(u.id),
         `"${u.status}"`
       ]);
@@ -522,46 +401,16 @@ export default function UniversitiesListMaintenance() {
     }
   };
 
-  if (isLoadingUniversities) {
-    return (
-      <div className="flex min-h-[28rem] items-center justify-center">
-        <LoadingState title="Loading university registry" message="Retrieving universities and course totals from PhilSA." />
-      </div>
-    );
-  }
-
-  if (universitiesLoadError) {
-    return (
-      <div className="flex min-h-[28rem] items-center justify-center">
-        <ErrorState
-          title="University registry unavailable"
-          message={universitiesLoadError}
-          action={<button type="button" onClick={() => void loadUniversities(universityPagination.page)} className="btn-primary">Try again</button>}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {notification && (
-        <NotificationRegion>
-          <NotificationToast
-            title={notification.title}
-            message={notification.message}
-            tone={notification.tone}
-            onDismiss={() => setNotification(null)}
-          />
-        </NotificationRegion>
-      )}
-      
+
       {/* Breadcrumb Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-philsa-gray">
           <Link to="/admin/maintenance" className="hover:text-philsa-navy font-bold">Maintenance Center</Link>
           <ChevronRight className="w-3.5 h-3.5" />
-          <button 
-            onClick={handleBackToUniversities}
+          <button
+            onClick={() => setSelectedUniversity(null)}
             className={`hover:text-philsa-navy font-bold ${!selectedUniversity ? 'text-philsa-navy font-black' : ''}`}
           >
             List of Universities
@@ -576,13 +425,19 @@ export default function UniversitiesListMaintenance() {
 
         {selectedUniversity && (
           <button
-            onClick={handleBackToUniversities}
+            onClick={() => setSelectedUniversity(null)}
             className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-philsa-navy text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" /> Back to All Universities
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="card-philsa bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-4">
+          {error}
+        </div>
+      )}
 
       {/* VIEW 1: UNIVERSITIES LIST (When no university is selected) */}
       {!selectedUniversity ? (
@@ -626,19 +481,19 @@ export default function UniversitiesListMaintenance() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Accredited Universities</div>
-                <div className="text-2xl font-black text-philsa-navy mt-1">{universityPagination.summary.totalUniversities}</div>
+                <div className="text-2xl font-black text-philsa-navy mt-1">{universities.length}</div>
               </div>
               <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
-                <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public Universities</div>
-                <div className="text-2xl font-black text-blue-900 mt-1">{universityPagination.summary.publicUniversities}</div>
+                <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public / State</div>
+                <div className="text-2xl font-black text-blue-900 mt-1">{universities.filter(u => u.classification === 'Public').length}</div>
               </div>
               <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
-                <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private Autonomous</div>
-                <div className="text-2xl font-black text-purple-900 mt-1">{universityPagination.summary.privateUniversities}</div>
+                <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private</div>
+                <div className="text-2xl font-black text-purple-900 mt-1">{universities.filter(u => u.classification === 'Private').length}</div>
               </div>
               <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Degree Courses</div>
-                <div className="text-2xl font-black text-emerald-900 mt-1">{universityPagination.summary.totalDegreeCourses}</div>
+                <div className="text-2xl font-black text-emerald-900 mt-1">{totalCourses}</div>
               </div>
             </div>
           </div>
@@ -686,7 +541,7 @@ export default function UniversitiesListMaintenance() {
                   >
                     <option value="ALL">All Regions</option>
                     {uniqueUniRegions.map(r => (
-                      <option key={r} value={r}>{r}</option>
+                      <option key={r} value={r}>{regionLabel(r)}</option>
                     ))}
                   </select>
                 </div>
@@ -746,8 +601,8 @@ export default function UniversitiesListMaintenance() {
                       filteredUniversities.map((uni) => {
                         const count = getCourseCountForUniversity(uni.id);
                         return (
-                          <tr 
-                            key={uni.id} 
+                          <tr
+                            key={uni.id}
                             className="hover:bg-slate-50/80 transition-all group"
                           >
                             <td className="py-3.5 px-4">
@@ -756,19 +611,19 @@ export default function UniversitiesListMaintenance() {
                               </span>
                             </td>
                             <td className="py-3.5 px-4 space-y-0.5">
-                              <div 
-                                onClick={() => void handleSelectUniversity(uni)}
+                              <div
+                                onClick={() => setSelectedUniversity(uni)}
                                 className="font-black text-philsa-navy hover:text-blue-700 transition-colors cursor-pointer text-sm"
                                 title="Click to view offered college courses"
                               >
                                 {uni.name}
                               </div>
-                              <div className="text-[10px] text-slate-400 font-medium">Est. {uni.establishedYear}</div>
+                              <div className="text-[10px] text-slate-400 font-medium">Est. {uni.establishedYear ?? '—'}</div>
                             </td>
                             <td className="py-3.5 px-4">
                               <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${
-                                uni.classification === 'Public' 
-                                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                uni.classification === 'Public'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
                                   : 'bg-purple-50 text-purple-700 border-purple-200'
                               }`}>
                                 {uni.classification}
@@ -776,7 +631,7 @@ export default function UniversitiesListMaintenance() {
                             </td>
                             <td className="py-3.5 px-4 space-y-0.5">
                               <div className="font-bold text-slate-800">{uni.city}</div>
-                              <div className="text-[10px] text-slate-400">{uni.region}</div>
+                              <div className="text-[10px] text-slate-400">{regionLabel(uni.region)}</div>
                             </td>
                             <td className="py-3.5 px-4 space-y-0.5">
                               <div className="font-bold text-philsa-navy">{uni.presidentRector}</div>
@@ -790,8 +645,8 @@ export default function UniversitiesListMaintenance() {
                             </td>
                             <td className="py-3.5 px-4 text-center">
                               <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${
-                                uni.status === 'Active' 
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                uni.status === 'Active'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : 'bg-slate-100 text-slate-500 border-slate-200'
                               }`}>
                                 {uni.status}
@@ -807,8 +662,7 @@ export default function UniversitiesListMaintenance() {
                                   <Edit3 className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={(e) => handleDeleteUni(uni.id, e)}
-                                  disabled={isSaving}
+                                  onClick={(e) => requestDeleteUni(uni, e)}
                                   className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
                                   title="Delete University"
                                 >
@@ -832,7 +686,7 @@ export default function UniversitiesListMaintenance() {
                 return (
                   <div
                     key={uni.id}
-                    onClick={() => void handleSelectUniversity(uni)}
+                    onClick={() => setSelectedUniversity(uni)}
                     className="card-philsa bg-white p-6 hover:shadow-xl hover:border-philsa-navy/40 transition-all cursor-pointer group space-y-4 relative overflow-hidden border border-slate-200"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -845,7 +699,7 @@ export default function UniversitiesListMaintenance() {
                             <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
                               {uni.code}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-400">Est. {uni.establishedYear}</span>
+                            <span className="text-[10px] font-bold text-slate-400">Est. {uni.establishedYear ?? '—'}</span>
                           </div>
                           <h3 className="text-base font-black text-philsa-navy group-hover:text-blue-700 transition-colors">
                             {uni.name}
@@ -862,8 +716,7 @@ export default function UniversitiesListMaintenance() {
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={(e) => handleDeleteUni(uni.id, e)}
-                          disabled={isSaving}
+                          onClick={(e) => requestDeleteUni(uni, e)}
                           className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                           title="Delete University"
                         >
@@ -875,7 +728,7 @@ export default function UniversitiesListMaintenance() {
                     <div className="space-y-2 text-xs">
                       <div className="flex items-center gap-2 text-slate-600 font-medium">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{uni.city}, {uni.region}</span>
+                        <span>{uni.city}, {regionLabel(uni.region)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-slate-600 font-medium">
                         <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -902,19 +755,11 @@ export default function UniversitiesListMaintenance() {
               })}
             </div>
           )}
-          <PaginationControls
-            metadata={universityPagination}
-            isLoading={isLoadingUniversities}
-            previousLabel="Previous university page"
-            nextLabel="Next university page"
-            onPrevious={() => void loadUniversities(universityPagination.page - 1)}
-            onNext={() => void loadUniversities(universityPagination.page + 1)}
-          />
         </>
       ) : (
         /* VIEW 2: COLLEGE COURSES FOR SELECTED UNIVERSITY */
         <div className="space-y-6">
-          
+
           {/* Selected University Details Header */}
           <div className="card-philsa bg-white p-6 border border-slate-200 rounded-2xl space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -924,20 +769,20 @@ export default function UniversitiesListMaintenance() {
                     {selectedUniversity.code}
                   </span>
                   <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
-                    selectedUniversity.classification === 'Public' 
-                      ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                    selectedUniversity.classification === 'Public'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
                       : 'bg-purple-50 text-purple-700 border-purple-200'
                   }`}>
                     {selectedUniversity.classification}
                   </span>
-                  <span className="text-xs text-slate-400">Est. {selectedUniversity.establishedYear}</span>
+                  <span className="text-xs text-slate-400">Est. {selectedUniversity.establishedYear ?? '—'}</span>
                 </div>
                 <h1 className="text-2xl font-black text-philsa-navy tracking-tight flex items-center gap-2.5">
                   <GraduationCap className="w-7 h-7 text-philsa-navy" />
                   {selectedUniversity.name}
                 </h1>
                 <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap font-medium">
-                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" /> {selectedUniversity.city}, {selectedUniversity.region}</span>
+                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" /> {selectedUniversity.city}, {regionLabel(selectedUniversity.region)}</span>
                   <span>•</span>
                   <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-slate-400" /> {selectedUniversity.email}</span>
                   <span>•</span>
@@ -964,7 +809,7 @@ export default function UniversitiesListMaintenance() {
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
               <div className="flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-philsa-navy" />
-                <span className="font-bold text-philsa-navy">{coursePagination.count} Registered College Courses</span>
+                <span className="font-bold text-philsa-navy">{universityCourses.length} Registered College Courses</span>
               </div>
               <div className="text-xs font-medium text-slate-500">
                 President / Rector: <span className="font-bold text-slate-700">{selectedUniversity.presidentRector}</span>
@@ -1001,28 +846,7 @@ export default function UniversitiesListMaintenance() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
-                  {isLoadingCourses ? (
-                    <tr>
-                      <td colSpan={3} className="py-12 text-center text-slate-500 font-medium bg-slate-50/50" role="status">
-                        Loading college courses...
-                      </td>
-                    </tr>
-                  ) : coursesLoadError ? (
-                    <tr>
-                      <td colSpan={3} className="py-12 text-center bg-rose-50/50" role="alert">
-                        <p className="font-bold text-rose-700">{coursesLoadError}</p>
-                        {selectedUniversity && (
-                          <button
-                            type="button"
-                            onClick={() => void loadCourses(selectedUniversity, coursePagination.page)}
-                            className="mt-3 rounded-lg bg-white px-3 py-1.5 font-bold text-philsa-navy shadow-sm"
-                          >
-                            Try again
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ) : filteredCourses.length === 0 ? (
+                  {filteredCourses.length === 0 ? (
                     <tr>
                       <td colSpan={3} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
                         No college courses match your search criteria.
@@ -1049,8 +873,7 @@ export default function UniversitiesListMaintenance() {
                               <Edit3 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleDeleteCourse(crs.id)}
-                              disabled={isSaving}
+                              onClick={() => { setError(null); setPendingCourseDelete(crs); }}
                               className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
                               title="Delete Course"
                             >
@@ -1065,32 +888,21 @@ export default function UniversitiesListMaintenance() {
               </table>
             </div>
           </div>
-          <PaginationControls
-            metadata={coursePagination}
-            isLoading={isLoadingCourses}
-            previousLabel="Previous course page"
-            nextLabel="Next course page"
-            onPrevious={() => selectedUniversity && void loadCourses(selectedUniversity, coursePagination.page - 1)}
-            onNext={() => selectedUniversity && void loadCourses(selectedUniversity, coursePagination.page + 1)}
-          />
         </div>
       )}
 
       {/* University Add / Edit Modal */}
       {isUniModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <GraduationCap className="w-5 h-5 text-philsa-navy" />
                 {editingUniversity ? 'Edit University Details' : 'Add New University'}
               </h3>
               <button
-                type="button"
                 onClick={() => setIsUniModalOpen(false)}
-                disabled={isSaving}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
-                aria-label="Close university form"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1099,20 +911,19 @@ export default function UniversitiesListMaintenance() {
             <form onSubmit={handleSaveUni} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">University Code *</label>
+                  <label className="font-bold text-slate-700">University Code</label>
                   <input
                     type="text"
-                    required
-                    value={uniFormData.code || ''}
-                    onChange={e => setUniFormData({ ...uniFormData, code: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="e.g. UP-DIL"
+                    disabled
+                    readOnly
+                    value={editingUniversity ? editingUniversity.code : 'Auto-generated (UNI-#####)'}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono text-xs text-slate-500 cursor-not-allowed"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Classification *</label>
                   <select
-                    value={uniFormData.classification || 'Public'}
+                    value={uniFormData.classification}
                     onChange={e => {
                       if (isUniversityClassification(e.target.value)) {
                         setUniFormData({ ...uniFormData, classification: e.target.value });
@@ -1131,7 +942,7 @@ export default function UniversitiesListMaintenance() {
                 <input
                   type="text"
                   required
-                  value={uniFormData.name || ''}
+                  value={uniFormData.name}
                   onChange={e => setUniFormData({ ...uniFormData, name: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   placeholder="Official name of university..."
@@ -1141,21 +952,22 @@ export default function UniversitiesListMaintenance() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Region *</label>
-                  <input
-                    type="text"
-                    required
-                    value={uniFormData.region || ''}
+                  <select
+                    value={uniFormData.region}
                     onChange={e => setUniFormData({ ...uniFormData, region: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="e.g. NCR - National Capital Region"
-                  />
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                  >
+                    {PHILIPPINE_REGIONS.map((region) => (
+                      <option key={region.code} value={region.code}>{region.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Main Campus City *</label>
                   <input
                     type="text"
                     required
-                    value={uniFormData.city || ''}
+                    value={uniFormData.city}
                     onChange={e => setUniFormData({ ...uniFormData, city: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     placeholder="e.g. Quezon City"
@@ -1167,7 +979,7 @@ export default function UniversitiesListMaintenance() {
                 <label className="font-bold text-slate-700">President / Rector</label>
                 <input
                   type="text"
-                  value={uniFormData.presidentRector || ''}
+                  value={uniFormData.presidentRector}
                   onChange={e => setUniFormData({ ...uniFormData, presidentRector: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   placeholder="e.g. Dr. Angelo A. Jimenez"
@@ -1179,7 +991,7 @@ export default function UniversitiesListMaintenance() {
                   <label className="font-bold text-slate-700">Official Email</label>
                   <input
                     type="email"
-                    value={uniFormData.email || ''}
+                    value={uniFormData.email}
                     onChange={e => setUniFormData({ ...uniFormData, email: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     placeholder="info@university.edu.ph"
@@ -1189,7 +1001,7 @@ export default function UniversitiesListMaintenance() {
                   <label className="font-bold text-slate-700">Contact Number</label>
                   <input
                     type="text"
-                    value={uniFormData.phone || ''}
+                    value={uniFormData.phone}
                     onChange={e => setUniFormData({ ...uniFormData, phone: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     placeholder="(02) 8981-8500"
@@ -1199,26 +1011,22 @@ export default function UniversitiesListMaintenance() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Established Year *</label>
+                  <label className="font-bold text-slate-700">Year Established</label>
                   <input
                     type="number"
-                    required
-                    min={1000}
+                    min={1500}
                     max={new Date().getFullYear()}
-                    value={uniFormData.establishedYear ?? new Date().getFullYear()}
-                    onChange={e => setUniFormData({ ...uniFormData, establishedYear: Number(e.target.value) })}
+                    value={uniFormData.establishedYear ?? ''}
+                    onChange={e => setUniFormData({ ...uniFormData, establishedYear: e.target.value ? Number(e.target.value) : null })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                    placeholder="e.g. 1908"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Registry Status *</label>
+                  <label className="font-bold text-slate-700">Status</label>
                   <select
-                    value={uniFormData.status ?? 'Active'}
-                    onChange={e => {
-                      if (isRegistryStatus(e.target.value)) {
-                        setUniFormData({ ...uniFormData, status: e.target.value });
-                      }
-                    }}
+                    value={uniFormData.status}
+                    onChange={e => setUniFormData({ ...uniFormData, status: e.target.value === 'Inactive' ? 'Inactive' : 'Active' })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Active">Active</option>
@@ -1231,7 +1039,6 @@ export default function UniversitiesListMaintenance() {
                 <button
                   type="button"
                   onClick={() => setIsUniModalOpen(false)}
-                  disabled={isSaving}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer"
                 >
                   Cancel
@@ -1239,7 +1046,7 @@ export default function UniversitiesListMaintenance() {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Check className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save University'}
                 </button>
@@ -1252,18 +1059,15 @@ export default function UniversitiesListMaintenance() {
       {/* College Course Add / Edit Modal */}
       {isCourseModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-philsa-navy" />
                 {editingCourse ? 'Edit College Course' : `Add Course to ${selectedUniversity?.code}`}
               </h3>
               <button
-                type="button"
                 onClick={() => setIsCourseModalOpen(false)}
-                disabled={isSaving}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
-                aria-label="Close college course form"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1284,20 +1088,19 @@ export default function UniversitiesListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Degree Type</label>
-                  <select
-                    value={courseFormData.degreeType || 'Bachelor of Science'}
-                    onChange={e => {
-                      if (isDegreeType(e.target.value)) {
-                        setCourseFormData({ ...courseFormData, degreeType: e.target.value });
-                      }
-                    }}
+                  <input
+                    type="text"
+                    list="degree-type-suggestions"
+                    value={courseFormData.degreeType}
+                    onChange={e => setCourseFormData({ ...courseFormData, degreeType: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  >
-                    <option value="Bachelor of Science">Bachelor of Science</option>
-                    <option value="Bachelor of Arts">Bachelor of Arts</option>
-                    <option value="Bachelor of Fine Arts">Bachelor of Fine Arts</option>
-                    <option value="Associate">Associate Degree</option>
-                  </select>
+                    placeholder="Choose or type a degree type..."
+                  />
+                  <datalist id="degree-type-suggestions">
+                    {DEGREE_TYPE_SUGGESTIONS.map((degree) => (
+                      <option key={degree} value={degree} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -1373,43 +1176,50 @@ export default function UniversitiesListMaintenance() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Course Status *</label>
-                <select
-                  value={courseFormData.status ?? 'Active'}
-                  onChange={e => {
-                    if (isRegistryStatus(e.target.value)) {
-                      setCourseFormData({ ...courseFormData, status: e.target.value });
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsCourseModalOpen(false)}
-                  disabled={isSaving}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+                  disabled={isSavingCourse}
+                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save College Course'}
+                  <Check className="w-4 h-4" /> {isSavingCourse ? 'Saving...' : 'Save College Course'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmationDialog
+        isOpen={pendingDelete !== null}
+        title={pendingDelete ? `Are you sure you want to remove ${pendingDelete.name} at Maintenance Table?` : ''}
+        message="This will be removed to other modules. All associated college courses will also be removed."
+        details={pendingDelete ? `${pendingDelete.name} • ${pendingDelete.code}` : ''}
+        confirmLabel="Agree"
+        tone="danger"
+        isConfirming={isDeleting}
+        onConfirm={handleConfirmDeleteUni}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmationDialog
+        isOpen={pendingCourseDelete !== null}
+        title={pendingCourseDelete ? `Remove ${pendingCourseDelete.programCode} from ${selectedUniversity?.code ?? ''}?` : ''}
+        message="This college course will be removed from this university."
+        details={pendingCourseDelete ? `${pendingCourseDelete.programName} • ${pendingCourseDelete.programCode}` : ''}
+        confirmLabel="Agree"
+        tone="danger"
+        isConfirming={isDeletingCourse}
+        onConfirm={handleConfirmDeleteCourse}
+        onCancel={() => setPendingCourseDelete(null)}
+      />
 
     </div>
   );

@@ -8,7 +8,7 @@
 
 **Tech stack:** Python 3.13, Django 5.2, Django REST Framework 3.16, DRF SimpleJWT, Django test runner, React 19, and TypeScript 5.8.
 
-**Status:** Reviewed and approved for Thursday execution; Wednesday remains planning-only.
+**Status:** Phase 2, Phase 3, and Phase 4 implemented with TDD on Thursday; Phase 5 regression and manual smoke testing complete. Awaiting Maricon's code review and final acceptance before merge.
 
 **Specification:** `../specs/2026-08-05-ticket-001-finish-user-authentication-login-design.md`
 
@@ -60,15 +60,15 @@
 - Modify `backend/apps/accounts/tests/test_login_endpoints.py`.
 - Modify `backend/apps/accounts/tests/test_auth_controls.py`.
 
-- [ ] Add failing tests for attempts one through four without lockout.
-- [ ] Add a failing test for lockout on the fifth failure.
-- [ ] Add failing tests for correct-password denial during lockout, lockout expiry, and success-state reset.
-- [ ] Add a failing leakage test covering the durable internal-ID state and safe lockout audit output.
-- [ ] Run the focused tests and record the expected red result.
-- [ ] Implement only the behavior required by those tests using the Phase 1-approved database storage.
-- [ ] Preserve the generic `401 AUTHENTICATION_FAILED` response for invalid, inactive, locked, and wrong-password paths.
-- [ ] Rerun the focused tests and require zero failures and errors.
-- [ ] Inspect the diff and stop for Maricon's review.
+- [x] Add failing tests for attempts one through four without lockout.
+- [x] Add a failing test for lockout on the fifth failure.
+- [x] Add failing tests for correct-password denial during lockout, lockout expiry, and success-state reset.
+- [x] Add a failing leakage test covering the durable internal-ID state and safe lockout audit output.
+- [x] Run the focused tests and record the expected red result.
+- [x] Implement only the behavior required by those tests using the Phase 1-approved database storage.
+- [x] Preserve the generic `401 AUTHENTICATION_FAILED` response for invalid, inactive, locked, and wrong-password paths.
+- [x] Rerun the focused tests and require zero failures and errors.
+- [x] Inspect the diff and stop for Maricon's review.
 
 ## Phase 3 — OTP resend maximum with TDD
 
@@ -77,14 +77,14 @@
 - Modify `backend/apps/accounts/services.py`.
 - Modify `backend/apps/accounts/tests/test_login_endpoints.py`.
 
-- [ ] Add failing tests for three accepted resends and rejection of the next resend.
-- [ ] Add failing tests proving rejection sends no email, rotates no OTP, and extends no absolute expiry.
-- [ ] Add a failing test proving the latest valid OTP remains usable after resend exhaustion.
-- [ ] Run the focused tests and record the expected red result.
-- [ ] Enforce `AUTH_OTP_MAX_RESENDS` before code generation and email delivery.
-- [ ] Use the existing safe `429` rate-limit envelope without exposing account or token data.
-- [ ] Rerun `apps.accounts.tests.test_login_endpoints` and require zero failures and errors.
-- [ ] Inspect the diff and stop for Maricon's review.
+- [x] Add failing tests for three accepted resends and rejection of the next resend.
+- [x] Add failing tests proving rejection sends no email, rotates no OTP, and extends no absolute expiry.
+- [x] Add a failing test proving the latest valid OTP remains usable after resend exhaustion.
+- [x] Run the focused tests and record the expected red result.
+- [x] Enforce `AUTH_OTP_MAX_RESENDS` before code generation and email delivery.
+- [x] Use the existing safe `429` rate-limit envelope without exposing account or token data.
+- [x] Rerun `apps.accounts.tests.test_login_endpoints` and require zero failures and errors.
+- [x] Inspect the diff and stop for Maricon's review.
 
 ## Phase 4 — Safe audit events with TDD
 
@@ -95,26 +95,26 @@
 - Modify `backend/apps/accounts/tests/test_auth_controls.py`.
 - Modify `backend/apps/accounts/tests/test_auth_error_safety.py`.
 
-- [ ] Add failing tests for password failure/success, lockout, OTP send/failure/verification, selfie save, and session creation.
-- [ ] Add failing tests excluding passwords, codes, tokens, email, LRN, request bodies, and selfie bytes from audit output.
-- [ ] Run the focused tests and record the expected red result.
-- [ ] Emit events only after server-confirmed outcomes and include the existing correlation ID.
-- [ ] Limit metadata to approved non-secret values.
-- [ ] Rerun the audit and error-safety tests and require zero failures and errors.
-- [ ] Inspect captured logs and stop for Maricon's review.
+- [x] Add failing tests for password failure/success, lockout, OTP send/failure/verification, selfie save, and session creation.
+- [x] Add failing tests excluding passwords, codes, tokens, email, LRN, request bodies, and selfie bytes from audit output.
+- [x] Run the focused tests and record the expected red result.
+- [x] Emit events only after server-confirmed outcomes and include the existing correlation ID.
+- [x] Limit metadata to approved non-secret values.
+- [x] Rerun the audit and error-safety tests and require zero failures and errors.
+- [x] Inspect captured logs and stop for Maricon's review.
 
 ## Phase 5 — Regression, smoke test, and handoff
 
 **Deliverable:** Evidence that Ticket 001 is secure, regression-free, reviewable, and reversible.
 
-- [ ] Run `python manage.py check --settings=config.settings.local`.
-- [ ] Run the focused login, audit, error-safety, token-session, and session test modules.
-- [ ] Run `python manage.py test --settings=config.settings.test`.
-- [ ] Manually verify identifier → password → OTP → selfie → session using a synthetic account.
-- [ ] Manually verify invalid identifier/password, lockout, expiry, OTP failures, resend exhaustion, selfie rejection, refresh replay rejection, and logout.
-- [ ] Confirm browser errors reveal no account existence, role, scope, lockout state, token, or sensitive payload.
-- [ ] Inspect `git diff` and `git diff --check`.
-- [ ] Record exact commands, results, skips, and pre-existing failures in `../implement/m.landicho.implement.md`.
+- [x] Run `python manage.py check --settings=config.settings.local`.
+- [x] Run the focused login, audit, error-safety, token-session, and session test modules.
+- [x] Run `python manage.py test --settings=config.settings.test`.
+- [x] Manually verify identifier → password → OTP → selfie → session using a synthetic account.
+- [x] Manually verify invalid identifier/password, lockout, expiry, OTP failures, resend exhaustion, selfie rejection, refresh replay rejection, and logout.
+- [x] Confirm browser errors reveal no account existence, role, scope, lockout state, token, or sensitive payload.
+- [x] Inspect `git diff` and `git diff --check`.
+- [x] Record exact commands, results, skips, and pre-existing failures in `../implement/m.landicho.implement.md`.
 - [ ] Obtain code review and Maricon's final acceptance before merge.
 
 ## Rollback
