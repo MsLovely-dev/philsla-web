@@ -117,6 +117,7 @@ export default function UniversitiesListMaintenance() {
     adjustCourseCount,
   } = useMaintenanceData();
   const [courses, setCourses] = useState<CollegeCourseRecord[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -161,8 +162,13 @@ export default function UniversitiesListMaintenance() {
       return;
     }
     let active = true;
+    // Show a loading state (not the empty state) while this university's courses
+    // are fetched, so drilling in never flashes "no courses" for a populated one.
+    setIsLoadingCourses(true);
+    setCourses([]);
     universityService.listCourses(selectedUniversity.id).then((result) => {
       if (!active) return;
+      setIsLoadingCourses(false);
       if (result.ok) {
         setCourses(result.data);
       } else {
@@ -879,8 +885,12 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* College Courses: empty-registry CTA, otherwise the table */}
-          {universityCourses.length === 0 ? (
+          {/* College Courses: loading, then empty-registry CTA, otherwise the table */}
+          {isLoadingCourses ? (
+            <div className="flex justify-center py-16">
+              <LoadingState title="Loading college courses" message="Fetching this university's degree programs." />
+            </div>
+          ) : universityCourses.length === 0 ? (
             <div className="flex justify-center py-16">
             <EmptyState
               title="No college courses yet"
