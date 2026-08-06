@@ -351,3 +351,5 @@ export class BackendQuestionBankService {
     };
   }
 }
+
+export const questionBankService = new BackendQuestionBankService();
