@@ -1,0 +1,101 @@
+# Exam Blueprint Maintenance Table — Design
+
+- Date: 2026-08-06
+- Owner: Ian Chris Sandoval (`i.sandoval`)
+- Ticket: Ticket 001 — Maintenance Table – Exam Blueprint (`task.md`)
+- Status: Resumption gates authorized by Ian Chris Sandoval on 2026-08-06. This spec is the "test-first implementation plan reviewed and approved before code changes begin" gate; it must be reviewed and approved before implementation starts.
+
+## Problem
+
+`frontend/src/pages/admin/maintenance/ExamBlueprintMaintenance.tsx` is a UI-only prototype: four tabs (Subject Areas, Difficulty Level, Question Type, Topics) backed by nothing but local component state. Ticket 001 deferred turning this into a real, backend-integrated maintenance table until its catalog ownership, lifecycle, authorization, and persistence questions were resolved (see `task.md`). Those questions are answered below.
+
+## Resumption gates — how each is satisfied
+
+1. **Product/sprint ownership reprioritizes the ticket.** Authorized by Ian Chris Sandoval, 2026-08-06.
+2. **Blueprint-vs-Exam-Set boundary and catalog ownership.** This table manages *reference/lookup data* (`Subject`, `Topic`, `QuestionType`) that `Question` and `BlueprintSection` records already point to by foreign key. It does not touch `ExamBlueprint`, `BlueprintVersion`, `ExamSet`, or any workflow/lifecycle object — those remain owned by the separately implemented Exam Sets integration and by Ju.Cabigon's Exam Blueprint story (transition tests, Question Bank wiring). No file overlap: this work only adds new views/serializers/URLs and a new frontend service; it does not modify anything Ju.Cabigon's branch touches.
+3. **Maintenance lookup ownership, lifecycle, authorized operations.** See "Data model" and "Lifecycle" below.
+4. **Backend API contract and persistence approach.** See "API contract" below. No new models or migrations — `Subject`, `Topic`, and `QuestionType` already exist in `apps/exams/models.py` with `is_active`, `code`, `name`, `description`, `created_at`, `updated_at`, and (for `Topic`) a `subject` FK with `on_delete=PROTECT`.
+5. **Permission matrix, object-level authorization, validation, audit events, sensitive-data handling.** See "Permissions", "Validation", and "Audit" below. No sensitive or real exam content is involved — these are catalog labels (subject/topic/question-type names and codes), not exam content, answer keys, or personal data.
+6. **Test-first implementation plan reviewed and approved before code changes.** This spec plus the implementation plan produced by `writing-plans` after this spec is approved.
+
+## Scope
+
+**In scope:** real, backend-integrated CRUD (create, edit, deactivate — no hard delete) for:
+- Subject Areas (`Subject`)
+- Question Type (`QuestionType`)
+- Topics (`Topic`, nested under a Subject)
+
+**Out of scope:**
+- Difficulty Level. It is a fixed `DifficultyLevel(TextChoices)` enum in code (`EASY`/`MEDIUM`/`HARD`), not a database-editable table. Converting it to an editable model would touch `Question.difficulty` and `BlueprintDifficultyDistribution`, both used by the already-implemented and tested Exam Sets/Blueprint validation logic. That's a materially bigger, separate change and is not authorized here.
+- CSV/XLSX bulk upload. The prototype has a `bulkUpload` UI affordance; the real Universities/Courses maintenance table (the closest existing precedent) doesn't implement this either. Left out; the button is removed rather than wired to nothing.
+- Hard delete of any record.
+- Any change to `ExamBlueprint`, `BlueprintVersion`, `ExamSet`, or other workflow/lifecycle models.
+
+## Data model
+
+No new models or migrations. Existing fields on `Subject`, `Topic`, `QuestionType` (all in `apps/exams/models.py`):
+
+| Field | Notes |
+|---|---|
+| `code` | Unique per model (Subject, QuestionType); Topic has no unique code constraint but has a unique `(subject, name)` constraint |
+| `name` | Unique per model (Subject, QuestionType) |
+| `description` | Optional, free text |
+| `is_active` | Soft-deactivate flag; defaults `True` |
+| `created_at` / `updated_at` | Already present, used for audit trail and optimistic concurrency |
+| `Topic.subject` | FK to `Subject`, `on_delete=PROTECT` — the database already refuses to hard-delete a Subject that has Topics |
+
+## Lifecycle
+
+- **Create:** any of the four authorized roles can create a new Subject/Topic/QuestionType with a unique code+name (per the existing DB constraints).
+- **Edit:** any field can be changed by the four authorized roles. Optimistic concurrency reuses the existing `updated_at` timestamp as the token: the client echoes back the `updated_at` value it last read as `expected_version`, and the server rejects the write with 409 if the current `updated_at` no longer matches. This is the same *purpose* as `UniversityInputSerializer`'s `expectedVersion` field, but `University`/`CollegeCourse` back it with a dedicated integer `version` column that `Subject`/`Topic`/`QuestionType` don't have — adding one would require a migration, so this design reuses the timestamp column that already exists instead. A stale edit is rejected with a 409, not silently overwritten, either way.
+- **Deactivate:** `PATCH {is_active: false}`. A deactivated record stays valid on existing Questions/Blueprint sections that already reference it (nothing is retroactively invalidated), but stops appearing as a selectable option when authoring *new* Questions/Blueprint sections. Reactivation (`is_active: true`) is allowed the same way.
+- **No hard delete**, anywhere, for any of the three record types. `Topic.subject`'s `on_delete=PROTECT` already enforces this at the database level for Subjects with Topics; the API simply never exposes a DELETE method at all, for any of the three, so the same posture applies uniformly even to unreferenced records.
+
+## API contract
+
+Mirrors `apps/configuration/views.py` (University/CollegeCourse admin views) exactly in shape and pagination.
+
+```
+GET/POST   /api/v1/exams/admin/subjects/
+GET/PATCH/PUT /api/v1/exams/admin/subjects/{subject_id}/
+
+GET/POST   /api/v1/exams/admin/subjects/{subject_id}/topics/
+GET/PATCH/PUT /api/v1/exams/admin/subjects/{subject_id}/topics/{topic_id}/
+
+GET/POST   /api/v1/exams/admin/question-types/
+GET/PATCH/PUT /api/v1/exams/admin/question-types/{question_type_id}/
+```
+
+- List endpoints: `StandardPageNumberPagination` (matching the existing registry pagination contract in `docs/api/API-STANDARDS.md`), search by `code`/`name`, filter by `is_active`.
+- No DELETE method on any endpoint.
+- `PUT`/`PATCH` require `expected_version` in the body (the `updated_at` timestamp last read by the client), rejected with 409 on mismatch — see "Lifecycle" for why this uses the existing `updated_at` column rather than a new integer version field.
+- Validation errors (duplicate code/name, unknown subject_id for a Topic) return the existing safe validation-error envelope used elsewhere in `apps/exams` (`error.code`/`error.message`/`error.fields`), not a raw `IntegrityError`.
+
+## Permissions
+
+`RoleRequiredPermission` with `required_roles = require_roles(PortalRole.ITEM_WRITER, PortalRole.ACADEMIC_REVIEWER, PortalRole.EXAM_ADMINISTRATOR, PortalRole.SYSTEM_ADMIN)` — identical to the existing `BLUEPRINT_MANAGEMENT_ROLES`/`QUESTION_MANAGEMENT_ROLES` in `apps/exams/views.py`. Rationale: these are the same people who author Questions and Blueprint sections that reference these lookups.
+
+Given the P0 found during the Exam Sets live rehearsal (`_actor_profile()` only worked for `force_authenticate()`-issued test users, not real bearer-token logins), every write endpoint here will be exercised by at least one test that drives a real login to a real access token, not only `force_authenticate()`.
+
+## Audit
+
+Mirror `apps/configuration/audit.py`'s `record_configuration_event`: a new `apps/exams/audit.py` with `record_exam_blueprint_maintenance_event(*, event: str, outcome: str, request=None, user=None)`, logging structured events (`subject_created`, `subject_updated`, `subject_deactivated`, and the `topic_*`/`question_type_*` equivalents) to the existing `philsa.audit` logger. No new database audit table — consistent with how the Universities/Courses maintenance table (the closest precedent) handles this. (Confirmed no existing audit helper already covers `apps/exams` — searched for `AuditLog`/`audit_log`/`WorkflowHistory` patterns in the configuration and universities apps; the only precedent is `apps/configuration/audit.py`.)
+
+## Frontend
+
+- New `frontend/src/services/backendExamBlueprintMaintenanceService.ts`: typed transport mapping (`listSubjects`, `createSubject`, `updateSubject`, `listTopics(subjectId)`, `createTopic`, `updateTopic`, `listQuestionTypes`, `createQuestionType`, `updateQuestionType`), following `backendUniversityService.ts`'s pattern.
+- Rewire `ExamBlueprintMaintenance.tsx`: remove the local `useState<BlueprintConfig[]>([])` array as the source of truth; load through the new service with loading/empty/retryable-error/mutation-error states, matching `UniversitiesListMaintenance.tsx`. Keep the tab UI for Subject Areas / Question Type / Topics; remove the Difficulty Level tab. Change the Topics tab's "Subject" field from free text to a dropdown populated from loaded Subjects (`Topic.subject` is a real FK, not free text).
+- Extend the frontend maintenance-module permission check (in `RouteGuards.tsx`, the file `11ff29d` touched) to cover this table for the four roles, matching the backend.
+- Remove the `bulkUpload` prop/button from the rewired component (out of scope, see above).
+
+## Testing
+
+- Backend (`apps/exams/tests.py`, following `ExamSetApiTests`' structure): list/create/update/deactivate/validation-conflict/permission-denied/unauthenticated cases for all three resources, plus at least one test per resource driving a real login flow to a real bearer token (not `force_authenticate()`), per the lesson from the Exam Sets rehearsal.
+- Frontend: `backendExamBlueprintMaintenanceService.test.ts` (transport mapping) and `ExamBlueprintMaintenance.test.tsx` (loading/empty/error/mutation states, tab switching, Subject dropdown for Topics), following the `UniversitiesListMaintenance.test.tsx` pattern.
+- No new Playwright e2e spec is required for this pass; the existing manual/live-rehearsal technique proven on Exam Sets is available if a live walkthrough is wanted before release.
+
+## Security
+
+- No real exam content, answer keys, candidate/student data, credentials, or tokens are involved — Subject/Topic/QuestionType are catalog labels only.
+- Same posture as the rest of `apps/exams`: backend is authoritative for validation, authorization, and lifecycle; the frontend has no independent authority.
+- No hard delete anywhere, so no path to silently breaking existing Questions/Blueprint sections that reference a Subject/Topic/QuestionType.
