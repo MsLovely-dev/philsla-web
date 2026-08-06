@@ -300,6 +300,24 @@ describe('BackendApplicationService', () => {
     );
   });
 
+  it('passes admissions review queue filters to the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse([], { status: 200 }));
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.listReviewQueue({
+      search: 'Lovely',
+      status: 'PENDING',
+      schoolName: 'Sample National High School',
+      submitted: 'today',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/review-queue/?search=Lovely&status=PENDING&schoolName=Sample+National+High+School&submitted=today',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
   it('submits an admissions reviewer decision for an application', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(

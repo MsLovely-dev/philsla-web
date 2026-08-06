@@ -6,12 +6,15 @@ import {
   ExternalLink,
   Check, X, AlertCircle, ChevronDown, 
   Download,
-  FileText
+  FileText,
+  CalendarDays,
+  School
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { backendApplicationService, mapBackendApplicationsToReviewRows } from '../../services/backendApplicationService';
+import { backendApplicationService, mapBackendApplicationsToReviewRows, type ReviewQueueFilters } from '../../services/backendApplicationService';
+import { buildApplicationReviewExportRows, exportApplicationReviewBatch } from '../../services/applicationReviewExportService';
 
 const STATUS_BADGES = {
   PENDING: 'bg-blue-50 text-blue-600 border-blue-200',
@@ -31,11 +34,16 @@ export default function ReviewApplications() {
   const [decisionError, setDecisionError] = useState('');
   const [isSavingDecision, setIsSavingDecision] = useState(false);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
+  const [schoolOptions, setSchoolOptions] = useState<Array<{ value: string; name: string; filter: Pick<ReviewQueueFilters, 'schoolId' | 'schoolName'> }>>([]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const [activeModal, setActiveModal] = useState<'APPROVE' | 'REASSIGN' | 'CORRECTION' | 'FRAUD' | null>(null);
   const [selectedApp, setSelectedApp] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [schoolFilter, setSchoolFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState<'ALL' | 'TODAY'>('ALL');
   const [rejectionReason, setRejectionReason] = useState('Unverifiable or fraudulent documents');
   const [customRejectionDetail, setCustomRejectionDetail] = useState('');
 
@@ -53,6 +61,47 @@ export default function ReviewApplications() {
     navigate(`/admin/reviewer/applications/${app.id}`);
   };
 
+  const reviewQueueFilters = (): ReviewQueueFilters => ({
+    ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
+    ...(statusFilter !== 'ALL' ? { status: statusFilter } : {}),
+    ...(schoolOptions.find(school => school.value === schoolFilter)?.filter ?? {}),
+    ...(dateFilter === 'TODAY' ? { submitted: 'today' } : {}),
+  });
+
+  useEffect(() => {
+    if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') return;
+
+    let cancelled = false;
+    void backendApplicationService.listReviewQueue().then((result) => {
+      if (cancelled || result.ok === false) return;
+      const rows = mapBackendApplicationsToReviewRows(result.data);
+      const schools = Array.from(
+        new Map(
+          rows
+            .filter(app => app.schoolId || app.schoolName)
+            .map(app => {
+              const schoolName = String(app.schoolName || '').trim();
+              const schoolId = String(app.schoolId || '').trim();
+              const value = schoolName ? schoolName.toLowerCase() : `id:${schoolId}`;
+              return [
+                value,
+                {
+                  value,
+                  name: schoolName || schoolId,
+                  filter: schoolName ? { schoolName } : { schoolId },
+                },
+              ];
+            }),
+        ).values(),
+      ).sort((a, b) => a.name.localeCompare(b.name));
+      setSchoolOptions(schools);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') return;
 
@@ -60,7 +109,7 @@ export default function ReviewApplications() {
     setIsLoadingQueue(true);
     setQueueError('');
 
-    void backendApplicationService.listReviewQueue().then((result) => {
+    void backendApplicationService.listReviewQueue(reviewQueueFilters()).then((result) => {
       if (cancelled) return;
       setIsLoadingQueue(false);
 
@@ -75,7 +124,7 @@ export default function ReviewApplications() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [searchTerm, statusFilter, schoolFilter, dateFilter]);
 
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') return;
@@ -147,6 +196,61 @@ export default function ReviewApplications() {
     closeModal();
   };
 
+  const visibleApps = apps.filter(app => {
+    const displayCandidateId = app.candidateId || app.id;
+    const normalizedSearch = searchTerm.toLowerCase();
+    const matchesSearch =
+      `${app.firstName} ${app.lastName}`.toLowerCase().includes(normalizedSearch) ||
+      displayCandidateId.toLowerCase().includes(normalizedSearch) ||
+      app.id.toLowerCase().includes(normalizedSearch) ||
+      String(app.schoolName ?? '').toLowerCase().includes(normalizedSearch) ||
+      String(app.universities?.[0] ?? '').toLowerCase().includes(normalizedSearch);
+    const matchesStatus = statusFilter === 'ALL' || app.status === statusFilter;
+    const selectedSchool = schoolOptions.find(school => school.value === schoolFilter);
+    const matchesSchool =
+      !selectedSchool ||
+      (selectedSchool.filter.schoolName
+        ? String(app.schoolName ?? '').toLowerCase() === selectedSchool.filter.schoolName.toLowerCase()
+        : app.schoolId === selectedSchool.filter.schoolId);
+    const matchesDate =
+      import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend' ||
+      dateFilter === 'ALL' ||
+      app.submittedAt?.slice(0, 10) === new Date().toISOString().slice(0, 10);
+    return matchesSearch && matchesStatus && matchesSchool && matchesDate;
+  });
+
+  const handleExportBatch = async () => {
+    setExportError('');
+    const count = visibleApps.length;
+    if (count === 0) {
+      setExportError('There are no applications to export.');
+      return;
+    }
+
+    const confirmed = window.confirm(`Exporting ${count} application${count === 1 ? '' : 's'}. Continue?`);
+    if (!confirmed) return;
+
+    setIsExporting(true);
+    try {
+      await exportApplicationReviewBatch(buildApplicationReviewExportRows(visibleApps.map(app => ({
+        candidateId: app.candidateId || app.id,
+        applicantName: `${app.firstName ?? ''} ${app.lastName ?? ''}`.trim() || 'Unnamed applicant',
+        status: app.status,
+        submittedAt: app.submittedAt,
+        schoolId: app.schoolId,
+        schoolName: app.schoolName,
+        mobile: app.mobile,
+        email: app.email,
+        preferredUniversity: app.universities?.[0],
+        preferredCourse: app.courses?.[0],
+      }))));
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'The export could not be generated.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
@@ -155,11 +259,20 @@ export default function ReviewApplications() {
           <p className="text-philsa-gray text-xs font-black uppercase tracking-[0.2em] opacity-60">PhilSLA Admission Intelligence Unit</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-           <button className="btn-secondary flex items-center gap-2">
-              <Download className="w-4 h-4" /> Export Batch
+           <button
+             onClick={handleExportBatch}
+             disabled={isLoadingQueue || isExporting || visibleApps.length === 0}
+             className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+           >
+              <Download className="w-4 h-4" /> {isExporting ? 'Exporting...' : 'Export Batch'}
            </button>
         </div>
       </div>
+      {exportError && (
+        <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+          {exportError}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -196,13 +309,39 @@ export default function ReviewApplications() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray" />
               <input 
                 type="text" 
-                placeholder="Search Candidate ID, Name, or University..." 
+                placeholder="Search Candidate ID, Name, School, or University..." 
                 className="w-full bg-philsa-bg border-none rounded-xl pl-11 pr-4 py-3 text-sm focus:ring-2 focus:ring-philsa-red/10 transition-all font-medium"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
            </div>
-           <div className="flex items-center gap-3">
+           <div className="flex flex-wrap items-center gap-3">
+              <div className="relative min-w-[220px]">
+                <School className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray pointer-events-none" />
+                <select
+                  value={schoolFilter}
+                  onChange={(event) => setSchoolFilter(event.target.value)}
+                  className="w-full appearance-none bg-philsa-bg border border-transparent rounded-xl pl-10 pr-9 py-3 text-[10px] font-black uppercase tracking-widest text-philsa-navy focus:ring-2 focus:ring-philsa-red/10"
+                >
+                  <option value="">All Schools</option>
+                  {schoolOptions.map(school => (
+                    <option key={school.value} value={school.value}>{school.name}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray pointer-events-none" />
+              </div>
+              <div className="relative min-w-[160px]">
+                <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray pointer-events-none" />
+                <select
+                  value={dateFilter}
+                  onChange={(event) => setDateFilter(event.target.value as 'ALL' | 'TODAY')}
+                  className="w-full appearance-none bg-philsa-bg border border-transparent rounded-xl pl-10 pr-9 py-3 text-[10px] font-black uppercase tracking-widest text-philsa-navy focus:ring-2 focus:ring-philsa-red/10"
+                >
+                  <option value="ALL">All Dates</option>
+                  <option value="TODAY">Today</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray pointer-events-none" />
+              </div>
               <div className="flex bg-philsa-bg p-1 rounded-xl">
                 {['ALL', 'PENDING', 'REJECTED'].map((status) => (
                   <button
@@ -239,22 +378,14 @@ export default function ReviewApplications() {
                   </td>
                 </tr>
               )}
-              {!isLoadingQueue && apps.length === 0 && (
+              {!isLoadingQueue && visibleApps.length === 0 && (
                 <tr>
                   <td colSpan={3} className="px-8 py-10 text-center text-xs font-black uppercase tracking-widest text-philsa-gray">
                     No submitted applications found.
                   </td>
                 </tr>
               )}
-              {!isLoadingQueue && apps.filter(app => {
-                const displayCandidateId = app.candidateId || app.id;
-                const matchesSearch =
-                  `${app.firstName} ${app.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  displayCandidateId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                  app.id.toLowerCase().includes(searchTerm.toLowerCase());
-                const matchesStatus = statusFilter === 'ALL' || app.status === statusFilter;
-                return matchesSearch && matchesStatus;
-              }).map((app) => {
+              {!isLoadingQueue && visibleApps.map((app) => {
                 const isDecisionFinal = ['ACCEPTED', 'APPROVED', 'REJECTED'].includes(app.status);
                 const displayCandidateId = app.candidateId || app.id;
 
@@ -328,7 +459,7 @@ export default function ReviewApplications() {
         </div>
         
         <div className="px-8 py-4 bg-philsa-bg/50 border-t border-philsa-border flex items-center justify-between">
-           <p className="text-[10px] text-philsa-gray font-bold uppercase tracking-widest">System Registry Active • Showing {apps.length} applicants</p>
+           <p className="text-[10px] text-philsa-gray font-bold uppercase tracking-widest">System Registry Active • Showing {visibleApps.length} applicants</p>
            <div className="flex gap-2">
              <button className="px-3 py-1 bg-white border border-philsa-border rounded text-xs font-bold text-philsa-gray disabled:opacity-50">Previous</button>
              <button className="px-3 py-1 bg-white border border-philsa-border rounded text-xs font-bold text-philsa-navy">1</button>
