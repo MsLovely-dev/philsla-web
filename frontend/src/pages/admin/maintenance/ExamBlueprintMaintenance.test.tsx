@@ -5,7 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import ExamBlueprintMaintenance from './ExamBlueprintMaintenance';
 import { examBlueprintMaintenanceService } from '../../../services/backendExamBlueprintMaintenanceService';
 
-function catalogRecord(overrides: Partial<{ id: string; code: string; name: string }> = {}) {
+function catalogRecord(overrides: Partial<{ id: string; code: string; name: string; isActive: boolean }> = {}) {
   return {
     id: '1',
     code: 'SCI',
@@ -73,6 +73,32 @@ describe('ExamBlueprintMaintenance', () => {
     await waitFor(() => expect(screen.getByText('Mathematics')).toBeInTheDocument());
     expect(examBlueprintMaintenanceService.createSubject).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'MATH', name: 'Mathematics' }),
+    );
+  });
+
+  it('creating a record without touching Active Status persists isActive matching the visible "Inactive" toggle', async () => {
+    const created = catalogRecord({ id: '3', code: 'HIST', name: 'History', isActive: false });
+    vi.spyOn(examBlueprintMaintenanceService, 'createSubject').mockResolvedValue({
+      ok: true,
+      data: created,
+    });
+    vi.mocked(examBlueprintMaintenanceService.listSubjects)
+      .mockResolvedValueOnce({ ok: true, data: [] })
+      .mockResolvedValue({ ok: true, data: [created] });
+    const user = userEvent.setup();
+    render(<MemoryRouter><ExamBlueprintMaintenance /></MemoryRouter>);
+    await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /create new entry/i }));
+    // The Active Status toggle starts untouched — the form visibly shows "Inactive".
+    expect(screen.getByText('Inactive')).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText(/code/i), 'HIST');
+    await user.type(screen.getByPlaceholderText(/subject name/i), 'History');
+    await user.click(screen.getByRole('button', { name: /submit entry/i }));
+
+    await waitFor(() => expect(screen.getByText('History')).toBeInTheDocument());
+    expect(examBlueprintMaintenanceService.createSubject).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'HIST', name: 'History', isActive: false }),
     );
   });
 

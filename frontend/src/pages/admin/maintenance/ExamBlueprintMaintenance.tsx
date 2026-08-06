@@ -104,12 +104,17 @@ function getFieldsForCategory(category: Category, subjects: CatalogRecord[]): Ma
   }
 }
 
+// MaintenancePageTemplate has no concept of a per-field default value: on "Create New Entry" it
+// always initializes formData to `{}` (see handleOpenCreate), so an untouched "Active Status"
+// toggle is `undefined` and visually renders in its "Inactive" position (formData[name] ? 'Active'
+// : 'Inactive'). The submitted payload must agree with what the admin saw on screen, so an
+// untouched toggle here maps to `isActive: false`, not a silently-defaulted `true`.
 function toCatalogPayload(record: Record<string, unknown>): CatalogPayload {
   return {
     code: typeof record.code === 'string' ? record.code : undefined,
     name: typeof record.name === 'string' ? record.name : undefined,
     description: typeof record.description === 'string' ? record.description : undefined,
-    isActive: typeof record.isActive === 'boolean' ? record.isActive : true,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : false,
   };
 }
 
@@ -119,7 +124,7 @@ function toTopicPayload(record: Record<string, unknown>): TopicPayload {
     code: typeof record.code === 'string' ? record.code : undefined,
     name: typeof record.name === 'string' ? record.name : undefined,
     description: typeof record.description === 'string' ? record.description : undefined,
-    isActive: typeof record.isActive === 'boolean' ? record.isActive : true,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : false,
   };
 }
 
