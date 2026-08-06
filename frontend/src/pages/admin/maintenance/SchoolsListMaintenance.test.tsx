@@ -19,7 +19,7 @@ const school: SchoolRecord = {
   updatedAt: '2026-08-06T00:00:00Z',
 };
 
-const EMPTY_STATE = 'No schools match your search and filter criteria.';
+const EMPTY_STATE = 'No schools yet';
 
 function renderPage() {
   return render(

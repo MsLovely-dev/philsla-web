@@ -23,7 +23,7 @@ import {
   type SchoolRecord,
 } from '../../../services/backendSchoolService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog, ErrorState, LoadingState } from '../../../components/ui';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState } from '../../../components/ui';
 import { useMaintenanceData } from '../../../services/maintenanceDataContext';
 
 function isSchoolClassification(value: string): value is SchoolClassification {
@@ -219,18 +219,18 @@ export default function SchoolsListMaintenance() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={exportCSV}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
             >
-              <Download className="w-4 h-4" /> Export CSV
+              <Download className="w-4 h-4 shrink-0" /> Export CSV
             </button>
             <button
               onClick={handleOpenAddModal}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2"
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4" /> Add New School
+              <Plus className="w-4 h-4 shrink-0" /> Add New School
             </button>
           </div>
         </div>
@@ -340,9 +340,22 @@ export default function SchoolsListMaintenance() {
         </div>
       </div>
 
-      {/* Schools List — Table or Grid */}
-      {viewMode === 'table' ? (
-        <div className="card-philsa bg-white overflow-hidden p-0">
+      {/* Schools List: empty-registry CTA, otherwise table or grid */}
+      {schools.length === 0 ? (
+        <EmptyState
+          title="No schools yet"
+          message="Add your first accredited school to start building the registry."
+          action={
+            <button
+              onClick={handleOpenAddModal}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 shrink-0" /> Add your first school
+            </button>
+          }
+        />
+      ) : viewMode === 'table' ? (
+        <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -367,7 +380,7 @@ export default function SchoolsListMaintenance() {
                   filteredSchools.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50/80 transition-all">
                       <td className="py-3.5 px-4">
-                        <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block">
+                        <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block whitespace-nowrap">
                           {s.code}
                         </span>
                       </td>
@@ -434,7 +447,7 @@ export default function SchoolsListMaintenance() {
                   </div>
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                      <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 whitespace-nowrap">
                         {s.code}
                       </span>
                       <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${

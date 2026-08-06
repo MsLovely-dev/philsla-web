@@ -35,7 +35,7 @@ import {
   type UniversityRecord,
 } from '../../../services/backendUniversityService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog, ErrorState, LoadingState } from '../../../components/ui';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState } from '../../../components/ui';
 import { useMaintenanceData } from '../../../services/maintenanceDataContext';
 
 function isUniversityClassification(value: string): value is UniversityClassification {
@@ -479,18 +479,18 @@ export default function UniversitiesListMaintenance() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <button
                   onClick={exportCSV}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2"
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
                 >
-                  <Download className="w-4 h-4" /> Export CSV
+                  <Download className="w-4 h-4 shrink-0" /> Export CSV
                 </button>
                 <button
                   onClick={handleOpenAddUniModal}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap shrink-0"
                 >
-                  <Plus className="w-4 h-4" /> Add University
+                  <Plus className="w-4 h-4 shrink-0" /> Add University
                 </button>
               </div>
             </div>
@@ -591,8 +591,21 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* TABLE VIEW DISPLAY */}
-          {viewMode === 'table' ? (
+          {/* LIST DISPLAY: empty-registry CTA, otherwise table or grid */}
+          {universities.length === 0 ? (
+            <EmptyState
+              title="No universities yet"
+              message="Add your first accredited university to start building the registry."
+              action={
+                <button
+                  onClick={handleOpenAddUniModal}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4 shrink-0" /> Add your first university
+                </button>
+              }
+            />
+          ) : viewMode === 'table' ? (
             <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -624,7 +637,7 @@ export default function UniversitiesListMaintenance() {
                             className="hover:bg-slate-50/80 transition-all group"
                           >
                             <td className="py-3.5 px-4">
-                              <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-1 rounded-md border border-slate-200">
+                              <span className="inline-block whitespace-nowrap font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-1 rounded-md border border-slate-200">
                                 {uni.code}
                               </span>
                             </td>
@@ -696,6 +709,10 @@ export default function UniversitiesListMaintenance() {
                 </table>
               </div>
             </div>
+          ) : filteredUniversities.length === 0 ? (
+            <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
+              No universities match your search and filter criteria.
+            </div>
           ) : (
             /* GRID VIEW DISPLAY */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -714,7 +731,7 @@ export default function UniversitiesListMaintenance() {
                         </div>
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                            <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 whitespace-nowrap">
                               {uni.code}
                             </span>
                             <span className="text-[10px] font-bold text-slate-400">Est. {uni.establishedYear ?? '—'}</span>
@@ -852,7 +869,21 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* College Courses List Table */}
+          {/* College Courses: empty-registry CTA, otherwise the table */}
+          {universityCourses.length === 0 ? (
+            <EmptyState
+              title="No college courses yet"
+              message="Add the first degree program offered by this university."
+              action={
+                <button
+                  onClick={handleOpenAddCourseModal}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-philsa-navy hover:bg-slate-800 text-white transition-all cursor-pointer shadow-xs flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4 shrink-0" /> Add the first course
+                </button>
+              }
+            />
+          ) : (
           <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -874,7 +905,7 @@ export default function UniversitiesListMaintenance() {
                     filteredCourses.map((crs) => (
                       <tr key={crs.id} className="hover:bg-slate-50/80 transition-all">
                         <td className="py-3.5 px-4">
-                          <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-md inline-block">
+                          <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-md inline-block whitespace-nowrap">
                             {crs.programCode}
                           </span>
                         </td>
@@ -906,6 +937,7 @@ export default function UniversitiesListMaintenance() {
               </table>
             </div>
           </div>
+          )}
         </div>
       )}
 

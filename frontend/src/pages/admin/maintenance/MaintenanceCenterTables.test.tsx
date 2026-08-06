@@ -35,7 +35,7 @@ describe('active Maintenance Center tables', () => {
 
     render(<MaintenanceDataProvider><MemoryRouter><SchoolsListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 
-    expect(await screen.findByText('No schools match your search and filter criteria.')).toBeInTheDocument();
+    expect(await screen.findByText('No schools yet')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock School')).not.toBeInTheDocument();
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
@@ -48,7 +48,7 @@ describe('active Maintenance Center tables', () => {
 
     render(<MaintenanceDataProvider><MemoryRouter><UniversitiesListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 
-    expect(await screen.findByText('No universities match your search and filter criteria.')).toBeInTheDocument();
+    expect(await screen.findByText('No universities yet')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock University')).not.toBeInTheDocument();
     await waitFor(() => expect(setItem).not.toHaveBeenCalled());
     setItem.mockRestore();

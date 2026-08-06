@@ -51,7 +51,7 @@ describe('UniversitiesListMaintenance', () => {
     await user.click(await screen.findByText(university.name));
 
     expect(listCourses).toHaveBeenCalledWith(university.id);
-    expect(await screen.findByText('No college courses match your search criteria.')).toBeInTheDocument();
+    expect(await screen.findByText('No college courses yet')).toBeInTheDocument();
     expect(screen.getByText(`${university.code} - College Courses`)).toBeInTheDocument();
   });
 
@@ -72,7 +72,7 @@ describe('UniversitiesListMaintenance', () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText('No universities match your search and filter criteria.');
+    await screen.findByText('No universities yet');
 
     await user.click(screen.getByRole('button', { name: /add university/i }));
     await user.type(screen.getByPlaceholderText('Official name of university...'), university.name);
@@ -96,7 +96,7 @@ describe('UniversitiesListMaintenance', () => {
     );
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText('No universities match your search and filter criteria.');
+    await screen.findByText('No universities yet');
 
     await user.click(screen.getByRole('button', { name: /add university/i }));
     await user.type(screen.getByPlaceholderText('Official name of university...'), university.name);
