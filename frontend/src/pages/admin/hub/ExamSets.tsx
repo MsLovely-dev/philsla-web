@@ -174,15 +174,8 @@ export default function ExamSets() {
       navigate('/admin/blueprints');
       return;
     }
-    if (tab === 'published') {
-      navigate('/admin/hub/exam-sets/published');
-      return;
-    }
-    if (tab === 'audit') {
-      navigate('/admin/hub/exam-sets/audit');
-      return;
-    }
-    navigate('/admin/hub/exam-sets/assembly');
+    const hash = tab === 'published' ? 'published' : tab === 'audit' ? 'audit' : 'dashboard';
+    navigate(`/admin/hub/exam-sets/content#${hash}`);
   };
 
   const openCreate = () => {

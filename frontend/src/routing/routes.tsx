@@ -11,8 +11,6 @@ import HubBulkUpload from '../pages/admin/hub/BulkUpload';
 import HubExamSets from '../pages/admin/hub/ExamSets';
 import HubOverview from '../pages/admin/hub/Overview';
 import HubQuestionBank from '../pages/admin/hub/QuestionBank';
-import ExamSetAudit from '../pages/admin/hub/ExamSetAudit';
-import ExamSetPublished from '../pages/admin/hub/ExamSetPublished';
 import ResultsRelease from '../pages/admin/hub/ResultsRelease';
 import StimulusManagement from '../pages/admin/hub/StimulusManagement';
 import AttendanceRulesMaintenance from '../pages/admin/maintenance/AttendanceRulesMaintenance';
@@ -128,23 +126,21 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/university/schedules', element: <ExamSchedules />, access: 'protected', allowedRoles: UNIVERSITY },
 
   { path: '/admin/hub/overview', element: <HubOverview />, access: 'protected', allowedRoles: HUB },
-  { path: '/admin/hub/questions', element: <HubQuestionBank />, access: 'protected', allowedRoles: withSystemAdmin('ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR') },
+  { path: '/admin/hub/questions', element: <HubQuestionBank />, access: 'protected', allowedRoles: withSystemAdmin('ITEM_WRITER', 'ACADEMIC_REVIEWER') },
   { path: '/admin/hub/stimuli', element: <StimulusManagement />, access: 'protected', allowedRoles: HUB },
   { path: '/admin/hub/exam-sets', element: <ExamBlueprints />, access: 'protected', allowedRoles: HUB },
-  { path: '/admin/hub/exam-sets/assembly', element: <HubExamSets />, access: 'protected', allowedRoles: EXAM_SET_MANAGEMENT },
-  { path: '/admin/hub/exam-sets/published', element: <ExamSetPublished />, access: 'protected', allowedRoles: EXAM_SET_MANAGEMENT },
-  { path: '/admin/hub/exam-sets/audit', element: <ExamSetAudit />, access: 'protected', allowedRoles: EXAM_SET_MANAGEMENT },
   { path: '/admin/hub/upload', element: <HubBulkUpload />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/hub/audit', element: <HubAuditTrail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/hub/audit/student-registration', element: <HubAuditTrail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/hub/review', element: <ExamReviewList />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN') },
   { path: '/admin/hub/review/:id', element: <ExamReviewDetail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN') },
   { path: '/admin/hub/results-release', element: <ResultsRelease />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
-  { path: '/admin/hub/exam-sets/content', element: <Navigate to="/admin/hub/exam-sets/assembly" replace />, access: 'protected', allowedRoles: EXAM_SET_MANAGEMENT },
+  { path: '/admin/hub/exam-sets/content', element: <HubExamSets />, access: 'protected', allowedRoles: EXAM_SET_MANAGEMENT },
 
   { path: '/admin/results/scores', element: <ScoreManagement />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
   { path: '/admin/results/scores/:batchId/:candidateId', element: <ScoreCandidateDetail />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
   { path: '/admin/results/matrix', element: <ReportingMatrix />, access: 'protected', allowedRoles: withSystemAdmin('EXECUTIVE', 'GOVERNMENT', 'UNIVERSITY_ADMIN') },
+  { path: '/admin/questions', element: <HubQuestionBank />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
   { path: '/admin/blueprints', element: <ExamBlueprints />, access: 'protected', allowedRoles: HUB },
   { path: '/admin/reports', element: <ResultsManagement />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
 

@@ -109,8 +109,14 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
       { 
         icon: Database, 
         label: 'Question Bank', 
+        href: '/admin/questions', 
+        roles: ['SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR'] 
+      },
+      { 
+        icon: Database, 
+        label: 'Question Bank', 
         href: '/admin/hub/questions', 
-        roles: ['ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR', 'SYSTEM_ADMIN'] 
+        roles: ['ITEM_WRITER', 'ACADEMIC_REVIEWER'] 
       },
       { icon: CheckCircle, label: 'Exam Review', href: '/admin/hub/review', roles: ['SYSTEM_ADMIN', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN'] },
       { icon: CheckCircle, label: 'Results Release', href: '/admin/hub/results-release' },
