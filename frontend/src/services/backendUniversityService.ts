@@ -3,11 +3,15 @@ import { serviceSuccess, type ServiceResult } from './serviceResult';
 
 export type UniversityClassification = 'Public' | 'Private';
 export type ActivationStatus = 'Active' | 'Inactive';
-export type DegreeType =
-  | 'Bachelor of Science'
-  | 'Bachelor of Arts'
-  | 'Bachelor of Fine Arts'
-  | 'Associate';
+
+// degree_type is a free string on the backend. These are common suggestions the
+// UI offers in a combobox; any other value is accepted too.
+export const DEGREE_TYPE_SUGGESTIONS = [
+  'Bachelor of Science',
+  'Bachelor of Arts',
+  'Bachelor of Fine Arts',
+  'Associate',
+] as const;
 
 export interface UniversityRecord {
   id: string;
@@ -68,7 +72,7 @@ export interface CollegeCourseRecord {
   collegeName: string;
   programCode: string;
   programName: string;
-  degreeType: DegreeType;
+  degreeType: string;
   majorSpecialization: string;
   durationYears: number;
   totalUnits: number;
@@ -82,7 +86,7 @@ export interface CollegeCoursePayload {
   collegeName: string;
   programCode: string;
   programName: string;
-  degreeType: DegreeType;
+  degreeType: string;
   majorSpecialization: string;
   durationYears: number;
   totalUnits: number;
@@ -97,7 +101,7 @@ interface ApiCollegeCourse {
   collegeName: string;
   programCode: string;
   programName: string;
-  degreeType: DegreeType;
+  degreeType: string;
   majorSpecialization: string;
   durationYears: number;
   totalUnits: number;

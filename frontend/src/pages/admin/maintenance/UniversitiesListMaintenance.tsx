@@ -29,7 +29,7 @@ import {
   universityService,
   type CollegeCoursePayload,
   type CollegeCourseRecord,
-  type DegreeType,
+  DEGREE_TYPE_SUGGESTIONS,
   type UniversityClassification,
   type UniversityPayload,
   type UniversityRecord,
@@ -39,10 +39,6 @@ import { ConfirmationDialog } from '../../../components/ui';
 
 function isUniversityClassification(value: string): value is UniversityClassification {
   return value === 'Public' || value === 'Private';
-}
-
-function isDegreeType(value: string): value is DegreeType {
-  return ['Bachelor of Science', 'Bachelor of Arts', 'Bachelor of Fine Arts', 'Associate'].includes(value);
 }
 
 const EMPTY_COURSE_FORM: CollegeCoursePayload = {
@@ -1092,20 +1088,19 @@ export default function UniversitiesListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Degree Type</label>
-                  <select
-                    value={courseFormData.degreeType || 'Bachelor of Science'}
-                    onChange={e => {
-                      if (isDegreeType(e.target.value)) {
-                        setCourseFormData({ ...courseFormData, degreeType: e.target.value });
-                      }
-                    }}
+                  <input
+                    type="text"
+                    list="degree-type-suggestions"
+                    value={courseFormData.degreeType}
+                    onChange={e => setCourseFormData({ ...courseFormData, degreeType: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  >
-                    <option value="Bachelor of Science">Bachelor of Science</option>
-                    <option value="Bachelor of Arts">Bachelor of Arts</option>
-                    <option value="Bachelor of Fine Arts">Bachelor of Fine Arts</option>
-                    <option value="Associate">Associate Degree</option>
-                  </select>
+                    placeholder="Choose or type a degree type..."
+                  />
+                  <datalist id="degree-type-suggestions">
+                    {DEGREE_TYPE_SUGGESTIONS.map((degree) => (
+                      <option key={degree} value={degree} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
