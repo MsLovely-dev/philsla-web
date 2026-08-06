@@ -23,7 +23,7 @@
 **In scope:** real, backend-integrated CRUD (create, edit, deactivate — no hard delete) for:
 - Subject Areas (`Subject`)
 - Question Type (`QuestionType`)
-- Topics (`Topic`, nested under a Subject)
+- Topics (`Topic`, flat resource with `subject_id` as a payload field)
 
 **Out of scope:**
 - Difficulty Level. It is a fixed `DifficultyLevel(TextChoices)` enum in code (`EASY`/`MEDIUM`/`HARD`), not a database-editable table. Converting it to an editable model would touch `Question.difficulty` and `BlueprintDifficultyDistribution`, both used by the already-implemented and tested Exam Sets/Blueprint validation logic. That's a materially bigger, separate change and is not authorized here.
@@ -59,12 +59,14 @@ Follows `apps/exams/views.py`'s own established view shape (`ExamBlueprintListCr
 GET/POST   /api/v1/exams/admin/subjects/
 GET/PATCH/PUT /api/v1/exams/admin/subjects/{subject_id}/
 
-GET/POST   /api/v1/exams/admin/subjects/{subject_id}/topics/
-GET/PATCH/PUT /api/v1/exams/admin/subjects/{subject_id}/topics/{topic_id}/
+GET/POST   /api/v1/exams/admin/topics/
+GET/PATCH/PUT /api/v1/exams/admin/topics/{topic_id}/
 
 GET/POST   /api/v1/exams/admin/question-types/
 GET/PATCH/PUT /api/v1/exams/admin/question-types/{question_type_id}/
 ```
+
+Topics are a **flat** resource (`subject_id` is a field in the create/update payload, not part of the URL) — not nested under `/subjects/{id}/topics/` as an earlier draft of this spec proposed by analogy with `apps/configuration`'s CollegeCourse-under-University nesting. Two reasons: (1) `apps/exams` doesn't nest any resource anywhere — Blueprints, Questions, and ExamSets are all flat top-level lists; (2) the existing prototype's Topics tab already renders a flat, cross-subject table (with Subject shown as a column on each row), not a "pick a subject, then see its topics" drill-down, so a flat list matches the UI it's replacing. The list representation includes the subject's `code`/`name` alongside each topic (matching how `CollegeCourseSerializer` includes `universityCode`), so the frontend never has to join client-side.
 
 - List endpoints: unpaginated, returning the full active-and-inactive set ordered by the model's `Meta.ordering`, with no query-param filtering. This deliberately does not copy `StandardPageNumberPagination` or search/status filtering from `apps/configuration`'s University/CollegeCourse admin views (an earlier draft of this spec assumed it would) — every existing list endpoint in `apps/exams` itself (`ExamBlueprintListCreateView`, `QuestionListCreateView`, `ExamSetListCreateView`) already returns a flat, unfiltered, unpaginated array with no query-param support at all, and matching the sibling views in the same app/file takes precedence over matching a different app's convention. These are small reference tables (tens of records, not hundreds), so the frontend filters/searches client-side over the full returned list, the same way a lookup dropdown normally works.
 - No DELETE method on any endpoint.
@@ -83,9 +85,9 @@ Mirror `apps/configuration/audit.py`'s `record_configuration_event`: a new `apps
 
 ## Frontend
 
-- New `frontend/src/services/backendExamBlueprintMaintenanceService.ts`: typed transport mapping (`listSubjects`, `createSubject`, `updateSubject`, `listTopics(subjectId)`, `createTopic`, `updateTopic`, `listQuestionTypes`, `createQuestionType`, `updateQuestionType`), following `backendUniversityService.ts`'s pattern.
+- New `frontend/src/services/backendExamBlueprintMaintenanceService.ts`: typed transport mapping (`listSubjects`, `createSubject`, `updateSubject`, `listTopics`, `createTopic`, `updateTopic`, `listQuestionTypes`, `createQuestionType`, `updateQuestionType` — `listTopics` takes no arguments, since Topics is a flat resource), following `backendUniversityService.ts`'s pattern.
 - Rewire `ExamBlueprintMaintenance.tsx`: remove the local `useState<BlueprintConfig[]>([])` array as the source of truth; load through the new service with loading/empty/retryable-error/mutation-error states, matching `UniversitiesListMaintenance.tsx`. Keep the tab UI for Subject Areas / Question Type / Topics; remove the Difficulty Level tab. Change the Topics tab's "Subject" field from free text to a dropdown populated from loaded Subjects (`Topic.subject` is a real FK, not free text).
-- Extend the frontend maintenance-module permission check (in `RouteGuards.tsx`, the file `11ff29d` touched) to cover this table for the four roles, matching the backend.
+- Fix `routes.tsx`'s route entry for `/admin/maintenance/exam-blueprint`: it currently declares `allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER')`, which doesn't match any role with a legitimate reason to maintain exam-blueprint catalogs — it looks like a copy-paste leftover from a different maintenance route. Change it to `withSystemAdmin('ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR')`, matching the backend role list exactly. This is a one-line change to a route config array, not a change to `RouteGuards.tsx`'s guard logic itself (which is shared, generic infrastructure I'm not touching).
 - Remove the `bulkUpload` prop/button from the rewired component (out of scope, see above).
 
 ## Testing
