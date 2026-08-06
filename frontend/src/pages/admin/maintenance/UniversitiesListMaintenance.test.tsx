@@ -108,6 +108,32 @@ describe('UniversitiesListMaintenance', () => {
     expect(screen.getByText('Add New University')).toBeInTheDocument();
   });
 
+  it('exports a CSV through the config modal with formula-injection neutralized', async () => {
+    const injected: UniversityRecord = { ...university, name: '=cmd|/c calc' };
+    vi.mocked(universityService.listUniversities).mockResolvedValue(serviceSuccess([injected]));
+    const captured: Blob[] = [];
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockImplementation((blob) => {
+        captured.push(blob as Blob);
+        return 'blob:mock';
+      });
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText(injected.name);
+
+    await user.click(screen.getByRole('button', { name: /export csv/i })); // header opens the modal
+    await user.click(await screen.findByRole('button', { name: 'Download CSV' })); // modal performs it
+
+    expect(createObjectURL).toHaveBeenCalled();
+    const text = await captured[0].text();
+    // The leading "=" is prefixed with a quote so spreadsheets treat it as text.
+    expect(text).toContain("'=cmd|/c calc");
+    expect(text).not.toContain(',=cmd'); // never a bare formula cell
+  });
+
   it('does not refetch the university list when the page remounts within the cached provider', async () => {
     const listUniversities = vi
       .mocked(universityService.listUniversities)

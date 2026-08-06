@@ -37,6 +37,12 @@ import {
 import type { ServiceFailure } from '../../../services/serviceResult';
 import { ConfirmationDialog, EmptyState, ErrorState, LoadingState } from '../../../components/ui';
 import { useMaintenanceData } from '../../../services/maintenanceDataContext';
+import {
+  ExportConfigModal,
+  type ExportColumnOption,
+  type ExportSelection,
+} from '../../../components/maintenance/ExportConfigModal';
+import { downloadCsv, toCsv } from '../../../services/csvExportService';
 
 function isUniversityClassification(value: string): value is UniversityClassification {
   return value === 'Public' || value === 'Private';
@@ -65,6 +71,39 @@ const EMPTY_UNI_FORM: UniversityPayload = {
   establishedYear: null,
   status: 'Active',
 };
+
+type UniversityExportColumn = ExportColumnOption & { get: (u: UniversityRecord) => unknown };
+const UNIVERSITY_EXPORT_COLUMNS: UniversityExportColumn[] = [
+  { key: 'code', label: 'Code', get: (u) => u.code },
+  { key: 'name', label: 'University Name', get: (u) => u.name },
+  { key: 'classification', label: 'Classification', get: (u) => u.classification },
+  { key: 'region', label: 'Region', get: (u) => regionLabel(u.region) },
+  { key: 'city', label: 'City', get: (u) => u.city },
+  { key: 'presidentRector', label: 'President/Rector', sensitive: true, get: (u) => u.presidentRector },
+  { key: 'email', label: 'Email', sensitive: true, get: (u) => u.email },
+  { key: 'phone', label: 'Phone', sensitive: true, get: (u) => u.phone },
+  { key: 'establishedYear', label: 'Established', get: (u) => u.establishedYear ?? '' },
+  { key: 'courseCount', label: 'Course Count', get: (u) => u.courseCount },
+  { key: 'status', label: 'Status', get: (u) => u.status },
+];
+
+type CourseExportColumn = ExportColumnOption & { get: (c: CollegeCourseRecord) => unknown };
+const COURSE_EXPORT_COLUMNS: CourseExportColumn[] = [
+  { key: 'programCode', label: 'Program Code', get: (c) => c.programCode },
+  { key: 'programName', label: 'Program Name', get: (c) => c.programName },
+  { key: 'collegeName', label: 'College', get: (c) => c.collegeName },
+  { key: 'degreeType', label: 'Degree Type', get: (c) => c.degreeType },
+  { key: 'majorSpecialization', label: 'Specialization', get: (c) => c.majorSpecialization },
+  { key: 'durationYears', label: 'Duration (Yrs)', get: (c) => c.durationYears },
+  { key: 'totalUnits', label: 'Total Units', get: (c) => c.totalUnits },
+  { key: 'cutoffPercentile', label: 'Cutoff %', get: (c) => c.cutoffPercentile },
+  { key: 'status', label: 'Status', get: (c) => c.status },
+];
+
+const EXPORT_SCOPE_OPTIONS = [
+  { value: 'filtered', label: 'Only rows matching current filters' },
+  { value: 'all', label: 'All rows' },
+];
 
 export default function UniversitiesListMaintenance() {
   const {
@@ -95,6 +134,7 @@ export default function UniversitiesListMaintenance() {
   const [collegeFilter, setCollegeFilter] = useState('ALL');
 
   // Modals
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isUniModalOpen, setIsUniModalOpen] = useState(false);
   const [editingUniversity, setEditingUniversity] = useState<UniversityRecord | null>(null);
   const [uniFormData, setUniFormData] = useState<UniversityPayload>(EMPTY_UNI_FORM);
@@ -345,50 +385,18 @@ export default function UniversitiesListMaintenance() {
     setPendingCourseDelete(null);
   };
 
-  const exportCSV = () => {
+  const handleExport = ({ columns, scope }: ExportSelection) => {
+    setIsExportModalOpen(false);
     if (selectedUniversity) {
-      const headers = ['Program Code', 'Program Name', 'College', 'Degree Type', 'Specialization', 'Duration (Yrs)', 'Total Units', 'Cutoff %', 'Status'];
-      const rows = universityCourses.map(c => [
-        `"${c.programCode}"`,
-        `"${c.programName}"`,
-        `"${c.collegeName}"`,
-        `"${c.degreeType}"`,
-        `"${c.majorSpecialization}"`,
-        c.durationYears,
-        c.totalUnits,
-        c.cutoffPercentile,
-        `"${c.status}"`
-      ]);
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `${selectedUniversity.code}_College_Courses.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const cols = COURSE_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
+      const source = scope === 'all' ? universityCourses : filteredCourses;
+      const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
+      downloadCsv(`${selectedUniversity.code}_College_Courses.csv`, csv);
     } else {
-      const headers = ['Code', 'University Name', 'Classification', 'Region', 'City', 'President/Rector', 'Email', 'Established', 'Course Count', 'Status'];
-      const rows = filteredUniversities.map(u => [
-        `"${u.code}"`,
-        `"${u.name}"`,
-        `"${u.classification}"`,
-        `"${regionLabel(u.region)}"`,
-        `"${u.city}"`,
-        `"${u.presidentRector}"`,
-        `"${u.email}"`,
-        u.establishedYear ?? '',
-        getCourseCountForUniversity(u.id),
-        `"${u.status}"`
-      ]);
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `philSA_List_of_Universities.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const cols = UNIVERSITY_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
+      const source = scope === 'all' ? universities : filteredUniversities;
+      const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
+      downloadCsv('philSA_List_of_Universities.csv', csv);
     }
   };
 
@@ -481,7 +489,7 @@ export default function UniversitiesListMaintenance() {
 
               <div className="flex items-center gap-3 shrink-0">
                 <button
-                  onClick={exportCSV}
+                  onClick={() => setIsExportModalOpen(true)}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
                 >
                   <Download className="w-4 h-4 shrink-0" /> Export CSV
@@ -827,7 +835,7 @@ export default function UniversitiesListMaintenance() {
 
               <div className="flex items-center gap-2.5">
                 <button
-                  onClick={exportCSV}
+                  onClick={() => setIsExportModalOpen(true)}
                   className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <Download className="w-4 h-4 text-slate-500" /> Export Courses
@@ -1258,6 +1266,15 @@ export default function UniversitiesListMaintenance() {
           </div>
         </div>
       )}
+
+      <ExportConfigModal
+        isOpen={isExportModalOpen}
+        title={selectedUniversity ? 'Export college courses' : 'Export universities'}
+        columns={selectedUniversity ? COURSE_EXPORT_COLUMNS : UNIVERSITY_EXPORT_COLUMNS}
+        scopeOptions={EXPORT_SCOPE_OPTIONS}
+        onCancel={() => setIsExportModalOpen(false)}
+        onExport={handleExport}
+      />
 
       <ConfirmationDialog
         isOpen={pendingDelete !== null}

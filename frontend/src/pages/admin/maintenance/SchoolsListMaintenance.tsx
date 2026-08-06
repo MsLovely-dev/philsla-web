@@ -25,6 +25,12 @@ import {
 import type { ServiceFailure } from '../../../services/serviceResult';
 import { ConfirmationDialog, EmptyState, ErrorState, LoadingState } from '../../../components/ui';
 import { useMaintenanceData } from '../../../services/maintenanceDataContext';
+import {
+  ExportConfigModal,
+  type ExportColumnOption,
+  type ExportSelection,
+} from '../../../components/maintenance/ExportConfigModal';
+import { downloadCsv, toCsv } from '../../../services/csvExportService';
 
 function isSchoolClassification(value: string): value is SchoolClassification {
   return value === 'Public' || value === 'Private';
@@ -37,6 +43,21 @@ const EMPTY_FORM: SchoolPayload = {
   region: PHILIPPINE_REGIONS[0].code,
   status: 'Active',
 };
+
+type SchoolExportColumn = ExportColumnOption & { get: (s: SchoolRecord) => unknown };
+const SCHOOL_EXPORT_COLUMNS: SchoolExportColumn[] = [
+  { key: 'code', label: 'Code', get: (s) => s.code },
+  { key: 'classification', label: 'Classification', get: (s) => s.classification },
+  { key: 'name', label: 'Name', get: (s) => s.name },
+  { key: 'examineeCapacity', label: 'Examinee Capacity', get: (s) => s.examineeCapacity },
+  { key: 'region', label: 'Region/Municipality/City', get: (s) => regionLabel(s.region) },
+  { key: 'status', label: 'Status', get: (s) => s.status },
+];
+
+const EXPORT_SCOPE_OPTIONS = [
+  { value: 'filtered', label: 'Only rows matching current filters' },
+  { value: 'all', label: 'All rows' },
+];
 
 export default function SchoolsListMaintenance() {
   const {
@@ -56,6 +77,7 @@ export default function SchoolsListMaintenance() {
   const [regionFilter, setRegionFilter] = useState<string>('ALL');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
   const [formData, setFormData] = useState<SchoolPayload>(EMPTY_FORM);
@@ -144,22 +166,12 @@ export default function SchoolsListMaintenance() {
     setPendingDelete(null);
   };
 
-  const exportCSV = () => {
-    const headers = ['Code', 'Classification', 'Name', 'Examinee Capacity', 'Region/Municipality/City'];
-    const rows = filteredSchools.map((s) => [
-      `"${s.code}"`,
-      `"${s.classification}"`,
-      `"${s.name}"`,
-      s.examineeCapacity,
-      `"${regionLabel(s.region)}"`,
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const link = document.createElement('a');
-    link.setAttribute('href', encodeURI(csvContent));
-    link.setAttribute('download', `philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExport = ({ columns, scope }: ExportSelection) => {
+    setIsExportModalOpen(false);
+    const cols = SCHOOL_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
+    const source = scope === 'all' ? schools : filteredSchools;
+    const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
+    downloadCsv(`philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
 
   // First load shows a distinct loading/error state; when cached it is already loaded.
@@ -221,7 +233,7 @@ export default function SchoolsListMaintenance() {
 
           <div className="flex items-center gap-3 shrink-0">
             <button
-              onClick={exportCSV}
+              onClick={() => setIsExportModalOpen(true)}
               className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4 shrink-0" /> Export CSV
@@ -620,6 +632,15 @@ export default function SchoolsListMaintenance() {
           </div>
         </div>
       )}
+
+      <ExportConfigModal
+        isOpen={isExportModalOpen}
+        title="Export schools"
+        columns={SCHOOL_EXPORT_COLUMNS}
+        scopeOptions={EXPORT_SCOPE_OPTIONS}
+        onCancel={() => setIsExportModalOpen(false)}
+        onExport={handleExport}
+      />
 
       <ConfirmationDialog
         isOpen={pendingDelete !== null}
