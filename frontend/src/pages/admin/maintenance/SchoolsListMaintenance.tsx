@@ -529,10 +529,11 @@ export default function SchoolsListMaintenance() {
         </div>
       )}
 
-      {/* Add / Edit School Modal */}
+      {/* Add / Edit School Modal — stacks above the details modal when opened from it */}
       <ModalShell
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setError(null); }}
+        zClass="z-[110]"
         className="max-w-xl p-6 space-y-6"
       >
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -652,12 +653,11 @@ export default function SchoolsListMaintenance() {
             </form>
       </ModalShell>
 
-      {/* School Details Modal — sits under the edit/delete modals so cancelling returns here */}
+      {/* School Details Modal — full-screen backdrop; the edit/delete modals stack above it (z-[110]) so cancelling returns here */}
       <ModalShell
         isOpen={viewingSchool !== null}
         onClose={() => setViewingSchool(null)}
         backdrop={!isModalOpen && pendingDelete === null}
-        zClass="z-40"
         className="max-w-lg p-6 space-y-5"
       >
         {viewingSchool && (
