@@ -272,7 +272,7 @@ class ScoreManagementCandidateProfileView(ScoreManagementBaseView):
 class ScoreManagementBatchReleaseView(ScoreManagementBaseView):
     def post(self, request, session_id: str) -> Response:
         try:
-            released_count = release_score_session(session_id=session_id, released_by=request.user)
+            release_result = release_score_session(session_id=session_id, released_by=request.user)
         except ScoreProcessingError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -280,7 +280,10 @@ class ScoreManagementBatchReleaseView(ScoreManagementBaseView):
             {
                 "id": session_id,
                 "status": ScoreBatchStatus.RESULTS_RELEASED,
-                "releasedCount": released_count,
+                "releasedCount": release_result.released_count,
+                "notificationQueuedCount": release_result.notification_queued_count,
+                "notificationSkippedCount": release_result.notification_skipped_count,
+                "notificationFailedCount": release_result.notification_failed_count,
             },
         )
 

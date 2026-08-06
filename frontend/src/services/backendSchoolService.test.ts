@@ -19,6 +19,7 @@ const apiSchool = {
   name: 'Philippine Science High School',
   examineeCapacity: 1200,
   region: 'NCR',
+  status: 'Active' as const,
   createdAt: '2026-08-04T00:00:00Z',
   updatedAt: '2026-08-04T00:00:00Z',
 };
@@ -48,6 +49,7 @@ describe('BackendSchoolService', () => {
       name: 'Philippine Science High School',
       examineeCapacity: 1200,
       region: 'NCR',
+      status: 'Active',
     });
 
     expect(result.ok).toBe(true);
@@ -60,6 +62,7 @@ describe('BackendSchoolService', () => {
           name: 'Philippine Science High School',
           examineeCapacity: 1200,
           region: 'NCR',
+          status: 'Active',
         }),
       }),
     );
@@ -78,8 +81,8 @@ describe('MockSchoolService', () => {
   it('generates sequential SCH codes and supports delete', async () => {
     const service = new MockSchoolService();
 
-    const first = await service.createSchool({ classification: 'Public', name: 'Alpha', examineeCapacity: 500, region: 'NCR' });
-    const second = await service.createSchool({ classification: 'Private', name: 'Beta', examineeCapacity: 300, region: 'Region III' });
+    const first = await service.createSchool({ classification: 'Public', name: 'Alpha', examineeCapacity: 500, region: 'NCR', status: 'Active' });
+    const second = await service.createSchool({ classification: 'Private', name: 'Beta', examineeCapacity: 300, region: 'Region III', status: 'Active' });
 
     expect(first.ok && first.data.code).toBe('SCH-00001');
     expect(second.ok && second.data.code).toBe('SCH-00002');

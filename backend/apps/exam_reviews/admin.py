@@ -32,3 +32,4 @@ class ExamReviewItemAdmin(admin.ModelAdmin):
     list_filter = ("subject", "item_type")
     search_fields = ("review__attempt_code", "review__application__candidate_id", "question_text")
     ordering = ("review", "position")
+

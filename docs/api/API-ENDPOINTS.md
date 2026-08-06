@@ -11,7 +11,8 @@ The baseline health and authentication boundaries, the first student-application
 | `GET` | `/api/v1/health/` | Public; no credentials required | `AllowAny` | Safe service liveness smoke check | Implemented |
 | `GET` | `/api/v1/auth/session/` | Required bearer access token | `IsAuthenticated` | Return server-derived session, role, permission, and scope claims | Implemented |
 | `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented |
-| `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented |
+| `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP or required first-login password change | Implemented |
+| `POST` | `/api/v1/auth/login/password/change/` | Public with password-change pending token | `AllowAny` | Replace a temporary first-login password and advance to OTP | Implemented |
 | `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and advance to selfie photo logging | Implemented |
 | `POST` | `/api/v1/auth/login/otp/resend/` | Public with OTP pending-auth token | `AllowAny` | Resend the login email OTP with cooldown and resend limits | Implemented |
 | `POST` | `/api/v1/auth/login/selfie/` | Public with selfie pending-auth token | `AllowAny` | Store the captured login selfie image and complete session issuance | Implemented |
@@ -34,6 +35,11 @@ The baseline health and authentication boundaries, the first student-application
 | `PATCH` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Update an editable owned application using optimistic concurrency | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/submit/` | Required bearer access token | Owning `STUDENT` | Validate and submit or resubmit an application | Implemented |
 | `GET` | `/api/v1/applications/review-queue/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | List submitted registration applications for admissions review | Implemented |
+| `GET` | `/api/v1/applications/bulk-upload/template/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Download the active student-application bulk upload CSV template | Implemented |
+| `POST` | `/api/v1/applications/bulk-upload/validate/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Validate a CSV and create durable batch and row results before import | Implemented |
+| `GET` | `/api/v1/applications/bulk-upload/{batchId}/` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Read stored validation/import summary and row errors | Implemented |
+| `GET` | `/api/v1/applications/bulk-upload/{batchId}/errors.csv` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Download stored row errors as CSV for correction | Implemented |
+| `POST` | `/api/v1/applications/bulk-upload/{batchId}/confirm/` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Confirm a validated batch and import only eligible rows | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
 | `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
@@ -163,7 +169,40 @@ Successful response:
 }
 ```
 
-`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, and records a release audit row. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues no-score availability email notifications in chunks for released candidates with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend attempts to enqueue a Django RQ dispatch job after the release transaction commits; if Redis is unavailable, release remains successful and notifications stay `PENDING`. The worker drains pending notifications across multiple batches. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. SMTP delivery failures are recorded later by the notification dispatch job on the outbox row and can be retried while below the configured attempt limit. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+
+Successful release response:
+
+```json
+{
+  "id": "SESSION-2027-REGULAR",
+  "status": "RESULTS_RELEASED",
+  "releasedCount": 188394,
+  "notificationQueuedCount": 188000,
+  "notificationSkippedCount": 394,
+  "notificationFailedCount": 0
+}
+```
+
+Queued student release emails are dispatched out-of-band by the Django RQ worker:
+
+```powershell
+..\venv\Scripts\python.exe manage.py rqworker default --worker-class rq.SimpleWorker --settings=config.settings.local
+```
+
+On Windows, use `rq.SimpleWorker`; the default RQ worker uses `os.fork()`, which is not available on Windows.
+
+If the worker is unavailable, use the manual fallback:
+
+```powershell
+..\venv\Scripts\python.exe manage.py dispatch_score_release_notifications --limit 100 --settings=config.settings.local
+```
+
+Failed notifications can be retried explicitly:
+
+```powershell
+..\venv\Scripts\python.exe manage.py dispatch_score_release_notifications --limit 100 --retry-failed --max-attempts 3 --settings=config.settings.local
+```
 
 `GET /api/v1/results/score-management/batches/{sessionId}/export/` streams processed approved scores as `text/csv`. The CSV includes candidate ID, candidate name, exam set, raw score, maximum score, final score, percentile, overall rank, and release status. Text cells that could be interpreted as spreadsheet formulas are prefixed before streaming.
 
@@ -307,6 +346,29 @@ Step 2 accepts `multipart/form-data` containing `mediaType` (`STUDENT_ID_FRONT` 
 In Student ID mode, the backend extracts the Student ID name and compares its normalized value with the full name returned by the verified LRN record. The configured name threshold is authoritative. The API returns both compared names, the score, and `informationComparisonPassed`. Local/test settings use a deterministic mock recognizer for the Lovely Mae R Chavez fixture. Production explicitly rejects that mock provider and routes unavailable real recognition to manual review or rejection according to the captured configuration.
 
 Admissions reviewers can load the review ledger with `GET /api/v1/applications/review-queue/`. The queue excludes `DRAFT` applications and includes submitted, resubmitted, correction, approved, and rejected registration records ordered by latest submission/creation time. Admissions reviewers and system admins can read a non-draft application detail with `GET /api/v1/applications/{applicationId}/`; draft detail remains limited to the owning student. Authorized callers can render application identity images through `GET /api/v1/applications/{applicationId}/identity-media/{mediaType}/`, where `mediaType` is a stored identity media value such as `SELFIE` or `STUDENT_ID_FRONT`. Student and unauthenticated callers are denied from the review queue.
+
+Admissions reviewers and system admins can create submitted applications through CSV-only bulk upload under `/api/v1/applications/bulk-upload/`. The active template columns are:
+
+```csv
+templateVersion,firstName,middleName,lastName,suffix,dateOfBirth,sex,email,mobile,region,province,city,barangay,street,postalCode,lrn,schoolId,schoolName,academicTrack,gradeLevel,enrollmentStatus,schoolYear,gwa,firstChoiceUniversity,firstChoiceCourse,secondChoiceUniversity,secondChoiceCourse,thirdChoiceUniversity,thirdChoiceCourse,privacyConsent,declarationAccepted
+```
+
+`POST /api/v1/applications/bulk-upload/validate/` accepts multipart form data with `file`. The backend rejects non-CSV files, stale or mismatched headers, unknown columns, missing required values, invalid `YYYY-MM-DD` dates, invalid 12-digit LRNs, invalid emails, false consent/declaration values, incomplete optional preference pairs, duplicate LRN/email values in the CSV, and existing application/account conflicts. Validation creates a durable batch and row results before returning:
+
+```json
+{
+  "batchId": "opaque-batch-id",
+  "status": "VALIDATED",
+  "totalRows": 1,
+  "validRows": 1,
+  "failedRows": 0,
+  "conflictRows": 0,
+  "fieldErrorRows": 0,
+  "canConfirm": true
+}
+```
+
+`POST /api/v1/applications/bulk-upload/{batchId}/confirm/` is idempotent. It imports only rows still marked valid, rechecks LRN/email conflicts before each row is created, marks newly conflicting rows without blocking other rows, and returns the same summary shape plus `importedRows` and `rejectedRows`. Imported applications are created with `status = SUBMITTED`, `completionStatus = PENDING_STUDENT_COMPLETION`, `submissionSource = ADMISSIONS_BULK_UPLOAD`, `submittedByUserId`, `bulkUploadBatchId`, and `bulkUploadRowNumber`. Confirmed bulk-upload rows create active Student accounts immediately, generate a temporary password, require password change on first login, and send an activation email containing the login email, temporary password, a direct `/login?activation=bulk&email=...` first-login link, and first-login instructions. Bulk upload does not accept selfie/student-ID/document files, and approval is blocked while `completionStatus = PENDING_STUDENT_COMPLETION`.
 
 The applicant registration audit log displays:
 
@@ -476,7 +538,7 @@ Test coverage:
 
 Use this endpoint for Step 2 of the shared login flow. It accepts the Step-1 pending-auth token and password.
 
-Current implementation status: request validation, pending-token validation, password hash verification, OTP generation, OTP hashing, email dispatch, account OTP request limits, IP monitoring, safe error shape, and audit events are implemented.
+Current implementation status: request validation, pending-token validation, password hash verification, temporary-password detection, OTP generation, OTP hashing, email dispatch, account OTP request limits, IP monitoring, safe error shape, and audit events are implemented.
 
 Request:
 
@@ -505,6 +567,43 @@ Successful response:
   "resendCooldownSeconds": 60
 }
 ```
+
+Temporary-password response:
+
+```json
+{
+  "passwordChangeToken": "opaque-password-change-token",
+  "nextStep": "password_change",
+  "expiresInSeconds": 600
+}
+```
+
+### `POST /api/v1/auth/login/password/change/`
+
+Use this endpoint when `/api/v1/auth/login/password/` returns `nextStep = password_change`. It accepts a password-change pending token and the student's new permanent password.
+
+Request:
+
+```json
+{
+  "passwordChangeToken": "opaque-password-change-token",
+  "password": "NewPassword1!",
+  "confirmPassword": "NewPassword1!"
+}
+```
+
+Successful response:
+
+```json
+{
+  "otpPendingAuthToken": "opaque-step-2-token",
+  "nextStep": "otp",
+  "expiresInSeconds": 300,
+  "resendCooldownSeconds": 60
+}
+```
+
+The backend clears the temporary-password flag before issuing the OTP challenge. Password-change tokens are opaque, time-limited, single-use, and must never be logged or returned after use.
 
 Test coverage:
 

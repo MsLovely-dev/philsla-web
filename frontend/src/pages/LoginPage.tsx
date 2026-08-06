@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { AlertTriangle, ArrowLeft, ArrowRight, Camera, CheckCircle2, Clock, Info, KeyRound, LogIn, Mail, RotateCcw, Shield } from 'lucide-react';
 import { Logo } from '../components/Logo';
@@ -9,7 +9,7 @@ import type { UserRole } from '../types';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MESSAGE_AUTO_DISMISS_MS = 10000;
 
-type LoginStep = 'identifier' | 'activation' | 'password' | 'otp' | 'selfie';
+type LoginStep = 'identifier' | 'activation' | 'password' | 'passwordChange' | 'otp' | 'selfie';
 
 function isValidIdentifier(value: string): boolean {
   const trimmed = value.trim();
@@ -49,6 +49,7 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [step, setStep] = useState<LoginStep>('identifier');
   const [pendingAuthToken, setPendingAuthToken] = useState('');
+  const [passwordChangeToken, setPasswordChangeToken] = useState('');
   const [activationToken, setActivationToken] = useState('');
   const [otpPendingAuthToken, setOtpPendingAuthToken] = useState('');
   const [selfiePendingAuthToken, setSelfiePendingAuthToken] = useState('');
@@ -58,13 +59,15 @@ export default function LoginPage() {
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [bulkActivationMode, setBulkActivationMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resendingOtp, setResendingOtp] = useState(false);
   const [otpResendCooldown, setOtpResendCooldown] = useState(0);
   const [otpExpiresIn, setOtpExpiresIn] = useState(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery } = usePhilSA();
+  const { startLoginIdentifier, verifyLoginPassword, completeTemporaryPasswordChange, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery } = usePhilSA();
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (videoRef.current && cameraStream) {
@@ -85,6 +88,19 @@ export default function LoginPage() {
       }
     };
   }, [selfiePreviewUrl]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const activation = params.get('activation');
+    const email = params.get('email')?.trim() ?? '';
+
+    if (activation !== 'bulk') return;
+
+    setBulkActivationMode(true);
+    if (EMAIL_PATTERN.test(email)) {
+      setIdentifier(email);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     if (step !== 'otp' || otpResendCooldown <= 0) return;
@@ -226,6 +242,15 @@ export default function LoginPage() {
       return;
     }
 
+    if (result.data.nextStep === 'password_change') {
+      setPasswordChangeToken(result.data.passwordChangeToken);
+      setNewPassword('');
+      setConfirmPassword('');
+      setNotice('Change your temporary password before continuing.');
+      setStep('passwordChange');
+      return;
+    }
+
     setOtpPendingAuthToken(result.data.otpPendingAuthToken);
     setOtpResendCooldown(result.data.resendCooldownSeconds);
     setOtpExpiresIn(result.data.expiresInSeconds);
@@ -233,6 +258,44 @@ export default function LoginPage() {
     resetSelfieCapture();
     setOtp(['', '', '', '', '', '']);
     setNotice('');
+    setStep('otp');
+  };
+
+  const handleTemporaryPasswordChangeStep = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!newPassword || !confirmPassword) {
+      setError('Enter and confirm your new password.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setNotice('');
+    const result = await completeTemporaryPasswordChange(passwordChangeToken, newPassword, confirmPassword);
+    setLoading(false);
+
+    if (result.ok === false) {
+      setError(result.error.message);
+      return;
+    }
+
+    setPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordChangeToken('');
+    setOtpPendingAuthToken(result.data.otpPendingAuthToken);
+    setOtpResendCooldown(result.data.resendCooldownSeconds);
+    setOtpExpiresIn(result.data.expiresInSeconds);
+    setSelfiePendingAuthToken('');
+    resetSelfieCapture();
+    setOtp(['', '', '', '', '', '']);
+    setNotice('Password changed. Enter the verification code sent to your email.');
     setStep('otp');
   };
 
@@ -453,6 +516,7 @@ export default function LoginPage() {
   const resetToIdentifier = () => {
     setStep('identifier');
     setPendingAuthToken('');
+    setPasswordChangeToken('');
     setActivationToken('');
     setOtpPendingAuthToken('');
     setSelfiePendingAuthToken('');
@@ -523,6 +587,7 @@ export default function LoginPage() {
                   <input
                     type="email"
                     inputMode="email"
+                    aria-label="Account email"
                     value={identifier}
                     onChange={(event) => setIdentifier(event.target.value)}
                     placeholder="Enter your account email"
@@ -533,7 +598,9 @@ export default function LoginPage() {
                 </div>
                 <p className="text-sm text-philsa-gray font-medium leading-relaxed mt-4 ml-1 flex items-start gap-2">
                   <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                  Use the email address registered with your PhilSLA account.
+                  {bulkActivationMode
+                    ? 'First-time student login: enter the temporary password from your activation email.'
+                    : 'Use the email address registered with your PhilSLA account.'}
                 </p>
               </div>
 
@@ -649,6 +716,68 @@ export default function LoginPage() {
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </button>
 
+            </form>
+          )}
+
+          {step === 'passwordChange' && (
+            <form onSubmit={handleTemporaryPasswordChangeStep} className="space-y-8">
+              <div>
+                <label className="label-philsa block mb-3 ml-1">Change Temporary Password</label>
+                <div className="relative group">
+                  <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    placeholder="Create your permanent password"
+                    className="input-philsa pl-14"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+                <p className="text-[10px] text-philsa-gray font-bold leading-relaxed uppercase tracking-wider mt-3 ml-1">
+                  Use at least 8 characters with uppercase, lowercase, number, and special character.
+                </p>
+              </div>
+
+              <div>
+                <label className="label-philsa block mb-3 ml-1">Confirm Password</label>
+                <div className="relative group">
+                  <KeyRound className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-philsa-gray/40 group-focus-within:text-philsa-red transition-colors" />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Confirm your permanent password"
+                    className="input-philsa pl-14"
+                    autoComplete="new-password"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="bg-[#e5f1ec]/30 p-4 rounded-lg border border-[#00563F]/15 flex items-start gap-4">
+                <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 shadow-xs border border-gray-200">
+                  <Shield className="w-4 h-4 text-[#00563F]" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-[#00563F] uppercase tracking-widest mb-1">First Login</p>
+                  <p className="text-[10px] text-[#00563F]/80 font-bold leading-tight uppercase">{maskIdentifier(identifier)}</p>
+                </div>
+              </div>
+
+              <button disabled={loading} className="btn-primary w-full flex items-center justify-center gap-3 group">
+                {loading ? 'Changing Password...' : 'Change Password'}
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </button>
+
+              <button
+                type="button"
+                onClick={resetToIdentifier}
+                className="w-full text-[11px] text-philsa-gray font-black uppercase tracking-widest hover:text-philsa-navy transition-colors text-center"
+              >
+                Change Account
+              </button>
             </form>
           )}
 

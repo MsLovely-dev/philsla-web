@@ -123,20 +123,20 @@ docs/superpowers/
 | **Maricon Landicho (M.Landicho)** | Maintenance Table – Student Registration | Maintenance & Config | Not started | 🟡 deferred | `worktrees/m.landicho/` | *(parked — no branch yet)* | `docs/superpowers/m.landicho/m.landicho.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Exam Blueprint | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/exam-blueprint` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Question Bank Management | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/question-bank` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
-| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | In progress | 🔴 no backend entity | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
+| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | Implemented; release verification open | 🟠 API-integrated; baseline failures and migration rehearsal remain | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **Ian Chris Sandoval (I.Sandoval)** | Maintenance Table – Exam Blueprint | Maintenance & Config | Not started | 🟡 deferred | `worktrees/i.sandoval/` | *(parked — no branch yet)* | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
-| **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (.NET Student) | BRD-04/04A Exam Delivery | Not started | 🔴 no .NET app exists yet | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-student` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
-| **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (.NET Proctor) | BRD-04/04A Exam Delivery | Not started | 🔴 no .NET app exists yet | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-proctor` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
-| **Prince Barachiel Malonzo (P.Malonzo)** | Exam Review | BRD-05 Scoring & Results | In progress | 🔴 no backend entity | `worktrees/p.malonzo/` | `p.malonzo/exam-review` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
+| **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (.NET Student) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-student` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
+| **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (Proctor) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-proctor` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
+| **Prince Barachiel Malonzo (P.Malonzo)** | Exam Review | BRD-05 Scoring & Results | Scoped demo path complete; locally verified, PostgreSQL concurrency rehearsal pending | 🟢 real backend/API grading, item scoring, answer-sheet upload, and atomic Score Management handoff | `worktrees/p.malonzo/` | `p.malonzo/exam-review` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
 | **Prince Barachiel Malonzo (P.Malonzo)** | Exam Results Release & Analytics | BRD-05 Scoring & Results | Not started | 🔴 no backend entity | `worktrees/p.malonzo/` | `p.malonzo/results-release` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
 | **Prince Barachiel Malonzo (P.Malonzo)** | Student Portal | Student Portal | Not started | 🟡 out of scope this sprint | `worktrees/p.malonzo/` | *(parked — no branch yet)* | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
-| **Alvy Depositar (A.Depositar)** | Score Management | BRD-05 Scoring & Results | Not started | 🔴 no backend entity | `worktrees/a.depositar/` | `a.depositar/score-management` | `docs/superpowers/a.depositar/a.depositar.task.md` |
-| **Alvy Depositar (A.Depositar)** | System Integration | System Admin & Compliance | Not started | 🟡 documentation | `worktrees/a.depositar/` | `a.depositar/system-integration` | `docs/superpowers/a.depositar/a.depositar.task.md` |
+| **Alvy Depositar (A.Depositar)** | Score Management | BRD-05 Scoring & Results | ~80% complete overall; 85-90% excluding integration/distribution | 🟢 real backend/API/demo seed path now exists | `worktrees/a.depositar/` | `a.depositar/score-management` | `docs/superpowers/a.depositar/a.depositar.task.md` |
+| **Alvy Depositar (A.Depositar)** | System Integration | System Admin & Compliance | Deprioritized | 🟡 documentation only if time allows | `worktrees/a.depositar/` | `a.depositar/system-integration` | `docs/superpowers/a.depositar/a.depositar.task.md` |
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – Universities and Courses | Maintenance & Config | In progress | 🟢 | `worktrees/jp.mayordo/` | `jp.mayordo/universities-courses` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
-| **JP Mayordo (JP.Mayordo)** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟢 committed | `worktrees/jp.mayordo/` | `jp.mayordo/deped-shs` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
-| **Joshua Ganapin (Jo.Ganapin)** | QR Scanning (Attendance Check-In) | BRD-04A Proctoring — extends FR-009, desktop-app-only per D-QR-01 | Not started | 🔴 no backend (proctoring app empty) | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
+| **JP Mayordo (JP.Mayordo)** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟡 stretch goal | `worktrees/jp.mayordo/` | `jp.mayordo/deped-shs` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
+| **Joshua Ganapin (Jo.Ganapin)** | QR Scanning | Testing Center Ops | Not started | 🔴 no backend (proctoring app empty) | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
 
-**Reality check up front:** 5 of these 9 devs are working with zero or partial backend to build against (Ian, bienvenido.mendoza, Prince, Alvy on Score Management, Joshua). Their Friday output is a **polished demo/prototype and an honest roadmap narrative**, not working software. That's not a staffing failure — it reflects how much of BRD-04/04A and BRD-05 is genuinely pre-implementation. Don't let anyone on those tracks burn Thursday trying to force a real backend into existence.
+**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince on Results Release/Analytics, and Joshua). Ian's separately reviewed Exam Sets integration uses the merged API rather than mock/browser-local state as authoritative storage, but release readiness remains gated by frontend baseline acceptance and a PostgreSQL-compatible migration rehearsal. A.Depositar's Score Management scope now has a working backend/API/demo-seed path; production-scale processing, complete audit coverage, Application Review synchronization, and downstream distribution remain. The Friday target is a **presentation-ready demo path**, not 100% production completion.
 
 ---
 
@@ -160,36 +160,35 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - **Deliverable:** two reviewed plans, one per branch.
 
 ### Ian Chris Sandoval (I.Sandoval) 🔴 / 🟡 — `worktrees/i.sandoval/`
-- On branch `i.sandoval/exam-sets`: confirm directly that Exam Sets has no backend entity (`backend/apps/exams` has no `/exam-sets/` endpoint). Agree scope: `ExamSets.tsx` stays on mock data with a visible "prototype" treatment, plus a one-slide explanation of the open Blueprint-vs-Exam-Set architecture question.
-- Maintenance Table – Exam Blueprint: confirm this is **deferred**, no branch cut — full bandwidth goes to the Exam Sets narrative.
-- **Deliverable:** scope agreement confirmed, not a code plan.
+- On branch `i.sandoval/exam-sets`: the separately approved Exam Sets plan has connected `ExamSets.tsx` to the versioned API, aligned lifecycle and role enforcement, and removed authoritative mock/browser-local persistence. Preserve the verification evidence and the remaining PostgreSQL migration-rehearsal caveat in the implementation log.
+- Maintenance Table – Exam Blueprint: keep this **deferred**, with no maintenance branch cut; the Exam Sets integration was authorized by its own reviewed plan.
+- **Deliverable:** API-backed Exam Sets workflow, verification log, and explicit open release gates.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴 — `worktrees/b.mendoza/`
-- Confirm directly: no .NET desktop app exists anywhere in the repo — `ExamDelivery.tsx` is a React web page simulating the experience (fake SQLite log strings, no real IPC).
+- Confirm directly: no Tauri/.NET desktop app exists anywhere in the repo — `ExamDelivery.tsx` is a React web page simulating the experience (fake SQLite log strings, no real IPC).
 - On branches `b.mendoza/desktop-app-student` and `b.mendoza/desktop-app-proctor`: agree scope for both — Friday deliverable is a polished walkthrough of the existing simulation plus a one-pager on the real architecture plan (encrypted local store, package unlock via `schedule_id`, device enrollment via cert/mTLS per ADR-011) — not working software.
 - **Deliverable:** scope agreement confirmed for both stories.
 
-### Prince Barachiel Malonzo (P.Malonzo) 🔴 / 🟡 — `worktrees/p.malonzo/`
-- Confirm `backend/apps/results` is an empty stub; `ExamReviewList.tsx` / `ExamReviewDetail.tsx` run entirely on mock data.
-- On branch `p.malonzo/exam-review` and `p.malonzo/results-release`: agree scope — Exam Review becomes a polished list → detail walkthrough; Results Release & Analytics becomes a roadmap narrative, not a build.
+### Prince Barachiel Malonzo (P.Malonzo) 🟢 / 🟡 — `worktrees/p.malonzo/`
+- Confirmed `backend/apps/exam_reviews` owns the real Exam Review models, API views, grading states, item scoring, answer-sheet upload, and finalization flow; `apps.results` owns the atomic CandidateScore intake used by release, and `ExamReviewList.tsx` / `ExamReviewDetail.tsx` consume the API through the frontend service.
+- On branch `p.malonzo/exam-review`: grading-readiness hardening and the real Exam Review → Score Management score handoff are implemented. Results Release & Analytics remains a separate roadmap narrative, not a build.
 - Student Portal: confirm this stays **out of scope** for this sprint entirely, no branch cut — three stories solo is already a full load.
 - **Deliverable:** scope agreement confirmed for both active branches; Student Portal explicitly parked.
 
-### Alvy Depositar (A.Depositar) 🔴 / 🟡 — `worktrees/a.depositar/`
-- On branch `a.depositar/score-management`: confirm no backend exists; agree scope — polish `ScoreManagement.tsx`'s recheck workflow (`GRADED → FINALIZED → UNDER_RECHECKING → RELEASED`) as a demo asset, plus prepare a talking point on the aggregation-formula blocking dependency BRD-05 itself already flags.
-- On branch `a.depositar/system-integration`: scope this as a **documentation task** — audit current integration adapters (LRN stub adapter, PhilSys not yet populated, DepEd/CHED/TESDA reporting) and confirm what's real vs. stubbed.
-- **Deliverable:** both scopes agreed; list of integration points to document tomorrow.
+### Alvy Depositar (A.Depositar) 🟢 / 🟡 — `worktrees/a.depositar/`
+- On branch `a.depositar/score-management`: update scope from prototype-only to working demo path. Score Management now has backend-owned processing, persistence, APIs, frontend wiring, local score seed data, candidate profile lookup, and linked student account seed data.
+- On branch `a.depositar/system-integration`: deprioritize system integration unless time remains. Keep it as documentation-only follow-up because Score Management is the priority.
+- **Deliverable:** current Score Management completion documented at 80% overall, with remaining production-scale gaps clearly listed.
 
-### JP Mayordo (JP.Mayordo) 🟢 / 🟢 — `worktrees/jp.mayordo/`
+### JP Mayordo (JP.Mayordo) 🟢 / 🟡 — `worktrees/jp.mayordo/`
 - On branch `jp.mayordo/universities-courses`: identify which existing maintenance-table screen is furthest along to copy the pattern from (e.g. `StudentRegistrationMaintenance.tsx`), get a plan reviewed for wiring `UniversitiesListMaintenance.tsx` to real backend CRUD.
-- On branch `jp.mayordo/deped-shs`: **committed, not optional.** Confirm whether the Universities/Courses maintenance-table pattern applies cleanly; either way, get a plan reviewed today for wiring `DepEdSHSListMaintenance.tsx` (or equivalent) to real backend CRUD, sequenced after Universities and Courses.
-- **Deliverable:** reviewed plans for both Universities and Courses and DepEd SHS — both committed, not stretch-or-defer.
+- On branch `jp.mayordo/deped-shs`: scope only today — confirm whether the same pattern applies cleanly; if yes, this becomes a Thursday-afternoon stretch goal, if no, it stays deferred.
+- **Deliverable:** reviewed plan for Universities and Courses; DepEd SHS scoped as stretch-or-defer.
 
 ### Joshua Ganapin (Jo.Ganapin) 🔴 — `worktrees/jo.ganapin/`
 - On branch `jo.ganapin/qr-scanning`: confirm `backend/apps/proctoring` is an empty stub with no QR validation logic anywhere.
-- **Locked architecture decision (D-QR-01):** QR scanning is desktop-app-only — it happens inside the Proctor's exam client (webcam or USB HID scanner), not a separate mobile app. Reasons: offline schedule/seat data is already cached locally in the desktop client, it reuses the Proctor's existing session instead of a second login, and it writes into one audit trail instead of two. This mockup is being built as a **stand-in for a screen inside B.Mendoza's `desktop-app-proctor` build** (currently also 🔴, .NET, not started) — not as an independent product. When the real desktop Proctor app exists, this screen/logic is meant to slot into it, not live beside it as its own app.
-- Agree scope: build a client-side QR-scan mockup (scan → attendance status change) as a demo asset, simulating the full write contract into FR-009's attendance logic: decode QR → validate signature/schedule/center → auto-populate candidate + seat → compute Present/Late against `LATE_ADMISSION_GRACE_MINUTES` → write attendance record with `actor_type=PROCTOR`, `method=QR_SCAN` → audit log entry. Use the Present/Late/Absent grace-period model already designed in FR-009 as the narrative for what's built vs. designed.
-- **Deliverable:** scope agreement confirmed, including explicit framing that this is a desktop-Proctor-app screen, not a mobile companion.
+- Agree scope: build a client-side QR-scan mockup (scan → attendance status change) as a demo asset, referencing the Present/Late/Absent grace-period model already designed in FR-009 as the narrative for what's built vs. designed.
+- **Deliverable:** scope agreement confirmed.
 
 ### Standing items for everyone, today
 - [ ] Confirm `AGENTS.md` (root, `backend/`, `frontend/`) is current before opening any Claude Code + Superpowers session
@@ -220,25 +219,25 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - **Late PM:** Manual smoke test of create/list/transition on both `/admin/hub/questions` and `/admin/questions`.
 
 ### Ian Chris Sandoval (I.Sandoval) 🔴
-- **All day, on `i.sandoval/exam-sets`:** No backend work. Add the "prototype" indicator to `ExamSets.tsx`. Build the Blueprint-vs-Exam-Set architecture talking point.
+- **Completed under the separately reviewed Exam Sets plan, on `i.sandoval/exam-sets`:** Align the merged backend, connect the typed frontend service and workflow, and add backend, component, and browser coverage. Keep release claims gated by the recorded full-suite and migration evidence.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴
-- **All day, on `desktop-app-student` then `desktop-app-proctor`:** No backend work. Polish `ExamDelivery.tsx`'s flow (readiness check → webcam check → offline DB check → exam → submit) for a clean walkthrough. Draft the .NET architecture one-pager for both variants.
+- **All day, on `desktop-app-student` then `desktop-app-proctor`:** No backend work. Polish `ExamDelivery.tsx`'s flow (readiness check → webcam check → offline DB check → exam → submit) for a clean walkthrough. Draft the Tauri architecture one-pager for both variants.
 
-### Prince Barachiel Malonzo (P.Malonzo) 🔴
-- **AM–Midday, on `exam-review`:** Fix broken mock-data references between `ExamReviewList.tsx` and `ExamReviewDetail.tsx`; polish the rubric/grading display.
+### Prince Barachiel Malonzo (P.Malonzo) 🟢 / 🟡
+- **AM–Midday, on `exam-review`:** Complete backend and frontend grading-readiness guards, verify list → detail scoring and release, and polish the missing-rubric display.
 - **PM, on `results-release`:** Draft the Results Release & Analytics roadmap narrative (readiness gating, holds, government reporting interface — all currently unbuilt).
 
-### Alvy Depositar (A.Depositar) 🔴 / 🟡
-- **AM, on `score-management`:** Polish `ScoreManagement.tsx`'s recheck modal flow for a clean demo.
-- **PM, on `system-integration`:** Document the actual state of each integration point (LRN, PhilSys, DepEd/CHED/TESDA) — what's real, what's stubbed, what's missing.
+### Alvy Depositar (A.Depositar) 🟢 / 🟡
+- **AM, on `score-management`:** Verify the working demo path: seed score data, seed linked candidate accounts/profiles, provision staff demo accounts, process scores, view results, open candidate profile, release, and export CSV.
+- **PM, on `score-management`:** Close demo blockers first. Treat system integration as optional documentation only after Score Management demo data and page flow are stable.
 
 ### JP Mayordo (JP.Mayordo) 🟢
-- **AM, on `universities-courses`:** Execute wiring — list/add/edit/remove CRUD against real backend. Manual test.
-- **PM, on `deped-shs`:** Execute wiring using the same pattern — list/add/edit/remove CRUD against real backend. Manual test. This is a committed deliverable, not a stretch goal — if Universities/Courses runs long, compress rather than drop this.
+- **AM–PM, on `universities-courses`:** Execute wiring — list/add/edit/remove CRUD against real backend. Manual test.
+- **Late PM (only if finished early), on `deped-shs`:** Attempt using the same pattern. If it doesn't fit, it stays deferred — no penalty.
 
 ### Joshua Ganapin (Jo.Ganapin) 🔴
-- **All day, on `qr-scanning`:** Build the QR-scan mockup as a self-contained demo flow, staged inside the Proctor check-in screen (not a mobile view). Simulate the full sequence: scan QR → decode → validate (signature, correct center/session, not-already-checked-in) → auto-populate candidate + seat → compute attendance status (Present/Late) against the `LATE_ADMISSION_GRACE_MINUTES` grace period from FR-009 → mock-write the attendance record tagged `actor_type=PROCTOR`, `method=QR_SCAN` → mock audit log entry. No backend integration attempt — every write is simulated/logged client-side, but the *shape* of the data and the sequence of steps should match what the real FR-009 attendance pipeline expects, so this slots in cleanly once `backend/apps/proctoring` is built.
+- **All day, on `qr-scanning`:** Build the QR-scan mockup (scan → attendance status change) as a self-contained demo flow. No backend integration attempt.
 
 ### Standing items for everyone, today
 - [ ] Midday check-in (15 min, all owners): converging or wandering? Kill and re-scope anything drifted.
@@ -262,7 +261,7 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - After midday: P0 fixes only.
 
 ### Ian Chris Sandoval (I.Sandoval) 🔴
-- AM: finalize Exam Sets talking point, dry run explaining it live. No code work.
+- AM: present the implemented Exam Sets API workflow and its verification evidence; explicitly disclose unresolved baseline checks and the PostgreSQL migration-rehearsal requirement.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴
 - AM: finalize the Desktop App walkthrough + architecture one-pager, dry run the "what's built vs. what's next" story for both variants. No code work.
@@ -270,14 +269,14 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 ### Prince Barachiel Malonzo (P.Malonzo) 🔴
 - AM: finalize Exam Review walkthrough + Results Release roadmap narrative, dry run. No code work.
 
-### Alvy Depositar (A.Depositar) 🔴 / 🟡
-- AM: finalize Score Management talking point + integration-status summary, dry run. No code work.
+### Alvy Depositar (A.Depositar) 🟢 / 🟡
+- AM: rehearse the Score Management demo path and explain current completion honestly: 80% overall, or 85-90% if system integration and downstream distribution are excluded. Call out remaining async processing, full audit trail, Application Review sync, and recipient distribution as post-demo work.
 
 ### JP Mayordo (JP.Mayordo) 🟢
-- AM: support rehearsal on both Universities/Courses and DepEd SHS maintenance screens — both are part of the demo path. After midday: P0 fixes only.
+- AM: support rehearsal on Universities/Courses maintenance screen if it's part of the demo path. If DepEd SHS didn't get built, note it as backlog — no scramble.
 
 ### Joshua Ganapin (Jo.Ganapin) 🔴
-- AM: finalize QR-scan mockup walkthrough, dry run the attendance narrative — including the D-QR-01 talking point (desktop-app-only, no mobile companion, why) and how this screen is meant to land inside B.Mendoza's `desktop-app-proctor` build once real. No code work.
+- AM: finalize QR-scan mockup walkthrough, dry run the attendance narrative. No code work.
 
 ### Standing items for everyone, Friday
 - [ ] Feature freeze by midday — P0 fixes only after that, through PR review

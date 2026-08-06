@@ -27,6 +27,9 @@ if not DATABASE_URL:
 
 DATABASES = {"default": database_config_from_url(DATABASE_URL)}
 
+if not os.environ.get("REDIS_URL", ""):
+    raise ImproperlyConfigured("REDIS_URL is required in production for Score Management background jobs.")
+
 if LRN_REGISTRY_PROVIDER == "mock":  # noqa: F405
     raise ImproperlyConfigured("LRN_REGISTRY_PROVIDER=mock is not allowed in production.")
 if STEP2_DOCUMENT_RECOGNITION_PROVIDER == "mock":  # noqa: F405

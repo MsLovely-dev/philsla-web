@@ -1,10 +1,14 @@
 import random
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import make_password
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.accounts.models import AccountProfile, AccountRoleAssignment
+from apps.accounts.roles import PortalRole
 from apps.applications.models import ApplicationStatus, StudentApplication
 from apps.results.services import generate_score_seed_data
 
@@ -33,6 +37,7 @@ PHOTO_IDS = (
     "1531123897727-8f129e1688ce",
     "1502685104226-ee32379fefbe",
 )
+DEMO_STUDENT_PASSWORD = "ScoreDemo2027!"
 
 
 class Command(BaseCommand):
@@ -59,6 +64,7 @@ class Command(BaseCommand):
         )
 
         created = 0
+        password_hash = make_password(DEMO_STUDENT_PASSWORD)
         with transaction.atomic():
             for application_seed in seed_data.applications:
                 if application_seed.lrn in existing_lrns:
@@ -74,9 +80,18 @@ class Command(BaseCommand):
                 birth_day = randomizer.randint(1, 28)
                 email_handle = f"{first_name}.{last_name}".lower().replace(" ", "")
                 mobile = f"09{randomizer.randint(100000000, 999999999)}"
+                email = f"{email_handle}.{application_seed.candidate_id[-6:]}@philsa.example.test"
+                owner = _ensure_student_account(
+                    candidate_id=application_seed.candidate_id,
+                    lrn=application_seed.lrn,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name or "Candidate",
+                    password_hash=password_hash,
+                )
 
                 application = StudentApplication(
-                    owner=None,
+                    owner=owner,
                     lrn=application_seed.lrn,
                     exam_cycle_id=settings.ACTIVE_EXAM_CYCLE_ID,
                     status=ApplicationStatus.APPROVED,
@@ -89,7 +104,7 @@ class Command(BaseCommand):
                     "suffix": "",
                     "dateOfBirth": f"{birth_year:04d}-{birth_month:02d}-{birth_day:02d}",
                     "sex": gender,
-                    "email": f"{email_handle}@philsa.edu.ph",
+                    "email": email,
                     "mobile": mobile,
                     "identityVerificationStatus": "VERIFIED",
                     "birthPlace": f"{city}, {province}",
@@ -119,3 +134,63 @@ class Command(BaseCommand):
                 created += 1
 
         self.stdout.write(self.style.SUCCESS(f"Seeded {created} student application profile(s) linked to Score Management LRNs."))
+
+
+def _ensure_student_account(*, candidate_id: str, lrn: str, email: str, first_name: str, last_name: str, password_hash: str):
+    user_model = get_user_model()
+    username = f"score.student.{candidate_id.lower()}"
+    profile = AccountProfile.objects.select_related("user").filter(
+        role=PortalRole.STUDENT.value,
+        lrn=lrn,
+    ).first()
+    if profile is not None:
+        user = profile.user
+        updated_fields = []
+        if user.email != email:
+            user.email = email
+            updated_fields.append("email")
+        if getattr(user, "first_name", "") != first_name:
+            user.first_name = first_name
+            updated_fields.append("first_name")
+        if getattr(user, "last_name", "") != last_name:
+            user.last_name = last_name
+            updated_fields.append("last_name")
+        if updated_fields:
+            user.save(update_fields=updated_fields)
+    else:
+        user, created = user_model.objects.get_or_create(
+            username=username,
+            defaults={
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+                "is_active": True,
+                "password": password_hash,
+            },
+        )
+        if created:
+            pass
+        else:
+            user.email = email
+            user.first_name = first_name
+            user.last_name = last_name
+            user.is_active = True
+            user.password = password_hash
+            user.save(update_fields=["email", "first_name", "last_name", "is_active", "password"])
+        profile, _ = AccountProfile.objects.update_or_create(
+            user=user,
+            defaults={
+                "role": PortalRole.STUDENT.value,
+                "lrn": lrn,
+                "scopes": {},
+            },
+        )
+
+    AccountRoleAssignment.objects.get_or_create(
+        account_profile=profile,
+        defaults={
+            "role": PortalRole.STUDENT.value,
+            "permission_mode": AccountRoleAssignment.PermissionMode.INHERIT,
+        },
+    )
+    return profile.user
