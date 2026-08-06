@@ -139,6 +139,7 @@ REST_FRAMEWORK = {
         "registration_lrn_verify": "20/min",
         "registration_email_otp": "5/min",
         "registration_selfie_face": "30/min",
+        "maintenance_write": "60/min",
     },
     "PAGE_SIZE": 10,
 }

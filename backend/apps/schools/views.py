@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
+from apps.core.throttling import MaintenanceWriteRateThrottle
 
 from .audit import record_school_event
 from .models import School
@@ -21,6 +22,8 @@ SCHOOL_MANAGEMENT_ROLES = require_roles(
 class SchoolListCreateView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = SCHOOL_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
 
     def get(self, request) -> Response:
         serializer = SchoolSerializer(School.objects.all(), many=True)
@@ -40,6 +43,8 @@ class SchoolListCreateView(APIView):
 class SchoolDetailView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = SCHOOL_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
 
     def get_object(self, school_id) -> School:
         return get_object_or_404(School, id=school_id)

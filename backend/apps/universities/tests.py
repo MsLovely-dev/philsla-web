@@ -1,8 +1,13 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
 from .models import CollegeCourse, University
 
@@ -319,3 +324,85 @@ class SeedUniversitiesCommandTests(TestCase):
         call_command("seed_university_registry")
         self.assertEqual(University.objects.count(), university_count)
         self.assertEqual(CollegeCourse.objects.count(), course_count)
+
+
+class MaintenanceValidationTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="system_admin", email="system.admin@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(self.user)
+        self.university = University.objects.create(
+            classification="Public", name="UP Diliman", region="NCR", city="Quezon City"
+        )
+
+    def _course(self, **overrides):
+        return {
+            "collegeName": "College of Engineering",
+            "programCode": "BSCS",
+            "programName": "Bachelor of Science in Computer Science",
+            "degreeType": "Bachelor of Science",
+            "durationYears": 4,
+            "totalUnits": 150,
+            "cutoffPercentile": 85.0,
+            **overrides,
+        }
+
+    def test_rejects_future_established_year(self) -> None:
+        response = self.client.post(
+            reverse("universities:university_list"),
+            {"classification": "Public", "name": "Future University", "region": "NCR", "city": "QC",
+             "establishedYear": timezone.now().year + 1},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(University.objects.filter(name="Future University").exists())
+
+    def test_rejects_cutoff_percentile_above_100(self) -> None:
+        url = reverse("universities:course_list", kwargs={"university_id": self.university.id})
+        response = self.client.post(url, self._course(cutoffPercentile=150), format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(CollegeCourse.objects.filter(university=self.university).count(), 0)
+
+    def test_rejects_duration_years_above_max(self) -> None:
+        url = reverse("universities:course_list", kwargs={"university_id": self.university.id})
+        response = self.client.post(url, self._course(durationYears=99), format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(CollegeCourse.objects.filter(university=self.university).count(), 0)
+
+
+class MaintenanceWriteThrottleTests(APITestCase):
+    def setUp(self) -> None:
+        cache.clear()
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="system_admin", email="system.admin@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(self.user)
+
+    def tearDown(self) -> None:
+        cache.clear()
+
+    def test_write_requests_are_throttled_after_the_limit(self) -> None:
+        url = reverse("universities:university_list")
+        # DRF captures THROTTLE_RATES as a class attribute at import, so patch the
+        # shared rate dict rather than relying on override_settings.
+        with patch.dict(SimpleRateThrottle.THROTTLE_RATES, {"maintenance_write": "1/min"}):
+            first = self.client.post(
+                url, {"classification": "Public", "name": "Uni A", "region": "NCR", "city": "QC"}, format="json"
+            )
+            second = self.client.post(
+                url, {"classification": "Public", "name": "Uni B", "region": "NCR", "city": "QC"}, format="json"
+            )
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(second.status_code, 429)
+
+    def test_read_requests_are_never_throttled(self) -> None:
+        url = reverse("universities:university_list")
+        with patch.dict(SimpleRateThrottle.THROTTLE_RATES, {"maintenance_write": "1/min"}):
+            self.assertEqual(self.client.get(url).status_code, 200)
+            self.assertEqual(self.client.get(url).status_code, 200)
+            self.assertEqual(self.client.get(url).status_code, 200)

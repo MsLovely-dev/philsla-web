@@ -25,6 +25,24 @@ class SchoolApiTests(APITestCase):
             "region": "NCR",
         }
 
+    def test_rejects_zero_capacity(self) -> None:
+        response = self.client.post(
+            reverse("schools:school_list"),
+            {**self.payload, "name": "Zero Cap School", "examineeCapacity": 0},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(School.objects.filter(name="Zero Cap School").exists())
+
+    def test_rejects_capacity_above_max(self) -> None:
+        response = self.client.post(
+            reverse("schools:school_list"),
+            {**self.payload, "name": "Huge Cap School", "examineeCapacity": 1_000_000},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(School.objects.filter(name="Huge Cap School").exists())
+
     def test_create_generates_sequential_code_and_lists(self) -> None:
         first = self.client.post(reverse("schools:school_list"), self.payload, format="json")
         self.assertEqual(first.status_code, 201)

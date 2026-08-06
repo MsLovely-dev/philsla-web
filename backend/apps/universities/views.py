@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
+from apps.core.throttling import MaintenanceWriteRateThrottle
 
 from .audit import record_college_course_event, record_university_event
 from .models import CollegeCourse, University
@@ -22,6 +23,8 @@ UNIVERSITY_MANAGEMENT_ROLES = require_roles(
 class UniversityListCreateView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = UNIVERSITY_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
 
     def get(self, request) -> Response:
         universities = University.objects.annotate(course_count=Count("courses"))
@@ -44,6 +47,8 @@ class UniversityListCreateView(APIView):
 class UniversityDetailView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = UNIVERSITY_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
 
     def get_object(self, university_id) -> University:
         return get_object_or_404(University, id=university_id)
@@ -78,6 +83,8 @@ class UniversityDetailView(APIView):
 class CollegeCourseListCreateView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = UNIVERSITY_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
 
     def get_university(self, university_id) -> University:
         return get_object_or_404(University, id=university_id)
@@ -102,6 +109,8 @@ class CollegeCourseListCreateView(APIView):
 class CollegeCourseDetailView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = UNIVERSITY_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
 
     def get_object(self, university_id, course_id) -> CollegeCourse:
         return get_object_or_404(CollegeCourse, id=course_id, university_id=university_id)
