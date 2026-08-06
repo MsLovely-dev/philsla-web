@@ -14,5 +14,6 @@ urlpatterns = [
     path("api/v1/results/", include(("apps.results.urls", "results"), namespace="results")),
     path("api/v1/exams/", include(("apps.exams.urls", "exams"), namespace="exams")),
     path("api/v1/schools/", include(("apps.schools.urls", "schools"), namespace="schools")),
+    path("api/v1/attendance/", include(("apps.attendance.urls", "attendance"), namespace="attendance")),
     path("api/v1/", include(("apps.core.urls", "core"), namespace="api-v1")),
 ]
