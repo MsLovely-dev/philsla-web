@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schoolService, type SchoolRecord } from '../../../services/backendSchoolService';
 import { serviceSuccess, validationError } from '../../../services/serviceResult';
+import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 import SchoolsListMaintenance from './SchoolsListMaintenance';
 
 const school: SchoolRecord = {
@@ -22,9 +23,11 @@ const EMPTY_STATE = 'No schools match your search and filter criteria.';
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <SchoolsListMaintenance />
-    </MemoryRouter>,
+    <MaintenanceDataProvider>
+      <MemoryRouter>
+        <SchoolsListMaintenance />
+      </MemoryRouter>
+    </MaintenanceDataProvider>,
   );
 }
 

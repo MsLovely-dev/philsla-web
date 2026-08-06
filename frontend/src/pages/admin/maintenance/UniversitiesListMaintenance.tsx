@@ -35,7 +35,8 @@ import {
   type UniversityRecord,
 } from '../../../services/backendUniversityService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog } from '../../../components/ui';
+import { ConfirmationDialog, ErrorState, LoadingState } from '../../../components/ui';
+import { useMaintenanceData } from '../../../services/maintenanceDataContext';
 
 function isUniversityClassification(value: string): value is UniversityClassification {
   return value === 'Public' || value === 'Private';
@@ -66,7 +67,16 @@ const EMPTY_UNI_FORM: UniversityPayload = {
 };
 
 export default function UniversitiesListMaintenance() {
-  const [universities, setUniversities] = useState<UniversityRecord[]>([]);
+  const {
+    universities,
+    universitiesLoaded,
+    universitiesError,
+    ensureUniversities,
+    reloadUniversities,
+    setUniversityRecord,
+    removeUniversityRecord,
+    adjustCourseCount,
+  } = useMaintenanceData();
   const [courses, setCourses] = useState<CollegeCourseRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -99,20 +109,10 @@ export default function UniversitiesListMaintenance() {
   const [pendingCourseDelete, setPendingCourseDelete] = useState<CollegeCourseRecord | null>(null);
   const [isDeletingCourse, setIsDeletingCourse] = useState(false);
 
+  // Load the university list once into the shared cache; instant on tab re-entry.
   useEffect(() => {
-    let active = true;
-    universityService.listUniversities().then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setUniversities(result.data);
-      } else {
-        setError((result as ServiceFailure).error.message);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+    ensureUniversities();
+  }, [ensureUniversities]);
 
   // Load the selected university's courses from the nested endpoint on drill-down.
   useEffect(() => {
@@ -134,13 +134,8 @@ export default function UniversitiesListMaintenance() {
     };
   }, [selectedUniversity]);
 
-  // Keep the in-memory university list's course count in step with course changes,
+  // Course-count deltas are applied against the shared cache (adjustCourseCount)
   // so the list-view column and totals stay accurate without a full refetch.
-  const applyCourseCountDelta = (universityId: string, delta: number) => {
-    setUniversities((prev) =>
-      prev.map((u) => (u.id === universityId ? { ...u, courseCount: Math.max(0, u.courseCount + delta) } : u)),
-    );
-  };
 
   // Helper to count courses for each university (server-provided on the list payload).
   const getCourseCountForUniversity = (uniId: string) => {
@@ -237,13 +232,9 @@ export default function UniversitiesListMaintenance() {
       return;
     }
 
-    if (editingUniversity) {
-      setUniversities((prev) => prev.map((u) => (u.id === result.data.id ? result.data : u)));
-      if (selectedUniversity?.id === result.data.id) {
-        setSelectedUniversity(result.data);
-      }
-    } else {
-      setUniversities((prev) => [result.data, ...prev]);
+    setUniversityRecord(result.data);
+    if (editingUniversity && selectedUniversity?.id === result.data.id) {
+      setSelectedUniversity(result.data);
     }
 
     setIsUniModalOpen(false);
@@ -268,7 +259,7 @@ export default function UniversitiesListMaintenance() {
     }
 
     const removedId = pendingDelete.id;
-    setUniversities((prev) => prev.filter((u) => u.id !== removedId));
+    removeUniversityRecord(removedId);
     setCourses((prev) => prev.filter((c) => c.universityId !== removedId));
     if (selectedUniversity?.id === removedId) {
       setSelectedUniversity(null);
@@ -332,7 +323,7 @@ export default function UniversitiesListMaintenance() {
       setCourses((prev) => prev.map((c) => (c.id === result.data.id ? result.data : c)));
     } else {
       setCourses((prev) => [...prev, result.data]);
-      applyCourseCountDelta(selectedUniversity.id, 1);
+      adjustCourseCount(selectedUniversity.id, 1);
     }
     setIsCourseModalOpen(false);
   };
@@ -350,7 +341,7 @@ export default function UniversitiesListMaintenance() {
     }
     const removedId = pendingCourseDelete.id;
     setCourses((prev) => prev.filter((c) => c.id !== removedId));
-    applyCourseCountDelta(selectedUniversity.id, -1);
+    adjustCourseCount(selectedUniversity.id, -1);
     setPendingCourseDelete(null);
   };
 
@@ -400,6 +391,33 @@ export default function UniversitiesListMaintenance() {
       document.body.removeChild(link);
     }
   };
+
+  // First load shows a distinct loading/error state; when cached it is already loaded.
+  if (!universitiesLoaded && universitiesError) {
+    return (
+      <div className="flex justify-center py-16">
+        <ErrorState
+          title="University registry unavailable"
+          message={universitiesError}
+          action={
+            <button
+              onClick={reloadUniversities}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer"
+            >
+              Try again
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (!universitiesLoaded) {
+    return (
+      <div className="flex justify-center py-16">
+        <LoadingState title="Loading university registry" message="Fetching the accredited university list." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">

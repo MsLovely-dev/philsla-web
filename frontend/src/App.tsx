@@ -1,6 +1,7 @@
 import { BrowserRouter, useRoutes } from 'react-router-dom';
 import { PhilSAProvider } from './PhilSAContext';
 import { MockDataProvider } from './services/mockService';
+import { MaintenanceDataProvider } from './services/maintenanceDataContext';
 import { ExamRoute, ProtectedRoute, PublicRoute } from './routing/RouteGuards';
 import { APP_ROUTES, AppRouteDefinition } from './routing/routes';
 
@@ -21,9 +22,11 @@ export default function App() {
   return (
     <PhilSAProvider>
       <MockDataProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
+        <MaintenanceDataProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </MaintenanceDataProvider>
       </MockDataProvider>
     </PhilSAProvider>
   );

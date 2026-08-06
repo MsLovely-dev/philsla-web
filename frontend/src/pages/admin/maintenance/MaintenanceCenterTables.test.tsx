@@ -6,7 +6,9 @@ import SchoolsListMaintenance from './SchoolsListMaintenance';
 import StudentRegistrationMaintenance from './StudentRegistrationMaintenance';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
 import { universityService } from '../../../services/backendUniversityService';
+import { schoolService } from '../../../services/backendSchoolService';
 import { serviceSuccess } from '../../../services/serviceResult';
+import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 
 describe('active Maintenance Center tables', () => {
   beforeEach(() => {
@@ -29,8 +31,9 @@ describe('active Maintenance Center tables', () => {
   it('starts the schools table empty and ignores saved browser data', async () => {
     localStorage.setItem('philsa_maintenance_schools_list', JSON.stringify([{ name: 'Saved Mock School' }]));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([]));
 
-    render(<MemoryRouter><SchoolsListMaintenance /></MemoryRouter>);
+    render(<MaintenanceDataProvider><MemoryRouter><SchoolsListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 
     expect(await screen.findByText('No schools match your search and filter criteria.')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock School')).not.toBeInTheDocument();
@@ -43,7 +46,7 @@ describe('active Maintenance Center tables', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
     vi.spyOn(universityService, 'listUniversities').mockResolvedValue(serviceSuccess([]));
 
-    render(<MemoryRouter><UniversitiesListMaintenance /></MemoryRouter>);
+    render(<MaintenanceDataProvider><MemoryRouter><UniversitiesListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 
     expect(await screen.findByText('No universities match your search and filter criteria.')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock University')).not.toBeInTheDocument();

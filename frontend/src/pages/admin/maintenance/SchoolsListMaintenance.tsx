@@ -23,7 +23,8 @@ import {
   type SchoolRecord,
 } from '../../../services/backendSchoolService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog } from '../../../components/ui';
+import { ConfirmationDialog, ErrorState, LoadingState } from '../../../components/ui';
+import { useMaintenanceData } from '../../../services/maintenanceDataContext';
 
 function isSchoolClassification(value: string): value is SchoolClassification {
   return value === 'Public' || value === 'Private';
@@ -38,7 +39,15 @@ const EMPTY_FORM: SchoolPayload = {
 };
 
 export default function SchoolsListMaintenance() {
-  const [schools, setSchools] = useState<SchoolRecord[]>([]);
+  const {
+    schools,
+    schoolsLoaded,
+    schoolsError,
+    ensureSchools,
+    reloadSchools,
+    setSchoolRecord,
+    removeSchoolRecord,
+  } = useMaintenanceData();
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -54,20 +63,10 @@ export default function SchoolsListMaintenance() {
   const [pendingDelete, setPendingDelete] = useState<SchoolRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Load the school list once into the shared cache; instant on tab re-entry.
   useEffect(() => {
-    let active = true;
-    schoolService.listSchools().then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setSchools(result.data);
-      } else {
-        setError((result as ServiceFailure).error.message);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+    ensureSchools();
+  }, [ensureSchools]);
 
   const uniqueRegions = useMemo(() => {
     return Array.from(new Set(schools.map((s) => s.region))).sort();
@@ -126,11 +125,7 @@ export default function SchoolsListMaintenance() {
       return;
     }
 
-    if (editingSchool) {
-      setSchools((prev) => prev.map((s) => (s.id === result.data.id ? result.data : s)));
-    } else {
-      setSchools((prev) => [result.data, ...prev]);
-    }
+    setSchoolRecord(result.data);
     setIsModalOpen(false);
   };
 
@@ -145,7 +140,7 @@ export default function SchoolsListMaintenance() {
       setPendingDelete(null);
       return;
     }
-    setSchools((prev) => prev.filter((s) => s.id !== pendingDelete.id));
+    removeSchoolRecord(pendingDelete.id);
     setPendingDelete(null);
   };
 
@@ -166,6 +161,33 @@ export default function SchoolsListMaintenance() {
     link.click();
     document.body.removeChild(link);
   };
+
+  // First load shows a distinct loading/error state; when cached it is already loaded.
+  if (!schoolsLoaded && schoolsError) {
+    return (
+      <div className="flex justify-center py-16">
+        <ErrorState
+          title="School registry unavailable"
+          message={schoolsError}
+          action={
+            <button
+              onClick={reloadSchools}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer"
+            >
+              Try again
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (!schoolsLoaded) {
+    return (
+      <div className="flex justify-center py-16">
+        <LoadingState title="Loading school registry" message="Fetching the accredited school list." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">

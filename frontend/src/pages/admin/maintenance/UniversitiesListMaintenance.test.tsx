@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { universityService, type UniversityRecord } from '../../../services/backendUniversityService';
 import { authorizationError, networkError, serviceSuccess, validationError } from '../../../services/serviceResult';
+import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
 
 const university: UniversityRecord = {
@@ -24,7 +26,11 @@ const university: UniversityRecord = {
 };
 
 function renderPage() {
-  return render(<MemoryRouter><UniversitiesListMaintenance /></MemoryRouter>);
+  return render(
+    <MaintenanceDataProvider>
+      <MemoryRouter><UniversitiesListMaintenance /></MemoryRouter>
+    </MaintenanceDataProvider>,
+  );
 }
 
 describe('UniversitiesListMaintenance', () => {
@@ -100,5 +106,36 @@ describe('UniversitiesListMaintenance', () => {
     expect(await screen.findByText('A university with this name already exists in this region.')).toBeInTheDocument();
     // The modal stays open on failure so the admin can correct and retry.
     expect(screen.getByText('Add New University')).toBeInTheDocument();
+  });
+
+  it('does not refetch the university list when the page remounts within the cached provider', async () => {
+    const listUniversities = vi
+      .mocked(universityService.listUniversities)
+      .mockResolvedValue(serviceSuccess([university]));
+    const user = userEvent.setup();
+
+    // The provider outlives the page: toggling the page off/on mimics a tab switch.
+    function Harness() {
+      const [visible, setVisible] = useState(true);
+      return (
+        <>
+          <button onClick={() => setVisible((v) => !v)}>toggle</button>
+          {visible && <UniversitiesListMaintenance />}
+        </>
+      );
+    }
+
+    render(
+      <MaintenanceDataProvider>
+        <MemoryRouter><Harness /></MemoryRouter>
+      </MaintenanceDataProvider>,
+    );
+
+    await screen.findByText(university.name);
+    await user.click(screen.getByRole('button', { name: 'toggle' })); // unmount page
+    await user.click(screen.getByRole('button', { name: 'toggle' })); // remount page
+    await screen.findByText(university.name);
+
+    expect(listUniversities).toHaveBeenCalledTimes(1);
   });
 });
