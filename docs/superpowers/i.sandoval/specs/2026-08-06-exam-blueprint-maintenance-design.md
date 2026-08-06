@@ -47,13 +47,13 @@ No new models or migrations. Existing fields on `Subject`, `Topic`, `QuestionTyp
 ## Lifecycle
 
 - **Create:** any of the four authorized roles can create a new Subject/Topic/QuestionType with a unique code+name (per the existing DB constraints).
-- **Edit:** any field can be changed by the four authorized roles. Optimistic concurrency reuses the existing `updated_at` timestamp as the token: the client echoes back the `updated_at` value it last read as `expected_version`, and the server rejects the write with 409 if the current `updated_at` no longer matches. This is the same *purpose* as `UniversityInputSerializer`'s `expectedVersion` field, but `University`/`CollegeCourse` back it with a dedicated integer `version` column that `Subject`/`Topic`/`QuestionType` don't have — adding one would require a migration, so this design reuses the timestamp column that already exists instead. A stale edit is rejected with a 409, not silently overwritten, either way.
+- **Edit:** any field can be changed by the four authorized roles via a direct partial update (`PUT`/`PATCH`, same handler) — no client-submitted version/concurrency token. This matches `ExamBlueprintDetailView`/`QuestionListCreateView`'s sibling detail view/`ExamSetDetailView` exactly: none of them require a client-submitted version either, even `ExamSet` (the most lifecycle-sensitive model in this app), which instead guards against lost updates with `select_for_update()` inside its service function. An earlier draft of this spec proposed an `expected_version` field mirroring `apps/configuration`'s University/CollegeCourse pattern; dropped because it doesn't match any existing convention inside `apps/exams` itself, and a simple reference/lookup table doesn't need stronger concurrency guarantees than this app's own ExamSet lifecycle transitions have. The update service function still wraps the read-modify-write in `select_for_update()` for the same reason `update_exam_set`-style functions do: a concurrent duplicate-code write should still fail cleanly on the DB unique constraint, not race.
 - **Deactivate:** `PATCH {is_active: false}`. A deactivated record stays valid on existing Questions/Blueprint sections that already reference it (nothing is retroactively invalidated), but stops appearing as a selectable option when authoring *new* Questions/Blueprint sections. Reactivation (`is_active: true`) is allowed the same way.
 - **No hard delete**, anywhere, for any of the three record types. `Topic.subject`'s `on_delete=PROTECT` already enforces this at the database level for Subjects with Topics; the API simply never exposes a DELETE method at all, for any of the three, so the same posture applies uniformly even to unreferenced records.
 
 ## API contract
 
-Mirrors `apps/configuration/views.py` (University/CollegeCourse admin views) exactly in shape and pagination.
+Follows `apps/exams/views.py`'s own established view shape (`ExamBlueprintListCreateView`/`ExamBlueprintDetailView` and siblings) rather than `apps/configuration/views.py`'s University/CollegeCourse admin views, since these new views live in the same file — see "Lifecycle" above for why pagination and `expected_version` specifically were dropped from an earlier draft of this spec.
 
 ```
 GET/POST   /api/v1/exams/admin/subjects/
@@ -66,10 +66,10 @@ GET/POST   /api/v1/exams/admin/question-types/
 GET/PATCH/PUT /api/v1/exams/admin/question-types/{question_type_id}/
 ```
 
-- List endpoints: `StandardPageNumberPagination` (matching the existing registry pagination contract in `docs/api/API-STANDARDS.md`), search by `code`/`name`, filter by `is_active`.
+- List endpoints: unpaginated, returning the full active-and-inactive set ordered by the model's `Meta.ordering`, with no query-param filtering. This deliberately does not copy `StandardPageNumberPagination` or search/status filtering from `apps/configuration`'s University/CollegeCourse admin views (an earlier draft of this spec assumed it would) — every existing list endpoint in `apps/exams` itself (`ExamBlueprintListCreateView`, `QuestionListCreateView`, `ExamSetListCreateView`) already returns a flat, unfiltered, unpaginated array with no query-param support at all, and matching the sibling views in the same app/file takes precedence over matching a different app's convention. These are small reference tables (tens of records, not hundreds), so the frontend filters/searches client-side over the full returned list, the same way a lookup dropdown normally works.
 - No DELETE method on any endpoint.
-- `PUT`/`PATCH` require `expected_version` in the body (the `updated_at` timestamp last read by the client), rejected with 409 on mismatch — see "Lifecycle" for why this uses the existing `updated_at` column rather than a new integer version field.
-- Validation errors (duplicate code/name, unknown subject_id for a Topic) return the existing safe validation-error envelope used elsewhere in `apps/exams` (`error.code`/`error.message`/`error.fields`), not a raw `IntegrityError`.
+- `PUT` and `PATCH` are the same handler (`patch()` delegates to `put()`), matching `ExamBlueprintDetailView`/`ExamSetDetailView` exactly.
+- Validation errors (duplicate code/name, unknown `subject_id` for a Topic) surface through DRF's global exception handler (`apps/core/exceptions.py`), which every `apps/exams` endpoint already goes through automatically — raising a plain `serializers.ValidationError` or an `APIException` subclass (e.g. a new `ExamBlueprintMaintenanceConflict`, mirroring `UniversityRegistryConflict`'s shape for the duplicate-code-on-save race) is enough; no bespoke envelope-building code is needed.
 
 ## Permissions
 
