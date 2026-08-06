@@ -136,24 +136,41 @@ First full run reproduced a genuine, reproducible P0: creating an Exam Set throu
 - Fixed Subject API validation error handling in response to code review (two review-driven fix commits addressing validation layer gaps found during implementation).
 - Added frontend service layer for backend Exam Blueprint Maintenance APIs with transport mapping for list and create operations.
 - Wired `ExamBlueprintMaintenance.tsx` page to real backend services for Subject, Topic, and QuestionType management.
-- Added `MaintenancePageTemplate.tsx` as a reusable template component for maintenance center pages with pagination, loading, error, and empty states.
-- Conditionally hid the Delete button in the template component (wrapped in `{onDelete && (...)}` conditional render) to avoid showing an inert button on pages with no delete endpoint (authorized scope expansion during Task 5). Verified all 14 other consumers of the template still pass a real `onDelete` prop and are unaffected.
+- Enhanced `MaintenancePageTemplate.tsx` (pre-existing component): conditionally hid the Delete button (wrapped in `{onDelete && (...)}` conditional render) to avoid showing an inert button on pages with no delete endpoint (authorized scope expansion during Task 5). Verified all 14 other consumers of the template still pass a real `onDelete` prop and are unaffected.
 - Reorganized `MaintenanceCenterTables.test.tsx`: removed `ExamBlueprintMaintenance` from the synchronous `it.each` array (component is no longer synchronous after Tasks 5-6 rewrites) and added a dedicated async test that mocks the three backend service endpoints and verifies the empty-state render (authorized scope expansion during Task 5 code review).
 - Fixed form state synchronization: submitted `isActive` state now matches the visible toggle state on creation (Task 5 bug fix).
-- **Corrected route permissions bug (Task 6):** `routes.tsx` line 160 had incorrect role restrictions (`UNIVERSITY_ADMIN`, `ADMISSIONS_REVIEWER`). Changed to correct roles: `ITEM_WRITER`, `ACADEMIC_REVIEWER`, `EXAM_ADMINISTRATOR`. Additionally corrected the same role lists in navigation gates (`MaintenanceHub.tsx` tile on lines 50-57 and `DashboardLayout.tsx` section/sub-item rules on lines 174-185) to make the page actually reachable for the intended roles. This was a post-implementation discovery corrected before merge.
+- **Corrected route permissions bug (Task 6):** Four role gates were found to be incorrect after final review:
+  1. `/admin/maintenance/exam-blueprint` leaf route (`routes.tsx:160`) — changed from `['UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']` to `['ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR']`
+  2. `/admin/maintenance` hub route (`routes.tsx:155`) — added missing `['ITEM_WRITER', 'ACADEMIC_REVIEWER']`
+  3. Exam Blueprint tile in `MaintenanceHub.tsx` (lines 50-57) — changed allowedRoles, removed stale "difficulty levels" description, corrected table count from 4 to 3
+  4. Exam Blueprint sub-item in `DashboardLayout.tsx` (lines 174-185) — added `ITEM_WRITER`/`ACADEMIC_REVIEWER` to section-level roles, updated sub-item roles to match route
+  These corrections ensure the page is reachable in the UI for the intended roles (ITEM_WRITER, ACADEMIC_REVIEWER, EXAM_ADMINISTRATOR).
+- **Fixed isActive default value (authorized scope expansion):** Catalog records (Subject/Topic/QuestionType) were defaulting to `isActive: false` on creation, contradicting the design spec which states new records should default to `true` (immediately usable). Enhanced `MaintenancePageTemplate.tsx` with optional `defaultValue` field on `MaintenanceField` interface; set `defaultValue: true` on the isActive toggle in `ExamBlueprintMaintenance.tsx`; changed `toCatalogPayload`/`toTopicPayload` to default to `true` instead of `false`; updated test to assert new correct behavior. What's displayed (toggle position) and what's submitted (isActive value) now both default to Active/true on creation.
 
 ### Commits
 
+**Core implementation (Tasks 1-4):**
 - `8ef426e feat(exam-blueprint-maintenance): add Subject admin API`
 - `b442bf7 fix: correct validation error handling for subject creation`
 - `49502c3 fix: convert non-uniqueness validation errors to DRF 400 response`
 - `028f81e feat(exam-blueprint-maintenance): add QuestionType admin API`
 - `948556f feat(exam-blueprint-maintenance): add Topic admin API`
 - `9217b17 feat(exam-blueprint-maintenance): add frontend service layer`
+
+**Backend integration and scope expansions (Task 5):**
 - `6e5dc09 feat(exam-blueprint-maintenance): wire maintenance table to real backend`
 - `8315652 fix(exam-blueprint-maintenance): hide dead Delete button and split MaintenanceCenterTables coverage`
 - `2ffe623 fix(exam-blueprint-maintenance): match submitted isActive to the visible toggle state on create`
+
+**Route fix and verification (Task 6):**
 - `03a9aa5 fix(exam-blueprint-maintenance): correct allowed roles for the maintenance route`
+- `3b89301 docs(exam-blueprint-maintenance): record implementation and verification evidence`
+
+**Post-review findings and fixes:**
+- `fa5422e fix(exam-blueprint-maintenance): correct navigation gates to match route roles`
+- `ef9eb99 docs(exam-blueprint-maintenance): correct implementation log with accurate details`
+- `45580f4 fix(exam-blueprint-maintenance): add missing roles to /admin/maintenance hub route`
+- `7f5a507 fix(exam-blueprint-maintenance): correct isActive default from false to true on create`
 
 ### Verification evidence
 
@@ -177,7 +194,7 @@ Frontend, from `frontend/`:
 ### Remaining before production use
 
 - The `apps.universities` seed-idempotency failure and the `UniversitiesListMaintenance`/`QrScanModal`/`MaintenanceCenterTables` frontend test failures are outside this story's scope (JP.Mayordo and Jo.Ganapin respectively) and remain open for their respective owners to resolve.
-- The routes.tsx role-list bug (Task 6) was corrected before merge, so no follow-up needed.
+- All role-gating and form-default issues identified in final review have been corrected: four role gates updated to match the spec-intended audience (ITEM_WRITER, ACADEMIC_REVIEWER, EXAM_ADMINISTRATOR), and catalog record creation now defaults to Active status per spec. No follow-up needed.
 
 ## Release sign-off
 
