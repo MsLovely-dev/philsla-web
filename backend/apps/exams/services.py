@@ -1620,3 +1620,39 @@ def _is_uniqueness_conflict(exc: DjangoValidationError) -> bool:
             if "already exists" in error_msg or "unique" in error_msg:
                 return True
     return False
+
+
+def question_type_queryset():
+    return QuestionType.objects.all()
+
+
+def create_question_type(*, data: dict) -> QuestionType:
+    question_type = QuestionType(**data)
+    try:
+        question_type.full_clean()
+        with transaction.atomic():
+            question_type.save()
+    except IntegrityError as exc:
+        raise ExamBlueprintMaintenanceConflict("A question type with this code or name already exists.") from exc
+    except DjangoValidationError as exc:
+        if _is_uniqueness_conflict(exc):
+            raise ExamBlueprintMaintenanceConflict("A question type with this code or name already exists.") from exc
+        raise ValidationError(exc.message_dict) from exc
+    return question_type
+
+
+@transaction.atomic
+def update_question_type(*, question_type_id: int, data: dict) -> QuestionType:
+    question_type = QuestionType.objects.select_for_update().get(pk=question_type_id)
+    for field_name, value in data.items():
+        setattr(question_type, field_name, value)
+    try:
+        question_type.full_clean()
+        question_type.save()
+    except IntegrityError as exc:
+        raise ExamBlueprintMaintenanceConflict("A question type with this code or name already exists.") from exc
+    except DjangoValidationError as exc:
+        if _is_uniqueness_conflict(exc):
+            raise ExamBlueprintMaintenanceConflict("A question type with this code or name already exists.") from exc
+        raise ValidationError(exc.message_dict) from exc
+    return question_type

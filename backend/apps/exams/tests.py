@@ -752,3 +752,123 @@ class SubjectAdminApiTests(APITestCase):
             HTTP_AUTHORIZATION=f"Bearer {access_token}",
         )
         self.assertEqual(create_response.status_code, 201)
+
+
+class QuestionTypeAdminApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="question_type_maintenance_admin",
+            email="question.type.maintenance.admin@example.test",
+            password="Password1!",
+        )
+        self.profile = AccountProfile.objects.get_or_create(user=self.user, defaults={"role": PortalRole.SYSTEM_ADMIN.value})[0]
+        self.client.force_authenticate(self.user)
+
+    def test_create_list_and_update_question_type(self) -> None:
+        create_response = self.client.post(
+            reverse("exams:question_type_list"),
+            {"code": "MCQ", "name": "Multiple Choice"},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.data["code"], "MCQ")
+        self.assertTrue(create_response.data["isActive"])
+
+        list_response = self.client.get(reverse("exams:question_type_list"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.data), 1)
+
+        question_type_id = create_response.data["id"]
+        update_response = self.client.patch(
+            reverse("exams:question_type_detail", kwargs={"question_type_id": question_type_id}),
+            {"is_active": False},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.assertFalse(update_response.data["isActive"])
+
+    def test_rejects_duplicate_question_type_code(self) -> None:
+        QuestionType.objects.create(code="MCQ", name="Multiple Choice")
+        response = self.client.post(
+            reverse("exams:question_type_list"),
+            {"code": "MCQ", "name": "Multiple Choice Again"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["code"], "CONFLICT")
+
+    def test_rejects_missing_required_fields_with_400(self) -> None:
+        missing_code = self.client.post(
+            reverse("exams:question_type_list"),
+            {"name": "Multiple Choice"},
+            format="json",
+        )
+        self.assertEqual(missing_code.status_code, 400)
+
+        missing_name = self.client.post(
+            reverse("exams:question_type_list"),
+            {"code": "MCQ"},
+            format="json",
+        )
+        self.assertEqual(missing_name.status_code, 400)
+
+    def test_denies_unauthenticated_and_unapproved_roles(self) -> None:
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get(reverse("exams:question_type_list")).status_code, 401)
+
+        User = get_user_model()
+        university_user = User.objects.create_user(
+            username="question_type_denied_user",
+            email="question.type.denied@example.test",
+            password="Password1!",
+        )
+        AccountProfile.objects.create(user=university_user, role=PortalRole.UNIVERSITY_ADMIN.value)
+        self.client.force_authenticate(university_user)
+        self.assertEqual(self.client.get(reverse("exams:question_type_list")).status_code, 403)
+
+    def test_creates_question_type_for_a_genuinely_bearer_authenticated_user(self) -> None:
+        real_client = APIClient()
+
+        identifier_response = real_client.post(
+            "/api/v1/auth/login/identifier/",
+            {"identifier": self.user.email},
+            format="json",
+        )
+        self.assertEqual(identifier_response.status_code, 202)
+
+        password_response = real_client.post(
+            "/api/v1/auth/login/password/",
+            {"pendingAuthToken": identifier_response.data["pendingAuthToken"], "password": "Password1!"},
+            format="json",
+        )
+        self.assertEqual(password_response.status_code, 202)
+
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[-1].body)
+        self.assertIsNotNone(code_match)
+
+        otp_response = real_client.post(
+            "/api/v1/auth/login/otp/",
+            {"otpPendingAuthToken": password_response.data["otpPendingAuthToken"], "code": code_match.group(1)},
+            format="json",
+        )
+        self.assertEqual(otp_response.status_code, 202)
+
+        selfie_response = real_client.post(
+            "/api/v1/auth/login/selfie/",
+            {
+                "selfiePendingAuthToken": otp_response.data["selfiePendingAuthToken"],
+                "file": SimpleUploadedFile("selfie.jpg", b"selfie-image", content_type="image/jpeg"),
+            },
+        )
+        self.assertEqual(selfie_response.status_code, 200)
+        access_token = selfie_response.data["accessToken"]
+
+        create_response = real_client.post(
+            reverse("exams:question_type_list"),
+            {"code": "ESSAY", "name": "Essay"},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(create_response.status_code, 201)

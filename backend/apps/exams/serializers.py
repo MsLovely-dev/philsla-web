@@ -20,6 +20,7 @@ from .models import (
     SelectionMethod,
     QuestionStatus,
     Question,
+    QuestionType,
     Subject,
 )
 from .services import (
@@ -28,6 +29,7 @@ from .services import (
     create_exam_blueprint,
     create_or_update_exam_set,
     create_or_update_question,
+    create_question_type,
     create_subject,
     latest_blueprint_version,
     serialize_blueprint,
@@ -37,6 +39,7 @@ from .services import (
     transition_exam_set,
     transition_question,
     update_exam_blueprint,
+    update_question_type,
     update_subject,
 )
 
@@ -425,3 +428,40 @@ class SubjectInputSerializer(serializers.Serializer):
 
     def update(self, instance: Subject, validated_data: dict) -> Subject:
         return update_subject(subject_id=instance.pk, data=validated_data)
+
+
+class QuestionTypeSerializer(serializers.ModelSerializer):
+    isActive = serializers.BooleanField(source="is_active", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = QuestionType
+        fields = ("id", "code", "name", "description", "isActive", "createdAt", "updatedAt")
+
+
+class QuestionTypeInputSerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=30, required=False)
+    name = serializers.CharField(max_length=100, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+    def validate_code(self, value: str) -> str:
+        return value.strip().upper()
+
+    def validate_name(self, value: str) -> str:
+        return value.strip()
+
+    def validate(self, attrs: dict) -> dict:
+        if self.instance is None:
+            if "code" not in attrs or not attrs.get("code"):
+                raise serializers.ValidationError({"code": ["This field is required."]})
+            if "name" not in attrs or not attrs.get("name"):
+                raise serializers.ValidationError({"name": ["This field is required."]})
+        return attrs
+
+    def create(self, validated_data: dict) -> QuestionType:
+        return create_question_type(data=validated_data)
+
+    def update(self, instance: QuestionType, validated_data: dict) -> QuestionType:
+        return update_question_type(question_type_id=instance.pk, data=validated_data)

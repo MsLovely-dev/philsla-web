@@ -7,7 +7,7 @@ from apps.accounts.models import AccountProfile
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 
 from .audit import record_exam_blueprint_maintenance_event
-from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus, Subject
+from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus, QuestionType, Subject
 from .serializers import (
     BlueprintCloneSerializer,
     BlueprintTransitionSerializer,
@@ -16,10 +16,12 @@ from .serializers import (
     ExamSetTransitionSerializer,
     QuestionSerializer,
     QuestionTransitionSerializer,
+    QuestionTypeInputSerializer,
+    QuestionTypeSerializer,
     SubjectInputSerializer,
     SubjectSerializer,
 )
-from .services import blueprint_queryset, exam_set_queryset, latest_blueprint_version, question_queryset, subject_queryset
+from .services import blueprint_queryset, exam_set_queryset, latest_blueprint_version, question_queryset, question_type_queryset, subject_queryset
 from .services import clone_exam_set
 
 
@@ -308,3 +310,40 @@ class SubjectAdminDetailView(APIView):
 
     def patch(self, request, subject_id: int) -> Response:
         return self.put(request, subject_id)
+
+
+class QuestionTypeAdminListCreateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_BLUEPRINT_MAINTENANCE_ROLES
+
+    def get(self, request) -> Response:
+        return Response(QuestionTypeSerializer(question_type_queryset(), many=True).data)
+
+    def post(self, request) -> Response:
+        serializer = QuestionTypeInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        question_type = serializer.save()
+        record_exam_blueprint_maintenance_event(event="question_type_created", outcome="success", request=request, user=request.user)
+        return Response(QuestionTypeSerializer(question_type).data, status=201)
+
+
+class QuestionTypeAdminDetailView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_BLUEPRINT_MAINTENANCE_ROLES
+
+    def get_object(self, question_type_id: int) -> QuestionType:
+        return get_object_or_404(question_type_queryset(), pk=question_type_id)
+
+    def get(self, request, question_type_id: int) -> Response:
+        return Response(QuestionTypeSerializer(self.get_object(question_type_id)).data)
+
+    def put(self, request, question_type_id: int) -> Response:
+        question_type = self.get_object(question_type_id)
+        serializer = QuestionTypeInputSerializer(question_type, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_question_type = serializer.save()
+        record_exam_blueprint_maintenance_event(event="question_type_updated", outcome="success", request=request, user=request.user)
+        return Response(QuestionTypeSerializer(updated_question_type).data)
+
+    def patch(self, request, question_type_id: int) -> Response:
+        return self.put(request, question_type_id)

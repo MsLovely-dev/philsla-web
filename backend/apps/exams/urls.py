@@ -12,6 +12,8 @@ from .views import (
     QuestionDetailView,
     QuestionListCreateView,
     QuestionTransitionView,
+    QuestionTypeAdminDetailView,
+    QuestionTypeAdminListCreateView,
     SubjectAdminDetailView,
     SubjectAdminListCreateView,
 )
@@ -30,4 +32,6 @@ urlpatterns = [
     path("questions/<int:question_id>/transition/", QuestionTransitionView.as_view(), name="question_transition"),
     path("admin/subjects/", SubjectAdminListCreateView.as_view(), name="subject_list"),
     path("admin/subjects/<int:subject_id>/", SubjectAdminDetailView.as_view(), name="subject_detail"),
+    path("admin/question-types/", QuestionTypeAdminListCreateView.as_view(), name="question_type_list"),
+    path("admin/question-types/<int:question_type_id>/", QuestionTypeAdminDetailView.as_view(), name="question_type_detail"),
 ]
