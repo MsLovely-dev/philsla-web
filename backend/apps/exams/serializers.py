@@ -20,6 +20,7 @@ from .models import (
     SelectionMethod,
     QuestionStatus,
     Question,
+    Subject,
 )
 from .services import (
     clone_exam_blueprint,
@@ -27,6 +28,7 @@ from .services import (
     create_exam_blueprint,
     create_or_update_exam_set,
     create_or_update_question,
+    create_subject,
     latest_blueprint_version,
     serialize_blueprint,
     serialize_exam_set,
@@ -35,6 +37,7 @@ from .services import (
     transition_exam_set,
     transition_question,
     update_exam_blueprint,
+    update_subject,
 )
 
 
@@ -385,3 +388,32 @@ class ExamSetTransitionSerializer(serializers.Serializer):
             actor_profile=actor_profile,
             remarks=self.validated_data.get("remarks", ""),
         )
+
+
+class SubjectSerializer(serializers.ModelSerializer):
+    isActive = serializers.BooleanField(source="is_active", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = Subject
+        fields = ("id", "code", "name", "description", "isActive", "createdAt", "updatedAt")
+
+
+class SubjectInputSerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=30, required=False)
+    name = serializers.CharField(max_length=150, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+    def validate_code(self, value: str) -> str:
+        return value.strip().upper()
+
+    def validate_name(self, value: str) -> str:
+        return value.strip()
+
+    def create(self, validated_data: dict) -> Subject:
+        return create_subject(data=validated_data)
+
+    def update(self, instance: Subject, validated_data: dict) -> Subject:
+        return update_subject(subject_id=instance.pk, data=validated_data)

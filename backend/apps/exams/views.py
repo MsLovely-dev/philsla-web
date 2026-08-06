@@ -6,7 +6,8 @@ from rest_framework.views import APIView
 from apps.accounts.models import AccountProfile
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 
-from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus
+from .audit import record_exam_blueprint_maintenance_event
+from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus, Subject
 from .serializers import (
     BlueprintCloneSerializer,
     BlueprintTransitionSerializer,
@@ -15,8 +16,10 @@ from .serializers import (
     ExamSetTransitionSerializer,
     QuestionSerializer,
     QuestionTransitionSerializer,
+    SubjectInputSerializer,
+    SubjectSerializer,
 )
-from .services import blueprint_queryset, exam_set_queryset, latest_blueprint_version, question_queryset
+from .services import blueprint_queryset, exam_set_queryset, latest_blueprint_version, question_queryset, subject_queryset
 from .services import clone_exam_set
 
 
@@ -35,6 +38,13 @@ QUESTION_MANAGEMENT_ROLES = require_roles(
 )
 
 EXAM_SET_MANAGEMENT_ROLES = require_roles(
+    "EXAM_ADMINISTRATOR",
+    "SYSTEM_ADMIN",
+)
+
+EXAM_BLUEPRINT_MAINTENANCE_ROLES = require_roles(
+    "ITEM_WRITER",
+    "ACADEMIC_REVIEWER",
     "EXAM_ADMINISTRATOR",
     "SYSTEM_ADMIN",
 )
@@ -261,3 +271,40 @@ class ExamSetTransitionView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(ExamSetSerializer(exam_set_queryset().get(pk=exam_set.pk)).data)
+
+
+class SubjectAdminListCreateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_BLUEPRINT_MAINTENANCE_ROLES
+
+    def get(self, request) -> Response:
+        return Response(SubjectSerializer(subject_queryset(), many=True).data)
+
+    def post(self, request) -> Response:
+        serializer = SubjectInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        subject = serializer.save()
+        record_exam_blueprint_maintenance_event(event="subject_created", outcome="success", request=request, user=request.user)
+        return Response(SubjectSerializer(subject).data, status=201)
+
+
+class SubjectAdminDetailView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_BLUEPRINT_MAINTENANCE_ROLES
+
+    def get_object(self, subject_id: int) -> Subject:
+        return get_object_or_404(subject_queryset(), pk=subject_id)
+
+    def get(self, request, subject_id: int) -> Response:
+        return Response(SubjectSerializer(self.get_object(subject_id)).data)
+
+    def put(self, request, subject_id: int) -> Response:
+        subject = self.get_object(subject_id)
+        serializer = SubjectInputSerializer(subject, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_subject = serializer.save()
+        record_exam_blueprint_maintenance_event(event="subject_updated", outcome="success", request=request, user=request.user)
+        return Response(SubjectSerializer(updated_subject).data)
+
+    def patch(self, request, subject_id: int) -> Response:
+        return self.put(request, subject_id)

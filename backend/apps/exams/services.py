@@ -4,7 +4,8 @@ from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from django.db import transaction
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -82,6 +83,12 @@ class ExamSetValidationConflict(APIException):
     status_code = 409
     default_code = "exam_set_validation_conflict"
     default_detail = "The Exam Set must satisfy its validation requirements before this transition."
+
+
+class ExamBlueprintMaintenanceConflict(APIException):
+    status_code = 409
+    default_code = "conflict"
+    default_detail = "This record conflicts with an existing catalog entry."
 
 
 EXAM_SET_ALLOWED_TRANSITIONS = {
@@ -1566,3 +1573,31 @@ def clone_exam_set(*, exam_set: ExamSet, actor_profile: AccountProfile) -> ExamS
         initiated_by=actor_profile,
     )
     return cloned
+
+
+def subject_queryset():
+    return Subject.objects.all()
+
+
+def create_subject(*, data: dict) -> Subject:
+    subject = Subject(**data)
+    try:
+        subject.full_clean()
+        with transaction.atomic():
+            subject.save()
+    except (IntegrityError, DjangoValidationError) as exc:
+        raise ExamBlueprintMaintenanceConflict("A subject with this code or name already exists.") from exc
+    return subject
+
+
+@transaction.atomic
+def update_subject(*, subject_id: int, data: dict) -> Subject:
+    subject = Subject.objects.select_for_update().get(pk=subject_id)
+    for field_name, value in data.items():
+        setattr(subject, field_name, value)
+    try:
+        subject.full_clean()
+        subject.save()
+    except (IntegrityError, DjangoValidationError) as exc:
+        raise ExamBlueprintMaintenanceConflict("A subject with this code or name already exists.") from exc
+    return subject
