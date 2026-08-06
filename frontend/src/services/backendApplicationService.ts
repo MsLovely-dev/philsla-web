@@ -1,6 +1,8 @@
 import type { Application } from '../types';
 import { sharedApiClient, type ApiClient } from './apiClient';
-import type { ServiceResult } from './serviceResult';
+import type { PaginatedResult, ServiceResult } from './serviceResult';
+
+export type { PaginatedResult };
 
 export interface LrnVerificationProfile {
   lrn: string;
@@ -81,13 +83,6 @@ export interface StudentRegistrationFieldConfig {
 }
 
 export type StudentRegistrationFieldInput = Omit<StudentRegistrationFieldConfig, 'id' | 'createdAt' | 'updatedAt'>;
-
-export interface PaginatedResult<T> {
-  count: number;
-  next: string | null;
-  previous: string | null;
-  results: T[];
-}
 
 export interface StudentRegistrationFieldListParams {
   page?: number;

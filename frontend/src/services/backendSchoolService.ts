@@ -1,5 +1,5 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
-import { serviceSuccess, type ServiceResult } from './serviceResult';
+import { serviceSuccess, type PaginatedResult, type ServiceResult } from './serviceResult';
 
 export type SchoolClassification = 'Public' | 'Private';
 export type SchoolStatus = 'Active' | 'Inactive';
@@ -24,6 +24,16 @@ export interface SchoolPayload {
   status: SchoolStatus;
 }
 
+export interface SchoolListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  classification?: SchoolClassification | '';
+  region?: string;
+  status?: SchoolStatus | '';
+  ordering?: string;
+}
+
 /**
  * API shape returned by `/api/v1/schools/`. The serializer already emits
  * camelCase for `examineeCapacity`, so the mapping is near-identity, but we
@@ -43,6 +53,7 @@ interface ApiSchool {
 
 export interface SchoolService {
   listSchools(): Promise<ServiceResult<SchoolRecord[]>>;
+  listSchoolsPage(params: SchoolListParams): Promise<ServiceResult<PaginatedResult<SchoolRecord>>>;
   createSchool(payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>>;
   updateSchool(id: string, payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>>;
   deleteSchool(id: string): Promise<ServiceResult<null>>;
@@ -57,6 +68,25 @@ export class BackendSchoolService implements SchoolService {
     const result = await this.apiClient.request<ApiSchool[]>(SCHOOLS_ENDPOINT);
     if (!result.ok) return result as ServiceResult<SchoolRecord[]>;
     return serviceSuccess(result.data.map((item) => this.fromApiSchool(item)));
+  }
+
+  async listSchoolsPage(params: SchoolListParams): Promise<ServiceResult<PaginatedResult<SchoolRecord>>> {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page ?? 1));
+    query.set('pageSize', String(params.pageSize ?? 20));
+    if (params.search) query.set('search', params.search);
+    if (params.classification) query.set('classification', params.classification);
+    if (params.region) query.set('region', params.region);
+    if (params.status) query.set('status', params.status);
+    if (params.ordering) query.set('ordering', params.ordering);
+    const result = await this.apiClient.request<PaginatedResult<ApiSchool>>(
+      `${SCHOOLS_ENDPOINT}?${query.toString()}`,
+    );
+    if (!result.ok) return result as ServiceResult<PaginatedResult<SchoolRecord>>;
+    return serviceSuccess({
+      ...result.data,
+      results: result.data.results.map((item) => this.fromApiSchool(item)),
+    });
   }
 
   async createSchool(payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>> {
@@ -122,6 +152,28 @@ export class MockSchoolService implements SchoolService {
 
   async listSchools(): Promise<ServiceResult<SchoolRecord[]>> {
     return serviceSuccess(this.schools.map((school) => ({ ...school })));
+  }
+
+  async listSchoolsPage(params: SchoolListParams): Promise<ServiceResult<PaginatedResult<SchoolRecord>>> {
+    let items = this.schools.map((school) => ({ ...school }));
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter((s) => s.code.toLowerCase().includes(q) || s.name.toLowerCase().includes(q));
+    }
+    if (params.classification) items = items.filter((s) => s.classification === params.classification);
+    if (params.region) items = items.filter((s) => s.region === params.region);
+    if (params.status) items = items.filter((s) => s.status === params.status);
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    if (params.ordering === '-name') items.reverse();
+    const pageSize = params.pageSize ?? 20;
+    const page = params.page ?? 1;
+    const start = (page - 1) * pageSize;
+    return serviceSuccess({
+      count: items.length,
+      next: start + pageSize < items.length ? `?page=${page + 1}` : null,
+      previous: page > 1 ? `?page=${page - 1}` : null,
+      results: items.slice(start, start + pageSize),
+    });
   }
 
   async createSchool(payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>> {

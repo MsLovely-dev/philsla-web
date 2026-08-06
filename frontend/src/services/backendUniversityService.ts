@@ -1,5 +1,5 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
-import { serviceSuccess, type ServiceResult } from './serviceResult';
+import { serviceSuccess, type PaginatedResult, type ServiceResult } from './serviceResult';
 
 export type UniversityClassification = 'Public' | 'Private';
 export type ActivationStatus = 'Active' | 'Inactive';
@@ -40,6 +40,16 @@ export interface UniversityPayload {
   phone: string;
   establishedYear: number | null;
   status: ActivationStatus;
+}
+
+export interface UniversityListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  classification?: UniversityClassification | '';
+  region?: string;
+  status?: ActivationStatus | '';
+  ordering?: string;
 }
 
 /**
@@ -113,6 +123,7 @@ interface ApiCollegeCourse {
 
 export interface UniversityService {
   listUniversities(): Promise<ServiceResult<UniversityRecord[]>>;
+  listUniversitiesPage(params: UniversityListParams): Promise<ServiceResult<PaginatedResult<UniversityRecord>>>;
   createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>>;
   updateUniversity(id: string, payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>>;
   deleteUniversity(id: string): Promise<ServiceResult<null>>;
@@ -139,6 +150,27 @@ export class BackendUniversityService implements UniversityService {
     const result = await this.apiClient.request<ApiUniversity[]>(UNIVERSITIES_ENDPOINT);
     if (!result.ok) return result as ServiceResult<UniversityRecord[]>;
     return serviceSuccess(result.data.map((item) => this.fromApiUniversity(item)));
+  }
+
+  async listUniversitiesPage(
+    params: UniversityListParams,
+  ): Promise<ServiceResult<PaginatedResult<UniversityRecord>>> {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page ?? 1));
+    query.set('pageSize', String(params.pageSize ?? 20));
+    if (params.search) query.set('search', params.search);
+    if (params.classification) query.set('classification', params.classification);
+    if (params.region) query.set('region', params.region);
+    if (params.status) query.set('status', params.status);
+    if (params.ordering) query.set('ordering', params.ordering);
+    const result = await this.apiClient.request<PaginatedResult<ApiUniversity>>(
+      `${UNIVERSITIES_ENDPOINT}?${query.toString()}`,
+    );
+    if (!result.ok) return result as ServiceResult<PaginatedResult<UniversityRecord>>;
+    return serviceSuccess({
+      ...result.data,
+      results: result.data.results.map((item) => this.fromApiUniversity(item)),
+    });
   }
 
   async createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>> {
@@ -288,6 +320,35 @@ export class MockUniversityService implements UniversityService {
 
   async listUniversities(): Promise<ServiceResult<UniversityRecord[]>> {
     return serviceSuccess(this.universities.map((university) => ({ ...university })));
+  }
+
+  async listUniversitiesPage(
+    params: UniversityListParams,
+  ): Promise<ServiceResult<PaginatedResult<UniversityRecord>>> {
+    let items = this.universities.map((university) => ({ ...university }));
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter(
+        (u) =>
+          u.code.toLowerCase().includes(q) ||
+          u.name.toLowerCase().includes(q) ||
+          u.city.toLowerCase().includes(q),
+      );
+    }
+    if (params.classification) items = items.filter((u) => u.classification === params.classification);
+    if (params.region) items = items.filter((u) => u.region === params.region);
+    if (params.status) items = items.filter((u) => u.status === params.status);
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    if (params.ordering === '-name') items.reverse();
+    const pageSize = params.pageSize ?? 20;
+    const page = params.page ?? 1;
+    const start = (page - 1) * pageSize;
+    return serviceSuccess({
+      count: items.length,
+      next: start + pageSize < items.length ? `?page=${page + 1}` : null,
+      previous: page > 1 ? `?page=${page - 1}` : null,
+      results: items.slice(start, start + pageSize),
+    });
   }
 
   async createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>> {
