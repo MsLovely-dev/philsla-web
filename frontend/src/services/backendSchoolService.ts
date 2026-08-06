@@ -2,6 +2,7 @@ import { sharedApiClient, type ApiClient } from './apiClient';
 import { serviceSuccess, type ServiceResult } from './serviceResult';
 
 export type SchoolClassification = 'Public' | 'Private';
+export type SchoolStatus = 'Active' | 'Inactive';
 
 export interface SchoolRecord {
   id: string;
@@ -10,6 +11,7 @@ export interface SchoolRecord {
   name: string;
   examineeCapacity: number;
   region: string;
+  status: SchoolStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -19,6 +21,7 @@ export interface SchoolPayload {
   name: string;
   examineeCapacity: number;
   region: string;
+  status: SchoolStatus;
 }
 
 /**
@@ -33,6 +36,7 @@ interface ApiSchool {
   name: string;
   examineeCapacity: number;
   region: string;
+  status: SchoolStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -90,6 +94,7 @@ export class BackendSchoolService implements SchoolService {
       name: school.name,
       examineeCapacity: school.examineeCapacity,
       region: school.region,
+      status: school.status,
       createdAt: school.createdAt,
       updatedAt: school.updatedAt,
     };
@@ -101,6 +106,7 @@ export class BackendSchoolService implements SchoolService {
       name: payload.name,
       examineeCapacity: payload.examineeCapacity,
       region: payload.region,
+      status: payload.status,
     };
   }
 }
@@ -128,6 +134,7 @@ export class MockSchoolService implements SchoolService {
       name: payload.name,
       examineeCapacity: payload.examineeCapacity,
       region: payload.region,
+      status: payload.status,
       createdAt: now,
       updatedAt: now,
     };

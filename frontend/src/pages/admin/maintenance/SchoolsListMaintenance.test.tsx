@@ -13,6 +13,7 @@ const school: SchoolRecord = {
   name: 'Philippine Science High School',
   examineeCapacity: 1200,
   region: 'NCR',
+  status: 'Active',
   createdAt: '2026-08-06T00:00:00Z',
   updatedAt: '2026-08-06T00:00:00Z',
 };
