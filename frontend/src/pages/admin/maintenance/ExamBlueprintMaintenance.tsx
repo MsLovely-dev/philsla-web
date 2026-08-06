@@ -1,188 +1,245 @@
-import React, { useState } from 'react';
-import MaintenancePageTemplate, { MaintenanceColumn, MaintenanceField, MaintenanceRecord } from '../../../components/maintenance/MaintenancePageTemplate';
+import { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import MaintenancePageTemplate, {
+  type MaintenanceColumn,
+  type MaintenanceField,
+} from '../../../components/maintenance/MaintenancePageTemplate';
+import {
+  examBlueprintMaintenanceService,
+  type CatalogPayload,
+  type CatalogRecord,
+  type TopicPayload,
+  type TopicRecord,
+} from '../../../services/backendExamBlueprintMaintenanceService';
+import type { ServiceError } from '../../../services/serviceResult';
 
-const CATEGORIES = [
-  'Subject Areas',
-  'Difficulty Level',
-  'Question Type',
-  'Topics'
-];
+const CATEGORIES = ['Subject Areas', 'Question Type', 'Topics'] as const;
+type Category = (typeof CATEGORIES)[number];
 
-interface BlueprintConfig extends MaintenanceRecord {
-  id?: string;
-  category?: string;
-  code?: string;
-  subject?: string;
-  level?: string;
-  questionType?: string;
-  autoScored?: string | boolean;
-  topicCode?: string;
-  topic?: string;
-  gradeLevel?: string;
-  status?: string | boolean;
+type BlueprintRow = CatalogRecord | TopicRecord;
+
+function StatusPill({ isActive }: { isActive: boolean }) {
+  return (
+    <span
+      className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
+        isActive
+          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+          : 'bg-slate-100 text-slate-600 border border-slate-200'
+      }`}
+    >
+      {isActive ? 'Yes' : 'No'}
+    </span>
+  );
+}
+
+function getColumnsForCategory(category: Category): MaintenanceColumn<BlueprintRow>[] {
+  const statusColumn: MaintenanceColumn<BlueprintRow> = {
+    key: 'isActive',
+    label: 'Active',
+    render: (row) => <StatusPill isActive={Boolean(row.isActive)} />,
+  };
+
+  switch (category) {
+    case 'Subject Areas':
+      return [
+        { key: 'code', label: 'Code' },
+        { key: 'name', label: 'Subject' },
+        statusColumn,
+      ];
+
+    case 'Question Type':
+      return [
+        { key: 'code', label: 'Code' },
+        { key: 'name', label: 'Question Type' },
+        statusColumn,
+      ];
+
+    case 'Topics':
+    default:
+      return [
+        { key: 'code', label: 'Topic Code' },
+        { key: 'subjectName', label: 'Subject' },
+        { key: 'name', label: 'Topic' },
+        statusColumn,
+      ];
+  }
+}
+
+function getFieldsForCategory(category: Category, subjects: CatalogRecord[]): MaintenanceField[] {
+  const tailFields: MaintenanceField[] = [
+    { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description' },
+    { name: 'isActive', label: 'Active Status', type: 'toggle' },
+  ];
+
+  switch (category) {
+    case 'Subject Areas':
+      return [
+        { name: 'code', label: 'Code', type: 'text', required: true, placeholder: 'Enter code (e.g. SCI)' },
+        { name: 'name', label: 'Subject Name', type: 'text', required: true, placeholder: 'Enter subject name (e.g. Science)' },
+        ...tailFields,
+      ];
+
+    case 'Question Type':
+      return [
+        { name: 'code', label: 'Code', type: 'text', required: true, placeholder: 'Enter code (e.g. MCQ)' },
+        { name: 'name', label: 'Question Type Name', type: 'text', required: true, placeholder: 'e.g. Multiple Choice' },
+        ...tailFields,
+      ];
+
+    case 'Topics':
+    default:
+      return [
+        { name: 'code', label: 'Code', type: 'text', required: true, placeholder: 'Enter code (e.g. TOP-001)' },
+        {
+          name: 'subjectId',
+          label: 'Subject',
+          type: 'select',
+          required: true,
+          placeholder: 'Select a subject',
+          options: subjects.filter((subject) => subject.isActive).map((subject) => ({ value: subject.id, label: subject.name })),
+        },
+        { name: 'name', label: 'Topic Name', type: 'text', required: true, placeholder: 'e.g. General Mathematics' },
+        ...tailFields,
+      ];
+  }
+}
+
+function toCatalogPayload(record: Record<string, unknown>): CatalogPayload {
+  return {
+    code: typeof record.code === 'string' ? record.code : undefined,
+    name: typeof record.name === 'string' ? record.name : undefined,
+    description: typeof record.description === 'string' ? record.description : undefined,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : true,
+  };
+}
+
+function toTopicPayload(record: Record<string, unknown>): TopicPayload {
+  return {
+    subjectId: typeof record.subjectId === 'string' ? record.subjectId : undefined,
+    code: typeof record.code === 'string' ? record.code : undefined,
+    name: typeof record.name === 'string' ? record.name : undefined,
+    description: typeof record.description === 'string' ? record.description : undefined,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : true,
+  };
 }
 
 export default function ExamBlueprintMaintenance() {
-  const [data, setData] = useState<BlueprintConfig[]>([]);
+  const [subjects, setSubjects] = useState<CatalogRecord[]>([]);
+  const [questionTypes, setQuestionTypes] = useState<CatalogRecord[]>([]);
+  const [topics, setTopics] = useState<TopicRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<ServiceError | null>(null);
+  const [mutationError, setMutationError] = useState<ServiceError | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<Category>('Subject Areas');
 
-  const [selectedCategory, setSelectedCategory] = useState<string>('Subject Areas');
-
-  const saveConfigs = (newData: BlueprintConfig[]) => {
-    setData(newData);
-  };
-
-  const getColumnsForCategory = (category: string): MaintenanceColumn<BlueprintConfig>[] => {
-    switch (category) {
-      case 'Subject Areas':
-        return [
-          { key: 'code', label: 'Code' },
-          { key: 'subject', label: 'Subject' },
-          { 
-            key: 'status', 
-            label: 'Active',
-            render: (row) => (
-              <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                row.status === 'Active' || row.status === 'Yes' || row.status === true 
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-              }`}>
-                {row.status === 'Active' || row.status === 'Yes' || row.status === true ? 'Yes' : 'No'}
-              </span>
-            )
-          }
-        ];
-
-      case 'Difficulty Level':
-        return [
-          { key: 'code', label: 'Code' },
-          { key: 'level', label: 'Level' },
-          { 
-            key: 'status', 
-            label: 'Active',
-            render: (row) => (
-              <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                row.status === 'Active' || row.status === 'Yes' || row.status === true 
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-              }`}>
-                {row.status === 'Active' || row.status === 'Yes' || row.status === true ? 'Yes' : 'No'}
-              </span>
-            )
-          }
-        ];
-
-      case 'Question Type':
-        return [
-          { key: 'code', label: 'Code' },
-          { key: 'questionType', label: 'Question Type' },
-          { 
-            key: 'autoScored', 
-            label: 'Auto Scored',
-            render: (row) => (
-              <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                row.autoScored === 'Yes' || row.autoScored === true
-                  ? 'bg-blue-50 text-blue-700 border border-blue-100'
-                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-              }`}>
-                {row.autoScored || 'No'}
-              </span>
-            )
-          },
-          { 
-            key: 'status', 
-            label: 'Active',
-            render: (row) => (
-              <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                row.status === 'Active' || row.status === 'Yes' || row.status === true 
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-              }`}>
-                {row.status === 'Active' || row.status === 'Yes' || row.status === true ? 'Yes' : 'No'}
-              </span>
-            )
-          }
-        ];
-
-      case 'Topics':
-      default:
-        return [
-          { key: 'topicCode', label: 'Topic Code' },
-          { key: 'subject', label: 'Subject' },
-          { key: 'topic', label: 'Topic' },
-          { key: 'gradeLevel', label: 'Grade Level' },
-          { 
-            key: 'status', 
-            label: 'Active',
-            render: (row) => (
-              <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${
-                row.status === 'Active' || row.status === 'Yes' || row.status === true 
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                  : 'bg-slate-100 text-slate-600 border border-slate-200'
-              }`}>
-                {row.status === 'Active' || row.status === 'Yes' || row.status === true ? 'Yes' : 'No'}
-              </span>
-            )
-          }
-        ];
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    const [subjectsResult, questionTypesResult, topicsResult] = await Promise.all([
+      examBlueprintMaintenanceService.listSubjects(),
+      examBlueprintMaintenanceService.listQuestionTypes(),
+      examBlueprintMaintenanceService.listTopics(),
+    ]);
+    const failed = [subjectsResult, questionTypesResult, topicsResult].find((result) => result.ok === false);
+    if (failed?.ok === false) {
+      setLoadError(failed.error);
+      setLoading(false);
+      return;
     }
-  };
+    if (subjectsResult.ok) setSubjects(subjectsResult.data);
+    if (questionTypesResult.ok) setQuestionTypes(questionTypesResult.data);
+    if (topicsResult.ok) setTopics(topicsResult.data);
+    setLoading(false);
+  }, []);
 
-  const fields: MaintenanceField[] = [
-    { 
-      name: 'category', 
-      label: 'Category', 
-      type: 'select', 
-      required: true, 
-      options: CATEGORIES.map(c => ({ value: c, label: c }))
-    },
-    { name: 'code', label: 'Code (for Subject, Difficulty, Question Type)', type: 'text', placeholder: 'e.g. SUB-001, DIF-001, QT-001' },
-    { name: 'subject', label: 'Subject Name (for Subject Areas & Topics)', type: 'text', placeholder: 'e.g. Mathematics, English, Science' },
-    { name: 'level', label: 'Difficulty Level (for Difficulty Level)', type: 'text', placeholder: 'e.g. Easy, Medium, Hard' },
-    { name: 'questionType', label: 'Question Type Name (for Question Type)', type: 'text', placeholder: 'e.g. Multiple Choice, Essay' },
-    { 
-      name: 'autoScored', 
-      label: 'Auto Scored (for Question Type)', 
-      type: 'select',
-      options: [
-        { value: 'Yes', label: 'Yes' },
-        { value: 'No', label: 'No' },
-      ]
-    },
-    { name: 'topicCode', label: 'Topic Code (for Topics)', type: 'text', placeholder: 'e.g. TOP-001' },
-    { name: 'topic', label: 'Topic Name (for Topics)', type: 'text', placeholder: 'e.g. General Mathematics' },
-    { name: 'gradeLevel', label: 'Grade Level (for Topics)', type: 'text', placeholder: 'e.g. Grade 11–12' },
-    { name: 'status', label: 'Active Status', type: 'toggle' }
-  ];
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const handleAdd = (newData: BlueprintConfig) => {
-    const item = {
-      ...newData,
-      category: newData.category || selectedCategory,
-      id: Math.random().toString(36).substr(2, 9),
-      status: newData.status === true || newData.status === 'Active' || newData.status === 'Yes' ? 'Active' : 'Inactive'
-    };
-    saveConfigs([item, ...data]);
-  };
+  if (loading) {
+    return (
+      <div role="status" aria-live="polite" className="flex min-h-64 items-center justify-center gap-3 text-sm font-semibold text-slate-600">
+        <Loader2 className="h-5 w-5 animate-spin" /> Loading exam blueprint catalogs…
+      </div>
+    );
+  }
 
-  const handleEdit = (updatedRow: BlueprintConfig) => {
-    const item = {
-      ...updatedRow,
-      status: updatedRow.status === true || updatedRow.status === 'Active' || updatedRow.status === 'Yes' ? 'Active' : 'Inactive'
-    };
-    saveConfigs(data.map(row => row.id === item.id ? item : row));
-  };
+  if (loadError) {
+    return (
+      <div role="alert" className="m-5 flex min-h-56 flex-col items-center justify-center rounded-3xl border border-red-200 bg-red-50 p-8 text-center sm:m-7">
+        <AlertCircle className="h-8 w-8 text-red-600" />
+        <h2 className="mt-3 text-lg font-black text-red-900">Exam blueprint catalogs could not be loaded</h2>
+        <p className="mt-1 max-w-xl text-sm text-red-700">{loadError.message}</p>
+        <button type="button" onClick={() => void load()} className="btn-secondary mt-4 flex items-center gap-2">
+          <RefreshCw className="h-4 w-4" /> Retry
+        </button>
+      </div>
+    );
+  }
 
-  const handleDelete = (row: BlueprintConfig) => {
-    if (window.confirm(`Are you sure you want to delete ${row.subject || row.topic || row.questionType || row.level || row.code || 'this record'}?`)) {
-      saveConfigs(data.filter(r => r.id !== row.id));
+  const handleAdd = async (row: BlueprintRow) => {
+    const record = row as unknown as Record<string, unknown>;
+
+    if (selectedCategory === 'Topics') {
+      const result = await examBlueprintMaintenanceService.createTopic(toTopicPayload(record));
+      if (result.ok === false) {
+        setMutationError(result.error);
+        return;
+      }
+      setMutationError(null);
+      await load();
+      return;
     }
+
+    const result =
+      selectedCategory === 'Subject Areas'
+        ? await examBlueprintMaintenanceService.createSubject(toCatalogPayload(record))
+        : await examBlueprintMaintenanceService.createQuestionType(toCatalogPayload(record));
+    if (result.ok === false) {
+      setMutationError(result.error);
+      return;
+    }
+    setMutationError(null);
+    await load();
   };
 
-  // Clean simple tab navigation bar
+  const handleEdit = async (row: BlueprintRow) => {
+    const record = row as unknown as Record<string, unknown>;
+    const id = typeof record.id === 'string' ? record.id : '';
+    if (!id) return;
+
+    if (selectedCategory === 'Topics') {
+      const result = await examBlueprintMaintenanceService.updateTopic(id, toTopicPayload(record));
+      if (result.ok === false) {
+        setMutationError(result.error);
+        return;
+      }
+      setMutationError(null);
+      await load();
+      return;
+    }
+
+    const result =
+      selectedCategory === 'Subject Areas'
+        ? await examBlueprintMaintenanceService.updateSubject(id, toCatalogPayload(record))
+        : await examBlueprintMaintenanceService.updateQuestionType(id, toCatalogPayload(record));
+    if (result.ok === false) {
+      setMutationError(result.error);
+      return;
+    }
+    setMutationError(null);
+    await load();
+  };
+
   const aboveTableContent = (
     <div className="flex flex-col gap-3 animate-fadeIn">
+      {mutationError && (
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {mutationError.message}
+        </div>
+      )}
       <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 rounded-2xl w-fit">
-        {CATEGORIES.map(category => (
+        {CATEGORIES.map((category) => (
           <button
             key={category}
             type="button"
@@ -200,25 +257,20 @@ export default function ExamBlueprintMaintenance() {
     </div>
   );
 
-  const filteredData = data.filter(item => item.category === selectedCategory);
-  const columns = getColumnsForCategory(selectedCategory);
+  const data: BlueprintRow[] =
+    selectedCategory === 'Subject Areas' ? subjects : selectedCategory === 'Question Type' ? questionTypes : topics;
 
   return (
     <MaintenancePageTemplate
       title="Exam Blueprint Maintenance"
-      subtitle="Lookup tables for examination subject areas, difficulty levels, question types, and topic structures."
+      subtitle="Lookup tables for examination subject areas, question types, and topic structures."
       breadcrumb={['Maintenance', 'Exam Blueprint']}
-      columns={columns}
-      data={filteredData}
-      fields={fields}
+      columns={getColumnsForCategory(selectedCategory)}
+      data={data}
+      fields={getFieldsForCategory(selectedCategory, subjects)}
       onAdd={handleAdd}
       onEdit={handleEdit}
-      onDelete={handleDelete}
       aboveTableContent={aboveTableContent}
-      bulkUpload={{
-        templateUrl: '#',
-        allowedTypes: ['.xlsx', '.csv']
-      }}
     />
   );
 }
