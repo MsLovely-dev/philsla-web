@@ -555,4 +555,120 @@ describe('BackendApplicationService', () => {
       completionStatus: 'PENDING_STUDENT_COMPLETION',
     });
   });
+
+  describe('Student Registration field configuration transport', () => {
+    it('lists public Student Registration fields from the unauthenticated configuration endpoint', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse(
+          [{ id: 1, section: 'Step 1 Fields', type: 'Verification Method', value: 'Sample Enrollment Category', status: true }],
+          { status: 200 },
+        ),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.listPublicStudentRegistrationFields();
+
+      expect(result.ok).toBe(true);
+      expect(fetcher.mock.calls[0][0]).toBe('http://backend.test/api/v1/configuration/fields/?module=student_registration');
+    });
+
+    it('lists Student Registration fields from the admin configuration endpoint', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse(
+          [{ id: 1, section: 'Step 1 Fields', type: 'Verification Method', value: 'Sample Enrollment Category', status: true }],
+          { status: 200 },
+        ),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.listStudentRegistrationFields();
+
+      expect(result.ok).toBe(true);
+      expect(fetcher.mock.calls[0][0]).toBe('http://backend.test/api/v1/configuration/admin/fields/?module=student_registration');
+    });
+
+    it('requests a paginated admin field list with every supported filter in the query string', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse({ count: 1, next: null, previous: null, results: [] }, { status: 200 }),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.listStudentRegistrationFieldsPage({
+        page: 2,
+        pageSize: 10,
+        type: 'Verification Method',
+        search: 'Sample',
+        status: true,
+        priority: 'High Priority',
+        inputType: 'dropdown',
+      });
+
+      expect(result.ok).toBe(true);
+      const [calledUrl] = fetcher.mock.calls[0] as [string, RequestInit];
+      const calledParams = new URLSearchParams(calledUrl.split('?')[1]);
+      expect(calledParams.get('module')).toBe('student_registration');
+      expect(calledParams.get('page')).toBe('2');
+      expect(calledParams.get('pageSize')).toBe('10');
+      expect(calledParams.get('type')).toBe('Verification Method');
+      expect(calledParams.get('search')).toBe('Sample');
+      expect(calledParams.get('status')).toBe('true');
+      expect(calledParams.get('priority')).toBe('High Priority');
+      expect(calledParams.get('inputType')).toBe('dropdown');
+    });
+
+    it('creates a Student Registration field through the admin configuration endpoint', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse(
+          { id: 5, section: 'Step 1 Fields', type: 'Verification Method', value: 'Sample Enrollment Category', status: true },
+          { status: 201 },
+        ),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const input = {
+        section: 'Step 1 Fields',
+        type: 'Verification Method',
+        value: 'Sample Enrollment Category',
+        status: true,
+      };
+      const result = await service.createStudentRegistrationField(input);
+
+      expect(result.ok).toBe(true);
+      expect(fetcher).toHaveBeenCalledWith(
+        'http://backend.test/api/v1/configuration/admin/fields/',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(input) }),
+      );
+    });
+
+    it('updates a Student Registration field through the admin configuration endpoint', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse(
+          { id: 5, section: 'Step 1 Fields', type: 'Verification Method', value: 'Sample Enrollment Category', status: false },
+          { status: 200 },
+        ),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.updateStudentRegistrationField(5, { status: false });
+
+      expect(result.ok).toBe(true);
+      expect(fetcher).toHaveBeenCalledWith(
+        'http://backend.test/api/v1/configuration/admin/fields/5/',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: false }) }),
+      );
+    });
+
+    it('deletes a Student Registration field through the admin configuration endpoint', async () => {
+      const fetcher = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.deleteStudentRegistrationField(5);
+
+      expect(result.ok).toBe(true);
+      expect(fetcher).toHaveBeenCalledWith(
+        'http://backend.test/api/v1/configuration/admin/fields/5/',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
 });

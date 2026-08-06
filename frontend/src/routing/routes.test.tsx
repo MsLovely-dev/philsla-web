@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { APP_ROUTES } from './routes';
+import { canAccessStudentRegistrationMaintenance } from './roleAccess';
 
 describe('APP_ROUTES', () => {
   it('defines unique concrete route paths', () => {
@@ -47,5 +48,17 @@ describe('APP_ROUTES', () => {
       (route) => route.access === 'protected' && !route.allowedRoles?.length,
     );
     expect(missingRoles).toEqual([]);
+  });
+
+  it('declares strict exact-role access for the Student Registration maintenance route only', () => {
+    const registration = APP_ROUTES.find((route) => route.path === '/admin/maintenance/registration');
+    expect(registration?.strictAccess).toBe(canAccessStudentRegistrationMaintenance);
+
+    const otherMaintenanceRoutes = APP_ROUTES.filter(
+      (route) => route.path.startsWith('/admin/maintenance/') && route.path !== '/admin/maintenance/registration',
+    );
+    for (const route of otherMaintenanceRoutes) {
+      expect(route.strictAccess).toBeUndefined();
+    }
   });
 });
