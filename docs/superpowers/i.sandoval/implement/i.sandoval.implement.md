@@ -61,7 +61,35 @@ Frontend, from `frontend/`:
 
 ### Skipped or environmental limits
 
-- PostgreSQL-compatible integration verification was not run because no test `DATABASE_URL` or disposable PostgreSQL/Supabase environment was configured. The full Django suite used the repository test settings.
-- The repaired `apps.results` migration graph rebases independently numbered Exam Review migrations after the Score Management sequence. Deployment to a database that already recorded the independent Exam Review migration names requires a reviewed PostgreSQL-compatible rehearsal and migration-history reconciliation before release.
 - Production-settings validation was not required because production settings were unchanged.
 - No real exam content, answer keys, credentials, personal data, package delivery, or testing-center payloads were used.
+
+## Release-gate follow-up
+
+- Date: 2026-08-06
+- Branch: `i.sandoval/exam-sets` (fast-forwarded to `origin/main` at `5f87571`; branch carried zero unmerged commits of its own — the Exam Sets work had already shipped via PR #80)
+
+### Baseline failures — resolved
+
+The two frontend baseline failures recorded above (`src/services/apiClient.test.ts`, `src/routing/RouteGuards.test.tsx`) were fixed by commit `11ff29d` (`fix(frontend): require read access for protected modules`), which had landed on `main` but not yet on this branch. After fast-forwarding:
+
+- `npm test -- backendExamBlueprintService.test.ts backendExamSetService.test.ts useExamSets.test.tsx ExamSets.test.tsx apiClient.test.ts RouteGuards.test.tsx` — passed; 31 tests, 6 files.
+- `npm test` (full suite, after `npm install` to sync dependencies added by other branches) — 174 passed, 10 failed. All 10 failures are pre-existing and outside Exam Sets scope: 1 in `QrScanModal.test.tsx` (Jo.Ganapin's QR Scanning story) and 9 across `UniversitiesListMaintenance.test.tsx` / `MaintenanceCenterTables.test.tsx` (JP.Mayordo's Universities/Courses story — the tests import a non-existent `backendUniversityService` named export; the actual export is `universityService`, and the implementation code itself uses the correct name). Not modified, per one-owner-per-story.
+- Backend: `.venv/Scripts/python.exe -m pip`/`uv pip install -r requirements/base.txt -r requirements/dev.txt` to sync `whitenoise`/`gunicorn` added by other merged branches, then `manage.py test --settings=config.settings.test` — 352 passed, 1 failed (`apps.universities.tests.SeedUniversitiesCommandTests.test_seed_command_is_idempotent_and_generates_sequential_codes`, also JP.Mayordo's story). `apps.exams` and `apps.results` suites pass in full (15 and 55 tests respectively via `apps.results apps.exams` combined run below).
+
+### PostgreSQL-compatible migration rehearsal — completed
+
+Ran against a disposable `postgres:16` Docker container (no persistent volume, removed after the rehearsal):
+
+- `docker run --rm -d --name philsla-pg-rehearsal -e POSTGRES_PASSWORD=rehearsal -e POSTGRES_DB=philsla_rehearsal -p 55432:5432 postgres:16`
+- `DATABASE_URL=postgres://postgres:rehearsal@localhost:55432/philsla_rehearsal?sslmode=disable manage.py migrate --settings=config.settings.local` — applied the full migration graph (accounts, admin, applications, attendance, auth, configuration, contenttypes, exam_reviews, exams, results, schools, sessions, token_blacklist, universities) cleanly from empty, including `results.0001_initial` → `0003` and `exam_reviews.0001_initial`. No conflicts: the two apps now carry independent, non-overlapping migration histories (`exam_reviews` was split into its own app after the merge repair recorded above), so the migration-history reconciliation risk flagged earlier no longer applies to the current graph.
+- Re-running the same `migrate` command reported "No migrations to apply" (idempotent), and `manage.py check --settings=config.settings.local` passed against the Postgres connection.
+- Added `backend/config/settings/test_postgres.py` (mirrors `config.settings.test`, swaps only `DATABASES` to the `DATABASE_URL`-configured Postgres connection) so this rehearsal is repeatable.
+- `manage.py test apps.results apps.exams --settings=config.settings.test_postgres` — passed; 55 tests.
+- `manage.py test --settings=config.settings.test_postgres` (full suite) — 352 passed, 1 failed: the same pre-existing `apps.universities` seed-idempotency failure seen on SQLite, confirming parity rather than a Postgres-specific regression.
+- Container stopped and auto-removed (`--rm`) after the rehearsal; no rehearsal data persisted.
+
+### Remaining before production use
+
+- Release/security review of the merged Exam Sets + repaired `apps.results`/`apps.exam_reviews` migration history, per the original task brief.
+- The pre-existing `apps.universities` seed-idempotency failure and the `UniversitiesListMaintenance`/`QrScanModal` frontend test failures are outside this story's scope (JP.Mayordo and Jo.Ganapin respectively) and are called out here only because they surfaced while re-baselining this branch against current `main`.

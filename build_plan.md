@@ -123,7 +123,7 @@ docs/superpowers/
 | **Maricon Landicho (M.Landicho)** | Maintenance Table – Student Registration | Maintenance & Config | Not started | 🟡 deferred | `worktrees/m.landicho/` | *(parked — no branch yet)* | `docs/superpowers/m.landicho/m.landicho.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Exam Blueprint | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/exam-blueprint` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Question Bank Management | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/question-bank` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
-| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | Implemented; release verification open | 🟠 API-integrated; baseline failures and migration rehearsal remain | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
+| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | Implemented; baseline failures resolved and PostgreSQL migration rehearsal complete; release/security review open | 🟢 API-integrated; demo rehearsal and release/security review remain | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **Ian Chris Sandoval (I.Sandoval)** | Maintenance Table – Exam Blueprint | Maintenance & Config | Not started | 🟡 deferred | `worktrees/i.sandoval/` | *(parked — no branch yet)* | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (.NET Student) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-student` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (Proctor) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-proctor` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
@@ -136,7 +136,7 @@ docs/superpowers/
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟡 stretch goal | `worktrees/jp.mayordo/` | `jp.mayordo/deped-shs` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
 | **Joshua Ganapin (Jo.Ganapin)** | QR Scanning | Testing Center Ops | Not started | 🔴 no backend (proctoring app empty) | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
 
-**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince on Results Release/Analytics, and Joshua). Ian's separately reviewed Exam Sets integration uses the merged API rather than mock/browser-local state as authoritative storage, but release readiness remains gated by frontend baseline acceptance and a PostgreSQL-compatible migration rehearsal. A.Depositar's Score Management scope now has a working backend/API/demo-seed path; production-scale processing, complete audit coverage, Application Review synchronization, and downstream distribution remain. The Friday target is a **presentation-ready demo path**, not 100% production completion.
+**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince on Results Release/Analytics, and Joshua). Ian's separately reviewed Exam Sets integration uses the merged API rather than mock/browser-local state as authoritative storage; the frontend baseline failures are now resolved and the PostgreSQL-compatible migration rehearsal is complete, leaving only demo rehearsal and a release/security review before production use. A.Depositar's Score Management scope now has a working backend/API/demo-seed path; production-scale processing, complete audit coverage, Application Review synchronization, and downstream distribution remain. The Friday target is a **presentation-ready demo path**, not 100% production completion.
 
 ---
 
@@ -260,8 +260,8 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - AM: support rehearsal on Blueprint → Question Bank walkthrough.
 - After midday: P0 fixes only.
 
-### Ian Chris Sandoval (I.Sandoval) 🔴
-- AM: present the implemented Exam Sets API workflow and its verification evidence; explicitly disclose unresolved baseline checks and the PostgreSQL migration-rehearsal requirement.
+### Ian Chris Sandoval (I.Sandoval) 🟢
+- AM: present the implemented Exam Sets API workflow and its verification evidence, including the now-resolved frontend baseline checks and the completed PostgreSQL migration rehearsal; disclose the remaining release/security review as post-demo work.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴
 - AM: finalize the Desktop App walkthrough + architecture one-pager, dry run the "what's built vs. what's next" story for both variants. No code work.

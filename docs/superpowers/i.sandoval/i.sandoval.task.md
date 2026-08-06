@@ -34,10 +34,10 @@ The original sprint brief described Exam Sets as a prototype-only screen because
 
 **Post-implementation follow-up**
 
-- [ ] Review the implementation and verification evidence before merging/releasing.
-- [ ] Resolve or explicitly accept the frontend baseline failures and environmental limits recorded in the implementation log.
+- [x] Review the implementation and verification evidence before merging/releasing. (Merged to `main` via PR #80.)
+- [x] Resolve or explicitly accept the frontend baseline failures and environmental limits recorded in the implementation log. (Both `apiClient.test.ts` and `RouteGuards.test.tsx` fixed by `11ff29d`; confirmed passing after fast-forwarding this branch to `main`. See the 2026-08-06 follow-up entry in the implementation log.)
 - [ ] Rehearse the Exam Sets demo using synthetic data only.
-- [ ] Before production use, complete a PostgreSQL-compatible migration rehearsal and release/security review as recorded in the implementation log.
+- [x] Before production use, complete a PostgreSQL-compatible migration rehearsal. (Completed 2026-08-06 against a disposable `postgres:16` container: full migration graph applies cleanly, `apps.results`/`apps.exams` suites pass, full suite parity with SQLite. See implementation log.) Release/security review is still outstanding.
 
 ### Maintenance Table — Exam Blueprint (Ticket 001)
 
