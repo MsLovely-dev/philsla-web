@@ -35,7 +35,7 @@ import {
   type UniversityRecord,
 } from '../../../services/backendUniversityService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell } from '../../../components/ui';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Select, StatusToggle } from '../../../components/ui';
 import { useMaintenanceData } from '../../../services/maintenanceDataContext';
 import {
   ExportConfigModal,
@@ -541,30 +541,28 @@ export default function UniversitiesListMaintenance() {
                 {/* Classification */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
-                  <select
+                  <Select
                     value={uniClassFilter}
                     onChange={e => setUniClassFilter(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="ALL">All Classifications</option>
                     <option value="Public">Public</option>
                     <option value="Private">Private</option>
-                  </select>
+                  </Select>
                 </div>
 
                 {/* Region */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region</label>
-                  <select
+                  <Select
                     value={uniRegionFilter}
                     onChange={e => setUniRegionFilter(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="ALL">All Regions</option>
                     {uniqueUniRegions.map(r => (
                       <option key={r} value={r}>{regionLabel(r)}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -1006,18 +1004,17 @@ export default function UniversitiesListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Classification *</label>
-                  <select
+                  <Select
                     value={uniFormData.classification}
                     onChange={e => {
                       if (isUniversityClassification(e.target.value)) {
                         setUniFormData({ ...uniFormData, classification: e.target.value });
                       }
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Public">Public</option>
                     <option value="Private">Private</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -1036,15 +1033,14 @@ export default function UniversitiesListMaintenance() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Region *</label>
-                  <select
+                  <Select
                     value={uniFormData.region}
                     onChange={e => setUniFormData({ ...uniFormData, region: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     {PHILIPPINE_REGIONS.map((region) => (
                       <option key={region.code} value={region.code}>{region.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Main Campus City *</label>
@@ -1108,14 +1104,10 @@ export default function UniversitiesListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Status</label>
-                  <select
+                  <StatusToggle
                     value={uniFormData.status}
-                    onChange={e => setUniFormData({ ...uniFormData, status: e.target.value === 'Inactive' ? 'Inactive' : 'Active' })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                    onChange={status => setUniFormData({ ...uniFormData, status })}
+                  />
                 </div>
               </div>
 

@@ -23,7 +23,7 @@ import {
   type SchoolRecord,
 } from '../../../services/backendSchoolService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell } from '../../../components/ui';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Select, StatusToggle } from '../../../components/ui';
 import { useMaintenanceData } from '../../../services/maintenanceDataContext';
 import {
   ExportConfigModal,
@@ -299,33 +299,31 @@ export default function SchoolsListMaintenance() {
           {/* Classification */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
-            <select
+            <Select
               value={classificationFilter}
               onChange={(e) => {
                 const value = e.target.value;
                 if (value === 'ALL' || isSchoolClassification(value)) setClassificationFilter(value);
               }}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
             >
               <option value="ALL">All Classifications</option>
               <option value="Public">Public Schools</option>
               <option value="Private">Private Schools</option>
-            </select>
+            </Select>
           </div>
 
           {/* Region */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region/Municipality/City</label>
-            <select
+            <Select
               value={regionFilter}
               onChange={(e) => setRegionFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
             >
               <option value="ALL">All Regions</option>
               {uniqueRegions.map((r) => (
                 <option key={r} value={r}>{regionLabel(r)}</option>
               ))}
-            </select>
+            </Select>
           </div>
           </div>
 
@@ -569,18 +567,17 @@ export default function SchoolsListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Classification *</label>
-                  <select
+                  <Select
                     value={formData.classification}
                     onChange={(e) => {
                       if (isSchoolClassification(e.target.value)) {
                         setFormData({ ...formData, classification: e.target.value });
                       }
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Public">Public</option>
                     <option value="Private">Private</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -610,28 +607,23 @@ export default function SchoolsListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Region/Municipality/City *</label>
-                  <select
+                  <Select
                     value={formData.region}
                     onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     {PHILIPPINE_REGIONS.map((region) => (
                       <option key={region.code} value={region.code}>{region.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
 
               <div className="space-y-1">
                 <label className="font-bold text-slate-700">Status</label>
-                <select
+                <StatusToggle
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value === 'Inactive' ? 'Inactive' : 'Active' })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
+                  onChange={(status) => setFormData({ ...formData, status })}
+                />
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
