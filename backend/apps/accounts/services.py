@@ -717,6 +717,13 @@ def update_admin_role_permissions(
     return _serialize_admin_role(normalized_role)
 
 
+def _require_admin_managed_role(role: str) -> str:
+    normalized_role = normalize_role(role)
+    if normalized_role is None or normalized_role == PortalRole.STUDENT.value:
+        raise AccountManagementConflict("Student accounts cannot be managed from User & Role Settings.")
+    return normalized_role
+
+
 @transaction.atomic
 def create_admin_user_account(
     *,
@@ -726,6 +733,7 @@ def create_admin_user_account(
     module_access: list[str],
     is_active: bool = True,
 ) -> tuple[object, AccountProfile]:
+    role = _require_admin_managed_role(role)
     UserModel = get_user_model()
     if UserModel.objects.filter(email__iexact=email).exists():
         raise AccountManagementConflict("This email is already assigned to an account.")
@@ -758,10 +766,11 @@ def update_admin_user_account(
     module_access: list[str],
     is_active: bool,
 ) -> tuple[object, AccountProfile]:
+    role = _require_admin_managed_role(role)
     UserModel = get_user_model()
     try:
-        user = UserModel.objects.select_for_update().select_related("account_profile").get(id=user_id)
-        profile = user.account_profile
+        user = UserModel.objects.select_for_update().get(id=user_id)
+        profile = AccountProfile.objects.select_for_update().get(user=user)
     except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
         raise AccountManagementConflict("The selected account could not be found.") from exc
 
@@ -793,8 +802,8 @@ def deactivate_admin_user_account(*, user_id: str, actor: object) -> None:
         raise AccountManagementConflict("You cannot deactivate your own account.")
 
     try:
-        user = UserModel.objects.select_for_update().select_related("account_profile").get(id=user_id)
-        profile = user.account_profile
+        user = UserModel.objects.select_for_update().get(id=user_id)
+        profile = AccountProfile.objects.select_for_update().get(user=user)
     except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
         raise AccountManagementConflict("The selected account could not be found.") from exc
 
