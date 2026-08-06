@@ -679,6 +679,21 @@ class SubjectAdminApiTests(APITestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.data["error"]["code"], "CONFLICT")
 
+    def test_rejects_missing_required_fields_with_400(self) -> None:
+        missing_code = self.client.post(
+            reverse("exams:subject_list"),
+            {"name": "Science"},
+            format="json",
+        )
+        self.assertEqual(missing_code.status_code, 400)
+
+        missing_name = self.client.post(
+            reverse("exams:subject_list"),
+            {"code": "SCI"},
+            format="json",
+        )
+        self.assertEqual(missing_name.status_code, 400)
+
     def test_denies_unauthenticated_and_unapproved_roles(self) -> None:
         self.client.force_authenticate(user=None)
         self.assertEqual(self.client.get(reverse("exams:subject_list")).status_code, 401)

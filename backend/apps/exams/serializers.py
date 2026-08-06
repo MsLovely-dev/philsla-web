@@ -412,6 +412,14 @@ class SubjectInputSerializer(serializers.Serializer):
     def validate_name(self, value: str) -> str:
         return value.strip()
 
+    def validate(self, attrs: dict) -> dict:
+        if self.instance is None:
+            if "code" not in attrs or not attrs.get("code"):
+                raise serializers.ValidationError({"code": ["This field is required."]})
+            if "name" not in attrs or not attrs.get("name"):
+                raise serializers.ValidationError({"name": ["This field is required."]})
+        return attrs
+
     def create(self, validated_data: dict) -> Subject:
         return create_subject(data=validated_data)
 
