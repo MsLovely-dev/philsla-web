@@ -354,6 +354,7 @@ export default function SchoolsListMaintenance() {
 
       {/* Schools List: empty-registry CTA, otherwise table or grid */}
       {schools.length === 0 ? (
+        <div className="flex justify-center py-16">
         <EmptyState
           title="No schools yet"
           message="Add your first accredited school to start building the registry."
@@ -366,6 +367,7 @@ export default function SchoolsListMaintenance() {
             </button>
           }
         />
+        </div>
       ) : viewMode === 'table' ? (
         <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
           <div className="overflow-x-auto">

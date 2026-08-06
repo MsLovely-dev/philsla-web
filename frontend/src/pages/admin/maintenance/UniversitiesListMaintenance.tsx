@@ -601,6 +601,7 @@ export default function UniversitiesListMaintenance() {
 
           {/* LIST DISPLAY: empty-registry CTA, otherwise table or grid */}
           {universities.length === 0 ? (
+            <div className="flex justify-center py-16">
             <EmptyState
               title="No universities yet"
               message="Add your first accredited university to start building the registry."
@@ -613,6 +614,7 @@ export default function UniversitiesListMaintenance() {
                 </button>
               }
             />
+            </div>
           ) : viewMode === 'table' ? (
             <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
               <div className="overflow-x-auto">
@@ -879,6 +881,7 @@ export default function UniversitiesListMaintenance() {
 
           {/* College Courses: empty-registry CTA, otherwise the table */}
           {universityCourses.length === 0 ? (
+            <div className="flex justify-center py-16">
             <EmptyState
               title="No college courses yet"
               message="Add the first degree program offered by this university."
@@ -891,6 +894,7 @@ export default function UniversitiesListMaintenance() {
                 </button>
               }
             />
+            </div>
           ) : (
           <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
             <div className="overflow-x-auto">
