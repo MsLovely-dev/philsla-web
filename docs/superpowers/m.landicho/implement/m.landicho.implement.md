@@ -8,7 +8,7 @@
 
 **Tech stack:** Python 3.13, Django 5.2, Django REST Framework 3.16, DRF SimpleJWT, Django cache interfaces, Django test runner, React 19, and TypeScript 5.8.
 
-**Status:** Phase 1 inspection complete; application implementation remains blocked pending approval of the database-backed lockout proposal.
+**Status:** Wednesday planning and scope lock complete; Phase 2 is approved but deferred to Thursday execution.
 
 **Owner and approver:** Maricon Landicho (M.Landicho)
 
@@ -63,7 +63,7 @@ Proceed phase by phase, with review after each security control. Do not treat Dj
 - [x] Confirm no suitable shared cache is approved/configured; no cache-based lockout design is authorized.
 - [x] Draft a separate persistence/migration proposal with rollout and rollback impact in `../plans/2026-08-05-ticket-001-password-lockout-storage-proposal.md`; no model or migration was created.
 - [x] Specify that lockout state is related by internal Django user identifier rather than email or LRN.
-- [ ] Review checkpoint: Maricon approves the lockout storage design before Phase 2.
+- [x] Review checkpoint: Maricon approved the database-backed lockout design and separately authorized its model/migration on 2026-08-05.
 
 ## Phase 2 — Password-attempt lockout using test-driven development
 
@@ -71,6 +71,8 @@ Proceed phase by phase, with review after each security control. Do not treat Dj
 
 **Files expected to change:**
 
+- Modify `backend/apps/accounts/models.py` for the additive lockout-state model.
+- Add `backend/apps/accounts/migrations/0008_password_login_lockout.py` for the reviewed additive table.
 - Modify `backend/apps/accounts/services.py` for lockout state and password-verification orchestration.
 - Modify `backend/apps/accounts/tests/test_login_endpoints.py` for endpoint behavior.
 - Modify `backend/apps/accounts/tests/test_auth_controls.py` for safe lockout audit behavior.
@@ -80,11 +82,11 @@ Proceed phase by phase, with review after each security control. Do not treat Dj
 - [ ] Add a failing test proving a correct password is still denied during the lockout without revealing account or lockout state in the response.
 - [ ] Add a failing test proving expiration of the lockout permits a fresh password attempt.
 - [ ] Add a failing test proving a successful password verification clears the applicable failure counter.
-- [ ] Add a failing test proving lockout keys and emitted audit records contain no email, LRN, password, or pending-auth token.
+- [ ] Add a failing test proving durable state and emitted lockout audit records contain no email, LRN, password, or pending-auth token.
 - [ ] Run the focused tests and record the expected failures before implementation.
-- [ ] Implement only the minimum backend service behavior needed to pass these tests using the Phase 1-approved storage mechanism.
+- [ ] Implement only the minimum backend model/service behavior needed to pass these tests using the Phase 1-approved database storage mechanism.
 - [ ] Preserve the existing generic `401 AUTHENTICATION_FAILED` response for invalid, inactive, locked, and wrong-password paths.
-- [ ] Run `python manage.py test apps.accounts.tests.test_login_endpoints apps.accounts.tests.test_auth_controls --settings=config.settings.test`; expected result is zero failures and zero errors.
+- [ ] Run `python manage.py test apps.accounts.tests.test_login_endpoints apps.accounts.tests.test_auth_controls --settings=config.settings.test`; require zero failures and errors.
 - [ ] Inspect the Phase 2 diff for accidental sensitive values, broad refactoring, or API-contract changes.
 - [ ] Review checkpoint: Maricon reviews the Phase 2 diff and test evidence before Phase 3.
 
@@ -219,7 +221,14 @@ Proceed phase by phase, with review after each security control. Do not treat Dj
 - Specified internal Django user ID as the only account reference for the lockout state; raw email and LRN are excluded.
 - Created only the documentation proposal at `../plans/2026-08-05-ticket-001-password-lockout-storage-proposal.md`.
 - No authentication code, tests, model, migration, dependency, API contract, or runtime configuration changed.
-- Phase 2 remains blocked until Maricon approves the storage design and separately authorizes model/migration files.
+- Maricon approved the storage design and proposed model/migration for Thursday execution; Wednesday remains planning-only.
+
+### Wednesday schedule correction — 2026-08-05
+
+- Phase 2 application, test, and migration changes were removed before commit after reconciling the sprint brief's planning-only Wednesday rule.
+- The existing login implementation was restored byte-for-byte from the `m.landicho/login` branch baseline.
+- The approved Phase 2 design and checklists remain as Thursday execution inputs.
+- No Ticket 001 application, test, dependency, configuration, or migration diff remains.
 
 ## Friday P0 fixes
 

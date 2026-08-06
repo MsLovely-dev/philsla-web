@@ -30,3 +30,5 @@ artifacts/*.zip
 .claude/*
 CLAUDE.md
 local/
+worktrees/
+.worktrees/

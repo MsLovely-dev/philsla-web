@@ -4,7 +4,7 @@
 
 **Owner and approver:** Maricon Landicho (M.Landicho)
 
-**Status:** Proposed in Phase 1; no model, migration, test, or application change is authorized by this document
+**Status:** Approved by Maricon Landicho on 2026-08-05 for Thursday Phase 2 execution; not implemented Wednesday
 
 ## Decision requested
 
@@ -72,6 +72,6 @@ If approved:
 
 ## Approval gate
 
-- [ ] Maricon approves database-backed lockout state as the Phase 2 storage design.
-- [ ] Maricon separately authorizes the proposed model and migration files before they are created.
-- [ ] Phase 2 begins with failing tests before implementation code.
+- [x] Maricon approves database-backed lockout state as the Phase 2 storage design.
+- [x] Maricon separately authorizes the proposed model and migration files before they are created.
+- [ ] Phase 2 begins Thursday with failing tests before implementation code.
