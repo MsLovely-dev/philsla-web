@@ -156,9 +156,11 @@ class Command(BaseCommand):
         updated_count = 0
 
         for row in SEED_ROWS:
+            candidate_number = int(row["candidate_id"].rsplit("-", 1)[-1])
             application, _ = StudentApplication.objects.update_or_create(
                 candidate_id=row["candidate_id"],
                 defaults={
+                    "lrn": f"109000000{candidate_number:03d}",
                     "exam_cycle_id": "DEMO-2026",
                     "status": ApplicationStatus.APPROVED,
                     "submitted_at": row["submitted_at"],
@@ -175,7 +177,7 @@ class Command(BaseCommand):
                 attempt_code=row["attempt_code"],
                 defaults={
                     "application": application,
-                    "exam_set_code": "DEMO-SET-2026",
+                    "exam_set_code": "ES-BP0001",
                     "submitted_at": row["submitted_at"],
                     "status": row["status"],
                     "total_score": row["total_score"],

@@ -3,8 +3,9 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Sequence
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -30,6 +31,21 @@ ReleaseStatus = Literal["NOT_RELEASED", "RELEASED"]
 
 class ScoreProcessingError(ValueError):
     """Raised when a score processing precondition is not satisfied."""
+
+
+class ScoreIntakeConflict(ValueError):
+    """Raised when an Exam Review score cannot safely enter Score Management."""
+
+
+@dataclass(frozen=True)
+class ExamReviewScoreInput:
+    review_id: UUID
+    exam_set_code: str
+    candidate_id: str
+    lrn: str
+    candidate_name: str
+    raw_score: int
+    max_score: int
 
 
 @dataclass(frozen=True)
@@ -116,6 +132,109 @@ REGULAR_EXAM_SETS = ("ES-BP0001", "ES-BP0002", "ES-BP0003", "ES-BP0004")
 PWD_EXAM_SETS = ("ES-PWD0001",)
 FIRST_NAMES = ("Alon", "Bituin", "Clara", "Diego", "Elena", "Francis", "Gio", "Hana")
 LAST_NAMES = ("Reyes", "Santos", "Cruz", "Garcia", "Ramos", "Torres", "Mendoza", "Flores")
+
+
+def _validate_exam_review_score_input(payload: ExamReviewScoreInput) -> None:
+    if not payload.exam_set_code.strip():
+        raise ScoreIntakeConflict("The Exam Review does not identify an Exam Set.")
+    if not payload.candidate_id.strip() or len(payload.candidate_id) > 40:
+        raise ScoreIntakeConflict("The Exam Review candidate ID is invalid.")
+    if len(payload.lrn) != 12 or not payload.lrn.isdigit():
+        raise ScoreIntakeConflict("The Exam Review candidate must have a valid 12-digit LRN.")
+    if not payload.candidate_name.strip() or len(payload.candidate_name) > 180:
+        raise ScoreIntakeConflict("The Exam Review candidate name is invalid.")
+    if (
+        isinstance(payload.raw_score, bool)
+        or isinstance(payload.max_score, bool)
+        or payload.raw_score < 0
+        or payload.max_score <= 0
+        or payload.raw_score > payload.max_score
+        or payload.raw_score > 32767
+        or payload.max_score > 32767
+    ):
+        raise ScoreIntakeConflict("The Exam Review score is outside the supported range.")
+
+
+def _score_has_processing_data(score: CandidateScore) -> bool:
+    return any(
+        (
+            score.overall_rank is not None,
+            score.percentile is not None,
+            score.processing_batch_id is not None,
+            score.processed_at is not None,
+            score.released_at is not None,
+            score.release_status == ScoreReleaseStatus.RELEASED,
+        )
+    )
+
+
+@transaction.atomic
+def accept_exam_review_score(*, payload: ExamReviewScoreInput) -> CandidateScore:
+    _validate_exam_review_score_input(payload)
+    exam_sets = list(
+        ExamSet.objects.select_for_update()
+        .select_related("session", "ranking_population")
+        .filter(code=payload.exam_set_code)[:2],
+    )
+    if len(exam_sets) != 1:
+        raise ScoreIntakeConflict("Exam Review must match exactly one Score Management Exam Set.")
+
+    exam_set = exam_sets[0]
+    session = ExaminationSession.objects.select_for_update().get(pk=exam_set.session_id)
+    if session.scoring_status != ScoreBatchStatus.READY_FOR_PROCESSING:
+        raise ScoreIntakeConflict("This Score Management session has already entered processing.")
+
+    final_score = (
+        (Decimal(payload.raw_score) / Decimal(payload.max_score)) * Decimal("100")
+    ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    existing = (
+        CandidateScore.objects.select_for_update()
+        .filter(session=session, candidate_id=payload.candidate_id)
+        .first()
+    )
+    if existing is None:
+        return CandidateScore.objects.create(
+            id=f"EXAM-REVIEW-{payload.review_id}",
+            session=session,
+            ranking_population=exam_set.ranking_population,
+            exam_set=exam_set,
+            candidate_id=payload.candidate_id,
+            lrn=payload.lrn,
+            candidate_name=payload.candidate_name.strip(),
+            raw_score=payload.raw_score,
+            max_score=payload.max_score,
+            final_score=final_score,
+            review_status=ScoreReviewStatus.APPROVED,
+            release_status=ScoreReleaseStatus.NOT_RELEASED,
+        )
+
+    if _score_has_processing_data(existing):
+        raise ScoreIntakeConflict("This candidate score has already entered processing or release.")
+
+    existing.ranking_population = exam_set.ranking_population
+    existing.exam_set = exam_set
+    existing.lrn = payload.lrn
+    existing.candidate_name = payload.candidate_name.strip()
+    existing.raw_score = payload.raw_score
+    existing.max_score = payload.max_score
+    existing.final_score = final_score
+    existing.review_status = ScoreReviewStatus.APPROVED
+    existing.release_status = ScoreReleaseStatus.NOT_RELEASED
+    existing.save(
+        update_fields=(
+            "ranking_population",
+            "exam_set",
+            "lrn",
+            "candidate_name",
+            "raw_score",
+            "max_score",
+            "final_score",
+            "review_status",
+            "release_status",
+            "updated_at",
+        ),
+    )
+    return existing
 
 
 def process_score_batch(

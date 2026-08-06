@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendExamReviewService, type ExamReviewDetailItem } from '../../../services/backendExamReviewService';
+import { conflictError } from '../../../services/serviceResult';
 import ExamReviewDetail from './ExamReviewDetail';
 
 vi.mock('../../../services/backendExamReviewService', () => ({
@@ -69,20 +70,25 @@ const review: ExamReviewDetailItem = {
   ],
 };
 
+function renderExamReviewDetail() {
+  render(
+    <MemoryRouter initialEntries={['/admin/hub/review/review-id']}>
+      <Routes>
+        <Route path="/admin/hub/review/:id" element={<ExamReviewDetail />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe('ExamReviewDetail', () => {
   beforeEach(() => {
+    vi.resetAllMocks();
     vi.mocked(backendExamReviewService.get).mockResolvedValue({ ok: true, data: review });
   });
 
   it('shows persisted questions, responses, answer keys, and pending items by subject', async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter initialEntries={['/admin/hub/review/review-id']}>
-        <Routes>
-          <Route path="/admin/hub/review/:id" element={<ExamReviewDetail />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderExamReviewDetail();
 
     expect(await screen.findByText('What is 18 + 24?')).toBeInTheDocument();
     expect(screen.getByText('Final Answer Sheet Mappings')).toBeInTheDocument();
@@ -110,13 +116,7 @@ describe('ExamReviewDetail', () => {
         : item),
     };
     vi.mocked(backendExamReviewService.scoreItem).mockResolvedValue({ ok: true, data: scoredReview });
-    render(
-      <MemoryRouter initialEntries={['/admin/hub/review/review-id']}>
-        <Routes>
-          <Route path="/admin/hub/review/:id" element={<ExamReviewDetail />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderExamReviewDetail();
 
     await user.click(await screen.findByRole('button', { name: /English/ }));
     const scoreInput = screen.getByRole('spinbutton', { name: 'Official score for question 1' });
@@ -127,5 +127,75 @@ describe('ExamReviewDetail', () => {
     expect(backendExamReviewService.scoreItem).toHaveBeenCalledWith('review-id', 'english-item', 8);
     expect(await screen.findByText('Graded')).toBeInTheDocument();
     expect(screen.getByText('Points: 8 / 10')).toBeInTheDocument();
+  });
+
+  it('releases a completed graded review through the backend', async () => {
+    const user = userEvent.setup();
+    const completedReview: ExamReviewDetailItem = {
+      ...review,
+      status: 'GRADED',
+      pendingSubjectiveItems: 0,
+    };
+    vi.mocked(backendExamReviewService.get).mockResolvedValue({ ok: true, data: completedReview });
+    vi.mocked(backendExamReviewService.release).mockResolvedValue({
+      ok: true,
+      data: { ...completedReview, status: 'FINALIZED' },
+    });
+    renderExamReviewDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Release to Score Management' }));
+
+    expect(backendExamReviewService.release).toHaveBeenCalledWith('review-id');
+    expect(await screen.findByText('Released to Score Management')).toBeInTheDocument();
+  });
+
+  it('keeps release available and shows the backend handoff conflict', async () => {
+    const user = userEvent.setup();
+    const completedReview: ExamReviewDetailItem = {
+      ...review,
+      status: 'GRADED',
+      pendingSubjectiveItems: 0,
+    };
+    vi.mocked(backendExamReviewService.get).mockResolvedValue({ ok: true, data: completedReview });
+    vi.mocked(backendExamReviewService.release).mockResolvedValue(
+      conflictError('Exam Review must match exactly one Score Management Exam Set.'),
+    );
+    renderExamReviewDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Release to Score Management' }));
+
+    expect(await screen.findByText('Exam Review must match exactly one Score Management Exam Set.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Release to Score Management' })).toBeInTheDocument();
+    expect(screen.queryByText('Released to Score Management')).not.toBeInTheDocument();
+  });
+
+  it('blocks release in the UI when a graded review still has pending subjective items', async () => {
+    vi.mocked(backendExamReviewService.get).mockResolvedValue({
+      ok: true,
+      data: { ...review, status: 'GRADED', pendingSubjectiveItems: 1 },
+    });
+    renderExamReviewDetail();
+
+    expect(await screen.findByText('1 subjective item still requires an official score before release.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Release to Score Management' })).not.toBeInTheDocument();
+    expect(backendExamReviewService.release).not.toHaveBeenCalled();
+  });
+
+  it('shows a fallback when a subjective item has no rubric text', async () => {
+    const user = userEvent.setup();
+    vi.mocked(backendExamReviewService.get).mockResolvedValue({
+      ok: true,
+      data: {
+        ...review,
+        examItems: review.examItems.map(item => (
+          item.id === 'english-item' ? { ...item, rubric: '' } : item
+        )),
+      },
+    });
+    renderExamReviewDetail();
+
+    await user.click(await screen.findByRole('button', { name: /English/ }));
+
+    expect(screen.getByText('No rubric provided for this item.')).toBeInTheDocument();
   });
 });

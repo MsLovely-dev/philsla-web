@@ -38,7 +38,7 @@ These deviations affect delivery mechanics only. The approved architecture and b
 - `/api/v1/results/exam-reviews/...` remains the public Exam Review API prefix.
 - `/api/v1/results/score-management/...` remains owned by `apps.results`.
 - Exam Review retains its protected foreign key to `applications.StudentApplication` and its account-role permission checks.
-- Finalization changes a graded review to `FINALIZED`; it does not create or update a Score Management record.
+- Finalization atomically creates or safely updates an unprocessed Score Management `CandidateScore` through the Score Management-owned intake service, then changes the graded review to `FINALIZED`.
 - No frontend production file or transport URL was changed.
 - No dependency was added.
 
@@ -133,7 +133,7 @@ compileall apps\results apps\exam_reviews: exit 0
 
 ### Task 3 — Exam Review API, services, and seed command
 
-Ported the valid Exam Review serializers, atomic services, role-protected views, URL-relative routes, and repeatable seven-review seed command. Added regression coverage proving finalization does not create a `CandidateScore`.
+Ported the valid Exam Review serializers, atomic services, role-protected views, URL-relative routes, and repeatable seven-review seed command. The later 2026-08-06 completion work replaced the original isolation boundary with an explicit Score Management-owned intake service so finalization performs a real, guarded `CandidateScore` handoff without moving score ownership into `apps.exam_reviews`.
 
 Verification:
 
@@ -242,14 +242,68 @@ push target: `origin/p.malonzo/exam-review`
 ## Disclosed limitations
 
 - The repository requires Python 3.13, but only Python 3.14.5 is installed locally. All backend verification passed on 3.14.5; the accepted 3.13 runtime remains to be verified in CI or a compliant environment.
-- PostgreSQL-backed migration verification was not run; isolated tests used the configured SQLite test database.
+- PostgreSQL-backed migration and concurrent row-lock verification were not run; isolated tests used the configured SQLite test database. The handoff/reprocessing serialization path requires a PostgreSQL-compatible rehearsal before production rollout.
 - The existing local `backend/db.sqlite3` has an incompatible historical `results.0001` record and old `results_examreview*` tables. Do not run local migrations until the owner chooses either an archive-and-fresh-database path or a reviewed data-preserving migration path.
 - Repository-wide `npm run lint` remains red with 38 unrelated TypeScript errors, including Command Center, Question Bank, Student Application, and other modules. No failing diagnostic points to the unchanged Exam Review frontend files.
 - After latest-main integration, the complete backend suite has two upstream application-test errors and the complete frontend suite has one upstream RouteGuards failure. The corresponding files match `origin/main`; focused Exam Review verification remains green.
 - The production build reports an existing large-chunk warning.
-- A real Exam Review-to-Score Management handoff remains out of scope and `TBD`.
+- The Exam Review-to-Score Management handoff accepts only an exact, unique ExamSet-code match in a not-yet-processed session; ranking, result release, analytics, and external distribution remain separate workflows.
 - Answer-sheet template selection does not perform CSV, OCR, or OMR recognition.
 
 ## Rollback and deployment note
 
 Rollback is performed by reverting the scoped Exam Review publication commit; do not rewrite Score Management's canonical migration history. Do not apply `exam_reviews.0001_initial` to a shared or production database until the migration and environment-specific rollout are reviewed. This local environment contains historical Exam Review tables under the old `results` namespace, so execution stopped before schema mutation as designed. The recommended development-only recovery is to archive the existing SQLite file and create a fresh database, but that move requires explicit owner approval; preserving old rows requires a separate reviewed data-migration plan.
+
+## 2026-08-06 — Exam Review completion hardening (uncommitted)
+
+The confirmed issue was functional, not documentation-only: the backend permitted a review with pending subjective items to be marked `GRADED`, and an inconsistent graded record could then be finalized. The connected frontend also exposed grading/release actions without enforcing the same readiness rule.
+
+Implemented without committing or pushing:
+
+- backend grading and release services now return a conflict until every subjective item has an official score;
+- the queue disables **Mark as Graded** while subjective items remain and explains why;
+- the detail page hides release while scoring is incomplete, displays a readiness notice, and retains a handler-level guard;
+- subjective items with blank rubric text display `No rubric provided for this item.`; and
+- `build_plan.md` now records Exam Review as a real backend/API-backed feature at approximately 95%, while the separate Results Release & Analytics story remains explicitly unbuilt.
+
+Verification evidence:
+
+```text
+backend Exam Review suite: 21 tests passed
+manage.py check --settings=config.settings.local: no issues
+focused frontend Exam Review suite: 3 files, 15 tests passed
+npm run build: passed; 3,109 modules transformed
+npm run lint: failed with 40 existing TypeScript errors in unrelated modules
+changed Exam Review frontend files in lint diagnostics: none
+git diff --check before this record update: exit 0
+```
+
+No commit or push was performed at that checkpoint. The hardening work and its plan/record remained working-tree changes for owner review.
+
+## 2026-08-06 — Exam Review to Score Management handoff (uncommitted)
+
+Exam Review release now performs a real synchronous handoff through the Score Management-owned intake service. It resolves exactly one Score Management ExamSet by code, creates or safely updates the candidate's unprocessed approved score, and only then finalizes the Exam Review in the same transaction.
+
+Implemented without committing or pushing:
+
+- exact ExamSet-code matching with missing/ambiguous configuration conflicts;
+- application candidate ID, 12-digit LRN, normalized name, raw/max score, and half-up two-decimal percentage mapping;
+- deterministic IDs for newly handed-off scores and safe updates keyed by session/candidate;
+- protection against changing processed, ranked, or released score data;
+- transaction rollback that leaves the review `GRADED` whenever intake fails;
+- synthetic Exam Review alignment to `ES-BP0001` and deterministic demo LRNs; and
+- truthful API, architecture, build-plan, and frontend conflict documentation/tests.
+
+Verification evidence:
+
+```text
+Exam Review plus complete Score Management backend suites: 67 tests passed
+manage.py check --settings=config.settings.local: no issues
+focused frontend Exam Review suite: 3 files, 16 tests passed
+Playwright Exam Review release success/conflict journey: 2 tests passed
+npm run build: passed; 3,111 modules transformed
+npm run lint: failed with 38 existing TypeScript errors in unrelated modules
+changed Exam Review diagnostics in lint output: none
+```
+
+The handoff intentionally stops before ranking, percentile processing, student-facing results release, analytics, and external distribution. All current handoff work, its tests, design, plan, and documentation remain uncommitted and unstaged for owner review.
