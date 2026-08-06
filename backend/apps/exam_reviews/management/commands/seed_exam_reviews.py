@@ -9,7 +9,7 @@ from apps.applications.models import (
     StudentApplication,
     StudentApplicationPersonalInfo,
 )
-from apps.results.models import (
+from apps.exam_reviews.models import (
     ExamReviewItem,
     ExamReviewItemType,
     ExamReviewRecord,
