@@ -71,6 +71,8 @@ New project-process documentation remains under `docs/superpowers/m.landicho/`.
 - Staff activation and invitation redesign.
 - Production private-object-storage integration for selfie evidence.
 - README alignment and frontend Gemini-key remediation.
+- Identifier-step anti-enumeration fix: `start_identifier_login` currently returns a distinguishable response (202 pendingAuthToken vs. immediate 401) depending on whether the identifier resolves to a real account, revealing account existence before the password step. Raised in PR #69 review (bienthehumanoid). Pre-existing behavior, not introduced or fixed by Ticket 001; needs its own design pass on how the password step should behave against a synthetic/no-op account.
+- Safe rate/volume audit logging for failed identifier lookups (non-registered-account attempts), to give visibility into spam or credential-stuffing/DDoS-style patterns against the identifier endpoint. Raised in PR #69 review (bienthehumanoid, approving comment). Explicitly deferred by the reviewer at merge time — no identifiers or personal data should be logged, only aggregate/rate signals per the existing safe-audit constraints.
 
 ## Acceptance criteria
 
