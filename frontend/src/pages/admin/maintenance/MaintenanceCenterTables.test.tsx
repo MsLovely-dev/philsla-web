@@ -5,7 +5,7 @@ import ExamBlueprintMaintenance from './ExamBlueprintMaintenance';
 import SchoolsListMaintenance from './SchoolsListMaintenance';
 import StudentRegistrationMaintenance from './StudentRegistrationMaintenance';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
-import { backendUniversityService } from '../../../services/backendUniversityService';
+import { universityService } from '../../../services/backendUniversityService';
 import { serviceSuccess } from '../../../services/serviceResult';
 
 describe('active Maintenance Center tables', () => {
@@ -41,7 +41,7 @@ describe('active Maintenance Center tables', () => {
   it('loads an empty universities table from the backend and ignores saved browser data', async () => {
     localStorage.setItem('philsa_maintenance_universities_list', JSON.stringify([{ name: 'Saved Mock University' }]));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
-    vi.spyOn(backendUniversityService, 'listUniversities').mockResolvedValue(serviceSuccess([]));
+    vi.spyOn(universityService, 'listUniversities').mockResolvedValue(serviceSuccess([]));
 
     render(<MemoryRouter><UniversitiesListMaintenance /></MemoryRouter>);
 
