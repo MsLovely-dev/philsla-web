@@ -351,6 +351,7 @@ class ExamSetSerializer(serializers.Serializer):
     archived_by = serializers.CharField(read_only=True, allow_null=True)
     approved_at = serializers.DateTimeField(read_only=True, allow_null=True)
     published_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    published_hash = serializers.CharField(read_only=True, allow_null=True)
     archived_at = serializers.DateTimeField(read_only=True, allow_null=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)

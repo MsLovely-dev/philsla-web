@@ -632,6 +632,23 @@ class ExamSetApiTests(APITestCase):
         self.assertEqual(transitioned.status, ExamSetStatus.APPROVED)
         self.assertEqual(ExamSet.objects.get(pk=stale_exam_set.pk).status, ExamSetStatus.APPROVED)
 
+    def test_publishing_sets_a_deterministic_content_hash(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        exam_set_id = created.data["id"]
+        self.assertIsNone(created.data["published_hash"])
+        transition_url = reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id})
+
+        self.client.post(transition_url, {"status": "ACADEMIC_REVIEW"}, format="json")
+        approved = self.client.post(transition_url, {"status": "APPROVED"}, format="json")
+        self.assertIsNone(approved.data["published_hash"])
+
+        published = self.client.post(transition_url, {"status": "PUBLISHED"}, format="json")
+        self.assertIsNotNone(published.data["published_hash"])
+        self.assertEqual(len(published.data["published_hash"]), 64)
+
+        refetched = self.client.get(reverse("exams:exam_set_detail", kwargs={"exam_set_id": exam_set_id}))
+        self.assertEqual(refetched.data["published_hash"], published.data["published_hash"])
+
 
 class SubjectAdminApiTests(APITestCase):
     def setUp(self) -> None:

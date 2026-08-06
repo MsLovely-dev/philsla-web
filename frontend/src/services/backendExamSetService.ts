@@ -99,6 +99,7 @@ export interface ExamSetRecord {
   approvedAt: string | null;
   publishedAt: string | null;
   archivedAt: string | null;
+  publishedHash: string | null;
   items: ExamSetItem[];
   validationResults: ExamSetValidationResult[];
   assemblyRuns: ExamSetAssemblyRun[];
@@ -156,6 +157,7 @@ interface ApiExamSet {
   approved_at: string | null;
   published_at: string | null;
   archived_at: string | null;
+  published_hash: string | null;
   items: ApiExamSetItem[];
   validation_results: ApiExamSetValidationResult[];
   assembly_runs: ApiExamSetAssemblyRun[];
@@ -321,6 +323,7 @@ export class BackendExamSetService {
       approvedAt: record.approved_at,
       publishedAt: record.published_at,
       archivedAt: record.archived_at,
+      publishedHash: record.published_hash,
       items: record.items.map((item) => ({
         id: item.id,
         displayOrder: item.display_order,

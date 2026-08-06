@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -1292,6 +1294,7 @@ def serialize_exam_set(exam_set: ExamSet) -> dict[str, Any]:
         "archived_by": _display_exam_set_user(exam_set.archived_by),
         "approved_at": exam_set.approved_at.isoformat() if exam_set.approved_at else None,
         "published_at": exam_set.published_at.isoformat() if exam_set.published_at else None,
+        "published_hash": exam_set.published_hash,
         "archived_at": exam_set.archived_at.isoformat() if exam_set.archived_at else None,
         "items": [serialize_exam_set_question(item) for item in exam_set.items.all().order_by("display_order", "selected_at")],
         "validation_results": [
@@ -1485,6 +1488,20 @@ def create_or_update_exam_set(
 
 
 @transaction.atomic
+def _compute_exam_set_hash(exam_set: ExamSet) -> str:
+    payload = {
+        "exam_code": exam_set.exam_code,
+        "blueprint_version_id": exam_set.blueprint_version_id,
+        "duration_minutes": exam_set.duration_minutes,
+        "items": sorted(
+            [item.question_id, str(item.points), item.display_order]
+            for item in exam_set.items.all()
+        ),
+    }
+    canonical = json.dumps(payload, sort_keys=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def transition_exam_set(
     *,
     exam_set: ExamSet,
@@ -1522,10 +1539,11 @@ def transition_exam_set(
     elif normalized_status == ExamSetStatus.PUBLISHED:
         exam_set.published_at = now
         exam_set.published_by = actor_profile
+        exam_set.published_hash = _compute_exam_set_hash(exam_set)
     elif normalized_status == ExamSetStatus.ARCHIVED:
         exam_set.archived_at = now
         exam_set.archived_by = actor_profile
-    exam_set.save(update_fields=["status", "approved_at", "approved_by", "published_at", "published_by", "archived_at", "archived_by", "updated_at"])
+    exam_set.save(update_fields=["status", "approved_at", "approved_by", "published_at", "published_by", "published_hash", "archived_at", "archived_by", "updated_at"])
     ExamSetWorkflowHistory.objects.create(
         exam_set=exam_set,
         previous_status=previous_status,

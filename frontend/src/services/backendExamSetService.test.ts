@@ -34,6 +34,7 @@ const apiExamSet = {
   approved_at: null,
   published_at: null,
   archived_at: null,
+  published_hash: null,
   items: [{
     id: '70',
     display_order: 1,
@@ -151,5 +152,18 @@ describe('BackendExamSetService', () => {
       ok: false,
       error: { kind: 'CONFLICT', code: 'INVALID_TRANSITION', message: 'Synthetic transition conflict.' },
     });
+  });
+
+  it('maps published_hash through to publishedHash', async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse([{ ...apiExamSet, published_hash: 'a'.repeat(64) }], 200));
+    const client = new ApiClient({ baseUrl: 'http://backend.test', fetcher });
+    const service = new BackendExamSetService(client);
+
+    const result = await service.listExamSets();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data[0].publishedHash).toBe('a'.repeat(64));
+    }
   });
 });

@@ -36,6 +36,7 @@ function examSet(overrides: Partial<ExamSetRecord> = {}): ExamSetRecord {
     approvedAt: null,
     publishedAt: null,
     archivedAt: null,
+    publishedHash: null,
     items: [],
     validationResults: [],
     assemblyRuns: [],
