@@ -1,10 +1,14 @@
 from types import SimpleNamespace
 
+import re
+
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.urls import reverse
 from rest_framework.test import APIClient
 from django.test import TestCase
 
+from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 from apps.applications.models import (
     ApplicationBulkUploadBatch,
@@ -118,11 +122,27 @@ class BulkUploadEndpointTests(TestCase):
         self.assertEqual(application.status, ApplicationStatus.SUBMITTED)
         self.assertEqual(application.completion_status, ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION)
         self.assertEqual(application.submission_source, ApplicationSubmissionSource.ADMISSIONS_BULK_UPLOAD)
-        self.assertIsNone(application.owner_id)
+        self.assertIsNotNone(application.owner_id)
         self.assertEqual(application.submitted_by_user_id, self.user.id)
         self.assertEqual(application.bulk_upload_row_number, 2)
         self.assertEqual(application.personal["firstName"], "Bulk")
         self.assertEqual(application.school["name"], "Test School")
+        account = application.owner
+        self.assertEqual(account.email, "bulk.student@example.test")
+        self.assertTrue(account.is_active)
+        profile = AccountProfile.objects.get(user=account)
+        self.assertEqual(profile.role, PortalRole.STUDENT.value)
+        self.assertEqual(profile.lrn, "123456789012")
+        self.assertTrue(profile.must_change_password)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["bulk.student@example.test"])
+        self.assertEqual(mail.outbox[0].subject, "Your PhilSLA student account is active")
+        password_match = re.search(r"Temporary password: ([^\s]+)", mail.outbox[0].body)
+        self.assertIsNotNone(password_match)
+        self.assertTrue(account.check_password(password_match.group(1)))
+        self.assertIn("You must change this temporary password on first login.", mail.outbox[0].body)
+        self.assertIn("http://localhost:3000/login?activation=bulk&email=bulk.student%40example.test", mail.outbox[0].body)
+        self.assertNotIn(f"password={password_match.group(1)}", mail.outbox[0].body)
 
     def test_confirm_imports_only_valid_rows(self):
         validation = self.client.post(

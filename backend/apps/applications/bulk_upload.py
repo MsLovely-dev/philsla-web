@@ -268,6 +268,25 @@ def _confirm_row(*, row_result: ApplicationBulkUploadRowResult, actor_user_id) -
         row_result.status = BulkUploadRowStatus.IMPORTED
         row_result.application = application
         row_result.save(update_fields=["status", "application", "updated_at"])
+        from apps.accounts.services import ActivationUnavailable, activate_bulk_uploaded_student_account
+
+        try:
+            activate_bulk_uploaded_student_account(application_id=str(application.id))
+            application.refresh_from_db(fields=["owner"])
+        except ActivationUnavailable as exc:
+            application.delete()
+            row_result.status = BulkUploadRowStatus.IMPORT_FAILED
+            row_result.application = None
+            row_result.errors = [_error("account", "", "activation_failed", str(exc.detail))]
+            row_result.save(update_fields=["status", "application", "errors", "updated_at"])
+        except Exception:
+            application.delete()
+            row_result.status = BulkUploadRowStatus.IMPORT_FAILED
+            row_result.application = None
+            row_result.errors = [
+                _error("account", "", "activation_email_failed", "Account activation email could not be sent.")
+            ]
+            row_result.save(update_fields=["status", "application", "errors", "updated_at"])
 
 
 def _read_csv_rows(uploaded_file) -> list[dict]:

@@ -87,6 +87,7 @@ PENDING_IDENTIFIER_PREFIX = "auth:pending:identifier:"
 PENDING_OTP_PREFIX = "auth:pending:otp:"
 PENDING_SELFIE_PREFIX = "auth:pending:selfie:"
 PENDING_STAFF_ACTIVATION_PREFIX = "auth:pending:staff-activation:"
+PENDING_PASSWORD_CHANGE_PREFIX = "auth:pending:password-change:"
 JWT_ACCESS_TOKEN_BLOCKLIST_PREFIX = "auth:jwt:blocklist:access:"
 JWT_USER_REVOKED_AT_PREFIX = "auth:jwt:revoked-at:user:"
 OTP_ACCOUNT_RATE_PREFIX = "auth:otp-rate:account:"
@@ -206,6 +207,10 @@ def _ttl_seconds(minutes: int) -> int:
 
 def _new_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def _temporary_password() -> str:
+    return f"Psa1!{secrets.token_urlsafe(18)}"
 
 
 def _json_expiration(token: AccessToken | RefreshToken) -> str:
@@ -374,6 +379,79 @@ def _send_password_recovery_link(*, email: str, reset_url: str) -> None:
         to=[email],
     )
     email_message.attach_alternative(_password_recovery_html_message(reset_url=reset_url), "text/html")
+    email_message.send(fail_silently=False)
+
+
+def _bulk_upload_activation_plain_message(*, email: str, temporary_password: str, login_url: str) -> str:
+    return (
+        "Your PhilSLA student account is now active. "
+        f"Login email: {email} "
+        f"Temporary password: {temporary_password} "
+        f"First-time login link: {login_url} "
+        "You must change this temporary password on first login. "
+        "After changing your password, continue the login verification steps and complete your student application details."
+    )
+
+
+def _standard_activation_plain_message(*, email: str) -> str:
+    return (
+        "Your student account is now active. "
+        f"Login email: {email} "
+        "You may log in to PhilSLA using your existing password."
+    )
+
+
+def _activation_html_message(*, body: str) -> str:
+    return f"""\
+<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #d9dde5;border-radius:18px;">
+            <tr>
+              <td style="padding:34px 42px 16px;text-align:center;">
+                <div style="font-size:46px;line-height:1;font-weight:800;font-family:Arial Black,Arial,Helvetica,sans-serif;">
+                  <span style="color:#18345c;">Phil</span><span style="color:#a5162d;">SLA</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 42px 40px;font-size:14px;line-height:1.6;text-align:left;">
+                <p style="margin:0;">{body}</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+"""
+
+
+def _send_student_account_activation_email(
+    *,
+    email: str,
+    temporary_password: str | None = None,
+) -> None:
+    body = (
+        _bulk_upload_activation_plain_message(
+            email=email,
+            temporary_password=temporary_password,
+            login_url=_frontend_url("/login", {"activation": "bulk", "email": email}),
+        )
+        if temporary_password
+        else _standard_activation_plain_message(email=email)
+    )
+    email_message = EmailMultiAlternatives(
+        subject="Your PhilSLA student account is active",
+        body=body,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        to=[email],
+    )
+    email_message.attach_alternative(_activation_html_message(body=body), "text/html")
     email_message.send(fail_silently=False)
 
 
@@ -935,9 +1013,27 @@ def verify_login_password(*, pending_auth_token: str, password: str, request: ob
     ):
         raise LoginFlowRejected("Incorrect email/LRN or password.")
 
+    cache.delete(pending_key)
+    try:
+        profile = user.account_profile
+    except AccountProfile.DoesNotExist:
+        profile = None
+    if profile is not None and profile.must_change_password:
+        password_change_token = _new_token()
+        ttl = _ttl_seconds(settings.AUTH_PENDING_TOKEN_TTL_MINUTES)
+        cache.set(f"{PENDING_PASSWORD_CHANGE_PREFIX}{password_change_token}", {"account": account}, ttl)
+        return {
+            "passwordChangeToken": password_change_token,
+            "nextStep": "password_change",
+            "expiresInSeconds": ttl,
+        }
+
+    return _start_otp_challenge(account=account, request=request)
+
+
+def _start_otp_challenge(*, account: dict[str, Any], request: object | None = None) -> dict[str, Any]:
     _record_otp_request(account=account, request=request)
 
-    cache.delete(pending_key)
     otp_pending_token = _new_token()
     otp_code = f"{secrets.randbelow(1_000_000):06d}"
     now = timezone.now()
@@ -945,7 +1041,7 @@ def verify_login_password(*, pending_auth_token: str, password: str, request: ob
     absolute_expires_at = now + timedelta(minutes=settings.AUTH_PENDING_ABSOLUTE_TTL_MINUTES)
     otp_expires_at = min(now + timedelta(minutes=settings.AUTH_OTP_TTL_MINUTES), absolute_expires_at)
     pending_otp_state = {
-        "account": pending["account"],
+        "account": account,
         "otp_hash": _hash_otp(token=otp_pending_token, code=otp_code),
         "attempts": 0,
         "resends": 0,
@@ -976,6 +1072,45 @@ def verify_login_password(*, pending_auth_token: str, password: str, request: ob
     if settings.AUTH_LOCAL_EXPOSE_OTP:
         response["devOtp"] = otp_code
     return response
+
+
+@transaction.atomic
+def complete_temporary_password_change(
+    *,
+    password_change_token: str,
+    password: str,
+    request: object | None = None,
+) -> dict[str, Any]:
+    pending_key = f"{PENDING_PASSWORD_CHANGE_PREFIX}{password_change_token}"
+    pending = cache.get(pending_key)
+    if pending is None:
+        raise LoginFlowRejected("Your session has expired. Please start again.")
+
+    account = pending["account"]
+    UserModel = get_user_model()
+    try:
+        user = UserModel.objects.select_for_update().get(
+            id=account["user_id"],
+            is_active=True,
+        )
+        profile = AccountProfile.objects.select_for_update().get(user=user)
+    except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("Your session has expired. Please start again.") from exc
+
+    if not profile.must_change_password:
+        cache.delete(pending_key)
+        raise LoginFlowRejected("Your session has expired. Please start again.")
+
+    user.set_password(password)
+    user.save(update_fields=["password"])
+    profile.must_change_password = False
+    profile.save(update_fields=["must_change_password", "updated_at"])
+    cache.delete(pending_key)
+    refreshed_account = _account_from_user(user, profile)
+    if refreshed_account is None:
+        raise LoginFlowRejected("Your session has expired. Please start again.")
+    return _start_otp_challenge(account=refreshed_account, request=request)
 
 
 def resend_login_otp(*, otp_pending_auth_token: str, request: object | None = None) -> dict[str, Any]:
@@ -1218,6 +1353,9 @@ def activate_student_registration_account(*, registration_application_id: str) -
         if application.password_hash:
             application.password_hash = ""
             application.save(update_fields=["password_hash", "updated_at"])
+        email = str(getattr(application.owner, "email", "") or "").strip().lower()
+        if email:
+            _send_student_account_activation_email(email=email)
         return None
 
     personal = application.personal or {}
@@ -1253,6 +1391,71 @@ def activate_student_registration_account(*, registration_application_id: str) -
     application.owner = user
     application.password_hash = ""
     application.save(update_fields=["owner", "password_hash", "updated_at"])
+    _send_student_account_activation_email(email=email)
+    return None
+
+
+@transaction.atomic
+def activate_bulk_uploaded_student_account(*, application_id: str) -> None:
+    """Create an active student account with a temporary first-login password."""
+
+    from apps.applications.models import (
+        ApplicationCompletionStatus,
+        ApplicationStatus,
+        ApplicationSubmissionSource,
+        StudentApplication,
+    )
+
+    try:
+        application = StudentApplication.objects.select_for_update().get(id=application_id)
+    except (StudentApplication.DoesNotExist, ValueError) as exc:
+        raise ActivationUnavailable("Bulk-uploaded application was not found.") from exc
+
+    if application.submission_source != ApplicationSubmissionSource.ADMISSIONS_BULK_UPLOAD:
+        raise ActivationUnavailable("Only bulk-uploaded applications can use temporary password activation.")
+    if application.status != ApplicationStatus.SUBMITTED:
+        raise ActivationUnavailable("Bulk-uploaded account activation requires a submitted application.")
+    if application.completion_status != ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION:
+        raise ActivationUnavailable("Bulk-uploaded account activation requires pending student completion.")
+    if application.owner_id:
+        return None
+
+    personal = application.personal or {}
+    email = str(personal.get("email", "")).strip().lower()
+    if not email:
+        raise ActivationUnavailable("Bulk-uploaded application is missing an email address.")
+
+    UserModel = get_user_model()
+    if UserModel.objects.filter(email__iexact=email).exists():
+        raise ActivationUnavailable("This email is already registered. Go to Login page.")
+    profile_lrn = application.lrn or None
+    if profile_lrn and AccountProfile.objects.filter(lrn=profile_lrn, role=PortalRole.STUDENT.value).exists():
+        raise ActivationUnavailable("This LRN already has an active student account.")
+
+    first_name = str(personal.get("firstName", "")).strip()
+    last_name = str(personal.get("lastName", "")).strip()
+    username = _unique_username(
+        UserModel,
+        base=" ".join(part for part in (first_name, last_name) if part),
+        fallback=f"student-{application.lrn or application.id}",
+    )
+    temporary_password = _temporary_password()
+    user = UserModel(username=username, email=email, first_name=first_name, last_name=last_name, is_active=True)
+    user.set_password(temporary_password)
+    try:
+        user.save()
+        AccountProfile.objects.create(
+            user=user,
+            role=PortalRole.STUDENT.value,
+            lrn=profile_lrn,
+            must_change_password=True,
+        )
+    except IntegrityError as exc:
+        raise ActivationUnavailable("Student account could not be activated because the credentials already exist.") from exc
+
+    application.owner = user
+    application.save(update_fields=["owner", "updated_at"])
+    _send_student_account_activation_email(email=email, temporary_password=temporary_password)
     return None
 
 

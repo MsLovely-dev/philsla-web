@@ -125,3 +125,38 @@ Observed results:
 - `npm run build` passed. Vite reported only the existing chunk-size warning for large output bundles.
 - `npm run lint` failed on existing unrelated TypeScript errors in admin/proctor/student pages and maintenance tests, including missing `User.name`/`User.center`, impossible status comparisons in `CommandCenter.tsx`, missing `html5-qrcode` type resolution, and other diagnostics outside the bulk-upload files changed in this task.
 - `git diff --check` reported no whitespace errors; Git printed Windows line-ending warnings only.
+
+### Bulk Upload Activation Update
+
+Work completed:
+
+- Changed bulk-upload confirmation to create active Student accounts for imported rows after final conflict checks pass.
+- Generated temporary first-login passwords for bulk-uploaded student accounts.
+- Added a persistent `must_change_password` account-profile flag and migration.
+- Added first-login password-change flow before OTP/session access.
+- Added activation emails for both bulk-uploaded students and standard approved applications.
+- Updated the Login page and backend auth service contract for `nextStep = password_change`.
+- Added a direct bulk activation login link that pre-fills the student's email without putting the temporary password in the URL.
+- Updated API documentation and the bulk-upload task brief to remove the old "no Student accounts during bulk upload" direction.
+
+Files changed:
+
+- `backend/apps/accounts/models.py`
+- `backend/apps/accounts/services.py`
+- `backend/apps/accounts/serializers.py`
+- `backend/apps/accounts/urls.py`
+- `backend/apps/accounts/views.py`
+- `backend/apps/accounts/migrations/0009_accountprofile_must_change_password.py`
+- `backend/apps/accounts/tests/test_login_endpoints.py`
+- `backend/apps/applications/bulk_upload.py`
+- `backend/apps/applications/tests/test_application_endpoints.py`
+- `backend/apps/applications/tests/test_bulk_upload_endpoints.py`
+- `docs/api/API-ENDPOINTS.md`
+- `docs/superpowers/l.chavez/bulk-upload.task.md`
+- `frontend/src/PhilSAContext.tsx`
+- `frontend/src/pages/LoginPage.tsx`
+- `frontend/src/pages/LoginPage.test.tsx`
+- `frontend/src/services/authService.ts`
+- `frontend/src/services/backendAuthService.ts`
+- `frontend/src/services/backendAuthService.test.ts`
+- `frontend/src/services/contracts.ts`

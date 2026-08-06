@@ -21,7 +21,9 @@ Complete the Review Applications bulk upload feature for student applications. A
 - Create imported records as `status = SUBMITTED`.
 - Add `completionStatus = PENDING_STUDENT_COMPLETION`.
 - Add structured source metadata with `submissionSource = ADMISSIONS_BULK_UPLOAD`.
-- Keep Student account creation only after admissions approval.
+- Create active Student accounts on bulk-upload confirmation with temporary first-login passwords.
+- Send account activation email after bulk-upload confirmation and standard approval.
+- Require bulk-uploaded students to change their temporary password on first login.
 - Block approval while student completion is pending.
 
 ## CSV Columns
@@ -54,6 +56,12 @@ templateVersion,firstName,middleName,lastName,suffix,dateOfBirth,sex,email,mobil
 - [x] Implement transactional confirmation with final LRN/email conflict recheck.
 - [x] Make confirmation idempotent.
 - [x] Block approval when `completionStatus = PENDING_STUDENT_COMPLETION`.
+- [x] Create active Student accounts for imported bulk-upload rows.
+- [x] Generate temporary first-login passwords for imported bulk-upload accounts.
+- [x] Require temporary-password users to change their password before OTP/session access.
+- [x] Send activation email with temporary credentials for bulk-uploaded students.
+- [x] Include direct first-login link in bulk-upload activation email.
+- [x] Send activation email without temporary credentials for standard approved applications.
 - [ ] Add safe audit events for validation, confirmation, imported rows, and rejected rows.
 - [x] Update API documentation.
 
@@ -90,6 +98,10 @@ templateVersion,firstName,middleName,lastName,suffix,dateOfBirth,sex,email,mobil
 - [x] Confirm is idempotent.
 - [x] Imported applications have submitted status, pending completion status, and bulk upload source metadata.
 - [x] Approval is blocked while completion is pending.
+- [x] Bulk upload confirmation creates active Student accounts with temporary-password flag.
+- [x] Temporary-password login requires password change before OTP.
+- [x] Temporary-password change clears the flag and continues to OTP.
+- [x] Standard approval sends an activation email using existing credentials.
 
 ## Frontend Tests
 
@@ -100,6 +112,7 @@ templateVersion,firstName,middleName,lastName,suffix,dateOfBirth,sex,email,mobil
 - [x] Successful confirmation refreshes the application list.
 - [ ] Pending Student Completion filter displays imported incomplete records.
 - [x] Approval action is unavailable or blocked for pending-completion applications.
+- [x] Bulk activation link pre-fills the student email on Login.
 
 ## Verification Commands
 
@@ -123,6 +136,6 @@ npm run build
 ## Notes
 
 - Do not log CSV row personal data in request logs, audit payloads, or telemetry.
-- Do not create active Student accounts during bulk upload.
+- Create active Student accounts during bulk-upload confirmation only after row validation and final conflict checks pass.
 - Do not add file upload support in this version.
 - Do not silently ignore unknown CSV columns.

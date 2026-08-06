@@ -11,7 +11,8 @@ The baseline health and authentication boundaries, the first student-application
 | `GET` | `/api/v1/health/` | Public; no credentials required | `AllowAny` | Safe service liveness smoke check | Implemented |
 | `GET` | `/api/v1/auth/session/` | Required bearer access token | `IsAuthenticated` | Return server-derived session, role, permission, and scope claims | Implemented |
 | `POST` | `/api/v1/auth/login/identifier/` | Public; no credentials required | `AllowAny` | Validate LRN/email format and start Step 1 identifier resolution | Implemented |
-| `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP | Implemented |
+| `POST` | `/api/v1/auth/login/password/` | Public with Step-1 pending-auth token | `AllowAny` | Validate password-step payload and advance to OTP or required first-login password change | Implemented |
+| `POST` | `/api/v1/auth/login/password/change/` | Public with password-change pending token | `AllowAny` | Replace a temporary first-login password and advance to OTP | Implemented |
 | `POST` | `/api/v1/auth/login/otp/` | Public with OTP pending-auth token | `AllowAny` | Validate OTP-step payload and advance to selfie photo logging | Implemented |
 | `POST` | `/api/v1/auth/login/otp/resend/` | Public with OTP pending-auth token | `AllowAny` | Resend the login email OTP with cooldown and resend limits | Implemented |
 | `POST` | `/api/v1/auth/login/selfie/` | Public with selfie pending-auth token | `AllowAny` | Store the captured login selfie image and complete session issuance | Implemented |
@@ -334,7 +335,7 @@ templateVersion,firstName,middleName,lastName,suffix,dateOfBirth,sex,email,mobil
 }
 ```
 
-`POST /api/v1/applications/bulk-upload/{batchId}/confirm/` is idempotent. It imports only rows still marked valid, rechecks LRN/email conflicts before each row is created, marks newly conflicting rows without blocking other rows, and returns the same summary shape plus `importedRows` and `rejectedRows`. Imported applications are created with `status = SUBMITTED`, `completionStatus = PENDING_STUDENT_COMPLETION`, `submissionSource = ADMISSIONS_BULK_UPLOAD`, `submittedByUserId`, `bulkUploadBatchId`, and `bulkUploadRowNumber`. Bulk upload does not create Student accounts, does not accept selfie/student-ID/document files, and approval is blocked while `completionStatus = PENDING_STUDENT_COMPLETION`.
+`POST /api/v1/applications/bulk-upload/{batchId}/confirm/` is idempotent. It imports only rows still marked valid, rechecks LRN/email conflicts before each row is created, marks newly conflicting rows without blocking other rows, and returns the same summary shape plus `importedRows` and `rejectedRows`. Imported applications are created with `status = SUBMITTED`, `completionStatus = PENDING_STUDENT_COMPLETION`, `submissionSource = ADMISSIONS_BULK_UPLOAD`, `submittedByUserId`, `bulkUploadBatchId`, and `bulkUploadRowNumber`. Confirmed bulk-upload rows create active Student accounts immediately, generate a temporary password, require password change on first login, and send an activation email containing the login email, temporary password, a direct `/login?activation=bulk&email=...` first-login link, and first-login instructions. Bulk upload does not accept selfie/student-ID/document files, and approval is blocked while `completionStatus = PENDING_STUDENT_COMPLETION`.
 
 The applicant registration audit log displays:
 
@@ -504,7 +505,7 @@ Test coverage:
 
 Use this endpoint for Step 2 of the shared login flow. It accepts the Step-1 pending-auth token and password.
 
-Current implementation status: request validation, pending-token validation, password hash verification, OTP generation, OTP hashing, email dispatch, account OTP request limits, IP monitoring, safe error shape, and audit events are implemented.
+Current implementation status: request validation, pending-token validation, password hash verification, temporary-password detection, OTP generation, OTP hashing, email dispatch, account OTP request limits, IP monitoring, safe error shape, and audit events are implemented.
 
 Request:
 
@@ -533,6 +534,43 @@ Successful response:
   "resendCooldownSeconds": 60
 }
 ```
+
+Temporary-password response:
+
+```json
+{
+  "passwordChangeToken": "opaque-password-change-token",
+  "nextStep": "password_change",
+  "expiresInSeconds": 600
+}
+```
+
+### `POST /api/v1/auth/login/password/change/`
+
+Use this endpoint when `/api/v1/auth/login/password/` returns `nextStep = password_change`. It accepts a password-change pending token and the student's new permanent password.
+
+Request:
+
+```json
+{
+  "passwordChangeToken": "opaque-password-change-token",
+  "password": "NewPassword1!",
+  "confirmPassword": "NewPassword1!"
+}
+```
+
+Successful response:
+
+```json
+{
+  "otpPendingAuthToken": "opaque-step-2-token",
+  "nextStep": "otp",
+  "expiresInSeconds": 300,
+  "resendCooldownSeconds": 60
+}
+```
+
+The backend clears the temporary-password flag before issuing the OTP challenge. Password-change tokens are opaque, time-limited, single-use, and must never be logged or returned after use.
 
 Test coverage:
 
