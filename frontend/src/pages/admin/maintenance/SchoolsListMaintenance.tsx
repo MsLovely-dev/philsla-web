@@ -79,6 +79,7 @@ export default function SchoolsListMaintenance() {
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewingSchool, setViewingSchool] = useState<SchoolRecord | null>(null);
   const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
   const [formData, setFormData] = useState<SchoolPayload>(EMPTY_FORM);
 
@@ -398,7 +399,15 @@ export default function SchoolsListMaintenance() {
                           {s.code}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 font-extrabold text-philsa-navy">{s.name}</td>
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => setViewingSchool(s)}
+                          className="font-extrabold text-philsa-navy hover:text-blue-700 transition-colors cursor-pointer text-left"
+                          title="View school details"
+                        >
+                          {s.name}
+                        </button>
+                      </td>
                       <td className="py-3.5 px-4">
                         <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                           s.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'
@@ -470,7 +479,13 @@ export default function SchoolsListMaintenance() {
                         {s.status}
                       </span>
                     </div>
-                    <h3 className="text-base font-black text-philsa-navy">{s.name}</h3>
+                    <button
+                      onClick={() => setViewingSchool(s)}
+                      className="text-base font-black text-philsa-navy hover:text-blue-700 transition-colors cursor-pointer text-left"
+                      title="View school details"
+                    >
+                      {s.name}
+                    </button>
                   </div>
                 </div>
 
@@ -629,6 +644,82 @@ export default function SchoolsListMaintenance() {
                 </button>
               </div>
             </form>
+      </ModalShell>
+
+      {/* School Details Modal */}
+      <ModalShell isOpen={viewingSchool !== null} className="max-w-lg p-6 space-y-5">
+        {viewingSchool && (
+          <>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
+                <SchoolIcon className="w-5 h-5 text-philsa-navy" />
+                School Details
+              </h3>
+              <button
+                onClick={() => setViewingSchool(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+                aria-label="Close details"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block whitespace-nowrap">
+                  {viewingSchool.code}
+                </span>
+                <h4 className="text-xl font-black text-philsa-navy">{viewingSchool.name}</h4>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</div>
+                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${viewingSchool.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                    {viewingSchool.classification}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Status</div>
+                  <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${viewingSchool.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                    {viewingSchool.status}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region/Municipality/City</div>
+                  <div className="font-bold text-slate-700">{regionLabel(viewingSchool.region)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Examinee Capacity</div>
+                  <div className="font-bold text-slate-700 font-mono">{viewingSchool.examineeCapacity.toLocaleString()} Seats</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Created</div>
+                  <div className="font-medium text-slate-600">{new Date(viewingSchool.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Last Updated</div>
+                  <div className="font-medium text-slate-600">{new Date(viewingSchool.updatedAt).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                onClick={() => { const school = viewingSchool; setViewingSchool(null); setPendingDelete(school); }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+              <button
+                onClick={() => { const school = viewingSchool; setViewingSchool(null); handleOpenEditModal(school); }}
+                className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+              >
+                <Edit3 className="w-4 h-4" /> Edit
+              </button>
+            </div>
+          </>
+        )}
       </ModalShell>
 
       <ExportConfigModal

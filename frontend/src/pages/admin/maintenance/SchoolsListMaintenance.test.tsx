@@ -109,4 +109,27 @@ describe('SchoolsListMaintenance', () => {
     expect(deleteSchool).toHaveBeenCalledWith(school.id);
     await waitFor(() => expect(screen.queryByText(school.name)).not.toBeInTheDocument());
   });
+
+  it('opens a details modal from the school name and can jump to editing', async () => {
+    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([school]));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: school.name }));
+    expect(await screen.findByText('School Details')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }));
+    expect(await screen.findByText('Edit Accredited School')).toBeInTheDocument();
+  });
+
+  it('opens the delete confirmation from the details modal', async () => {
+    vi.spyOn(schoolService, 'listSchools').mockResolvedValue(serviceSuccess([school]));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: school.name }));
+    await user.click(await screen.findByRole('button', { name: /^delete$/i }));
+
+    expect(await screen.findByText(/remove .* at Maintenance Table/i)).toBeInTheDocument();
+  });
 });
