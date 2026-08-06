@@ -603,23 +603,6 @@ export const DUMMY_QUESTIONS: Question[] = [
   }
 ];
 
-export const DUMMY_EXAM_SETS: ExamSet[] = [
-  {
-    id: 'ex1',
-    title: 'PhilSA General Admission 2026-A',
-    blueprint: {
-      sections: [
-        { subject: 'Math', items: 25, duration: 40 },
-        { subject: 'Reading Comp (English, Filipino)', items: 25, duration: 30 },
-        { subject: 'Lang Proficiency (English, Filipino)', items: 20, duration: 30 },
-        { subject: 'Science', items: 20, duration: 30 }
-      ]
-    },
-    questions: ['q1', 'q2', 'q_essay_1'],
-    status: 'PUBLISHED'
-  }
-];
-
 export const DUMMY_SCHEDULES: Schedule[] = [
   {
     id: 'sch1',
@@ -705,11 +688,7 @@ export function MockDataProvider({ children }: { children: ReactNode }) {
   const [examSets, setExamSets] = useState<ExamSet[]>(() => {
     const saved = localStorage.getItem('philsa_exam_sets');
     const parsed = saved ? JSON.parse(saved) : [];
-    const merged = [...parsed];
-    DUMMY_EXAM_SETS.forEach(d => {
-      if (!merged.some(m => m.id === d.id)) merged.push(d);
-    });
-    return merged;
+    return parsed.filter((examSet: ExamSet) => examSet.id !== 'ex1');
   });
 
   const [schedules, setSchedules] = useState<Schedule[]>(() => {
