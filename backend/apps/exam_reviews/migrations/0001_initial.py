@@ -91,11 +91,11 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name='examreviewitem',
-            constraint=models.UniqueConstraint(fields=('review', 'position'), name='exam_review_item_unique_position'),
+            constraint=models.UniqueConstraint(fields=('review', 'position'), name='exam_reviews_item_unique_position'),
         ),
         migrations.AddConstraint(
             model_name='examreviewitem',
-            constraint=models.UniqueConstraint(fields=('review', 'subject', 'item_number'), name='exam_review_item_unique_subject_number'),
+            constraint=models.UniqueConstraint(fields=('review', 'subject', 'item_number'), name='exam_reviews_item_unique_subject_number'),
         ),
         migrations.AddConstraint(
             model_name='examreviewitem',

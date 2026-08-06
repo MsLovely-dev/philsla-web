@@ -22,3 +22,12 @@ class ExamReviewModelBoundaryTests(SimpleTestCase):
             "applications.StudentApplication",
         )
         self.assertIs(application_field.remote_field.on_delete, PROTECT)
+
+    def test_exam_review_item_constraints_use_exam_reviews_namespace(self):
+        item_model = apps.get_app_config("exam_reviews").get_model("ExamReviewItem")
+        constraint_names = {constraint.name for constraint in item_model._meta.constraints}
+
+        self.assertIn("exam_reviews_item_unique_position", constraint_names)
+        self.assertIn("exam_reviews_item_unique_subject_number", constraint_names)
+        self.assertNotIn("exam_review_item_unique_position", constraint_names)
+        self.assertNotIn("exam_review_item_unique_subject_number", constraint_names)

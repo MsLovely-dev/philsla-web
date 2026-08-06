@@ -84,10 +84,10 @@ class ExamReviewItem(models.Model):
     class Meta:
         ordering = ["position"]
         constraints = [
-            models.UniqueConstraint(fields=("review", "position"), name="exam_review_item_unique_position"),
+            models.UniqueConstraint(fields=("review", "position"), name="exam_reviews_item_unique_position"),
             models.UniqueConstraint(
                 fields=("review", "subject", "item_number"),
-                name="exam_review_item_unique_subject_number",
+                name="exam_reviews_item_unique_subject_number",
             ),
             models.CheckConstraint(
                 condition=models.Q(points_awarded__isnull=True)
