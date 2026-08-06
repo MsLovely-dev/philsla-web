@@ -1,6 +1,6 @@
 # PhilSA Backend
 
-> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, Django Admin, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, database-backed auth account profiles, JWT-backed login/session handling, Django email-backend OTP delivery, and baseline tests are implemented. Job processing, storage provider, deployment, and production database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
+> **Current status:** A minimal Django and Django REST Framework project, versioned API namespace, Django Admin, safe health endpoint, standard API error envelope, Supabase Postgres `DATABASE_URL` settings, safe structured request logging, database-backed auth account profiles, JWT-backed login/session handling, Django email-backend OTP delivery, Score Management email dispatch jobs, and baseline tests are implemented. General job processing beyond Score Management email dispatch, storage provider, deployment, and production database operations remain `TBD`. See [backend architecture](../docs/architecture/BACKEND-ARCHITECTURE.md).
 
 ## Local setup
 
@@ -66,6 +66,26 @@ DEFAULT_FROM_EMAIL="PhilSA Admissions <no-reply@your-verified-domain.example>"
 ```
 
 The Brevo sender should be verified in Brevo before relying on delivery. Keep SMTP login values and keys in local environment files only.
+
+Score Management result-available emails use a database outbox plus Django RQ. Releasing scores queues `ScoreReleaseNotification` rows and enqueues a background dispatch job; the release request does not wait for SMTP. Run Redis and a worker alongside the backend:
+
+```env
+REDIS_URL="redis://localhost:6379/0"
+SCORE_RELEASE_EMAIL_AUTO_ENQUEUE="true"
+SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE="500"
+```
+
+```powershell
+python manage.py rqworker default --worker-class rq.SimpleWorker --settings=config.settings.local
+```
+
+Use `rq.SimpleWorker` on Windows because the default RQ worker uses `os.fork()`, which is only available on Unix-like systems.
+
+If the worker is not running, queued notifications remain `PENDING`. They can still be sent manually with:
+
+```powershell
+python manage.py dispatch_score_release_notifications --limit 500 --settings=config.settings.local
+```
 
 Azure Communication Services Email is the production email provider because the platform is expected to deploy on Azure. Switch the same OTP implementation to Azure Communication Services SMTP with environment settings like:
 

@@ -1,17 +1,21 @@
+from io import StringIO
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.db import connection
 from django.test import TestCase
-from django.test.utils import CaptureQueriesContext
+from django.test.utils import CaptureQueriesContext, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.accounts.roles import PortalRole
 from apps.applications.models import ApplicationAuditLog, ApplicationStatus, IdentityMediaType, RegistrationSelfieMedia, StudentApplication
-from apps.results.models import CandidateScore, ScoreReleaseStatus
+from apps.results.models import CandidateScore, ScoreReleaseNotification, ScoreReleaseNotificationStatus, ScoreReleaseStatus
 from apps.results.services import REGULAR_SESSION_ID, seed_score_management_data
 
 
@@ -33,8 +37,13 @@ class ScoreManagementApiTests(TestCase):
         response = self.client.get(reverse("results:score-management-batches"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["count"], 1)
-        batch = response.data["results"][0]
+        self.assertEqual(response.data["count"], 3)
+        batches = {batch["id"]: batch for batch in response.data["results"]}
+        self.assertCountEqual(
+            batches,
+            ["SESSION-2027-REGULAR", "SESSION-2027-SPECIAL", "SESSION-2027-STEM"],
+        )
+        batch = batches[REGULAR_SESSION_ID]
         self.assertEqual(batch["id"], REGULAR_SESSION_ID)
         self.assertEqual(batch["status"], "READY_FOR_PROCESSING")
         self.assertEqual(batch["totalCandidates"], 120)
@@ -84,7 +93,7 @@ class ScoreManagementApiTests(TestCase):
         self.assertTrue(CandidateScore.objects.filter(session_id=REGULAR_SESSION_ID, overall_rank__isnull=False).exists())
 
         batches = self.client.get(reverse("results:score-management-batches"))
-        batch = batches.data["results"][0]
+        batch = next(row for row in batches.data["results"] if row["id"] == REGULAR_SESSION_ID)
         self.assertEqual(batch["status"], "SCORING_PROCESSED")
         self.assertEqual(batch["processedCount"], 114)
         self.assertEqual(batch["processingProgress"], 100)
@@ -223,6 +232,9 @@ class ScoreManagementApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["status"], "RESULTS_RELEASED")
         self.assertEqual(response.data["releasedCount"], 114)
+        self.assertIn("notificationQueuedCount", response.data)
+        self.assertIn("notificationSkippedCount", response.data)
+        self.assertIn("notificationFailedCount", response.data)
         self.assertFalse(
             CandidateScore.objects.filter(
                 session_id=REGULAR_SESSION_ID,
@@ -230,6 +242,172 @@ class ScoreManagementApiTests(TestCase):
                 overall_rank__isnull=False,
             ).exists(),
         )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_release_queues_result_available_email_without_sending_immediately(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        StudentApplication.objects.create(
+            owner=None,
+            lrn=score.lrn,
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={
+                "firstName": "Juan",
+                "lastName": "Dela Cruz",
+                "email": "juan.delacruz@example.test",
+            },
+            school={"lrn": score.lrn},
+        )
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+        score.refresh_from_db()
+
+        response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["notificationQueuedCount"], 1)
+        self.assertEqual(response.data["notificationFailedCount"], 0)
+        self.assertEqual(len(mail.outbox), 0)
+        notification = ScoreReleaseNotification.objects.get(score=score)
+        self.assertEqual(notification.status, ScoreReleaseNotificationStatus.PENDING)
+        self.assertEqual(notification.recipient_email, "juan.delacruz@example.test")
+        self.assertEqual(notification.recipient_name, "Juan Dela Cruz")
+        self.assertIn("/student/results", notification.portal_url)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=True,
+        SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE=25,
+    )
+    def test_release_enqueues_background_email_dispatch_after_commit(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        StudentApplication.objects.create(
+            owner=None,
+            lrn=score.lrn,
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={
+                "firstName": "Juan",
+                "lastName": "Dela Cruz",
+                "email": "juan.delacruz@example.test",
+            },
+            school={"lrn": score.lrn},
+        )
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+
+        with self.captureOnCommitCallbacks(execute=True), patch("apps.results.jobs.enqueue_score_release_notification_dispatch") as enqueue_dispatch:
+            response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["notificationQueuedCount"], 1)
+        enqueue_dispatch.assert_called_once_with(limit=25)
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_dispatch_score_release_notifications_sends_branded_email_without_scores(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        StudentApplication.objects.create(
+            owner=None,
+            lrn=score.lrn,
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={
+                "firstName": "Juan",
+                "lastName": "Dela Cruz",
+                "email": "juan.delacruz@example.test",
+            },
+            school={"lrn": score.lrn},
+        )
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+        score.refresh_from_db()
+        self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
+
+        output = StringIO()
+        call_command("dispatch_score_release_notifications", "--limit", "10", stdout=output)
+
+        self.assertIn("sent=1", output.getvalue())
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ["juan.delacruz@example.test"])
+        self.assertEqual(message.subject, "Your PhilSLA Examination Results Are Now Available")
+        self.assertIn("Dear Juan Dela Cruz,", message.body)
+        self.assertIn("Your PhilSLA examination results have been released.", message.body)
+        self.assertIn("/student/results", message.body)
+        self.assertNotIn(str(score.raw_score), message.body)
+        self.assertNotIn(str(score.final_score), message.body)
+        self.assertNotIn(str(score.overall_rank), message.body)
+        self.assertNotIn(str(score.percentile), message.body)
+        self.assertEqual(len(message.alternatives), 1)
+        html_body, content_type = message.alternatives[0]
+        self.assertEqual(content_type, "text/html")
+        self.assertIn("<span style=\"color:#111111;\">Phil</span><span style=\"color:#8A1538;\">SLA</span>", html_body)
+        self.assertIn("Results Released", html_body)
+        self.assertIn("View Results", html_body)
+        self.assertIn("/student/results", html_body)
+        self.assertIn("This notice does not contain your examination score for security reasons.", html_body)
+        self.assertNotIn(str(score.raw_score), html_body)
+        self.assertNotIn(str(score.final_score), html_body)
+        self.assertNotIn(str(score.overall_rank), html_body)
+        self.assertNotIn(str(score.percentile), html_body)
+        notification = ScoreReleaseNotification.objects.get(score=score)
+        self.assertEqual(notification.status, ScoreReleaseNotificationStatus.SENT)
+        self.assertEqual(notification.attempts, 1)
+        self.assertIsNotNone(notification.sent_at)
+
+    def test_release_skips_email_when_application_match_is_ambiguous(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        StudentApplication.objects.create(
+            owner=None,
+            lrn=score.lrn,
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={"firstName": "First", "email": "first@example.test"},
+            school={"lrn": score.lrn},
+        )
+        StudentApplication.objects.create(
+            owner=None,
+            lrn=score.lrn,
+            exam_cycle_id="2027",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={"firstName": "Second", "email": "second@example.test"},
+            school={"lrn": score.lrn},
+        )
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+
+        response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "RESULTS_RELEASED")
+        self.assertEqual(response.data["notificationQueuedCount"], 0)
+        self.assertGreaterEqual(response.data["notificationSkippedCount"], 1)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(ScoreReleaseNotification.objects.filter(score=score).exists())
+
+    def test_release_skips_seeded_synthetic_student_email(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        StudentApplication.objects.create(
+            owner=None,
+            lrn=score.lrn,
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={
+                "firstName": "Seeded",
+                "lastName": "Student",
+                "email": "seeded.student@philsa.example.test",
+            },
+            school={"lrn": score.lrn},
+        )
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+
+        response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "RESULTS_RELEASED")
+        self.assertEqual(response.data["notificationQueuedCount"], 0)
+        self.assertGreaterEqual(response.data["notificationSkippedCount"], 1)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(ScoreReleaseNotification.objects.filter(score=score).exists())
 
     def test_reprocessing_rejects_released_results(self):
         self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")

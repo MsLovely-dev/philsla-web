@@ -26,3 +26,4 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {  # noqa: F405
 }
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 DEFAULT_FROM_EMAIL = "PhilSA Admissions <no-reply@example.test>"
+SCORE_RELEASE_EMAIL_AUTO_ENQUEUE = False

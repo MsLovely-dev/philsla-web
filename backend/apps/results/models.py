@@ -24,6 +24,12 @@ class ScoreReleaseStatus(models.TextChoices):
     RELEASED = "RELEASED", "Released"
 
 
+class ScoreReleaseNotificationStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    SENT = "SENT", "Sent"
+    FAILED = "FAILED", "Failed"
+
+
 class ExaminationSession(models.Model):
     id = models.CharField(max_length=64, primary_key=True)
     name = models.CharField(max_length=160)
@@ -191,3 +197,32 @@ class ScoreReleaseAuditLog(models.Model):
     class Meta:
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["session", "-created_at"])]
+
+
+class ScoreReleaseNotification(models.Model):
+    session = models.ForeignKey(ExaminationSession, on_delete=models.PROTECT, related_name="release_notifications")
+    score = models.ForeignKey(CandidateScore, on_delete=models.PROTECT, related_name="release_notifications")
+    recipient_email = models.EmailField(max_length=254)
+    recipient_name = models.CharField(max_length=180)
+    portal_url = models.CharField(max_length=500)
+    status = models.CharField(
+        max_length=16,
+        choices=ScoreReleaseNotificationStatus.choices,
+        default=ScoreReleaseNotificationStatus.PENDING,
+        db_index=True,
+    )
+    attempts = models.PositiveSmallIntegerField(default=0)
+    failure_reason = models.CharField(max_length=240, blank=True, default="")
+    queued_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["queued_at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=("session", "score"), name="unique_score_release_notification_per_score"),
+        ]
+        indexes = [
+            models.Index(fields=["session", "status"]),
+            models.Index(fields=["status", "queued_at"]),
+        ]
