@@ -123,6 +123,59 @@ First full run reproduced a genuine, reproducible P0: creating an Exam Set throu
 
 **What this review does not cover:** a formal release sign-off is an approval step by a designated reviewer, not something a feature owner can self-certify. This log documents everything a reviewer needs — implementation, verification evidence, the live-rehearsal-discovered P0 fix, migration rehearsal, and this security pass — for that sign-off to happen.
 
+## Exam Blueprint Maintenance Table
+
+- Date: 2026-08-06
+- Branch: `i.sandoval/exam-blueprint-maintenance`
+- Reviewed plan: `docs/superpowers/i.sandoval/plans/2026-08-06-exam-blueprint-maintenance.md`
+- Reviewed design: `docs/superpowers/i.sandoval/specs/2026-08-06-exam-blueprint-maintenance-design.md`
+
+### Implemented
+
+- Added backend admin APIs for Subject, QuestionType, and Topic (CRUD endpoints in `apps/exams` views, serializers, and permissions).
+- Added frontend service layer for backend Exam Blueprint Maintenance APIs with transport mapping for list and create operations.
+- Wired `ExamBlueprintMaintenance.tsx` page to real backend services for Subject, Topic, and QuestionType management.
+- Added `MaintenancePageTemplate.tsx` as a reusable template component for maintenance center pages with pagination, loading, error, and empty states.
+- Fixed a dead Delete button in the template component (removed non-functional delete UI element as authorized scope expansion during Task 5).
+- Split `MaintenanceCenterTables.test.tsx` into separate test files for better organization (authorized scope expansion during Task 5 code review).
+- Fixed form state synchronization: submitted `isActive` state now matches the visible toggle state on creation (Task 5 bug fix).
+- **Corrected route permissions bug (Task 6):** `routes.tsx` line 160 had incorrect role restrictions (`UNIVERSITY_ADMIN`, `ADMISSIONS_REVIEWER`). Changed to correct roles: `ITEM_WRITER`, `ACADEMIC_REVIEWER`, `EXAM_ADMINISTRATOR`. This was a post-implementation discovery corrected before merge.
+
+### Commits
+
+- `8ef426e feat(exam-blueprint-maintenance): add Subject admin API`
+- `028f81e feat(exam-blueprint-maintenance): add QuestionType admin API`
+- `948556f feat(exam-blueprint-maintenance): add Topic admin API`
+- `9217b17 feat(exam-blueprint-maintenance): add frontend service layer`
+- `6e5dc09 feat(exam-blueprint-maintenance): wire maintenance table to real backend`
+- `8315652 fix(exam-blueprint-maintenance): hide dead Delete button and split MaintenanceCenterTables coverage`
+- `2ffe623 fix(exam-blueprint-maintenance): match submitted isActive to the visible toggle state on create`
+- `03a9aa5 fix(exam-blueprint-maintenance): correct allowed roles for the maintenance route`
+
+### Verification evidence
+
+Backend, from `backend/` using the Python 3.13 virtual environment:
+
+- `.\.venv\Scripts\python.exe manage.py test --settings=config.settings.test` — 369 tests ran in 115.419s; 368 passed, 1 failed (pre-existing: `apps.universities.tests.SeedUniversitiesCommandTests.test_seed_command_is_idempotent_and_generates_sequential_codes`).
+
+Frontend, from `frontend/`:
+
+- `npm run build` — completed successfully; Vite emitted 3114 modules, only the pre-existing large-chunk warning.
+- `npm test` — 192 tests ran; 182 passed, 10 failed. All failures are pre-existing and out-of-scope:
+  - 1 from `src/pages/proctor/QrScanModal.test.tsx` (Jo.Ganapin's QR Scanning story)
+  - 8 from `src/pages/admin/maintenance/UniversitiesListMaintenance.test.tsx` (import of non-existent `backendUniversityService` named export; actual export is `universityService`)
+  - 1 from `src/pages/admin/maintenance/MaintenanceCenterTables.test.tsx` (same import issue)
+
+### Scope clarifications from code review (Task 5)
+
+- **MaintenancePageTemplate.tsx Delete button fix:** Route review revealed the template's Delete button was dead (no handler wired). Removed non-functional UI to clean up the component before it became a template for other pages.
+- **MaintenanceCenterTables.test.tsx split:** The test file grew large enough during implementation that review recommended splitting it into separate files for each table component. This was approved as a quality-of-life improvement aligned with test maintainability.
+
+### Remaining before production use
+
+- The `apps.universities` seed-idempotency failure and the `UniversitiesListMaintenance`/`QrScanModal`/`MaintenanceCenterTables` frontend test failures are outside this story's scope (JP.Mayordo and Jo.Ganapin respectively) and remain open for their respective owners to resolve.
+- The routes.tsx role-list bug (Task 6) was corrected before merge, so no follow-up needed.
+
 ## Release sign-off
 
 - Date: 2026-08-06
