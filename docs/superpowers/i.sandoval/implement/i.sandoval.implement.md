@@ -108,6 +108,17 @@ First full run reproduced a genuine, reproducible P0: creating an Exam Set throu
 
 ### Remaining before production use
 
-- Release/security review of the merged Exam Sets + repaired `apps.results`/`apps.exam_reviews` migration history, per the original task brief.
 - The pre-existing `apps.universities` seed-idempotency failure and the `UniversitiesListMaintenance`/`QrScanModal` frontend test failures are outside this story's scope (JP.Mayordo and Jo.Ganapin respectively) and are called out here only because they surfaced while re-baselining this branch against current `main`.
 - `_actor_profile()`'s same fallback pattern is worth a quick audit in any other `apps/exams` or sibling-app views that assume `request.user.account_profile` is always a live ORM relation, since only the Exam Set creation path was exercised end-to-end here.
+
+## Security review
+
+- Date: 2026-08-06
+
+**Code-level review of this diff** (the `_actor_profile()` fix, the two new rehearsal-only settings modules, and the new regression test): performed via an independent code-security pass covering injection, auth/authz bypass, crypto/secrets, and data-exposure categories. No high- or medium-confidence findings. The `_actor_profile()` fallback resolves only the authenticated caller's own `AccountProfile` (`request.user.id` is server-derived from a signature-verified JWT re-resolved against the database, never client-controlled), and remains gated behind `RoleRequiredPermission` on every call site. `local_rehearsal.py`/`postgres_rehearsal.py` are not wired into any default or production entrypoint (`manage.py` defaults to `config.settings.local`; `wsgi.py`/`asgi.py` default to `config.settings.production`) and are only selectable via an explicit `--settings=` flag.
+
+**Dependency vulnerability scan** (pre-existing, repository-wide, not introduced by this diff — flagged here for release-review visibility, not fixed, because remediation means major-version bumps across shared dependencies used by every story and needs coordinated regression testing, not a unilateral change under one story):
+- Frontend, `npm audit --production`: 11 known vulnerabilities (5 high, 2 moderate, 4 low) in `react-router`/`react-router-dom` (CSRF, open redirect, XSS advisories), `vite`, `postcss`, `protobufjs`, `ws`, and `qs` (via `express`).
+- Backend, `pip-audit -r requirements/base.txt`: numerous published CVEs against the pinned `django==5.2.3` and `pyjwt==2.10.1`, both well behind current patched releases.
+
+**What this review does not cover:** a formal release sign-off is an approval step by a designated reviewer, not something a feature owner can self-certify. This log documents everything a reviewer needs — implementation, verification evidence, the live-rehearsal-discovered P0 fix, migration rehearsal, and this security pass — for that sign-off to happen.

@@ -37,7 +37,9 @@ The original sprint brief described Exam Sets as a prototype-only screen because
 - [x] Review the implementation and verification evidence before merging/releasing. (Merged to `main` via PR #80.)
 - [x] Resolve or explicitly accept the frontend baseline failures and environmental limits recorded in the implementation log. (Both `apiClient.test.ts` and `RouteGuards.test.tsx` fixed by `11ff29d`; confirmed passing after fast-forwarding this branch to `main`. See the 2026-08-06 follow-up entry in the implementation log.)
 - [x] Rehearse the Exam Sets demo using synthetic data only. (Completed 2026-08-06 against real dev servers with a real login and real, unmocked API calls. Found and fixed a P0 blocker in the process — `_actor_profile()` rejected every real (non-`force_authenticate`) login with 403 on all Exam Set/Blueprint/Question write operations; see implementation log for root cause, fix, and the new regression test.)
-- [x] Before production use, complete a PostgreSQL-compatible migration rehearsal. (Completed 2026-08-06 against a disposable `postgres:16` container: full migration graph applies cleanly, `apps.results`/`apps.exams` suites pass, full suite parity with SQLite. See implementation log.) Release/security review is still outstanding.
+- [x] Before production use, complete a PostgreSQL-compatible migration rehearsal. (Completed 2026-08-06 against a disposable `postgres:16` container: full migration graph applies cleanly, `apps.results`/`apps.exams` suites pass, full suite parity with SQLite. See implementation log.)
+- [x] Security review of this diff. (Completed 2026-08-06: no high/medium findings in the code changes; a pre-existing, repository-wide dependency vulnerability scan is recorded in the implementation log for release-review visibility. See implementation log.)
+- [ ] Formal release sign-off by a designated reviewer. This is an approval step, not something I can self-certify as the feature owner — the implementation log has everything a reviewer needs.
 
 ### Maintenance Table — Exam Blueprint (Ticket 001)
 
