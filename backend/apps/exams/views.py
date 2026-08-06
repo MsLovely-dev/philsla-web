@@ -3,6 +3,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import AccountProfile
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 
 from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus
@@ -41,8 +42,15 @@ EXAM_SET_MANAGEMENT_ROLES = require_roles(
 
 def _actor_profile(request):
     profile = getattr(request.user, "account_profile", None)
-    if profile is not None:
+    if isinstance(profile, AccountProfile):
         return profile
+
+    user_id = getattr(request.user, "id", None)
+    if user_id is not None:
+        profile = AccountProfile.objects.filter(user_id=user_id).first()
+        if profile is not None:
+            return profile
+
     raise PermissionDenied("Authenticated account profile is required.")
 
 

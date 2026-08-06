@@ -123,7 +123,7 @@ docs/superpowers/
 | **Maricon Landicho (M.Landicho)** | Maintenance Table – Student Registration | Maintenance & Config | Not started | 🟡 deferred | `worktrees/m.landicho/` | *(parked — no branch yet)* | `docs/superpowers/m.landicho/m.landicho.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Exam Blueprint | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/exam-blueprint` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Question Bank Management | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/question-bank` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
-| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | Implemented; baseline failures resolved and PostgreSQL migration rehearsal complete; release/security review open | 🟢 API-integrated; demo rehearsal and release/security review remain | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
+| **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | Implemented; baseline failures resolved, PostgreSQL migration rehearsal complete, live demo rehearsal complete (found and fixed a P0 bearer-auth permission bug); release/security review open | 🟢 API-integrated; release/security review remains | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **Ian Chris Sandoval (I.Sandoval)** | Maintenance Table – Exam Blueprint | Maintenance & Config | Not started | 🟡 deferred | `worktrees/i.sandoval/` | *(parked — no branch yet)* | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (.NET Student) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-student` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (Proctor) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-proctor` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
@@ -261,7 +261,7 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - After midday: P0 fixes only.
 
 ### Ian Chris Sandoval (I.Sandoval) 🟢
-- AM: present the implemented Exam Sets API workflow and its verification evidence, including the now-resolved frontend baseline checks and the completed PostgreSQL migration rehearsal; disclose the remaining release/security review as post-demo work.
+- AM: present the implemented Exam Sets API workflow and its verification evidence, including the now-resolved frontend baseline checks, the completed PostgreSQL migration rehearsal, and the completed live demo rehearsal (which caught and fixed a P0 bug blocking every real-login write to Exam Sets/Blueprints/Questions); disclose the remaining release/security review as post-demo work.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴
 - AM: finalize the Desktop App walkthrough + architecture one-pager, dry run the "what's built vs. what's next" story for both variants. No code work.

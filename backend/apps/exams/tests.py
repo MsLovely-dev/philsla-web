@@ -1,4 +1,8 @@
+import re
+
 from django.contrib.auth import get_user_model
+from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
@@ -436,6 +440,56 @@ class ExamSetApiTests(APITestCase):
         self.client.force_authenticate(university_user)
 
         self.assertEqual(self.client.get(reverse("exams:exam_set_list")).status_code, 403)
+
+    def test_creates_exam_set_for_a_genuinely_bearer_authenticated_user(self) -> None:
+        """force_authenticate() attaches a real ORM User and bypasses PendingAwareBearerAuthentication
+        entirely, so it cannot catch bugs specific to the real login-issued access token. This test
+        drives the actual multi-step login flow to obtain a genuine bearer token."""
+
+        real_client = APIClient()
+
+        identifier_response = real_client.post(
+            "/api/v1/auth/login/identifier/",
+            {"identifier": self.user.email},
+            format="json",
+        )
+        self.assertEqual(identifier_response.status_code, 202)
+
+        password_response = real_client.post(
+            "/api/v1/auth/login/password/",
+            {"pendingAuthToken": identifier_response.data["pendingAuthToken"], "password": "Password1!"},
+            format="json",
+        )
+        self.assertEqual(password_response.status_code, 202)
+
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[-1].body)
+        self.assertIsNotNone(code_match)
+
+        otp_response = real_client.post(
+            "/api/v1/auth/login/otp/",
+            {"otpPendingAuthToken": password_response.data["otpPendingAuthToken"], "code": code_match.group(1)},
+            format="json",
+        )
+        self.assertEqual(otp_response.status_code, 202)
+
+        selfie_response = real_client.post(
+            "/api/v1/auth/login/selfie/",
+            {
+                "selfiePendingAuthToken": otp_response.data["selfiePendingAuthToken"],
+                "file": SimpleUploadedFile("selfie.jpg", b"selfie-image", content_type="image/jpeg"),
+            },
+        )
+        self.assertEqual(selfie_response.status_code, 200)
+        access_token = selfie_response.data["accessToken"]
+
+        create_response = real_client.post(
+            reverse("exams:exam_set_list"),
+            self.payload,
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.data["status"], "DRAFT")
 
     def test_rejects_invalid_item_references_without_replacing_existing_items(self) -> None:
         created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")

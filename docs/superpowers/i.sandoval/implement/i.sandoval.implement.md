@@ -84,12 +84,30 @@ Ran against a disposable `postgres:16` Docker container (no persistent volume, r
 - `docker run --rm -d --name philsla-pg-rehearsal -e POSTGRES_PASSWORD=rehearsal -e POSTGRES_DB=philsla_rehearsal -p 55432:5432 postgres:16`
 - `DATABASE_URL=postgres://postgres:rehearsal@localhost:55432/philsla_rehearsal?sslmode=disable manage.py migrate --settings=config.settings.local` — applied the full migration graph (accounts, admin, applications, attendance, auth, configuration, contenttypes, exam_reviews, exams, results, schools, sessions, token_blacklist, universities) cleanly from empty, including `results.0001_initial` → `0003` and `exam_reviews.0001_initial`. No conflicts: the two apps now carry independent, non-overlapping migration histories (`exam_reviews` was split into its own app after the merge repair recorded above), so the migration-history reconciliation risk flagged earlier no longer applies to the current graph.
 - Re-running the same `migrate` command reported "No migrations to apply" (idempotent), and `manage.py check --settings=config.settings.local` passed against the Postgres connection.
-- Added `backend/config/settings/test_postgres.py` (mirrors `config.settings.test`, swaps only `DATABASES` to the `DATABASE_URL`-configured Postgres connection) so this rehearsal is repeatable.
-- `manage.py test apps.results apps.exams --settings=config.settings.test_postgres` — passed; 55 tests.
-- `manage.py test --settings=config.settings.test_postgres` (full suite) — 352 passed, 1 failed: the same pre-existing `apps.universities` seed-idempotency failure seen on SQLite, confirming parity rather than a Postgres-specific regression.
+- Added `backend/config/settings/postgres_rehearsal.py` (mirrors `config.settings.test`, swaps only `DATABASES` to the `DATABASE_URL`-configured Postgres connection) so this rehearsal is repeatable. First named `test_postgres.py`; renamed after it collided with Django's `manage.py test` module auto-discovery (any `test*.py` file gets imported as a test module) and broke the full-suite run with a spurious `ImproperlyConfigured` collection error.
+- `manage.py test apps.results apps.exams --settings=config.settings.postgres_rehearsal` — passed; 56 tests (55 plus the new real-bearer-auth regression test below).
+- `manage.py test --settings=config.settings.postgres_rehearsal` (full suite) — 354 passed, 1 failed: the same pre-existing `apps.universities` seed-idempotency failure seen on SQLite, confirming parity rather than a Postgres-specific regression.
 - Container stopped and auto-removed (`--rm`) after the rehearsal; no rehearsal data persisted.
+
+### Live demo rehearsal — found and fixed a P0 blocker
+
+Rehearsed the Exam Sets demo path against real dev servers (not mocks): `manage.py runserver` on the local SQLite dev DB plus `npm run dev`, with a synthetic `rehearsal_admin` (SYSTEM_ADMIN) account and a synthetic approved Blueprint Version + Question seeded via `manage.py shell`. Drove the actual login form (identifier → password → email OTP → camera selfie, via Chromium's `--use-fake-device-for-media-stream`) and the actual Exam Sets UI with Playwright — no route mocking. Added a temporary `config/settings/local_rehearsal.py` (imports `config.settings.local`, sets `AUTH_LOCAL_EXPOSE_OTP = True` so the login OTP is readable without email infrastructure, and trusts the rehearsal's local origin) to make this repeatable without touching the login system itself (owned by M.Landicho's story).
+
+First full run reproduced a genuine, reproducible P0: creating an Exam Set through a real login-issued bearer token returned `403 PERMISSION_DENIED: "Authenticated account profile is required."` — reproduced outside the browser too, with a direct `curl` `POST` using the same access token. All of the existing `apps.exams` tests use `force_authenticate()`, which attaches a real Django `User` ORM instance directly to `request.user` and bypasses `PendingAwareBearerAuthentication` entirely, so this path was never exercised.
+
+**Root cause:** `_actor_profile()` in `apps/exams/views.py` read `request.user.account_profile`, the ORM reverse relation. That only exists on a real `User` instance. For genuine bearer-token requests, `apps/accounts/services.py`'s `validate_access_token()` builds `request.user` as a `SimpleNamespace` (`id`, `email`, `role`, `permissions`, `scopes`) with no such attribute, so the lookup silently returned `None` and every write path (create/update/clone/transition on Blueprints, Questions, and Exam Sets — everywhere `_actor_profile()` is called) rejected every real, non-test login.
+
+**Fix:** `_actor_profile()` now falls back to `AccountProfile.objects.filter(user_id=request.user.id).first()` when the fast-path attribute isn't a real `AccountProfile` instance, so it resolves correctly for both `force_authenticate()`-issued and genuine bearer-token-issued users.
+
+**Regression coverage:** Added `ExamSetApiTests.test_creates_exam_set_for_a_genuinely_bearer_authenticated_user`, which drives the real four-step login flow (matching the pattern in `apps/accounts/tests/test_login_endpoints.py`) to obtain a real access token, then asserts Exam Set creation succeeds. Confirmed failing (403) before the fix, passing after.
+
+**Verification after the fix:**
+- `manage.py test apps.exams.tests --settings=config.settings.test` — passed; 16 tests (15 existing + 1 new).
+- `manage.py test --settings=config.settings.test` (full suite) — 354 passed, 1 failed: the same pre-existing, out-of-scope `apps.universities` seed-idempotency failure.
+- Re-ran the full live rehearsal end to end: real login → Exam Sets nav → Create Exam Set (Blueprint Version + Question, synthetic data only) → `201 DRAFT` → Submit for Review → `200 ACADEMIC_REVIEW`, confirmed visually in the rendered UI. Rehearsal script and screenshots were run from a local scratch directory outside the repo and are not committed.
 
 ### Remaining before production use
 
 - Release/security review of the merged Exam Sets + repaired `apps.results`/`apps.exam_reviews` migration history, per the original task brief.
 - The pre-existing `apps.universities` seed-idempotency failure and the `UniversitiesListMaintenance`/`QrScanModal` frontend test failures are outside this story's scope (JP.Mayordo and Jo.Ganapin respectively) and are called out here only because they surfaced while re-baselining this branch against current `main`.
+- `_actor_profile()`'s same fallback pattern is worth a quick audit in any other `apps/exams` or sibling-app views that assume `request.user.account_profile` is always a live ORM relation, since only the Exam Set creation path was exercised end-to-end here.
