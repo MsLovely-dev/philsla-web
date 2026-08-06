@@ -26,6 +26,7 @@ class Migration(migrations.Migration):
                 ('room', models.CharField(blank=True, max_length=100)),
                 ('seat', models.CharField(blank=True, max_length=50)),
                 ('exam_date', models.DateField(blank=True, null=True)),
+                ('expires_at', models.DateTimeField(blank=True, help_text='Permit can no longer be used to check in after this time; null means no expiry set.', null=True)),
                 ('qr_token', models.CharField(default=apps.attendance.models.generate_qr_token, editable=False, max_length=64, unique=True)),
                 ('status', models.CharField(choices=[('ISSUED', 'Issued'), ('USED', 'Used'), ('VOID', 'Void')], default='ISSUED', max_length=16)),
                 ('issued_at', models.DateTimeField(auto_now_add=True)),
@@ -39,7 +40,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('scanned_at', models.DateTimeField(auto_now_add=True)),
-                ('scanned_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='attendance_scans', to=settings.AUTH_USER_MODEL)),
+                ('scanned_by', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='attendance_scans', to=settings.AUTH_USER_MODEL)),
                 ('permit', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attendance_records', to='attendance.exampermit')),
             ],
             options={

@@ -28,6 +28,11 @@ class ExamPermit(models.Model):
     room = models.CharField(max_length=100, blank=True)
     seat = models.CharField(max_length=50, blank=True)
     exam_date = models.DateField(null=True, blank=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Permit can no longer be used to check in after this time; null means no expiry set.",
+    )
     qr_token = models.CharField(
         max_length=64, unique=True, default=generate_qr_token, editable=False
     )
@@ -55,8 +60,7 @@ class AttendanceRecord(models.Model):
     )
     scanned_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
+        on_delete=models.PROTECT,
         related_name="attendance_scans",
     )
     scanned_at = models.DateTimeField(auto_now_add=True)

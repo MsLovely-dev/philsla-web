@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from apps.attendance.models import ExamPermit
 
@@ -19,6 +22,7 @@ class Command(BaseCommand):
                 test_center="University of the Philippines - Diliman",
                 room="Melchor Hall, Room 302",
                 seat=f"{i}A",
+                expires_at=timezone.now() + timedelta(hours=4),
             )
             self.stdout.write(
                 self.style.SUCCESS(

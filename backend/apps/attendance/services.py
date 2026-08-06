@@ -32,6 +32,11 @@ def mark_attendance(*, qr_token: str, proctor) -> dict:
 
     already_marked = permit.status == ExamPermit.Status.USED
 
+    if not already_marked and permit.expires_at and timezone.now() > permit.expires_at:
+        raise AttendanceError(
+            "EXPIRED", "This permit has expired and can no longer be used for entry."
+        )
+
     if not already_marked:
         permit.status = ExamPermit.Status.USED
         permit.save(update_fields=["status"])
