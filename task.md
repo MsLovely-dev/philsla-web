@@ -76,3 +76,23 @@ Ticket 001 may move out of `Deferred` only when all of the following are true:
 ### Review gate
 
 No Exam Blueprint maintenance implementation may begin from this entry. Approval confirms only the Ticket 001 deferral and does not authorize maintenance-table application changes. Exam Sets implementation authorization is recorded in its separate reviewed plan and implementation log.
+
+## Ticket 001 — Resumption (2026-08-06)
+
+| Field | Value |
+|---|---|
+| Status | **Resumed** — design spec reviewed and approved; implementation plan next |
+| Authorized by | Ian Chris Sandoval |
+| Authorization date | 2026-08-06 |
+| Resumption gates | All six satisfied — see `docs/superpowers/i.sandoval/specs/2026-08-06-exam-blueprint-maintenance-design.md` |
+| Branch | `i.sandoval/exam-blueprint-maintenance` |
+
+All resumption gates from the 2026-08-05 deferral entry above are satisfied by the reviewed design spec:
+- Product/sprint ownership reprioritization: authorized by Ian Chris Sandoval, 2026-08-06.
+- Blueprint-vs-Exam-Set boundary: this work manages reference/lookup data (`Subject`, `Topic`, `QuestionType`) only, not `ExamBlueprint`/`BlueprintVersion`/`ExamSet`, and touches no file Ju.Cabigon's Exam Blueprint story touches.
+- Maintenance lookup ownership, lifecycle, authorized operations: soft-deactivate only, no hard delete; documented in the design spec's "Lifecycle" section.
+- Backend API contract and persistence approach: documented in the design spec's "API contract" section. No new models or migrations.
+- Permission matrix, authorization, validation, audit, sensitive-data handling: documented in the design spec's "Permissions", "Validation", "Audit", and "Security" sections.
+- Test-first implementation plan: the design spec is written and approved; the implementation plan follows next, before any application code changes.
+
+This entry supersedes the 2026-08-05 deferral's "Not started" status; the deferral rationale and evidence above remain the historical record of why the ticket was originally parked.
