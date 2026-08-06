@@ -59,7 +59,14 @@ describe('QrScanModal', () => {
     clearMock.mockReset();
     trackStopMock.mockReset();
 
-    vi.mocked(Html5Qrcode).mockImplementation(function MockHtml5Qrcode() {
+    vi.mocked(Html5Qrcode).mockImplementation(function MockHtml5Qrcode(elementId: string) {
+      // Mirrors the real `Html5Qrcode` constructor (verified in
+      // node_modules/html5-qrcode/esm/html5-qrcode.js): it throws synchronously if the
+      // target element isn't in the DOM yet. This is load-bearing for the regression test
+      // below — a mock that skipped this check couldn't catch the bug it guards against.
+      if (!document.getElementById(elementId)) {
+        throw new Error(`HTML Element with id=${elementId} not found`);
+      }
       return createMockScannerInstance() as unknown as Html5Qrcode;
     });
   });
@@ -136,6 +143,42 @@ describe('QrScanModal', () => {
     await waitFor(() => expect(stopMock).toHaveBeenCalledTimes(1));
     expect(trackStopMock).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('does not restart the camera effect when onScan gets a new identity while the manual fallback is showing', async () => {
+    // Regression test: Task 4 (the caller) is expected to pass an inline
+    // `onScan={(code) => ...}`, which is a fresh function on every parent render. If the
+    // camera effect depended on `onScan`, a parent re-render while the permission-denied
+    // fallback is showing (camera region div unmounted) would re-run the effect and call
+    // `new Html5Qrcode(regionId)` against a DOM with no matching element — which the real
+    // library (and this mock, mirroring it above) throws on synchronously.
+    startShouldReject = true;
+    const onScanA = vi.fn();
+    const onScanB = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = render(<QrScanModal isOpen onClose={vi.fn()} onScan={onScanA} />);
+
+    await screen.findByLabelText(/enter code manually/i);
+    await waitFor(() => expect(startMock).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(Html5Qrcode)).toHaveBeenCalledTimes(1);
+
+    // Simulate a parent re-render passing a brand-new `onScan` function identity while the
+    // fallback UI (no camera region element in the DOM) is showing.
+    expect(() => {
+      rerender(<QrScanModal isOpen onClose={vi.fn()} onScan={onScanB} />);
+    }).not.toThrow();
+
+    // The camera-construction effect must not have re-fired: still constructed/started once.
+    expect(vi.mocked(Html5Qrcode)).toHaveBeenCalledTimes(1);
+    expect(startMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(/enter code manually/i)).toBeInTheDocument();
+
+    // The latest `onScan` is still the one actually used going forward.
+    await user.type(screen.getByLabelText(/enter code manually/i), 'SAMPLE_QR_ST-009');
+    await user.click(screen.getByRole('button', { name: /submit/i }));
+
+    expect(onScanB).toHaveBeenCalledWith('SAMPLE_QR_ST-009');
+    expect(onScanA).not.toHaveBeenCalled();
   });
 
   it('calls the close handler from the close button', async () => {

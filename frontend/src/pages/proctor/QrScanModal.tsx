@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Camera, X } from 'lucide-react';
 
@@ -41,6 +41,18 @@ export function QrScanModal({ isOpen, onClose, onScan, title = 'Scan QR Code', h
   const [cameraError, setCameraError] = useState(false);
   const [manualValue, setManualValue] = useState('');
 
+  // Keep the latest `onScan` in a ref instead of the camera effect's dependency array.
+  // Task 4 (the caller) is expected to pass an inline `onScan={(code) => ...}` — a fresh
+  // function identity on every parent render. If `onScan` were a dependency, any parent
+  // re-render while the modal is open would restart the whole camera effect: it would wipe
+  // in-progress manual-entry input, and — worse — if the permission-denied fallback is
+  // showing (camera region div unmounted), it would call `new Html5Qrcode(regionId)` against
+  // a DOM with no matching element, which throws synchronously. Reading `onScanRef.current`
+  // lets the effect depend only on `isOpen`/`regionId`, so it restarts the camera lifecycle
+  // only when the modal actually opens/closes, never on an unrelated parent re-render.
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -57,7 +69,7 @@ export function QrScanModal({ isOpen, onClose, onScan, title = 'Scan QR Code', h
         (decodedText) => {
           // Report the raw decoded value only. Whether it matches a student, is a
           // duplicate scan, etc. is the caller's concern (Task 4), not this component's.
-          onScan(decodedText);
+          onScanRef.current(decodedText);
         },
         () => {
           // Per-frame "no QR code found in this frame" callback. This fires continuously
@@ -88,7 +100,7 @@ export function QrScanModal({ isOpen, onClose, onScan, title = 'Scan QR Code', h
           }
         });
     };
-  }, [isOpen, onScan, regionId]);
+  }, [isOpen, regionId]);
 
   if (!isOpen) return null;
 
@@ -96,7 +108,7 @@ export function QrScanModal({ isOpen, onClose, onScan, title = 'Scan QR Code', h
     event.preventDefault();
     const trimmed = manualValue.trim();
     if (!trimmed) return;
-    onScan(trimmed);
+    onScanRef.current(trimmed);
     setManualValue('');
   };
 

@@ -54,6 +54,17 @@ If time runs short Thursday, Phases 0–3 alone still produce a defensible narra
 - [ ] Log everything built and verified in `../implement/jo.ganapin.implement.md`, referencing this plan.
 - [ ] Friday: dry run the demo narrative only — per `build_plan.md`, no code changes except P0 fixes discovered during rehearsal.
 
+## Phase 6 — Backend (Phase 2, retroactive review required)
+
+**Status note:** unlike Phases 0–5 above, this work already exists uncommitted in `backend/apps/attendance` (models, migrations, `POST /api/v1/attendance/scan/`, settings/urls wiring) — it was built ahead of this plan's review gate and ahead of the sprint's recorded "no backend" scope agreement (`build_plan.md`). This section retroactively documents it and defines what's still needed to call it reviewed, not a from-scratch build plan. See [BRD Section 7](../brd/2026-08-05-qr-scanning-brd.md#7-current-status--open-issue) for the governance gap this closes.
+
+- [ ] Get the existing `apps.attendance` code (models, `services.mark_attendance`, `views.ScanAttendanceView`, `serializers.py`, migration `0001_initial.py`) reviewed by the user as if it were a fresh plan submission — confirm it matches the BRD's Phase 2 business rules (unique `qr_token` per permit, re-scan reported as "already marked" not an error, void-able permits, Proctor/System-Admin-only access).
+- [ ] Confirm test coverage exists for `mark_attendance` (not-found permit, already-used permit, void permit, happy path) — add tests first for any case not already covered, per this project's test-first expectation.
+- [ ] Run the backend test suite for `apps.attendance` and confirm migrations apply cleanly against a fresh database.
+- [ ] Decide and record whether Thursday's frontend mockup (Phase 1, Phases 0–5 above) stays fully mock-data self-contained, or gets wired to call this real endpoint instead of `matchScannedCodeToStudent`'s local matching — this is a scope call for Thursday, not assumed here.
+- [ ] If wiring the frontend to this endpoint: reconcile the ID mismatch this plan's Phase 1 already flagged (`StudentPC.id` vs. `ExamPermit.candidate_id`/`qr_token`) — a real decision, not a placeholder, since the two were deliberately kept separate in Phase 1's mock data design.
+- [ ] Log the retroactive review outcome in `../implement/jo.ganapin.implement.md`, distinct from the Phase 1 log entries, noting this work predates its own approval and stating explicitly what was and wasn't verified before that approval was granted.
+
 ## Review gate
 
-No phase in this plan may be executed until the user has reviewed and approved both this plan and the linked spec.
+No phase in this plan may be executed until the user has reviewed and approved both this plan and the linked spec. Phase 6 is already-written code awaiting the same review standard applied retroactively — its checklist above is what "reviewed" means for that phase, since it cannot be un-built and re-approved-then-built like Phases 0–5.

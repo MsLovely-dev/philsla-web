@@ -134,9 +134,9 @@ docs/superpowers/
 | **Alvy Depositar (A.Depositar)** | System Integration | System Admin & Compliance | Deprioritized | 🟡 documentation only if time allows | `worktrees/a.depositar/` | `a.depositar/system-integration` | `docs/superpowers/a.depositar/a.depositar.task.md` |
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – Universities and Courses | Maintenance & Config | In progress | 🟢 | `worktrees/jp.mayordo/` | `jp.mayordo/universities-courses` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟡 stretch goal | `worktrees/jp.mayordo/` | `jp.mayordo/deped-shs` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
-| **Joshua Ganapin (Jo.Ganapin)** | QR Scanning | Testing Center Ops | Not started | 🔴 no backend (proctoring app empty) | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
+| **Joshua Ganapin (Jo.Ganapin)** | QR Scanning | Testing Center Ops | Backend built ahead of scope/approval; frontend demo not started | 🟢/🟡 real backend now exists (`apps.attendance` — permit model, check-in endpoint, migrations), built ahead of this row's original scope agreement and the design-approval gate; frontend scan mockup still not built | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
 
-**Reality check up front:** 4 of these 9 devs are still working with zero or partial backend to build against (Ian, bienvenido.mendoza, Prince on Results Release/Analytics, Joshua). A.Depositar's Score Management scope has moved from prototype-only to a working backend/API/demo-seed path. Its remaining work is production-scale processing, complete audit coverage, Application Review synchronization, and downstream result distribution. The Friday target remains a **presentation-ready demo path**, not 100% production completion.
+**Reality check up front:** 3 of these 9 devs are still working with zero or partial backend to build against (Ian, bienvenido.mendoza, Prince on Results Release/Analytics). A.Depositar's Score Management scope has moved from prototype-only to a working backend/API/demo-seed path. Its remaining work is production-scale processing, complete audit coverage, Application Review synchronization, and downstream result distribution. Joshua Ganapin's QR Scanning has also moved off the zero-backend list — a real `apps.attendance` backend now exists — but unlike Alvy's, it was built ahead of the recorded scope agreement and design-approval gate this plan requires, and the frontend demo it was meant to unblock hasn't been built yet; today's job is reconciling that, not just picking up where Wednesday left off. The Friday target remains a **presentation-ready demo path**, not 100% production completion.
 
 ---
 
@@ -185,10 +185,11 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - On branch `jp.mayordo/deped-shs`: scope only today — confirm whether the same pattern applies cleanly; if yes, this becomes a Thursday-afternoon stretch goal, if no, it stays deferred.
 - **Deliverable:** reviewed plan for Universities and Courses; DepEd SHS scoped as stretch-or-defer.
 
-### Joshua Ganapin (Jo.Ganapin) 🔴 — `worktrees/jo.ganapin/`
-- On branch `jo.ganapin/qr-scanning`: confirm `backend/apps/proctoring` is an empty stub with no QR validation logic anywhere.
-- Agree scope: build a client-side QR-scan mockup (scan → attendance status change) as a demo asset, referencing the Present/Late/Absent grace-period model already designed in FR-009 as the narrative for what's built vs. designed.
-- **Deliverable:** scope agreement confirmed.
+### Joshua Ganapin (Jo.Ganapin) 🟢/🟡 — `worktrees/jo.ganapin/`
+- On branch `jo.ganapin/qr-scanning`: a real backend app (`apps.attendance` — `ExamPermit`/`AttendanceRecord` models, `POST /api/v1/attendance/scan/`, migrations, settings wiring) already exists uncommitted, built ahead of this row's original "no backend" scope agreement and ahead of the design-approval gate recorded in the spec/plan.
+- Reconcile scope, don't just re-run yesterday's plan: get retroactive review/approval for the backend work already done (BRD updated to a two-phase structure: frontend demo + real backend), and decide whether Thursday targets the originally-planned client-side mockup alone, wiring that mockup to the real endpoint, or both.
+- Agree the fallback: if retroactive approval or wiring can't land in time, the original client-side-only mockup (scan → attendance status change, referencing the Present/Late/Absent grace-period model from FR-009) is still the safe demo asset to fall back to.
+- **Deliverable:** scope agreement confirmed, including explicit sign-off on the backend work already built; BRD (`docs/superpowers/jo.ganapin/brd/2026-08-05-qr-scanning-brd.md`) and phasing plan reflect the reconciled two-phase scope.
 
 ### Standing items for everyone, today
 - [ ] Confirm `AGENTS.md` (root, `backend/`, `frontend/`) is current before opening any Claude Code + Superpowers session
@@ -236,8 +237,9 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - **AM–PM, on `universities-courses`:** Execute wiring — list/add/edit/remove CRUD against real backend. Manual test.
 - **Late PM (only if finished early), on `deped-shs`:** Attempt using the same pattern. If it doesn't fit, it stays deferred — no penalty.
 
-### Joshua Ganapin (Jo.Ganapin) 🔴
-- **All day, on `qr-scanning`:** Build the QR-scan mockup (scan → attendance status change) as a self-contained demo flow. No backend integration attempt.
+### Joshua Ganapin (Jo.Ganapin) 🟢/🟡
+- **AM, on `qr-scanning`:** Get the already-built backend (`apps.attendance` models/endpoint) reviewed against Wednesday's reconciled scope; run its test suite and confirm migrations apply cleanly.
+- **PM, on `qr-scanning`:** Build the client-side QR-scan mockup per the original Phase 1 plan (scan → attendance status change, self-contained). If time allows, wire it to the real `/api/v1/attendance/scan/` endpoint instead of mock matching; if not, keep Phase 1 self-contained and treat backend wiring as post-Friday roadmap — do not let backend wiring block having a working demo.
 
 ### Standing items for everyone, today
 - [ ] Midday check-in (15 min, all owners): converging or wandering? Kill and re-scope anything drifted.
@@ -275,8 +277,8 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 ### JP Mayordo (JP.Mayordo) 🟢
 - AM: support rehearsal on Universities/Courses maintenance screen if it's part of the demo path. If DepEd SHS didn't get built, note it as backlog — no scramble.
 
-### Joshua Ganapin (Jo.Ganapin) 🔴
-- AM: finalize QR-scan mockup walkthrough, dry run the attendance narrative. No code work.
+### Joshua Ganapin (Jo.Ganapin) 🟢/🟡
+- AM: rehearse the QR-scan demo and narrate it honestly per whichever phase actually landed — frontend-only mock, or frontend wired to the real backend — and call out the other as roadmap, not done. No code work except P0 fixes.
 
 ### Standing items for everyone, Friday
 - [ ] Feature freeze by midday — P0 fixes only after that, through PR review
