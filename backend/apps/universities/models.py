@@ -102,7 +102,7 @@ class CollegeCourse(models.Model):
     college_name = models.CharField(max_length=200)
     program_code = models.CharField(max_length=40)
     program_name = models.CharField(max_length=200)
-    degree_type = models.CharField(max_length=100, blank=True, default="Bachelor of Science")
+    degree_type = models.CharField(max_length=100, blank=True)
     major_specialization = models.CharField(max_length=200, blank=True, default="")
     duration_years = models.PositiveSmallIntegerField(default=4)
     total_units = models.PositiveIntegerField(default=0)

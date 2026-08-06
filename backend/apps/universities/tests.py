@@ -202,6 +202,13 @@ class CollegeCourseApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["degreeType"], "Doctor of Philosophy")
 
+    def test_degree_type_is_blank_when_omitted(self) -> None:
+        # No default: omitting degreeType leaves it blank rather than forcing a value.
+        payload = {key: value for key, value in self.course_payload.items() if key != "degreeType"}
+        response = self.client.post(self._list_url(), payload, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["degreeType"], "")
+
     def test_unprivileged_role_cannot_manage_courses(self) -> None:
         User = get_user_model()
         student = User.objects.create_user(

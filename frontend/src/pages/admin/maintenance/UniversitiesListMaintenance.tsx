@@ -45,7 +45,7 @@ const EMPTY_COURSE_FORM: CollegeCoursePayload = {
   collegeName: '',
   programCode: '',
   programName: '',
-  degreeType: 'Bachelor of Science',
+  degreeType: '',
   majorSpecialization: '',
   durationYears: 4,
   totalUnits: 150,
