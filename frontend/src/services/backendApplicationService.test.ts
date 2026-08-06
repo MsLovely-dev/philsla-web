@@ -267,6 +267,116 @@ describe('BackendApplicationService', () => {
     );
   });
 
+  it('loads the pending student profile completion payload', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          application: { id: 'application-id', status: 'SUBMITTED', personal: {}, address: {}, school: {}, coursePreferences: [], reviewStep: {}, examCycleId: '2026', version: 1, submittedAt: null, createdAt: '2026-07-14T00:00:00Z', updatedAt: '2026-07-14T00:00:00Z' },
+          fields: [],
+          progress: { completed: 1, total: 2, percent: 50, remaining: [] },
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.getStudentProfileCompletion();
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/profile/',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('saves the student profile draft through the profile endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          application: { id: 'application-id', status: 'SUBMITTED', personal: { mobile: '09171234567' }, address: {}, school: {}, coursePreferences: [], reviewStep: {}, examCycleId: '2026', version: 2, submittedAt: null, createdAt: '2026-07-14T00:00:00Z', updatedAt: '2026-07-14T00:00:00Z' },
+          fields: [],
+          progress: { completed: 2, total: 2, percent: 100, remaining: [] },
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.saveStudentProfileDraft({ version: 1, personal: { mobile: '09171234567' } });
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/profile/',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ version: 1, personal: { mobile: '09171234567' } }),
+      }),
+    );
+  });
+
+  it('uploads a student profile attachment through the protected profile endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        { id: 'attachment-id', section: 'Scholarship Documents', fieldKey: 'Scholarship Certification', filename: 'cert.pdf', contentType: 'application/pdf', size: 8 },
+        { status: 201 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const file = new File(['%PDF-1.4'], 'cert.pdf', { type: 'application/pdf' });
+
+    const result = await service.uploadStudentProfileAttachment('Scholarship Certification', file);
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/profile/attachments/',
+      expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+    );
+  });
+
+  it('uploads a student profile selfie through the protected profile endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        { uploadedMedia: ['SELFIE'], results: {}, progress: { completed: 2, total: 2, percent: 100, remaining: [] } },
+        { status: 201 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const file = new File(['jpeg'], 'selfie.jpg', { type: 'image/jpeg' });
+
+    const result = await service.uploadStudentProfileSelfie(file);
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/profile/selfie/',
+      expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+    );
+  });
+
+  it('submits the completed student profile through the profile endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          application: { id: 'application-id', status: 'SUBMITTED', completionStatus: 'COMPLETE', personal: {}, address: {}, school: {}, coursePreferences: [], reviewStep: {}, examCycleId: '2026', version: 3, submittedAt: '2026-07-14T00:00:00Z', createdAt: '2026-07-14T00:00:00Z', updatedAt: '2026-07-14T00:00:00Z' },
+          fields: [],
+          progress: { completed: 2, total: 2, percent: 100, remaining: [] },
+        },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.submitStudentProfile(2);
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/profile/submit/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ version: 2 }),
+      }),
+    );
+  });
+
   it('loads the protected admissions review queue', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(
