@@ -115,14 +115,24 @@ export default function UniversitiesListMaintenance() {
     setUniversityRecord,
     removeUniversityRecord,
     adjustCourseCount,
+    courses: coursesByUniversity,
+    coursesError,
+    ensureCourses,
+    setCourseRecord,
+    removeCourseRecord,
   } = useMaintenanceData();
-  const [courses, setCourses] = useState<CollegeCourseRecord[]>([]);
-  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Selected University State (drill-down into College Courses)
   const [selectedUniversity, setSelectedUniversity] = useState<UniversityRecord | null>(null);
+
+  // Courses come from the shared per-university cache. `undefined` means "not
+  // fetched yet" (show loading); a fetched university stays cached for instant
+  // re-open.
+  const courseList = selectedUniversity ? coursesByUniversity[selectedUniversity.id] : undefined;
+  const courses = courseList ?? [];
+  const isLoadingCourses = Boolean(selectedUniversity) && courseList === undefined && !coursesError;
 
   // Search & Filter for Universities
   const [uniSearch, setUniSearch] = useState('');
@@ -156,29 +166,11 @@ export default function UniversitiesListMaintenance() {
   }, [ensureUniversities]);
 
   // Load the selected university's courses from the nested endpoint on drill-down.
+  // Load the selected university's courses once into the shared cache; a
+  // previously-opened university is served from cache with no refetch.
   useEffect(() => {
-    if (!selectedUniversity) {
-      setCourses([]);
-      return;
-    }
-    let active = true;
-    // Show a loading state (not the empty state) while this university's courses
-    // are fetched, so drilling in never flashes "no courses" for a populated one.
-    setIsLoadingCourses(true);
-    setCourses([]);
-    universityService.listCourses(selectedUniversity.id).then((result) => {
-      if (!active) return;
-      setIsLoadingCourses(false);
-      if (result.ok) {
-        setCourses(result.data);
-      } else {
-        setError((result as ServiceFailure).error.message);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [selectedUniversity]);
+    if (selectedUniversity) ensureCourses(selectedUniversity.id);
+  }, [selectedUniversity, ensureCourses]);
 
   // Course-count deltas are applied against the shared cache (adjustCourseCount)
   // so the list-view column and totals stay accurate without a full refetch.
@@ -306,7 +298,6 @@ export default function UniversitiesListMaintenance() {
 
     const removedId = pendingDelete.id;
     removeUniversityRecord(removedId);
-    setCourses((prev) => prev.filter((c) => c.universityId !== removedId));
     if (selectedUniversity?.id === removedId) {
       setSelectedUniversity(null);
     }
@@ -365,10 +356,8 @@ export default function UniversitiesListMaintenance() {
       return;
     }
 
-    if (editingCourse) {
-      setCourses((prev) => prev.map((c) => (c.id === result.data.id ? result.data : c)));
-    } else {
-      setCourses((prev) => [...prev, result.data]);
+    setCourseRecord(selectedUniversity.id, result.data);
+    if (!editingCourse) {
       adjustCourseCount(selectedUniversity.id, 1);
     }
     setIsCourseModalOpen(false);
@@ -386,7 +375,7 @@ export default function UniversitiesListMaintenance() {
       return;
     }
     const removedId = pendingCourseDelete.id;
-    setCourses((prev) => prev.filter((c) => c.id !== removedId));
+    removeCourseRecord(selectedUniversity.id, removedId);
     adjustCourseCount(selectedUniversity.id, -1);
     setPendingCourseDelete(null);
   };
@@ -885,10 +874,25 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* College Courses: loading, then empty-registry CTA, otherwise the table */}
+          {/* College Courses: loading, error, then empty-registry CTA, otherwise the table */}
           {isLoadingCourses ? (
             <div className="flex justify-center py-16">
               <LoadingState title="Loading college courses" message="Fetching this university's degree programs." />
+            </div>
+          ) : coursesError && courseList === undefined ? (
+            <div className="flex justify-center py-16">
+              <ErrorState
+                title="Couldn't load college courses"
+                message={coursesError}
+                action={
+                  <button
+                    onClick={() => ensureCourses(selectedUniversity.id)}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer"
+                  >
+                    Try again
+                  </button>
+                }
+              />
             </div>
           ) : universityCourses.length === 0 ? (
             <div className="flex justify-center py-16">

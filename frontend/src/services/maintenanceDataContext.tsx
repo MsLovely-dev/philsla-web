@@ -7,19 +7,25 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { universityService, type UniversityRecord } from './backendUniversityService';
+import {
+  universityService,
+  type CollegeCourseRecord,
+  type UniversityRecord,
+} from './backendUniversityService';
 import { schoolService, type SchoolRecord } from './backendSchoolService';
 import type { ServiceFailure } from './serviceResult';
 
 /**
- * App-level cache for the Maintenance Center registry lists (universities and
- * schools). Because this provider is mounted above the router, the fetched
- * lists survive navigation between the "List of Universities" and "List of
- * Schools" tabs — so switching tabs reads cached data instantly instead of
- * remounting from empty and refetching (the previous "empty-then-filled" flash).
+ * App-level cache for the Maintenance Center registries. Because this provider
+ * is mounted above the router, fetched data survives navigation between the
+ * "List of Universities" and "List of Schools" tabs — so switching tabs reads
+ * cached data instantly instead of remounting from empty and refetching (the
+ * previous "empty-then-filled" flash).
  *
- * College courses are intentionally NOT cached here: they are fetched
- * per-university on drill-down, which is cheap and naturally scoped.
+ * College courses are cached per-university (`courses[universityId]`): the first
+ * drill-down fetches, and re-opening the same university is instant with no
+ * refetch. `coursesLoaded` records which universities have been fetched so the
+ * UI can distinguish "loading" from "genuinely empty".
  */
 interface MaintenanceDataContextValue {
   universities: UniversityRecord[];
@@ -30,6 +36,13 @@ interface MaintenanceDataContextValue {
   setUniversityRecord: (record: UniversityRecord) => void;
   removeUniversityRecord: (id: string) => void;
   adjustCourseCount: (universityId: string, delta: number) => void;
+
+  courses: Record<string, CollegeCourseRecord[]>;
+  coursesError: string | null;
+  ensureCourses: (universityId: string) => void;
+  isCoursesLoaded: (universityId: string) => boolean;
+  setCourseRecord: (universityId: string, course: CollegeCourseRecord) => void;
+  removeCourseRecord: (universityId: string, courseId: string) => void;
 
   schools: SchoolRecord[];
   schoolsLoaded: boolean;
@@ -81,6 +94,14 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
 
   const removeUniversityRecord = useCallback((id: string) => {
     setUniversities((prev) => prev.filter((u) => u.id !== id));
+    // Drop the deleted university's cached courses too.
+    coursesLoadedRef.current.delete(id);
+    setCourses((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }, []);
 
   const adjustCourseCount = useCallback((universityId: string, delta: number) => {
@@ -89,6 +110,49 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
         u.id === universityId ? { ...u, courseCount: Math.max(0, u.courseCount + delta) } : u,
       ),
     );
+  }, []);
+
+  // --- College courses (cached per university) ---
+  const [courses, setCourses] = useState<Record<string, CollegeCourseRecord[]>>({});
+  const [coursesError, setCoursesError] = useState<string | null>(null);
+  const coursesLoadedRef = useRef<Set<string>>(new Set());
+  const coursesInFlightRef = useRef<Set<string>>(new Set());
+
+  const ensureCourses = useCallback((universityId: string) => {
+    if (coursesLoadedRef.current.has(universityId) || coursesInFlightRef.current.has(universityId)) {
+      return;
+    }
+    coursesInFlightRef.current.add(universityId);
+    setCoursesError(null);
+    universityService.listCourses(universityId).then((result) => {
+      coursesInFlightRef.current.delete(universityId);
+      if (result.ok) {
+        coursesLoadedRef.current.add(universityId);
+        setCourses((prev) => ({ ...prev, [universityId]: result.data }));
+      } else {
+        setCoursesError((result as ServiceFailure).error.message);
+      }
+    });
+  }, []);
+
+  const isCoursesLoaded = useCallback((universityId: string) => coursesLoadedRef.current.has(universityId), []);
+
+  const setCourseRecord = useCallback((universityId: string, course: CollegeCourseRecord) => {
+    setCourses((prev) => {
+      const list = prev[universityId] ?? [];
+      const exists = list.some((c) => c.id === course.id);
+      return {
+        ...prev,
+        [universityId]: exists ? list.map((c) => (c.id === course.id ? course : c)) : [...list, course],
+      };
+    });
+  }, []);
+
+  const removeCourseRecord = useCallback((universityId: string, courseId: string) => {
+    setCourses((prev) => ({
+      ...prev,
+      [universityId]: (prev[universityId] ?? []).filter((c) => c.id !== courseId),
+    }));
   }, []);
 
   // --- Schools ---
@@ -141,6 +205,12 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       setUniversityRecord,
       removeUniversityRecord,
       adjustCourseCount,
+      courses,
+      coursesError,
+      ensureCourses,
+      isCoursesLoaded,
+      setCourseRecord,
+      removeCourseRecord,
       schools,
       schoolsLoaded,
       schoolsError,
@@ -158,6 +228,12 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       setUniversityRecord,
       removeUniversityRecord,
       adjustCourseCount,
+      courses,
+      coursesError,
+      ensureCourses,
+      isCoursesLoaded,
+      setCourseRecord,
+      removeCourseRecord,
       schools,
       schoolsLoaded,
       schoolsError,

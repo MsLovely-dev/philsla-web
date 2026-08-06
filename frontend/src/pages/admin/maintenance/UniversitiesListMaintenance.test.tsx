@@ -3,7 +3,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { universityService, type UniversityRecord } from '../../../services/backendUniversityService';
+import {
+  universityService,
+  type CollegeCourseRecord,
+  type UniversityRecord,
+} from '../../../services/backendUniversityService';
 import { authorizationError, networkError, serviceSuccess, validationError } from '../../../services/serviceResult';
 import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
@@ -132,6 +136,40 @@ describe('UniversitiesListMaintenance', () => {
     // The leading "=" is prefixed with a quote so spreadsheets treat it as text.
     expect(text).toContain("'=cmd|/c calc");
     expect(text).not.toContain(',=cmd'); // never a bare formula cell
+  });
+
+  it('serves a re-opened university\'s courses from cache without refetching', async () => {
+    const course: CollegeCourseRecord = {
+      id: 'c1',
+      universityId: university.id,
+      universityCode: university.code,
+      collegeName: 'College of Engineering',
+      programCode: 'BSCS',
+      programName: 'Bachelor of Science in Computer Science',
+      degreeType: 'Bachelor of Science',
+      majorSpecialization: '',
+      durationYears: 4,
+      totalUnits: 150,
+      cutoffPercentile: 85,
+      status: 'Active',
+      createdAt: '2026-08-06T00:00:00Z',
+      updatedAt: '2026-08-06T00:00:00Z',
+    };
+    vi.mocked(universityService.listUniversities).mockResolvedValue(serviceSuccess([university]));
+    const listCourses = vi.spyOn(universityService, 'listCourses').mockResolvedValue(serviceSuccess([course]));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByText(university.name));
+    expect(await screen.findByText(course.programName)).toBeInTheDocument();
+    expect(listCourses).toHaveBeenCalledTimes(1);
+
+    // Go back to the list, then re-open the same university.
+    await user.click(screen.getByRole('button', { name: /back to all universities/i }));
+    await user.click(await screen.findByText(university.name));
+
+    expect(await screen.findByText(course.programName)).toBeInTheDocument();
+    expect(listCourses).toHaveBeenCalledTimes(1); // still 1 — served from cache
   });
 
   it('does not refetch the university list when the page remounts within the cached provider', async () => {
