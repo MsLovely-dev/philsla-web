@@ -1,3 +1,4 @@
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
 
@@ -45,6 +46,21 @@ class AuthErrorSafetyTests(TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertResponseDoesNotExpose(response, otp_token, code)
+
+    def test_selfie_step_error_does_not_expose_selfie_token_or_bytes(self) -> None:
+        selfie_token = "selfie-secret-token"
+        selfie_bytes = b"synthetic-selfie-bytes"
+
+        response = self.client.post(
+            "/api/v1/auth/login/selfie/",
+            data={
+                "selfiePendingAuthToken": selfie_token,
+                "file": SimpleUploadedFile("selfie.jpg", selfie_bytes, content_type="image/jpeg"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertResponseDoesNotExpose(response, selfie_token, selfie_bytes.decode())
 
     def test_refresh_error_does_not_expose_refresh_cookie(self) -> None:
         refresh_token = "refresh-secret-token"
