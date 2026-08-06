@@ -163,7 +163,7 @@ Successful response:
 }
 ```
 
-`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues a no-score availability email notification for each released candidate with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend enqueues a Django RQ dispatch job after the release transaction commits. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. SMTP delivery failures are recorded later by the notification dispatch job on the outbox row. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues no-score availability email notifications in chunks for released candidates with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend attempts to enqueue a Django RQ dispatch job after the release transaction commits; if Redis is unavailable, release remains successful and notifications stay `PENDING`. The worker drains pending notifications across multiple batches. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. SMTP delivery failures are recorded later by the notification dispatch job on the outbox row and can be retried while below the configured attempt limit. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
 
 Successful release response:
 
@@ -190,6 +190,12 @@ If the worker is unavailable, use the manual fallback:
 
 ```powershell
 ..\venv\Scripts\python.exe manage.py dispatch_score_release_notifications --limit 100 --settings=config.settings.local
+```
+
+Failed notifications can be retried explicitly:
+
+```powershell
+..\venv\Scripts\python.exe manage.py dispatch_score_release_notifications --limit 100 --retry-failed --max-attempts 3 --settings=config.settings.local
 ```
 
 `GET /api/v1/results/score-management/batches/{sessionId}/export/` streams processed approved scores as `text/csv`. The CSV includes candidate ID, candidate name, exam set, raw score, maximum score, final score, percentile, overall rank, and release status. Text cells that could be interpreted as spreadsheet formulas are prefixed before streaming.

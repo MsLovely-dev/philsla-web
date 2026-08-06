@@ -318,3 +318,51 @@ Files changed:
 - `backend/apps/results/tests/test_score_management_api.py`
 - `docs/api/API-ENDPOINTS.md`
 - `docs/superpowers/a.depositar/implement/a.depositar.implement.md`
+
+## 2026-08-06 - Score Release Email Production Hardening
+
+Plan reference:
+
+- User-approved follow-up from latest-push code review: make the email outbox/RQ path production-ready.
+
+Work completed:
+
+- Made Redis/RQ enqueue failure non-blocking after release commit. Release remains successful and notifications stay `PENDING`.
+- Added logging for failed background enqueue attempts.
+- Changed the RQ dispatch job to drain pending notifications across multiple batches.
+- Added failed-notification retry support below a configured max attempt count.
+- Added manual command flags: `--retry-failed` and `--max-attempts`.
+- Changed release notification queue creation to process candidate scores in chunks.
+- Added settings for dispatch max batches, max attempts, and queue chunk size.
+- Updated environment examples and docs for worker tuning and retry operations.
+
+Test-first evidence:
+
+- Red run: `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api --settings=config.settings.test`
+- Red result: failed because Redis enqueue errors propagated, one dispatch job only sent one batch, and retry parameters did not exist.
+- Green run: same focused API suite after implementation.
+- Green result: passed, 31 tests.
+
+Verification:
+
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_processing apps.results.tests.test_score_management_seed_command apps.results.tests.test_score_management_api apps.results.tests.test_score_management_models --settings=config.settings.test`
+  - Passed, 44 tests.
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+- `..\venv\Scripts\python.exe manage.py makemigrations --check --dry-run --settings=config.settings.local`
+  - Passed, `No changes detected.`
+- Production settings check with fake non-secret env values:
+  - `..\venv\Scripts\python.exe manage.py check --settings=config.settings.production`
+  - Passed, `System check identified no issues (0 silenced).`
+
+Files changed:
+
+- `backend/.env.example`
+- `backend/README.md`
+- `backend/apps/results/jobs.py`
+- `backend/apps/results/management/commands/dispatch_score_release_notifications.py`
+- `backend/apps/results/services.py`
+- `backend/apps/results/tests/test_score_management_api.py`
+- `backend/config/settings/base.py`
+- `docs/api/API-ENDPOINTS.md`
+- `docs/superpowers/a.depositar/implement/a.depositar.implement.md`

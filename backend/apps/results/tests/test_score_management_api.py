@@ -15,8 +15,9 @@ from rest_framework.test import APIClient
 
 from apps.accounts.roles import PortalRole
 from apps.applications.models import ApplicationAuditLog, ApplicationStatus, IdentityMediaType, RegistrationSelfieMedia, StudentApplication
+from apps.results.jobs import dispatch_score_release_notification_batch
 from apps.results.models import CandidateScore, ScoreReleaseNotification, ScoreReleaseNotificationStatus, ScoreReleaseStatus
-from apps.results.services import REGULAR_SESSION_ID, seed_score_management_data
+from apps.results.services import REGULAR_SESSION_ID, dispatch_score_release_notifications, seed_score_management_data
 
 
 def principal(user, role):
@@ -294,13 +295,48 @@ class ScoreManagementApiTests(TestCase):
         )
         self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
 
-        with self.captureOnCommitCallbacks(execute=True), patch("apps.results.jobs.enqueue_score_release_notification_dispatch") as enqueue_dispatch:
+        with patch("apps.results.jobs.enqueue_score_release_notification_dispatch") as enqueue_dispatch, self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["notificationQueuedCount"], 1)
         enqueue_dispatch.assert_called_once_with(limit=25)
         self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=True,
+        SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE=25,
+    )
+    def test_release_still_succeeds_when_background_enqueue_fails(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        StudentApplication.objects.create(
+            owner=None,
+            lrn=score.lrn,
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+            personal={
+                "firstName": "Juan",
+                "lastName": "Dela Cruz",
+                "email": "juan.delacruz@example.test",
+            },
+            school={"lrn": score.lrn},
+        )
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+
+        with patch(
+            "apps.results.jobs.enqueue_score_release_notification_dispatch",
+            side_effect=ConnectionError("redis unavailable"),
+        ), patch("apps.results.services.logger.exception") as log_exception, self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "RESULTS_RELEASED")
+        self.assertEqual(response.data["notificationQueuedCount"], 1)
+        notification = ScoreReleaseNotification.objects.get(score=score)
+        self.assertEqual(notification.status, ScoreReleaseNotificationStatus.PENDING)
+        self.assertEqual(len(mail.outbox), 0)
+        log_exception.assert_called_once_with("Failed to enqueue Score Management release email dispatch job.")
 
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_dispatch_score_release_notifications_sends_branded_email_without_scores(self):
@@ -352,6 +388,60 @@ class ScoreManagementApiTests(TestCase):
         self.assertEqual(notification.status, ScoreReleaseNotificationStatus.SENT)
         self.assertEqual(notification.attempts, 1)
         self.assertIsNotNone(notification.sent_at)
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE=1,
+    )
+    def test_background_dispatch_job_drains_pending_notifications_across_batches(self):
+        score_ids = ["PHL-2027-000001", "PHL-2027-000002", "PHL-2027-000003"]
+        for index, candidate_id in enumerate(score_ids, start=1):
+            score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id=candidate_id)
+            StudentApplication.objects.create(
+                owner=None,
+                lrn=score.lrn,
+                status=ApplicationStatus.SUBMITTED,
+                submitted_at=timezone.now(),
+                personal={
+                    "firstName": f"Student{index}",
+                    "lastName": "Recipient",
+                    "email": f"student{index}@example.test",
+                },
+                school={"lrn": score.lrn},
+            )
+        self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
+        self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
+
+        result = dispatch_score_release_notification_batch(limit=1)
+
+        self.assertEqual(result.sent_count, 3)
+        self.assertEqual(result.failed_count, 0)
+        self.assertEqual(len(mail.outbox), 3)
+        self.assertFalse(ScoreReleaseNotification.objects.filter(status=ScoreReleaseNotificationStatus.PENDING).exists())
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_dispatch_retries_failed_notifications_under_attempt_limit(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        notification = ScoreReleaseNotification.objects.create(
+            session=score.session,
+            score=score,
+            recipient_email="retry@example.test",
+            recipient_name="Retry Student",
+            portal_url="http://localhost:3000/student/results",
+            status=ScoreReleaseNotificationStatus.FAILED,
+            attempts=1,
+            failure_reason="temporary smtp error",
+        )
+
+        result = dispatch_score_release_notifications(limit=10, include_failed=True, max_attempts=3)
+
+        self.assertEqual(result.sent_count, 1)
+        self.assertEqual(result.failed_count, 0)
+        self.assertEqual(len(mail.outbox), 1)
+        notification.refresh_from_db()
+        self.assertEqual(notification.status, ScoreReleaseNotificationStatus.SENT)
+        self.assertEqual(notification.attempts, 2)
+        self.assertEqual(notification.failure_reason, "")
 
     def test_release_skips_email_when_application_match_is_ambiguous(self):
         score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")

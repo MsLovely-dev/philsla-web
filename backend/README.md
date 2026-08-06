@@ -73,6 +73,9 @@ Score Management result-available emails use a database outbox plus Django RQ. R
 REDIS_URL="redis://localhost:6379/0"
 SCORE_RELEASE_EMAIL_AUTO_ENQUEUE="true"
 SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE="500"
+SCORE_RELEASE_EMAIL_DISPATCH_MAX_BATCHES="1000"
+SCORE_RELEASE_EMAIL_MAX_ATTEMPTS="3"
+SCORE_RELEASE_EMAIL_QUEUE_CHUNK_SIZE="5000"
 ```
 
 ```powershell
@@ -85,6 +88,12 @@ If the worker is not running, queued notifications remain `PENDING`. They can st
 
 ```powershell
 python manage.py dispatch_score_release_notifications --limit 500 --settings=config.settings.local
+```
+
+To retry failed release-email notifications that are still below the attempt limit:
+
+```powershell
+python manage.py dispatch_score_release_notifications --limit 500 --retry-failed --max-attempts 3 --settings=config.settings.local
 ```
 
 Azure Communication Services Email is the production email provider because the platform is expected to deploy on Azure. Switch the same OTP implementation to Azure Communication Services SMTP with environment settings like:

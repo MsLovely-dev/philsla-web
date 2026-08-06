@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('results', '0006_merge_score_management_and_exam_review'),
+        ('results', '0003_candidatescore_results_can_session_739f12_idx_and_more'),
     ]
 
     operations = [

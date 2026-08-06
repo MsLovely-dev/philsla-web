@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import logging
 import random
 from collections import defaultdict
 from dataclasses import dataclass
@@ -7,9 +9,10 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Sequence
 from uuid import UUID, uuid4
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from .models import (
@@ -26,6 +29,8 @@ from .models import (
     ScoreReleaseStatus,
     ScoreReviewStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 ReviewStatus = Literal["APPROVED", "PENDING", "REJECTED"]
@@ -602,10 +607,8 @@ def release_score_session(*, session_id: str, released_by) -> ScoreReleaseResult
         portal_url=f"{settings.FRONTEND_BASE_URL.rstrip('/')}/student/results",
     )
     if notification_result.queued_count and settings.SCORE_RELEASE_EMAIL_AUTO_ENQUEUE:
-        from .jobs import enqueue_score_release_notification_dispatch
-
         transaction.on_commit(
-            lambda: enqueue_score_release_notification_dispatch(
+            lambda: _enqueue_score_release_notification_dispatch_safely(
                 limit=settings.SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE,
             ),
         )
@@ -620,106 +623,150 @@ def release_score_session(*, session_id: str, released_by) -> ScoreReleaseResult
 def queue_released_score_candidate_notifications(*, session: ExaminationSession, portal_url: str) -> ScoreReleaseQueueResult:
     from apps.applications.models import ApplicationStatus, StudentApplication
 
+    chunk_size = max(1, settings.SCORE_RELEASE_EMAIL_QUEUE_CHUNK_SIZE)
+    queued_count = 0
     skipped_count = 0
-    score_rows = list(CandidateScore.objects.filter(
+    score_rows = CandidateScore.objects.filter(
         session=session,
         review_status=ScoreReviewStatus.APPROVED,
         release_status=ScoreReleaseStatus.RELEASED,
         overall_rank__isnull=False,
-    ).order_by("candidate_id").values("id", "lrn"))
-    applications_by_lrn = defaultdict(list)
-    lrns = {row["lrn"] for row in score_rows}
+    ).order_by("candidate_id").values("id", "lrn").iterator(chunk_size=chunk_size)
 
-    if lrns:
-        for application in (
-            StudentApplication.objects.filter(lrn__in=lrns)
-            .exclude(status__in=[ApplicationStatus.DRAFT, ApplicationStatus.REJECTED])
-            .select_related("personal_info")
-            .only("lrn", "submitted_at", "created_at", "personal_info")
-            .order_by("lrn", "-submitted_at", "-created_at")
-        ):
-            applications_by_lrn[str(application.lrn)].append(application)
+    for score_chunk in _chunks(score_rows, chunk_size):
+        applications_by_lrn = defaultdict(list)
+        lrns = {row["lrn"] for row in score_chunk}
 
-    notifications: list[ScoreReleaseNotification] = []
-    for score in score_rows:
-        applications = applications_by_lrn.get(str(score["lrn"]), [])
-        if len(applications) != 1:
-            skipped_count += 1
-            continue
+        if lrns:
+            for application in (
+                StudentApplication.objects.filter(lrn__in=lrns)
+                .exclude(status__in=[ApplicationStatus.DRAFT, ApplicationStatus.REJECTED])
+                .select_related("personal_info")
+                .only("lrn", "submitted_at", "created_at", "personal_info")
+                .order_by("lrn", "-submitted_at", "-created_at")
+            ):
+                applications_by_lrn[str(application.lrn)].append(application)
 
-        application = applications[0]
-        recipient_email = _application_email(application)
-        if not recipient_email or _is_seeded_synthetic_email(recipient_email):
-            skipped_count += 1
-            continue
+        notifications: list[ScoreReleaseNotification] = []
+        for score in score_chunk:
+            applications = applications_by_lrn.get(str(score["lrn"]), [])
+            if len(applications) != 1:
+                skipped_count += 1
+                continue
 
-        notifications.append(
-            ScoreReleaseNotification(
-                session=session,
-                score_id=str(score["id"]),
-                recipient_email=recipient_email,
-                recipient_name=_application_display_name(application),
-                portal_url=portal_url,
-            ),
+            application = applications[0]
+            recipient_email = _application_email(application)
+            if not recipient_email or _is_seeded_synthetic_email(recipient_email):
+                skipped_count += 1
+                continue
+
+            notifications.append(
+                ScoreReleaseNotification(
+                    session=session,
+                    score_id=str(score["id"]),
+                    recipient_email=recipient_email,
+                    recipient_name=_application_display_name(application),
+                    portal_url=portal_url,
+                ),
+            )
+
+        created_notifications = ScoreReleaseNotification.objects.bulk_create(
+            notifications,
+            batch_size=chunk_size,
+            ignore_conflicts=True,
         )
+        queued_count += len(created_notifications)
 
-    created_notifications = ScoreReleaseNotification.objects.bulk_create(
-        notifications,
-        batch_size=5000,
-        ignore_conflicts=True,
-    )
     return ScoreReleaseQueueResult(
-        queued_count=len(created_notifications),
+        queued_count=queued_count,
         skipped_count=skipped_count,
         failed_count=0,
     )
 
 
-def dispatch_score_release_notifications(*, limit: int = 100) -> ScoreReleaseDispatchResult:
+def dispatch_score_release_notifications(
+    *,
+    limit: int = 100,
+    include_failed: bool = False,
+    max_attempts: int | None = None,
+) -> ScoreReleaseDispatchResult:
     if limit <= 0:
         raise ValueError("limit must be positive")
 
-    notifications = list(
-        ScoreReleaseNotification.objects.filter(status=ScoreReleaseNotificationStatus.PENDING)
-        .order_by("queued_at", "id")[:limit],
-    )
+    max_attempts = max_attempts or settings.SCORE_RELEASE_EMAIL_MAX_ATTEMPTS
+    statuses = [ScoreReleaseNotificationStatus.PENDING]
+    if include_failed:
+        statuses.append(ScoreReleaseNotificationStatus.FAILED)
+
     sent_count = 0
     failed_count = 0
     now = timezone.now()
 
-    for notification in notifications:
-        notification.attempts += 1
-        try:
-            email_message = EmailMultiAlternatives(
-                subject="Your PhilSLA Examination Results Are Now Available",
-                body=_score_release_email_body(
-                    recipient_name=notification.recipient_name,
-                    portal_url=notification.portal_url,
-                ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[notification.recipient_email],
-            )
-            email_message.attach_alternative(
-                _score_release_email_html_body(
-                    recipient_name=notification.recipient_name,
-                    portal_url=notification.portal_url,
-                ),
-                "text/html",
-            )
-            email_message.send(fail_silently=False)
-        except Exception as exc:
-            notification.status = ScoreReleaseNotificationStatus.FAILED
-            notification.failure_reason = str(exc)[:240]
-            notification.save(update_fields=["attempts", "status", "failure_reason", "updated_at"])
-            failed_count += 1
-        else:
-            notification.status = ScoreReleaseNotificationStatus.SENT
-            notification.failure_reason = ""
-            notification.sent_at = now
-            notification.save(update_fields=["attempts", "status", "failure_reason", "sent_at", "updated_at"])
-            sent_count += 1
+    with transaction.atomic():
+        notifications = list(_dispatch_notification_queryset(statuses=statuses, max_attempts=max_attempts)[:limit])
+
+        for notification in notifications:
+            notification.attempts += 1
+            try:
+                email_message = EmailMultiAlternatives(
+                    subject="Your PhilSLA Examination Results Are Now Available",
+                    body=_score_release_email_body(
+                        recipient_name=notification.recipient_name,
+                        portal_url=notification.portal_url,
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    to=[notification.recipient_email],
+                )
+                email_message.attach_alternative(
+                    _score_release_email_html_body(
+                        recipient_name=notification.recipient_name,
+                        portal_url=notification.portal_url,
+                    ),
+                    "text/html",
+                )
+                email_message.send(fail_silently=False)
+            except Exception as exc:
+                notification.status = ScoreReleaseNotificationStatus.FAILED
+                notification.failure_reason = str(exc)[:240]
+                notification.save(update_fields=["attempts", "status", "failure_reason", "updated_at"])
+                failed_count += 1
+            else:
+                notification.status = ScoreReleaseNotificationStatus.SENT
+                notification.failure_reason = ""
+                notification.sent_at = now
+                notification.save(update_fields=["attempts", "status", "failure_reason", "sent_at", "updated_at"])
+                sent_count += 1
 
     return ScoreReleaseDispatchResult(sent_count=sent_count, failed_count=failed_count)
+
+
+def _dispatch_notification_queryset(*, statuses: list[str], max_attempts: int):
+    queryset = ScoreReleaseNotification.objects.filter(status__in=statuses, attempts__lt=max_attempts).order_by("queued_at", "id")
+    if connection.features.has_select_for_update_skip_locked:
+        return queryset.select_for_update(skip_locked=True)
+    if connection.features.has_select_for_update:
+        return queryset.select_for_update()
+    return queryset
+
+
+def _enqueue_score_release_notification_dispatch_safely(*, limit: int) -> None:
+    from .jobs import enqueue_score_release_notification_dispatch
+
+    try:
+        enqueue_score_release_notification_dispatch(limit=limit)
+    except Exception:
+        logger.exception("Failed to enqueue Score Management release email dispatch job.")
+
+
+def _chunks(items, chunk_size: int):
+    chunk = []
+    for item in items:
+        chunk.append(item)
+        if len(chunk) >= chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
 
 
 def _score_model_to_seed_record(score: CandidateScore) -> ApprovedScoreSeedRecord:
