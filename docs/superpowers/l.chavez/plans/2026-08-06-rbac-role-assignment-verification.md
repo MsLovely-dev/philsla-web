@@ -17,7 +17,7 @@ Verify and, if needed, tighten backend RBAC role-assignment logic for staff/admi
 - `backend/apps/accounts/permission_codes.py`, only if assignment synchronization has a verified defect.
 - `backend/apps/accounts/tests/test_role_account_provisioning.py`
 - `backend/apps/accounts/tests/test_activation_endpoints.py`, only for existing Student activation coverage.
-- `docs/superpowers/l.chavez/implement/l.chavez.implement.md`
+- `docs/superpowers/l.chavez/implement/l.chavez.implement-rbac.md`
 
 ## Constraints
 
@@ -61,7 +61,7 @@ Run broader accounts tests if service behavior changes beyond the focused role-a
 
 ## Task 5: Implementation Log
 
-- [x] Record exact commands and observed results in `docs/superpowers/l.chavez/implement/l.chavez.implement.md`.
+- [x] Record exact commands and observed results in `docs/superpowers/l.chavez/implement/l.chavez.implement-rbac.md`.
 - [x] Inspect `git diff` and confirm the diff stays within the approved scope.
 
 ## Approval Gate

@@ -60,7 +60,7 @@ Files changed:
 - `backend/apps/accounts/services.py`
 - `backend/apps/accounts/tests/test_role_account_provisioning.py`
 - `docs/superpowers/l.chavez/plans/2026-08-06-rbac-role-assignment-verification.md`
-- `docs/superpowers/l.chavez/implement/l.chavez.implement.md`
+- `docs/superpowers/l.chavez/implement/l.chavez.implement-rbac.md`
 
 Follow-up manual-test fix:
 

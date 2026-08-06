@@ -21,7 +21,7 @@ In scope:
 - Custom account permission differences when module access is supplied.
 - Student account exclusion from User & Role Settings.
 - Focused backend tests for role assignment behavior.
-- Implementation evidence in `docs/superpowers/l.chavez/implement/l.chavez.implement.md`.
+- Implementation evidence in `docs/superpowers/l.chavez/implement/l.chavez.implement-rbac.md`.
 
 Out of scope:
 
