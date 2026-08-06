@@ -43,17 +43,15 @@ The original sprint brief described Exam Sets as a prototype-only screen because
 
 ### Maintenance Table — Exam Blueprint (Ticket 001)
 
-**Status:** Deferred; no implementation is authorized.
+**Status:** Complete. Resumption gates satisfied and authorized 2026-08-06; implemented via a 6-task subagent-driven plan with per-task code review and a clean final whole-branch review. See `docs/superpowers/i.sandoval/specs/2026-08-06-exam-blueprint-maintenance-design.md`, `docs/superpowers/i.sandoval/plans/2026-08-06-exam-blueprint-maintenance.md`, and the implementation log's "Exam Blueprint Maintenance Table" entry. Branch: `i.sandoval/exam-blueprint-maintenance`, kept separate and not yet merged into `i.sandoval/exam-sets` or pushed, per instruction.
 
-The Blueprint maintenance-table scope remains blocked on approved ownership, lifecycle, authorization, persistence, API-contract, validation, and audit decisions. The separate Exam Sets integration does not resolve those questions and must not be used as authorization to implement this ticket.
+**Resumption gates — all satisfied**
 
-**Resumption gates**
-
-- [ ] Product/sprint ownership explicitly reprioritizes the ticket and assigns an iteration.
-- [ ] The Blueprint-versus-Exam-Set boundary and catalog ownership are approved and documented.
-- [ ] Authorized operations, lifecycle, validation, audit events, and sensitive-data handling are approved.
-- [ ] The backend persistence approach and versioned API contract are reviewed.
-- [ ] A test-first implementation plan is reviewed and approved before code changes begin.
+- [x] Product/sprint ownership explicitly reprioritizes the ticket and assigns an iteration. (Authorized by Ian Chris Sandoval, 2026-08-06.)
+- [x] The Blueprint-versus-Exam-Set boundary and catalog ownership are approved and documented. (Design spec: this work manages reference/lookup data only — Subject/Topic/QuestionType — not ExamBlueprint/BlueprintVersion/ExamSet.)
+- [x] Authorized operations, lifecycle, validation, audit events, and sensitive-data handling are approved. (Design spec's Lifecycle/Permissions/Audit/Security sections; soft-deactivate only, no hard delete, no sensitive content.)
+- [x] The backend persistence approach and versioned API contract are reviewed. (Design spec's API contract section; no new models/migrations, reused existing Subject/Topic/QuestionType.)
+- [x] A test-first implementation plan is reviewed and approved before code changes begin. (Implementation plan, TDD throughout, per-task and final review all clean.)
 
 ## Guardrails
 
