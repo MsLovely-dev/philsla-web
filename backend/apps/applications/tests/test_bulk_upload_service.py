@@ -103,6 +103,36 @@ class BulkUploadServiceTests(TestCase):
 
         self.assertEqual(ApplicationBulkUploadBatch.objects.count(), 0)
 
+    def test_validation_denies_an_actor_without_an_explicit_active_flag(self):
+        missing_active_flag_actor = SimpleNamespace(
+            id=self.user.id,
+            user_id=self.user.id,
+            role=PortalRole.ADMISSIONS_REVIEWER.value,
+            is_authenticated=True,
+        )
+
+        with self.assertRaises(PermissionDenied):
+            validate_bulk_upload_csv(uploaded_file=csv_file([valid_row()]), actor=missing_active_flag_actor)
+
+        self.assertEqual(ApplicationBulkUploadBatch.objects.count(), 0)
+
+    def test_validation_snapshots_the_role_resolved_from_an_account_profile(self):
+        profile = AccountProfile.objects.create(user=self.user, role=PortalRole.SYSTEM_ADMIN.value)
+        profile_actor = SimpleNamespace(
+            id=self.user.id,
+            user_id=self.user.id,
+            account_profile=profile,
+            is_authenticated=True,
+            is_active=True,
+        )
+
+        validate_bulk_upload_csv(uploaded_file=csv_file([valid_row()]), actor=profile_actor)
+
+        self.assertEqual(
+            ApplicationBulkUploadBatch.objects.get().performed_by_role_snapshot,
+            PortalRole.SYSTEM_ADMIN.value,
+        )
+
     def test_validation_records_missing_required_fields_as_field_errors(self):
         result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(firstName="")]), actor=self.actor)
 

@@ -92,13 +92,13 @@ def build_bulk_upload_template_csv() -> str:
 
 
 def validate_bulk_upload_csv(*, uploaded_file, actor) -> dict:
-    _require_bulk_upload_role(actor)
+    actor_role = _require_bulk_upload_role(actor)
     batch = ApplicationBulkUploadBatch.objects.create(
         template_version=BULK_UPLOAD_TEMPLATE_VERSION,
         exam_cycle_id=settings.ACTIVE_EXAM_CYCLE_ID,
         status=BulkUploadBatchStatus.VALIDATING,
         uploaded_by_user_id=getattr(actor, "user_id", getattr(actor, "id")),
-        performed_by_role_snapshot=str(getattr(actor, "role", "")),
+        performed_by_role_snapshot=actor_role,
         expires_at=timezone.now() + timedelta(days=1),
     )
 
@@ -194,11 +194,13 @@ def _field_errors(row: dict) -> list[dict]:
     return errors
 
 
-def _require_bulk_upload_role(actor) -> None:
-    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "is_active", True):
+def _require_bulk_upload_role(actor) -> str:
+    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "is_active", False):
         raise PermissionDenied("Authenticated active admissions access is required.")
-    if get_user_role(actor) not in {PortalRole.ADMISSIONS_REVIEWER.value, PortalRole.SYSTEM_ADMIN.value}:
+    role = get_user_role(actor)
+    if role not in {PortalRole.ADMISSIONS_REVIEWER.value, PortalRole.SYSTEM_ADMIN.value}:
         raise PermissionDenied("Admissions reviewer or system administrator access is required.")
+    return role
 
 
 def _has_yyyy_mm_dd_format(value: str) -> bool:
