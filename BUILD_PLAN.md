@@ -136,7 +136,7 @@ docs/superpowers/
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟡 stretch goal | `worktrees/jp.mayordo/` | `jp.mayordo/deped-shs` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
 | **Joshua Ganapin (Jo.Ganapin)** | QR Scanning | Testing Center Ops | Not started | 🔴 no backend (proctoring app empty) | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
 
-**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince on Results Release/Analytics, and Joshua). Ian's separately reviewed Exam Sets integration uses the merged API rather than mock/browser-local state as authoritative storage; the frontend baseline failures are now resolved and the PostgreSQL-compatible migration rehearsal is complete, leaving only demo rehearsal and a release/security review before production use. A.Depositar's Score Management scope now has a working backend/API/demo-seed path; production-scale processing, complete audit coverage, Application Review synchronization, and downstream distribution remain. The Friday target is a **presentation-ready demo path**, not 100% production completion.
+**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince on Results Release/Analytics, and Joshua). Ian's separately reviewed Exam Sets and Maintenance Table – Exam Blueprint work are both complete, verified, and release-signed-off. A.Depositar's Score Management scope now has a working backend/API/demo-seed path; production-scale processing, complete audit coverage, Application Review synchronization, and downstream distribution remain. The Friday target is a **presentation-ready demo path**, not 100% production completion.
 
 ---
 
@@ -261,7 +261,7 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - After midday: P0 fixes only.
 
 ### Ian Chris Sandoval (I.Sandoval) 🟢
-- AM: present the implemented Exam Sets API workflow and its verification evidence, including the now-resolved frontend baseline checks, the completed PostgreSQL migration rehearsal, and the completed live demo rehearsal (which caught and fixed a P0 bug blocking every real-login write to Exam Sets/Blueprints/Questions); disclose the remaining release/security review as post-demo work.
+- AM: present the implemented Exam Sets API workflow and its verification evidence, including the now-resolved frontend baseline checks, the completed PostgreSQL migration rehearsal, and the completed live demo rehearsal (which caught and fixed a P0 bug blocking every real-login write to Exam Sets/Blueprints/Questions); also present the completed Maintenance Table – Exam Blueprint work (Ticket 001), reviewed end to end via subagent-driven development.
 
 ### bienvenido.mendoza (B.Mendoza) 🔴
 - AM: finalize the Desktop App walkthrough + architecture one-pager, dry run the "what's built vs. what's next" story for both variants. No code work.

@@ -55,6 +55,38 @@ class PasswordLoginSerializer(serializers.Serializer):
     )
 
 
+class TemporaryPasswordChangeSerializer(serializers.Serializer):
+    passwordChangeToken = serializers.CharField(
+        trim_whitespace=True,
+        error_messages={
+            "blank": "Your session has expired. Please start again.",
+            "required": "Your session has expired. Please start again.",
+        },
+    )
+    password = serializers.CharField(
+        trim_whitespace=False,
+        error_messages={
+            "blank": "Please enter your new password.",
+            "required": "Please enter your new password.",
+        },
+    )
+    confirmPassword = serializers.CharField(
+        trim_whitespace=False,
+        error_messages={
+            "blank": "Please confirm your new password.",
+            "required": "Please confirm your new password.",
+        },
+    )
+
+    def validate_password(self, value: str) -> str:
+        return validate_password_policy(value)
+
+    def validate(self, attrs: dict[str, str]) -> dict[str, str]:
+        if attrs["password"] != attrs["confirmPassword"]:
+            raise serializers.ValidationError({"confirmPassword": "Passwords do not match."})
+        return attrs
+
+
 class OtpLoginSerializer(serializers.Serializer):
     otpPendingAuthToken = serializers.CharField(
         trim_whitespace=True,

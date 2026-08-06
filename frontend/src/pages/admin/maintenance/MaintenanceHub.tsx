@@ -17,6 +17,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 
 import { usePhilSA } from '../../../PhilSAContext';
+import { canAccessStudentRegistrationMaintenance } from '../../../routing/roleAccess';
 
 const MAINTENANCE_MODULES = [
   {
@@ -26,7 +27,8 @@ const MAINTENANCE_MODULES = [
     icon: Users,
     href: '/admin/maintenance/registration',
     stats: '15 Active Tables',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
+    allowedRoles: ['SYSTEM_ADMIN'],
+    strictAccess: canAccessStudentRegistrationMaintenance,
   },
   {
     id: 'schools',
@@ -60,8 +62,8 @@ const MAINTENANCE_MODULES = [
 export default function MaintenanceHub() {
   const { user } = usePhilSA();
   
-  const filteredModules = MAINTENANCE_MODULES.filter(m => 
-    !user || m.allowedRoles.includes(user.role)
+  const filteredModules = MAINTENANCE_MODULES.filter(m =>
+    !user || (m.strictAccess ? m.strictAccess(user) : m.allowedRoles.includes(user.role))
   );
 
   return (

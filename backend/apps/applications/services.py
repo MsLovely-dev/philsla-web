@@ -26,7 +26,7 @@ from .identity_verification import (
     get_selfie_face_validator,
     get_student_id_recognizer,
 )
-from .models import (ApplicationIdentityMedia, ApplicationStatus, IdentityMediaType,
+from .models import (ApplicationCompletionStatus, ApplicationIdentityMedia, ApplicationStatus, IdentityMediaType,
                      RegistrationSelfieMedia,
                      Step2Verification, Step2VerificationConfiguration,
                      Step2VerificationStatus, StudentApplication,
@@ -1182,6 +1182,8 @@ def decide_application(
         raise ApplicationConflict("Only submitted applications can receive a reviewer decision.")
 
     if decision == "APPROVE":
+        if application.completion_status == ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION:
+            raise ApplicationConflict("Student completion is pending for this bulk-uploaded application.")
         application.status = ApplicationStatus.APPROVED
     elif decision == "REQUEST_CORRECTION":
         application.status = ApplicationStatus.FOR_CORRECTION

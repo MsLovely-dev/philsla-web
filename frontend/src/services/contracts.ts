@@ -34,6 +34,14 @@ export interface AuthOtpChallenge {
   devOtp?: string;
 }
 
+export interface AuthPasswordChangeChallenge {
+  passwordChangeToken: string;
+  nextStep: 'password_change';
+  expiresInSeconds: number;
+}
+
+export type AuthPasswordResult = AuthOtpChallenge | AuthPasswordChangeChallenge;
+
 export interface AuthSelfieChallenge {
   selfiePendingAuthToken: string;
   nextStep: 'selfie';
@@ -53,7 +61,8 @@ export interface AuthService {
   getCurrentSession(): Promise<ServiceResult<AuthSession | null>>;
   login(credentials: AuthCredentials): Promise<ServiceResult<AuthSession>>;
   startLoginIdentifier?(identifier: string): Promise<ServiceResult<AuthIdentifierChallenge>>;
-  verifyLoginPassword?(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>>;
+  verifyLoginPassword?(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthPasswordResult>>;
+  completeTemporaryPasswordChange?(passwordChangeToken: string, password: string, confirmPassword: string): Promise<ServiceResult<AuthOtpChallenge>>;
   completeStaffActivation?(activationToken: string, password: string, confirmPassword: string): Promise<ServiceResult<null>>;
   resendLoginOtp?(otpPendingAuthToken: string): Promise<ServiceResult<AuthOtpChallenge>>;
   verifyLoginOtp?(otpPendingAuthToken: string, code: string): Promise<ServiceResult<AuthSelfieChallenge>>;

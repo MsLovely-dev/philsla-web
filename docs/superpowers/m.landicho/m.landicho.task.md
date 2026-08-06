@@ -91,11 +91,11 @@ This entry records the approved solution and task scope. The phased implementati
 |---|---|
 | Owner | Maricon Landicho (M.Landicho) |
 | Module | Maintenance & Config |
-| Sprint status | Deferred; User Authentication (Login) remains the only real sprint deliverable |
+| Sprint status | Reactivated by Maricon for Ticket 002 planning on 2026-08-06 with sprint-owner clearance; `build_plan.md` roster and Thursday section updated same day to record the change |
 | Implementation assessment | Substantially implemented in the current system; verification and targeted hardening remain |
-| Branch | None; do not create a Ticket 002 branch while the story remains deferred |
-| Plan status | Design approved; implementation plan not yet written or approved |
-| Implementation status | Blocked until Ticket 002 is explicitly reactivated and Maricon approves the written plan |
+| Branch | `m.landicho/maintenance-student-registration`, created sequentially from merged `origin/main` |
+| Plan status | Draft saved at `plans/2026-08-06-ticket-002-maintenance-student-registration-plan.md`; awaiting Maricon's review |
+| Implementation status | Blocked until Maricon reviews and approves the written plan |
 
 ### Existing implementation evidence
 
@@ -137,7 +137,7 @@ Treat Ticket 002 as verification and targeted gap closure, not a new implementat
 
 ### Review gate
 
-This design is approved for documentation and future plan drafting only. Ticket 002 remains deferred, no branch is required, and no application or test changes are authorized. Before implementation, Maricon must explicitly reactivate Ticket 002 and review and approve its written implementation plan.
+Maricon reactivated Ticket 002 for branch setup and planning on 2026-08-06, with sprint-owner clearance. The branch and written plan now exist, but no application or test changes are authorized. Before implementation, Maricon must review and approve `plans/2026-08-06-ticket-002-maintenance-student-registration-plan.md`. `build_plan.md`'s original deferred status has been updated (roster row and Thursday section) to record this reactivation.
 
 ## Wednesday — planning and scope lock
 
