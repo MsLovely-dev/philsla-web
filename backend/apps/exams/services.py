@@ -1590,7 +1590,7 @@ def create_subject(*, data: dict) -> Subject:
     except DjangoValidationError as exc:
         if _is_uniqueness_conflict(exc):
             raise ExamBlueprintMaintenanceConflict("A subject with this code or name already exists.") from exc
-        raise
+        raise ValidationError(exc.message_dict) from exc
     return subject
 
 
@@ -1607,19 +1607,13 @@ def update_subject(*, subject_id: int, data: dict) -> Subject:
     except DjangoValidationError as exc:
         if _is_uniqueness_conflict(exc):
             raise ExamBlueprintMaintenanceConflict("A subject with this code or name already exists.") from exc
-        raise
+        raise ValidationError(exc.message_dict) from exc
     return subject
 
 
 def _is_uniqueness_conflict(exc: DjangoValidationError) -> bool:
     """Check if a DjangoValidationError is about uniqueness violations."""
-    if hasattr(exc, "error_dict"):
-        error_dict = exc.error_dict
-    elif hasattr(exc, "message_dict"):
-        error_dict = exc.message_dict
-    else:
-        return False
-
+    error_dict = exc.error_dict
     for field, errors in error_dict.items():
         for error in errors:
             error_msg = str(error).lower()
