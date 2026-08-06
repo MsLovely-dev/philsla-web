@@ -872,3 +872,120 @@ class QuestionTypeAdminApiTests(APITestCase):
             HTTP_AUTHORIZATION=f"Bearer {access_token}",
         )
         self.assertEqual(create_response.status_code, 201)
+
+
+class TopicAdminApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="topic_maintenance_admin",
+            email="topic.maintenance.admin@example.test",
+            password="Password1!",
+        )
+        self.profile = AccountProfile.objects.get_or_create(user=self.user, defaults={"role": PortalRole.SYSTEM_ADMIN.value})[0]
+        self.client.force_authenticate(self.user)
+        self.subject = Subject.objects.create(code="SCI", name="Science")
+
+    def test_create_list_and_update_topic(self) -> None:
+        create_response = self.client.post(
+            reverse("exams:topic_list"),
+            {"subject_id": self.subject.id, "code": "ORBIT", "name": "Orbital Mechanics"},
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.data["subjectCode"], "SCI")
+        self.assertTrue(create_response.data["isActive"])
+
+        list_response = self.client.get(reverse("exams:topic_list"))
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.data), 1)
+        self.assertEqual(list_response.data[0]["subjectName"], "Science")
+
+        topic_id = create_response.data["id"]
+        update_response = self.client.patch(
+            reverse("exams:topic_detail", kwargs={"topic_id": topic_id}),
+            {"is_active": False},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.assertFalse(update_response.data["isActive"])
+
+    def test_rejects_unknown_subject(self) -> None:
+        response = self.client.post(
+            reverse("exams:topic_list"),
+            {"subject_id": 999999, "code": "ORBIT", "name": "Orbital Mechanics"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "VALIDATION_FAILED")
+        self.assertIn("subject_id", response.data["error"]["fields"])
+
+    def test_rejects_duplicate_topic_name_within_subject(self) -> None:
+        Topic.objects.create(subject=self.subject, name="Orbital Mechanics")
+        response = self.client.post(
+            reverse("exams:topic_list"),
+            {"subject_id": self.subject.id, "name": "Orbital Mechanics"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["code"], "CONFLICT")
+
+    def test_denies_unauthenticated_and_unapproved_roles(self) -> None:
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.get(reverse("exams:topic_list")).status_code, 401)
+
+        User = get_user_model()
+        university_user = User.objects.create_user(
+            username="topic_denied_user",
+            email="topic.denied@example.test",
+            password="Password1!",
+        )
+        AccountProfile.objects.create(user=university_user, role=PortalRole.UNIVERSITY_ADMIN.value)
+        self.client.force_authenticate(university_user)
+        self.assertEqual(self.client.get(reverse("exams:topic_list")).status_code, 403)
+
+    def test_creates_topic_for_a_genuinely_bearer_authenticated_user(self) -> None:
+        real_client = APIClient()
+
+        identifier_response = real_client.post(
+            "/api/v1/auth/login/identifier/",
+            {"identifier": self.user.email},
+            format="json",
+        )
+        self.assertEqual(identifier_response.status_code, 202)
+
+        password_response = real_client.post(
+            "/api/v1/auth/login/password/",
+            {"pendingAuthToken": identifier_response.data["pendingAuthToken"], "password": "Password1!"},
+            format="json",
+        )
+        self.assertEqual(password_response.status_code, 202)
+
+        code_match = re.search(r"\b(\d{6})\b", mail.outbox[-1].body)
+        self.assertIsNotNone(code_match)
+
+        otp_response = real_client.post(
+            "/api/v1/auth/login/otp/",
+            {"otpPendingAuthToken": password_response.data["otpPendingAuthToken"], "code": code_match.group(1)},
+            format="json",
+        )
+        self.assertEqual(otp_response.status_code, 202)
+
+        selfie_response = real_client.post(
+            "/api/v1/auth/login/selfie/",
+            {
+                "selfiePendingAuthToken": otp_response.data["selfiePendingAuthToken"],
+                "file": SimpleUploadedFile("selfie.jpg", b"selfie-image", content_type="image/jpeg"),
+            },
+        )
+        self.assertEqual(selfie_response.status_code, 200)
+        access_token = selfie_response.data["accessToken"]
+
+        create_response = real_client.post(
+            reverse("exams:topic_list"),
+            {"subject_id": self.subject.id, "name": "Thermodynamics"},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(create_response.status_code, 201)

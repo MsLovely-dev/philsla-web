@@ -1656,3 +1656,51 @@ def update_question_type(*, question_type_id: int, data: dict) -> QuestionType:
             raise ExamBlueprintMaintenanceConflict("A question type with this code or name already exists.") from exc
         raise ValidationError(exc.message_dict) from exc
     return question_type
+
+
+def topic_queryset():
+    return Topic.objects.select_related("subject")
+
+
+def create_topic(*, data: dict) -> Topic:
+    subject_id = data.pop("subject_id")
+    try:
+        subject = Subject.objects.get(pk=subject_id)
+    except Subject.DoesNotExist as exc:
+        raise ValidationError({"subject_id": ["Unknown subject."]}) from exc
+
+    topic = Topic(subject=subject, **data)
+    try:
+        topic.full_clean()
+        with transaction.atomic():
+            topic.save()
+    except IntegrityError as exc:
+        raise ExamBlueprintMaintenanceConflict("A topic with this name already exists for this subject.") from exc
+    except DjangoValidationError as exc:
+        if _is_uniqueness_conflict(exc):
+            raise ExamBlueprintMaintenanceConflict("A topic with this name already exists for this subject.") from exc
+        raise ValidationError(exc.message_dict) from exc
+    return topic
+
+
+@transaction.atomic
+def update_topic(*, topic_id: int, data: dict) -> Topic:
+    topic = Topic.objects.select_for_update().select_related("subject").get(pk=topic_id)
+    subject_id = data.pop("subject_id", None)
+    if subject_id is not None:
+        try:
+            topic.subject = Subject.objects.get(pk=subject_id)
+        except Subject.DoesNotExist as exc:
+            raise ValidationError({"subject_id": ["Unknown subject."]}) from exc
+    for field_name, value in data.items():
+        setattr(topic, field_name, value)
+    try:
+        topic.full_clean()
+        topic.save()
+    except IntegrityError as exc:
+        raise ExamBlueprintMaintenanceConflict("A topic with this name already exists for this subject.") from exc
+    except DjangoValidationError as exc:
+        if _is_uniqueness_conflict(exc):
+            raise ExamBlueprintMaintenanceConflict("A topic with this name already exists for this subject.") from exc
+        raise ValidationError(exc.message_dict) from exc
+    return topic

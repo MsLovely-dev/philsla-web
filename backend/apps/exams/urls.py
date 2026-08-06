@@ -16,6 +16,8 @@ from .views import (
     QuestionTypeAdminListCreateView,
     SubjectAdminDetailView,
     SubjectAdminListCreateView,
+    TopicAdminDetailView,
+    TopicAdminListCreateView,
 )
 
 urlpatterns = [
@@ -34,4 +36,6 @@ urlpatterns = [
     path("admin/subjects/<int:subject_id>/", SubjectAdminDetailView.as_view(), name="subject_detail"),
     path("admin/question-types/", QuestionTypeAdminListCreateView.as_view(), name="question_type_list"),
     path("admin/question-types/<int:question_type_id>/", QuestionTypeAdminDetailView.as_view(), name="question_type_detail"),
+    path("admin/topics/", TopicAdminListCreateView.as_view(), name="topic_list"),
+    path("admin/topics/<int:topic_id>/", TopicAdminDetailView.as_view(), name="topic_detail"),
 ]

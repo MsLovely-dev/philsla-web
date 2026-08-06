@@ -7,7 +7,7 @@ from apps.accounts.models import AccountProfile
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 
 from .audit import record_exam_blueprint_maintenance_event
-from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus, QuestionType, Subject
+from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus, QuestionType, Subject, Topic
 from .serializers import (
     BlueprintCloneSerializer,
     BlueprintTransitionSerializer,
@@ -20,8 +20,10 @@ from .serializers import (
     QuestionTypeSerializer,
     SubjectInputSerializer,
     SubjectSerializer,
+    TopicInputSerializer,
+    TopicSerializer,
 )
-from .services import blueprint_queryset, exam_set_queryset, latest_blueprint_version, question_queryset, question_type_queryset, subject_queryset
+from .services import blueprint_queryset, exam_set_queryset, latest_blueprint_version, question_queryset, question_type_queryset, subject_queryset, topic_queryset
 from .services import clone_exam_set
 
 
@@ -347,3 +349,40 @@ class QuestionTypeAdminDetailView(APIView):
 
     def patch(self, request, question_type_id: int) -> Response:
         return self.put(request, question_type_id)
+
+
+class TopicAdminListCreateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_BLUEPRINT_MAINTENANCE_ROLES
+
+    def get(self, request) -> Response:
+        return Response(TopicSerializer(topic_queryset(), many=True).data)
+
+    def post(self, request) -> Response:
+        serializer = TopicInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        topic = serializer.save()
+        record_exam_blueprint_maintenance_event(event="topic_created", outcome="success", request=request, user=request.user)
+        return Response(TopicSerializer(topic).data, status=201)
+
+
+class TopicAdminDetailView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_BLUEPRINT_MAINTENANCE_ROLES
+
+    def get_object(self, topic_id: int) -> Topic:
+        return get_object_or_404(topic_queryset(), pk=topic_id)
+
+    def get(self, request, topic_id: int) -> Response:
+        return Response(TopicSerializer(self.get_object(topic_id)).data)
+
+    def put(self, request, topic_id: int) -> Response:
+        topic = self.get_object(topic_id)
+        serializer = TopicInputSerializer(topic, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        updated_topic = serializer.save()
+        record_exam_blueprint_maintenance_event(event="topic_updated", outcome="success", request=request, user=request.user)
+        return Response(TopicSerializer(updated_topic).data)
+
+    def patch(self, request, topic_id: int) -> Response:
+        return self.put(request, topic_id)

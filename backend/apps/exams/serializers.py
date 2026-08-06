@@ -22,6 +22,7 @@ from .models import (
     Question,
     QuestionType,
     Subject,
+    Topic,
 )
 from .services import (
     clone_exam_blueprint,
@@ -31,6 +32,7 @@ from .services import (
     create_or_update_question,
     create_question_type,
     create_subject,
+    create_topic,
     latest_blueprint_version,
     serialize_blueprint,
     serialize_exam_set,
@@ -41,6 +43,7 @@ from .services import (
     update_exam_blueprint,
     update_question_type,
     update_subject,
+    update_topic,
 )
 
 
@@ -465,3 +468,41 @@ class QuestionTypeInputSerializer(serializers.Serializer):
 
     def update(self, instance: QuestionType, validated_data: dict) -> QuestionType:
         return update_question_type(question_type_id=instance.pk, data=validated_data)
+
+
+class TopicSerializer(serializers.ModelSerializer):
+    subjectId = serializers.IntegerField(source="subject_id", read_only=True)
+    subjectCode = serializers.CharField(source="subject.code", read_only=True)
+    subjectName = serializers.CharField(source="subject.name", read_only=True)
+    isActive = serializers.BooleanField(source="is_active", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+    class Meta:
+        model = Topic
+        fields = ("id", "subjectId", "subjectCode", "subjectName", "code", "name", "description", "isActive", "createdAt", "updatedAt")
+
+
+class TopicInputSerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField(required=False)
+    code = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    name = serializers.CharField(max_length=200, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    is_active = serializers.BooleanField(required=False)
+
+    def validate_name(self, value: str) -> str:
+        return value.strip()
+
+    def validate(self, attrs: dict) -> dict:
+        if self.instance is None:
+            if "subject_id" not in attrs or not attrs.get("subject_id"):
+                raise serializers.ValidationError({"subject_id": ["This field is required."]})
+            if "name" not in attrs or not attrs.get("name"):
+                raise serializers.ValidationError({"name": ["This field is required."]})
+        return attrs
+
+    def create(self, validated_data: dict) -> Topic:
+        return create_topic(data=validated_data)
+
+    def update(self, instance: Topic, validated_data: dict) -> Topic:
+        return update_topic(topic_id=instance.pk, data=validated_data)
