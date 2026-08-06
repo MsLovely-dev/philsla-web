@@ -76,8 +76,8 @@ describe('ExamBlueprintMaintenance', () => {
     );
   });
 
-  it('creating a record without touching Active Status persists isActive matching the visible "Inactive" toggle', async () => {
-    const created = catalogRecord({ id: '3', code: 'HIST', name: 'History', isActive: false });
+  it('creating a record without touching Active Status persists isActive matching the visible "Active" toggle', async () => {
+    const created = catalogRecord({ id: '3', code: 'HIST', name: 'History', isActive: true });
     vi.spyOn(examBlueprintMaintenanceService, 'createSubject').mockResolvedValue({
       ok: true,
       data: created,
@@ -90,15 +90,15 @@ describe('ExamBlueprintMaintenance', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
 
     await user.click(screen.getByRole('button', { name: /create new entry/i }));
-    // The Active Status toggle starts untouched — the form visibly shows "Inactive".
-    expect(screen.getByText('Inactive')).toBeInTheDocument();
+    // The Active Status toggle defaults to "Active" on create (per design spec: new records
+    // should be immediately usable on creation unless explicitly deactivated).
     await user.type(screen.getByPlaceholderText(/code/i), 'HIST');
     await user.type(screen.getByPlaceholderText(/subject name/i), 'History');
     await user.click(screen.getByRole('button', { name: /submit entry/i }));
 
     await waitFor(() => expect(screen.getByText('History')).toBeInTheDocument());
     expect(examBlueprintMaintenanceService.createSubject).toHaveBeenCalledWith(
-      expect.objectContaining({ code: 'HIST', name: 'History', isActive: false }),
+      expect.objectContaining({ code: 'HIST', name: 'History', isActive: true }),
     );
   });
 

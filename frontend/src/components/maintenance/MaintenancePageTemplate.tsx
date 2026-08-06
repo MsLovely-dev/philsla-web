@@ -47,6 +47,7 @@ export interface MaintenanceField {
   validation?: (val: unknown) => string | null;
   disabled?: boolean;
   onChange?: (val: string, currentData: MaintenanceRecord) => MaintenanceRecord;
+  defaultValue?: unknown;
 }
 
 interface MaintenancePageProps<TRow extends object> {
@@ -125,7 +126,13 @@ export default function MaintenancePageTemplate<TRow extends object>({
 
   const handleOpenCreate = () => {
     setEditingRow(null);
-    setFormData({});
+    const defaultData: MaintenanceRecord = {};
+    fields.forEach(field => {
+      if (field.defaultValue !== undefined) {
+        defaultData[field.name] = field.defaultValue;
+      }
+    });
+    setFormData(defaultData);
     setFormErrors({});
     setIsModalOpen(true);
   };

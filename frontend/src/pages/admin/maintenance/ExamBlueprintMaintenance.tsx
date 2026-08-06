@@ -68,7 +68,7 @@ function getColumnsForCategory(category: Category): MaintenanceColumn<BlueprintR
 function getFieldsForCategory(category: Category, subjects: CatalogRecord[]): MaintenanceField[] {
   const tailFields: MaintenanceField[] = [
     { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description' },
-    { name: 'isActive', label: 'Active Status', type: 'toggle' },
+    { name: 'isActive', label: 'Active Status', type: 'toggle', defaultValue: true },
   ];
 
   switch (category) {
@@ -104,17 +104,19 @@ function getFieldsForCategory(category: Category, subjects: CatalogRecord[]): Ma
   }
 }
 
-// MaintenancePageTemplate has no concept of a per-field default value: on "Create New Entry" it
-// always initializes formData to `{}` (see handleOpenCreate), so an untouched "Active Status"
-// toggle is `undefined` and visually renders in its "Inactive" position (formData[name] ? 'Active'
-// : 'Inactive'). The submitted payload must agree with what the admin saw on screen, so an
-// untouched toggle here maps to `isActive: false`, not a silently-defaulted `true`.
+// MaintenancePageTemplate's handleOpenCreate now seeds formData with defaultValue from each
+// field definition (see MaintenanceField.defaultValue). The isActive toggle field in
+// getFieldsForCategory now has defaultValue: true, so a new create form displays the toggle
+// in its "Active" position and that's what gets submitted if the admin doesn't touch it.
+// Per the design spec, Subject/Topic/QuestionType records default to isActive: true (they
+// should be immediately usable on creation unless explicitly deactivated). The backend
+// tests (e.g., test_create_list_and_update_subject) also assert isActive: true on create.
 function toCatalogPayload(record: Record<string, unknown>): CatalogPayload {
   return {
     code: typeof record.code === 'string' ? record.code : undefined,
     name: typeof record.name === 'string' ? record.name : undefined,
     description: typeof record.description === 'string' ? record.description : undefined,
-    isActive: typeof record.isActive === 'boolean' ? record.isActive : false,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : true,
   };
 }
 
@@ -124,7 +126,7 @@ function toTopicPayload(record: Record<string, unknown>): TopicPayload {
     code: typeof record.code === 'string' ? record.code : undefined,
     name: typeof record.name === 'string' ? record.name : undefined,
     description: typeof record.description === 'string' ? record.description : undefined,
-    isActive: typeof record.isActive === 'boolean' ? record.isActive : false,
+    isActive: typeof record.isActive === 'boolean' ? record.isActive : true,
   };
 }
 
