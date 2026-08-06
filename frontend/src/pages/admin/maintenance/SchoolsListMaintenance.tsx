@@ -23,7 +23,7 @@ import {
   type SchoolRecord,
 } from '../../../services/backendSchoolService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog, EmptyState, ErrorState, LoadingState } from '../../../components/ui';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell } from '../../../components/ui';
 import { useMaintenanceData } from '../../../services/maintenanceDataContext';
 import {
   ExportConfigModal,
@@ -513,9 +513,7 @@ export default function SchoolsListMaintenance() {
       )}
 
       {/* Add / Edit School Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+      <ModalShell isOpen={isModalOpen} className="max-w-xl p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <SchoolIcon className="w-5 h-5 text-philsa-navy" />
@@ -631,9 +629,7 @@ export default function SchoolsListMaintenance() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </ModalShell>
 
       <ExportConfigModal
         isOpen={isExportModalOpen}

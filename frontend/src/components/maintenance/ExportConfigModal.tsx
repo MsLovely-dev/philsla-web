@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
+import { ModalShell } from '../ui/ModalShell';
 
 export interface ExportColumnOption {
   key: string;
@@ -52,13 +53,10 @@ export function ExportConfigModal({
     setScope(scopeOptions?.[0]?.value ?? 'all');
   }, [isOpen, columns, scopeOptions]);
 
-  if (!isOpen) return null;
-
   const chosen = columns.filter((c) => selected[c.key]).map((c) => c.key);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+    <ModalShell isOpen={isOpen} className="max-w-md p-6 space-y-5">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
           <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
             <Download className="w-5 h-5 text-philsa-navy" /> {title}
@@ -125,7 +123,6 @@ export function ExportConfigModal({
             <Download className="w-4 h-4" /> Download CSV
           </button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
