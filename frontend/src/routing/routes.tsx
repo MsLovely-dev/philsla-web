@@ -17,7 +17,6 @@ import ResultsRelease from '../pages/admin/hub/ResultsRelease';
 import StimulusManagement from '../pages/admin/hub/StimulusManagement';
 import AttendanceRulesMaintenance from '../pages/admin/maintenance/AttendanceRulesMaintenance';
 import BatchConfigurationMaintenance from '../pages/admin/maintenance/BatchConfigurationMaintenance';
-import DegreeProgramsMaintenance from '../pages/admin/maintenance/DegreeProgramsMaintenance';
 import DeviceValidationMaintenance from '../pages/admin/maintenance/DeviceValidationMaintenance';
 import ExamBlueprintMaintenance from '../pages/admin/maintenance/ExamBlueprintMaintenance';
 import ExamIntegrityMaintenance from '../pages/admin/maintenance/ExamIntegrityMaintenance';
@@ -182,7 +181,6 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/maintenance/question-bank', element: <QuestionBankConfigMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR') },
   { path: '/admin/maintenance/proctor', element: <ProctorMaintenance />, access: 'protected', allowedRoles: UNIVERSITY },
   { path: '/admin/maintenance/proctor-device', element: <ProctorDeviceVerification />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
-  { path: '/admin/maintenance/degree-programs', element: <DegreeProgramsMaintenance />, access: 'protected', allowedRoles: UNIVERSITY },
 
   { path: '/admin/command-center', element: <CommandCenter />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
   { path: '/admin/recordings', element: <RecordingsCommand />, access: 'protected', allowedRoles: OVERSIGHT },
