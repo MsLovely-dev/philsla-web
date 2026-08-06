@@ -9,7 +9,7 @@ from django.db.models import Prefetch
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.utils.text import slugify
-from rest_framework.exceptions import APIException, ValidationError
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from apps.accounts.models import AccountProfile
 
@@ -94,6 +94,22 @@ EXAM_SET_ALLOWED_TRANSITIONS = {
 }
 
 EXAM_SET_EDITABLE_STATUSES = {ExamSetStatus.DRAFT, ExamSetStatus.REVISION_REQUIRED}
+
+
+class BlueprintTransitionConflict(APIException):
+    status_code = 409
+    default_code = "invalid_status_transition"
+    default_detail = "The requested blueprint transition conflicts with the current workflow state."
+
+    def __init__(self, *, current_status: str, requested_status: str, detail: str) -> None:
+        super().__init__(
+            {
+                "code": self.default_code,
+                "detail": detail,
+                "current_status": current_status,
+                "requested_status": requested_status,
+            }
+        )
 
 
 def _payload_value(
@@ -272,6 +288,53 @@ def _normalize_blueprint_status(value: Any) -> str:
     return normalized if normalized in BlueprintStatus.values else BlueprintStatus.DRAFT
 
 
+BLUEPRINT_TRANSITION_MAP = {
+    BlueprintStatus.DRAFT: {BlueprintStatus.SUBMITTED},
+    BlueprintStatus.SUBMITTED: {BlueprintStatus.ACADEMIC_REVIEW, BlueprintStatus.REVISION_REQUIRED},
+    BlueprintStatus.ACADEMIC_REVIEW: {BlueprintStatus.APPROVED, BlueprintStatus.REVISION_REQUIRED},
+    BlueprintStatus.REVISION_REQUIRED: {BlueprintStatus.DRAFT},
+    BlueprintStatus.APPROVED: {BlueprintStatus.PUBLISHED},
+    BlueprintStatus.PUBLISHED: {BlueprintStatus.RETIRED},
+    BlueprintStatus.RETIRED: {BlueprintStatus.ARCHIVED},
+    BlueprintStatus.ARCHIVED: set(),
+}
+
+
+def _validate_blueprint_transition(
+    *,
+    current_status: str,
+    requested_status: str,
+    actor_profile: AccountProfile,
+    version: BlueprintVersion,
+) -> None:
+    if current_status == requested_status:
+        raise BlueprintTransitionConflict(
+            current_status=current_status,
+            requested_status=requested_status,
+            detail=f"The blueprint is already {current_status.replace('_', ' ')}.",
+        )
+
+    allowed_targets = BLUEPRINT_TRANSITION_MAP.get(current_status)
+    if allowed_targets is None or requested_status not in allowed_targets:
+        if current_status == BlueprintStatus.PUBLISHED and requested_status == BlueprintStatus.DRAFT:
+            raise BlueprintTransitionConflict(
+                current_status=current_status,
+                requested_status=requested_status,
+                detail="A published blueprint cannot be returned to draft.",
+            )
+        raise BlueprintTransitionConflict(
+            current_status=current_status,
+            requested_status=requested_status,
+            detail=(
+                f"A blueprint in {current_status.replace('_', ' ')} cannot transition to "
+                f"{requested_status.replace('_', ' ')}."
+            ),
+        )
+
+    if requested_status == BlueprintStatus.APPROVED and version.created_by_id == actor_profile.id:
+        raise PermissionDenied("Blueprint creators cannot approve their own blueprints.")
+
+
 def _normalize_question_type_key(value: str) -> str:
     return str(value).strip().lower().replace(" ", "_")
 
@@ -381,6 +444,12 @@ def transition_blueprint_version(
 ) -> BlueprintVersion:
     normalized_status = _normalize_blueprint_status(target_status)
     previous_status = version.status
+    _validate_blueprint_transition(
+        current_status=previous_status,
+        requested_status=normalized_status,
+        actor_profile=actor_profile,
+        version=version,
+    )
     version.status = normalized_status
     timestamp = timezone.now()
 

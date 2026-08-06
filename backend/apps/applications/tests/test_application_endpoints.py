@@ -26,6 +26,7 @@ from apps.applications.models import (
     StudentApplication,
     StudentApplicationAdditionalField,
     StudentApplicationAdditionalAttachment,
+    generate_candidate_id,
 )
 from apps.configuration.models import ConfigurableField
 
@@ -110,6 +111,12 @@ class ApplicationEndpointTests(TestCase):
         body = dict(payload or {})
         body["verificationToken"] = verification.data["verificationToken"]
         return self.client.post(reverse("applications:create"), body, format="json")
+
+    def test_generate_candidate_id_uses_phl_prefix(self):
+        candidate_id = generate_candidate_id(year=2027)
+
+        self.assertRegex(candidate_id, r"^PHL-2027-[A-Z0-9]{6}$")
+        self.assertNotIn("PS-", candidate_id)
 
     def test_student_can_create_read_and_update_own_draft(self):
         created = self.create({"personal": {"firstName": "Draft"}})
@@ -248,7 +255,7 @@ class ApplicationEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], ApplicationStatus.SUBMITTED)
-        self.assertRegex(response.data["candidateId"], r"^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+        self.assertRegex(response.data["candidateId"], r"^PHL-\d{4}-[A-Z0-9]{6}$")
         self.assertIsNotNone(response.data["submittedAt"])
         application = StudentApplication.objects.get(id=response.data["id"])
         self.assertEqual(application.candidate_id, response.data["candidateId"])
@@ -281,7 +288,7 @@ class ApplicationEndpointTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        self.assertRegex(response.data["candidateId"], r"^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+        self.assertRegex(response.data["candidateId"], r"^PHL-\d{4}-[A-Z0-9]{6}$")
         audit_log = ApplicationAuditLog.objects.get(application_id=response.data["id"])
         self.assertEqual(audit_log.action, "REGISTRATION_SUBMITTED")
         self.assertEqual(audit_log.outcome, "success")
@@ -813,6 +820,14 @@ class ApplicationEndpointTests(TestCase):
             content_type="image/jpeg",
             size=12,
             sha256="abc123",
+        )
+        ApplicationIdentityMedia.objects.create(
+            verification=verification,
+            media_type=IdentityMediaType.STUDENT_ID_FRONT,
+            file="private/registration-identity/student-id-front.jpg",
+            content_type="image/jpeg",
+            size=34,
+            sha256="def456",
         )
         self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
 

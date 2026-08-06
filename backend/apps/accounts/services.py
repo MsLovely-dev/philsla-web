@@ -24,7 +24,13 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from .audit import record_auth_event
-from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog, PasswordRecoveryToken
+from .models import (
+    AccountProfile,
+    AuthRefreshSession,
+    LoginSelfieLog,
+    PasswordLoginLockout,
+    PasswordRecoveryToken,
+)
 from .permission_codes import (
     default_role_permission_codes,
     ensure_account_assignment,
@@ -717,6 +723,13 @@ def update_admin_role_permissions(
     return _serialize_admin_role(normalized_role)
 
 
+def _require_admin_managed_role(role: str) -> str:
+    normalized_role = normalize_role(role)
+    if normalized_role is None or normalized_role == PortalRole.STUDENT.value:
+        raise AccountManagementConflict("Student accounts cannot be managed from User & Role Settings.")
+    return normalized_role
+
+
 @transaction.atomic
 def create_admin_user_account(
     *,
@@ -726,6 +739,7 @@ def create_admin_user_account(
     module_access: list[str],
     is_active: bool = True,
 ) -> tuple[object, AccountProfile]:
+    role = _require_admin_managed_role(role)
     UserModel = get_user_model()
     if UserModel.objects.filter(email__iexact=email).exists():
         raise AccountManagementConflict("This email is already assigned to an account.")
@@ -758,10 +772,11 @@ def update_admin_user_account(
     module_access: list[str],
     is_active: bool,
 ) -> tuple[object, AccountProfile]:
+    role = _require_admin_managed_role(role)
     UserModel = get_user_model()
     try:
-        user = UserModel.objects.select_for_update().select_related("account_profile").get(id=user_id)
-        profile = user.account_profile
+        user = UserModel.objects.select_for_update().get(id=user_id)
+        profile = AccountProfile.objects.select_for_update().get(user=user)
     except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
         raise AccountManagementConflict("The selected account could not be found.") from exc
 
@@ -793,8 +808,8 @@ def deactivate_admin_user_account(*, user_id: str, actor: object) -> None:
         raise AccountManagementConflict("You cannot deactivate your own account.")
 
     try:
-        user = UserModel.objects.select_for_update().select_related("account_profile").get(id=user_id)
-        profile = user.account_profile
+        user = UserModel.objects.select_for_update().get(id=user_id)
+        profile = AccountProfile.objects.select_for_update().get(user=user)
     except (UserModel.DoesNotExist, AccountProfile.DoesNotExist, ValueError) as exc:
         raise AccountManagementConflict("The selected account could not be found.") from exc
 
@@ -843,6 +858,66 @@ def start_identifier_login(*, identifier: str) -> dict[str, Any]:
     }
 
 
+def _password_matches_and_updates_lockout(
+    *,
+    user: object,
+    password: str,
+    request: object | None,
+) -> bool:
+    '''Verify a password while serializing its durable attempt state.'''
+
+    now = timezone.now()
+    password_matches = user.check_password(password)
+    became_locked = False
+
+    with transaction.atomic():
+        state, _ = PasswordLoginLockout.objects.select_for_update().get_or_create(user=user)
+        lockout_is_active = state.locked_until is not None and state.locked_until > now
+
+        if lockout_is_active:
+            password_accepted = False
+        else:
+            attempt_window = timedelta(minutes=settings.AUTH_PASSWORD_LOCKOUT_MINUTES)
+            lockout_expired = state.locked_until is not None
+            window_expired = (
+                state.window_started_at is not None
+                and state.window_started_at + attempt_window <= now
+            )
+            if lockout_expired or window_expired:
+                state.failed_attempts = 0
+                state.window_started_at = None
+                state.locked_until = None
+
+            if password_matches:
+                state.delete()
+                password_accepted = True
+            else:
+                if state.window_started_at is None:
+                    state.window_started_at = now
+                state.failed_attempts += 1
+                if state.failed_attempts >= settings.AUTH_PASSWORD_MAX_ATTEMPTS:
+                    state.locked_until = now + timedelta(minutes=settings.AUTH_PASSWORD_LOCKOUT_MINUTES)
+                    became_locked = True
+                state.save(
+                    update_fields=[
+                        'failed_attempts',
+                        'window_started_at',
+                        'locked_until',
+                        'updated_at',
+                    ]
+                )
+                password_accepted = False
+
+    if became_locked:
+        record_auth_event(
+            event='auth.lockout',
+            outcome='enforced',
+            request=request,
+            user=user,
+        )
+    return password_accepted
+
+
 def verify_login_password(*, pending_auth_token: str, password: str, request: object | None = None) -> dict[str, Any]:
     """Validate the password and issue an OTP-scoped pending-auth token."""
 
@@ -853,7 +928,11 @@ def verify_login_password(*, pending_auth_token: str, password: str, request: ob
 
     account = pending["account"]
     user = _get_user_for_account(account)
-    if user is None or not user.check_password(password):
+    if user is None or not _password_matches_and_updates_lockout(
+        user=user,
+        password=password,
+        request=request,
+    ):
         raise LoginFlowRejected("Incorrect email/LRN or password.")
 
     _record_otp_request(account=account, request=request)
@@ -915,6 +994,9 @@ def resend_login_otp(*, otp_pending_auth_token: str, request: object | None = No
     remaining_absolute_seconds = _absolute_seconds_left(pending)
     if remaining_absolute_seconds < settings.AUTH_OTP_MIN_RESEND_REMAINING_SECONDS:
         raise LoginFlowRejected("Verification code expired. Please start login again to request a new code.")
+
+    if int(pending.get("resends", 0)) >= settings.AUTH_OTP_MAX_RESENDS:
+        raise LoginOtpRateLimited("You have reached the maximum number of code resends for this login attempt.")
 
     last_sent_at = _parse_cached_datetime(pending.get("last_sent_at"))
     if last_sent_at is not None:

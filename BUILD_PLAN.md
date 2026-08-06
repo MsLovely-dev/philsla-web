@@ -130,13 +130,13 @@ docs/superpowers/
 | **Prince Barachiel Malonzo (P.Malonzo)** | Exam Review | BRD-05 Scoring & Results | In progress | 🔴 no backend entity | `worktrees/p.malonzo/` | `p.malonzo/exam-review` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
 | **Prince Barachiel Malonzo (P.Malonzo)** | Exam Results Release & Analytics | BRD-05 Scoring & Results | Not started | 🔴 no backend entity | `worktrees/p.malonzo/` | `p.malonzo/results-release` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
 | **Prince Barachiel Malonzo (P.Malonzo)** | Student Portal | Student Portal | Not started | 🟡 out of scope this sprint | `worktrees/p.malonzo/` | *(parked — no branch yet)* | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
-| **Alvy Depositar (A.Depositar)** | Score Management | BRD-05 Scoring & Results | Not started | 🔴 no backend entity | `worktrees/a.depositar/` | `a.depositar/score-management` | `docs/superpowers/a.depositar/a.depositar.task.md` |
-| **Alvy Depositar (A.Depositar)** | System Integration | System Admin & Compliance | Not started | 🟡 documentation | `worktrees/a.depositar/` | `a.depositar/system-integration` | `docs/superpowers/a.depositar/a.depositar.task.md` |
+| **Alvy Depositar (A.Depositar)** | Score Management | BRD-05 Scoring & Results | ~80% complete overall; 85-90% excluding integration/distribution | 🟢 real backend/API/demo seed path now exists | `worktrees/a.depositar/` | `a.depositar/score-management` | `docs/superpowers/a.depositar/a.depositar.task.md` |
+| **Alvy Depositar (A.Depositar)** | System Integration | System Admin & Compliance | Deprioritized | 🟡 documentation only if time allows | `worktrees/a.depositar/` | `a.depositar/system-integration` | `docs/superpowers/a.depositar/a.depositar.task.md` |
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – Universities and Courses | Maintenance & Config | In progress | 🟢 | `worktrees/jp.mayordo/` | `jp.mayordo/universities-courses` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
 | **JP Mayordo (JP.Mayordo)** | Maintenance Table – List of DepEd SHS | Maintenance & Config | Not started | 🟡 stretch goal | `worktrees/jp.mayordo/` | `jp.mayordo/deped-shs` | `docs/superpowers/jp.mayordo/jp.mayordo.task.md` |
 | **Joshua Ganapin (Jo.Ganapin)** | QR Scanning | Testing Center Ops | Not started | 🔴 no backend (proctoring app empty) | `worktrees/jo.ganapin/` | `jo.ganapin/qr-scanning` | `docs/superpowers/jo.ganapin/jo.ganapin.task.md` |
 
-**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince, Alvy on Score Management, Joshua). Ian's separately reviewed Exam Sets integration now consumes the merged API and no longer uses mock/browser-local state as authoritative storage. It is not release-ready until the recorded frontend baseline failures are resolved or accepted and the rebased results migrations are rehearsed against PostgreSQL-compatible storage. The other named tracks remain demonstrations or partial implementations rather than claims of production readiness.
+**Reality check up front:** Four of these 9 devs are working with zero or partial backend to build against (bienvenido.mendoza, Prince on Results Release/Analytics, and Joshua). Ian's separately reviewed Exam Sets integration uses the merged API rather than mock/browser-local state as authoritative storage, but release readiness remains gated by frontend baseline acceptance and a PostgreSQL-compatible migration rehearsal. A.Depositar's Score Management scope now has a working backend/API/demo-seed path; production-scale processing, complete audit coverage, Application Review synchronization, and downstream distribution remain. The Friday target is a **presentation-ready demo path**, not 100% production completion.
 
 ---
 
@@ -175,10 +175,10 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - Student Portal: confirm this stays **out of scope** for this sprint entirely, no branch cut — three stories solo is already a full load.
 - **Deliverable:** scope agreement confirmed for both active branches; Student Portal explicitly parked.
 
-### Alvy Depositar (A.Depositar) 🔴 / 🟡 — `worktrees/a.depositar/`
-- On branch `a.depositar/score-management`: confirm no backend exists; agree scope — polish `ScoreManagement.tsx`'s recheck workflow (`GRADED → FINALIZED → UNDER_RECHECKING → RELEASED`) as a demo asset, plus prepare a talking point on the aggregation-formula blocking dependency BRD-05 itself already flags.
-- On branch `a.depositar/system-integration`: scope this as a **documentation task** — audit current integration adapters (LRN stub adapter, PhilSys not yet populated, DepEd/CHED/TESDA reporting) and confirm what's real vs. stubbed.
-- **Deliverable:** both scopes agreed; list of integration points to document tomorrow.
+### Alvy Depositar (A.Depositar) 🟢 / 🟡 — `worktrees/a.depositar/`
+- On branch `a.depositar/score-management`: update scope from prototype-only to working demo path. Score Management now has backend-owned processing, persistence, APIs, frontend wiring, local score seed data, candidate profile lookup, and linked student account seed data.
+- On branch `a.depositar/system-integration`: deprioritize system integration unless time remains. Keep it as documentation-only follow-up because Score Management is the priority.
+- **Deliverable:** current Score Management completion documented at 80% overall, with remaining production-scale gaps clearly listed.
 
 ### JP Mayordo (JP.Mayordo) 🟢 / 🟡 — `worktrees/jp.mayordo/`
 - On branch `jp.mayordo/universities-courses`: identify which existing maintenance-table screen is furthest along to copy the pattern from (e.g. `StudentRegistrationMaintenance.tsx`), get a plan reviewed for wiring `UniversitiesListMaintenance.tsx` to real backend CRUD.
@@ -228,9 +228,9 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - **AM–Midday, on `exam-review`:** Fix broken mock-data references between `ExamReviewList.tsx` and `ExamReviewDetail.tsx`; polish the rubric/grading display.
 - **PM, on `results-release`:** Draft the Results Release & Analytics roadmap narrative (readiness gating, holds, government reporting interface — all currently unbuilt).
 
-### Alvy Depositar (A.Depositar) 🔴 / 🟡
-- **AM, on `score-management`:** Polish `ScoreManagement.tsx`'s recheck modal flow for a clean demo.
-- **PM, on `system-integration`:** Document the actual state of each integration point (LRN, PhilSys, DepEd/CHED/TESDA) — what's real, what's stubbed, what's missing.
+### Alvy Depositar (A.Depositar) 🟢 / 🟡
+- **AM, on `score-management`:** Verify the working demo path: seed score data, seed linked candidate accounts/profiles, provision staff demo accounts, process scores, view results, open candidate profile, release, and export CSV.
+- **PM, on `score-management`:** Close demo blockers first. Treat system integration as optional documentation only after Score Management demo data and page flow are stable.
 
 ### JP Mayordo (JP.Mayordo) 🟢
 - **AM–PM, on `universities-courses`:** Execute wiring — list/add/edit/remove CRUD against real backend. Manual test.
@@ -269,8 +269,8 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 ### Prince Barachiel Malonzo (P.Malonzo) 🔴
 - AM: finalize Exam Review walkthrough + Results Release roadmap narrative, dry run. No code work.
 
-### Alvy Depositar (A.Depositar) 🔴 / 🟡
-- AM: finalize Score Management talking point + integration-status summary, dry run. No code work.
+### Alvy Depositar (A.Depositar) 🟢 / 🟡
+- AM: rehearse the Score Management demo path and explain current completion honestly: 80% overall, or 85-90% if system integration and downstream distribution are excluded. Call out remaining async processing, full audit trail, Application Review sync, and recipient distribution as post-demo work.
 
 ### JP Mayordo (JP.Mayordo) 🟢
 - AM: support rehearsal on Universities/Courses maintenance screen if it's part of the demo path. If DepEd SHS didn't get built, note it as backlog — no scramble.

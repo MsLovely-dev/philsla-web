@@ -1,5 +1,7 @@
 Django~=5.2.3
 djangorestframework~=3.16.0
 djangorestframework-simplejwt~=5.5.0
+gunicorn~=23.0
 opencv-python-headless>=4.10,<5
 psycopg[binary]~=3.2
+whitenoise~=6.9
