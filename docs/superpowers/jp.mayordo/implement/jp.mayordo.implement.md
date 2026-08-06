@@ -47,3 +47,49 @@ Executes the approved plan (`plans/2026-08-05-universities-courses.md`) by repli
 - Region choices are re-declared in `universities/models.py` (identical values to `schools`) rather than importing across apps, keeping the app self-contained and mirroring the schools pattern.
 - Local dev DB migrated and seeded (`seed_universities`) so the screen is demo-ready in backend mode.
 - Approval-gate item from the plan (human sign-off on the field set + roles) is reflected by the field set actually implemented here; final reviewer sign-off happens on the PR.
+
+---
+
+# Implementation Log — Maintenance Table: List of DepEd SHS (demo-ready)
+
+**Owner:** JP Mayordo · **Executed:** 2026-08-06 (Thursday) · **Branch:** `jp.mayordo/deped-shs`
+**Plan:** `plans/2026-08-06-deped-shs.md` · **Spec:** `specs/2026-08-06-deped-shs.md`
+
+Aligned to the updated `BUILD_PLAN.md` goal: **"presentation-ready demo path by Friday, not 100% completion."**
+
+## Reality vs. the brief
+
+The Build Plan lists DepEd SHS as *"Not started — wire `DepEdSHSListMaintenance.tsx` to real backend CRUD."* Against the code that premise is stale: the equivalent screen `SchoolsListMaintenance.tsx` is **already** wired to `apps.schools` real CRUD (via `schoolService`, `ServiceResult`, `ConfirmationDialog`, `error`/`isSaving` states, region dropdown, auto `SCH-#####`) — shipped in PR #44. So the CRUD-wiring deliverable was already met. The genuine gap vs. the Universities slice was **frontend test coverage of the screen**, which this story closes. No production code was changed (additive, test-only) — the demo path cannot regress from it.
+
+## Phase A — Verify shipped slice ✅
+
+- `python manage.py test apps.schools --settings=config.settings.test` → **5 passed** (unchanged).
+- `npx vitest run src/services/backendSchoolService.test.ts` → **4 passed** (unchanged).
+- Confirmed `SchoolsListMaintenance.tsx` already uses `schoolService` + `ServiceResult` + `ConfirmationDialog` — no rewire needed.
+
+## Phase B — Screen component test ✅
+
+- Added `frontend/src/pages/admin/maintenance/SchoolsListMaintenance.test.tsx` (5 tests): mount/list renders rows, empty state, create round-trips through `createSchool` (no `code` sent), backend `validationError` keeps the modal open + shows the banner, delete via `ConfirmationDialog` (`Remove School` → `Agree`) calls `deleteSchool` and drops the row.
+- Written against the **real** non-paginated `schoolService` — deliberately NOT copied from the broken paginated `UniversitiesListMaintenance.test.tsx`.
+- `npx vitest run src/pages/admin/maintenance/SchoolsListMaintenance.test.tsx` → **5 passed**.
+
+## Phase C — e2e smoke ✅
+
+- Added `frontend/e2e/maintenance-schools.spec.ts` mirroring `maintenance-universities.spec.ts` (prototype/Mock mode, SYSTEM_ADMIN session, single page session): list → add → edit (rename) → delete via confirm dialog.
+- `npx playwright test e2e/maintenance-schools.spec.ts` → **1 passed** — run with `VITE_AUTH_SERVICE_MODE=prototype` to override the local `.env.local` (see note).
+
+## Checks run (observed, not assumed)
+
+| Check | Result |
+|---|---|
+| `python manage.py test apps.schools --settings=config.settings.test` | **5 passed** (unchanged) |
+| `npx vitest run src/services/backendSchoolService.test.ts` | **4 passed** (unchanged) |
+| `npx vitest run src/pages/admin/maintenance/SchoolsListMaintenance.test.tsx` | **5 passed** (new) |
+| `npx playwright test e2e/maintenance-schools.spec.ts` (prototype mode) | **1 passed** (new) |
+| `npm run lint` (`tsc --noEmit`) | **No errors in the added files.** 36 pre-existing repo-wide errors in unrelated files, present before this work. |
+
+## Notes / pre-existing issues surfaced (not caused here)
+
+- **Local `.env.local` forces backend mode** (`VITE_AUTH_SERVICE_MODE="backend"`), so `npm run dev` (Playwright's webServer) runs the app in backend auth mode and the `philsa_user` session seed is ignored → protected route redirects to login. This breaks BOTH e2e specs equally; the pre-existing `maintenance-universities.spec.ts` fails identically here. Run e2e with a `VITE_AUTH_SERVICE_MODE=prototype` override to verify green.
+- **Two live University backends (tech debt, out of scope per Build Plan):** `apps.universities` (`/api/v1/universities/`, simple, consumed by the frontend) vs. `apps.configuration` admin registry (`/api/v1/configuration/admin/universities/`, paginated + versioned + Module-38 scoped, documented as canonical but consumed by no frontend). The orphaned `UniversitiesListMaintenance.test.tsx` (8 failing) was written for the configuration contract and imports symbols the shipped service doesn't export. Recommend a separate reconciliation story. Not touched here.
+- Regression check: the 9 failures in `src/pages/admin/maintenance` (`UniversitiesListMaintenance.test.tsx` 8/8, `MaintenanceCenterTables.test.tsx` 1/4) are all in files this story did not modify (`git status` shows only new files) and are pre-existing on `main`; vitest isolates test files, so the new Schools test cannot affect them.
