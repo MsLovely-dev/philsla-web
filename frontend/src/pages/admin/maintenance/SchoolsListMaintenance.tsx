@@ -218,7 +218,7 @@ export default function SchoolsListMaintenance() {
         </div>
       </div>
 
-      {error && (
+      {error && !isModalOpen && (
         <div className="card-philsa bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-4">
           {error}
         </div>
@@ -353,12 +353,18 @@ export default function SchoolsListMaintenance() {
                 {editingSchool ? 'Edit Accredited School' : 'Register New Accredited School'}
               </h3>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => { setIsModalOpen(false); setError(null); }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-3 rounded-xl">
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSave} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
@@ -407,9 +413,9 @@ export default function SchoolsListMaintenance() {
                   <input
                     type="number"
                     required
-                    min={0}
-                    value={formData.examineeCapacity}
-                    onChange={(e) => setFormData({ ...formData, examineeCapacity: Number(e.target.value) })}
+                    min={1}
+                    value={formData.examineeCapacity === 0 ? '' : formData.examineeCapacity}
+                    onChange={(e) => setFormData({ ...formData, examineeCapacity: e.target.value === '' ? 0 : Number(e.target.value) })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   />
                 </div>
@@ -430,7 +436,7 @@ export default function SchoolsListMaintenance() {
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => { setIsModalOpen(false); setError(null); }}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer"
                 >
                   Cancel
