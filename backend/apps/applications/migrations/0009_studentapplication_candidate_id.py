@@ -12,7 +12,7 @@ def _hash_to_candidate_code(value):
 
     code = ""
     state = hash_value
-    for _ in range(8):
+    for _ in range(6):
         state = ((state ^ (state >> 15)) * 2246822519) & 0xFFFFFFFF
         code += CANDIDATE_CODE_ALPHABET[state % len(CANDIDATE_CODE_ALPHABET)]
 
@@ -23,7 +23,7 @@ def _format_candidate_id(application):
     registration_date = application.submitted_at or application.created_at
     year = registration_date.year if registration_date else 2026
     code = _hash_to_candidate_code(str(application.id))
-    return f"PS-{year}-{code[:4]}-{code[4:]}"
+    return f"PHL-{year}-{code}"
 
 
 def backfill_candidate_ids(apps, schema_editor):
@@ -36,7 +36,7 @@ def backfill_candidate_ids(apps, schema_editor):
         if candidate_id in used_candidate_ids:
             suffix_code = _hash_to_candidate_code(f"{application.id}:{len(used_candidate_ids)}")
             year = (application.submitted_at or application.created_at).year if (application.submitted_at or application.created_at) else 2026
-            candidate_id = f"PS-{year}-{suffix_code[:4]}-{suffix_code[4:]}"
+            candidate_id = f"PHL-{year}-{suffix_code}"
 
         application.candidate_id = candidate_id
         application.save(update_fields=["candidate_id"])

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "apps.applications",
     "apps.analytics",
     "apps.configuration",
+    "apps.exam_reviews",
     "apps.results",
     "apps.core",
     "apps.exams",

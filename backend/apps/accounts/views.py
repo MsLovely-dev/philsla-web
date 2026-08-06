@@ -230,6 +230,7 @@ class LoginSelfieView(APIView):
         record_auth_event(event="auth.login_selfie_submitted", outcome="accepted", request=request)
         user = get_user_model().objects.get(id=issue.user_id)
         django_login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        record_auth_event(event="auth.session_created", outcome="accepted", request=request, user=user)
         response = Response(
             {
                 "accessToken": issue.access_token,

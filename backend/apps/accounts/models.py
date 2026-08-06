@@ -136,6 +136,21 @@ class AccountPermission(models.Model):
         return f"{self.account_profile_id}: {self.effect} MOD_{self.module_id}_{self.action}"
 
 
+class PasswordLoginLockout(models.Model):
+    '''Durable password-attempt and lockout state for one Django user.'''
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='password_login_lockout',
+    )
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    window_started_at = models.DateTimeField(null=True, blank=True)
+    locked_until = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class AuthRefreshSession(models.Model):
     """Persistent refresh-token session boundary for backend auth."""
 
