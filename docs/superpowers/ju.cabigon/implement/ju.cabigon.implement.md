@@ -102,3 +102,51 @@ Remaining check:
 Notes:
 - The backend test suite confirms the Exam Blueprint transition coverage is working.
 - The frontend test suite confirms the Question Bank wiring still passes after the service-boundary changes.
+
+## Task 4: Question Bank Review Workflow
+
+Implemented the Question Bank review workflow update so submissions now begin in `PENDING_REVIEW` and approval is restricted to reviewer-side System Admins.
+
+Verified behavior:
+- Question Bank create and update actions submit `status: 'PENDING_REVIEW'`
+- backend question creation normalizes saved questions to `PENDING_REVIEW`
+- question approval requires a System Admin reviewer
+- a question creator cannot approve their own question
+- another System Admin can approve a pending question
+
+Verification:
+
+```text
+docker compose -f local/docker-compose.yml exec backend python manage.py test apps.exams.tests.QuestionBankApiTests
+OK
+
+docker compose -f local/docker-compose.yml exec frontend npm test -- src/pages/admin/hub/QuestionBank.test.tsx
+PASS: 8 tests
+
+docker compose -f local/docker-compose.yml exec frontend npm run build
+PASS
+```
+
+## Task 5: Review Dropdown Visibility Gate
+
+Implemented the Question Bank review dropdown visibility rule so only System Admin users can see it, and only for questions created by a different authenticated user.
+
+Verified behavior:
+- backend question responses now include a read-only `created_by_user_id` field
+- the frontend service maps `created_by_user_id` into the page model
+- the review dropdown is hidden for self-authored question rows
+- the review dropdown is hidden for non-System Admin users
+- the existing review transition flow still works for a System Admin reviewer on another user's question
+
+Verification:
+
+```text
+docker compose -f local/docker-compose.yml exec backend python manage.py test apps.exams.tests.QuestionBankApiTests
+OK
+
+docker compose -f local/docker-compose.yml exec frontend npm test -- src/services/backendQuestionBankService.test.ts src/pages/admin/hub/QuestionBank.test.tsx
+PASS: 15 tests
+
+docker compose -f local/docker-compose.yml exec frontend npm run build
+PASS
+```

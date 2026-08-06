@@ -122,6 +122,7 @@ class QuestionType(models.Model):
 class QuestionStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     PENDING_REVIEW = "pending_review", "Pending review"
+    FOR_CORRECTION = "for_correction", "For correction"
     APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
     RETIRED = "retired", "Retired"

@@ -12,12 +12,30 @@ const { listQuestions, createQuestion, updateQuestion, transitionQuestion, delet
   deleteQuestion: vi.fn(),
 }));
 
+type MockUser = {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: 'SYSTEM_ADMIN' | 'ITEM_WRITER';
+};
+
+const systemAdminUser: MockUser = {
+  id: 'system-admin-user',
+  email: 'system.admin@example.test',
+  firstName: 'System',
+  lastName: 'Admin',
+  role: 'SYSTEM_ADMIN',
+};
+
+let currentUser: MockUser | null = systemAdminUser;
+
 vi.mock('../../../services/backendQuestionBankService', () => ({
   questionBankService: { listQuestions, createQuestion, updateQuestion, transitionQuestion, deleteQuestion },
 }));
 
 vi.mock('../../../PhilSAContext', () => ({
-  usePhilSA: () => ({ user: null }),
+  usePhilSA: () => ({ user: currentUser }),
 }));
 
 vi.mock('./StimulusManagement', () => ({ default: () => null }));
@@ -40,6 +58,7 @@ const backendQuestion: QuestionBankItem = {
   points: 1,
   status: 'PENDING_REVIEW',
   createdBy: 'Synthetic Author',
+  createdByUserId: 'creator-user',
   reviewedBy: '',
   approvedBy: '',
   reviewedAt: null,
@@ -64,6 +83,7 @@ describe('QuestionBank page bootstrap', () => {
     transitionQuestion.mockReset();
     deleteQuestion.mockReset();
     localStorage.clear();
+    currentUser = systemAdminUser;
   });
 
   it('renders backend questions instead of synthetic fallback questions when the service returns data', async () => {
@@ -113,6 +133,7 @@ describe('QuestionBank page bootstrap', () => {
     await user.click(screen.getByRole('button', { name: /save question/i }));
 
     await waitFor(() => expect(createQuestion).toHaveBeenCalledTimes(1));
+    expect(createQuestion).toHaveBeenCalledWith(expect.objectContaining({ status: 'PENDING_REVIEW' }));
     expect(screen.getByText('Created Subject')).toBeInTheDocument();
   });
 
@@ -133,6 +154,7 @@ describe('QuestionBank page bootstrap', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
     await waitFor(() => expect(updateQuestion).toHaveBeenCalledTimes(1));
+    expect(updateQuestion).toHaveBeenCalledWith('backend-question-1', expect.objectContaining({ status: 'PENDING_REVIEW' }));
     expect(screen.getByText('Updated Subject')).toBeInTheDocument();
   });
 
@@ -147,11 +169,54 @@ describe('QuestionBank page bootstrap', () => {
     const row = (await screen.findByText('Backend Subject')).closest('tr');
     expect(row).not.toBeNull();
     await user.selectOptions(screen.getByDisplayValue('Pending Review'), 'ALL');
-    await user.selectOptions(within(row as HTMLElement).getByRole('combobox'), 'APPROVED');
+    await user.selectOptions(within(row as HTMLElement).getByRole('combobox', { name: /review question/i }), 'APPROVED');
     await user.click(screen.getByRole('button', { name: /apply changes/i }));
 
     await waitFor(() => expect(transitionQuestion).toHaveBeenCalledWith('backend-question-1', { status: 'APPROVED', remarks: '' }));
     expect(screen.getByText('APPROVED')).toBeInTheDocument();
+  });
+
+  it('sends correction requests with the correction workflow status', async () => {
+    const user = userEvent.setup();
+    const approvedQuestion = { ...backendQuestion, status: 'APPROVED' as const };
+    listQuestions.mockResolvedValue({ ok: true, data: [approvedQuestion] });
+    transitionQuestion.mockResolvedValue({ ok: true, data: { ...approvedQuestion, status: 'PENDING_REVIEW' } });
+
+    render(<QuestionBank />);
+
+    await user.selectOptions(screen.getByDisplayValue('Pending Review'), 'ALL');
+    const row = (await screen.findByText('Backend Subject')).closest('tr');
+    expect(row).not.toBeNull();
+    await user.selectOptions(within(row as HTMLElement).getByRole('combobox', { name: /review question/i }), 'FOR CORRECTION');
+    await user.type(screen.getByPlaceholderText(/please specify what needs to be revised/i), 'Please revise the answer key.');
+    await user.click(screen.getByRole('button', { name: /apply changes/i }));
+
+    await waitFor(() => expect(transitionQuestion).toHaveBeenCalledWith('backend-question-1', {
+      status: 'FOR_CORRECTION',
+      remarks: 'Please revise the answer key.',
+    }));
+  });
+
+  it('hides review actions for self-authored questions', async () => {
+    currentUser = { ...systemAdminUser, id: 'creator-user' };
+    listQuestions.mockResolvedValue({ ok: true, data: [backendQuestion] });
+
+    render(<QuestionBank />);
+
+    const row = (await screen.findByText('Backend Subject')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).queryByRole('combobox', { name: /review question/i })).not.toBeInTheDocument();
+  });
+
+  it('hides review actions for non-system-admin users', async () => {
+    currentUser = { ...systemAdminUser, id: 'writer-user', role: 'ITEM_WRITER' };
+    listQuestions.mockResolvedValue({ ok: true, data: [backendQuestion] });
+
+    render(<QuestionBank />);
+
+    const row = (await screen.findByText('Backend Subject')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).queryByRole('combobox', { name: /review question/i })).not.toBeInTheDocument();
   });
 
   it('deletes a question through the service boundary', async () => {

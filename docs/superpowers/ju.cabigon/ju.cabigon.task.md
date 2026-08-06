@@ -15,7 +15,7 @@ The sprint brief assigned Jude Cabigon two BRD-02 Item Bank tasks:
 > On branch `ju.cabigon/question-bank`, get a plan reviewed for wiring `QuestionBank.tsx` off `blueprintMockData.ts` onto `backendQuestionBankService.ts`, copying the working pattern in `ExamBlueprints.tsx`.
 
 ## Completed Outcome
-Both assigned tasks are complete in the current repo state.
+The originally assigned review-plan tasks are complete in the current repo state.
 
 ### Exam Blueprint
 - Transition-test coverage was added in `backend/apps/exams/tests.py`.
@@ -30,6 +30,14 @@ Both assigned tasks are complete in the current repo state.
 - `QuestionBank.tsx` now uses `backendQuestionBankService.ts` as the service boundary.
 - The page keeps synthetic fallback data secondary to the service.
 - Service contract, bootstrap, fallback, and mutation flows are covered by tests.
+
+### Question Bank Review Workflow
+- Question Bank saves now land in `PENDING_REVIEW`.
+- Question approval is restricted to System Admin reviewers.
+- A question creator cannot approve their own question.
+- The Review dropdown is visible only to System Admin users, and only for questions created by a different user.
+- The page now uses the backend's read-only `created_by_user_id` field for review visibility decisions.
+- The workflow change is covered by backend and frontend tests.
 
 ## Thursday Progress
 - Backend exam tests ran successfully in the backend container.

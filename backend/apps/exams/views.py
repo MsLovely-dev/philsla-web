@@ -39,6 +39,10 @@ EXAM_SET_MANAGEMENT_ROLES = require_roles(
     "SYSTEM_ADMIN",
 )
 
+QUESTION_REVIEW_ROLES = require_roles(
+    "SYSTEM_ADMIN",
+)
+
 
 def _actor_profile(request):
     profile = getattr(request.user, "account_profile", None)
@@ -184,7 +188,7 @@ class QuestionDetailView(APIView):
 
 class QuestionTransitionView(APIView):
     permission_classes = [RoleRequiredPermission]
-    required_roles = QUESTION_MANAGEMENT_ROLES
+    required_roles = QUESTION_REVIEW_ROLES
 
     def post(self, request, question_id: int) -> Response:
         question = get_object_or_404(question_queryset(), pk=question_id)

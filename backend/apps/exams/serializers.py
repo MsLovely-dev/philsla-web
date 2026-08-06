@@ -210,6 +210,7 @@ class QuestionSerializer(serializers.Serializer):
     points = serializers.FloatField(required=False)
     status = serializers.CharField(required=False, allow_blank=True)
     created_by = serializers.CharField(read_only=True)
+    created_by_user_id = serializers.CharField(read_only=True)
     reviewed_by = serializers.CharField(read_only=True, allow_null=True)
     approved_by = serializers.CharField(read_only=True, allow_null=True)
     reviewed_at = serializers.DateTimeField(read_only=True, allow_null=True)

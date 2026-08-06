@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../../lib/utils';
+import { usePhilSA } from '../../../PhilSAContext';
 import StimulusManagement from './StimulusManagement';
 import BulkUpload from './BulkUpload';
 import { questionBankService, type QuestionBankItem, type QuestionBankPayload, type QuestionStatus as BackendQuestionStatus } from '../../../services/backendQuestionBankService';
@@ -52,6 +53,7 @@ interface Question {
   score?: number;
   history?: { status: QuestionStatus; date: string; user: string; remark?: string }[];
   mediaUrl?: string;
+  createdByUserId?: string;
 }
 
 function mapBackendQuestion(question: QuestionBankItem): Question {
@@ -68,8 +70,16 @@ function mapBackendQuestion(question: QuestionBankItem): Question {
     typeCode: question.questionTypeCode,
     points: question.points,
     score: question.points,
-    status: question.status === 'APPROVED' ? 'APPROVED' : question.status === 'REJECTED' ? 'REJECTED' : 'PENDING REVIEW',
+    status:
+      question.status === 'APPROVED'
+        ? 'APPROVED'
+        : question.status === 'FOR_CORRECTION'
+          ? 'FOR CORRECTION'
+          : question.status === 'REJECTED'
+            ? 'REJECTED'
+            : 'PENDING REVIEW',
     author: question.createdBy || 'PhilSA Author',
+    createdByUserId: question.createdByUserId,
     content: question.questionText,
     options,
     idealAnswer: question.choices.find((choice) => choice.isCorrect)?.optionText ?? question.answers[0]?.answerText ?? '',
@@ -77,7 +87,14 @@ function mapBackendQuestion(question: QuestionBankItem): Question {
     difficulty: question.difficulty === 'EASY' ? 'LOW' : question.difficulty === 'DIFFICULT' ? 'HIGH' : 'MED',
     competency: question.competency,
     history: question.workflowHistory.map((entry) => ({
-      status: entry.newStatus === 'APPROVED' ? 'APPROVED' : entry.newStatus === 'REJECTED' ? 'REJECTED' : 'PENDING REVIEW',
+      status:
+        entry.newStatus === 'APPROVED'
+          ? 'APPROVED'
+          : entry.newStatus === 'FOR_CORRECTION'
+            ? 'FOR CORRECTION'
+            : entry.newStatus === 'REJECTED'
+              ? 'REJECTED'
+              : 'PENDING REVIEW',
       date: entry.createdAt.slice(0, 10),
       user: entry.initiatedBy,
       remark: entry.remarks || undefined,
@@ -87,9 +104,43 @@ function mapBackendQuestion(question: QuestionBankItem): Question {
 }
 
 function toBackendStatus(status: QuestionStatus): BackendQuestionStatus {
-  if (status === 'PENDING REVIEW' || status === 'FOR CORRECTION') return 'PENDING_REVIEW';
+  if (status === 'PENDING REVIEW') return 'PENDING_REVIEW';
+  if (status === 'FOR CORRECTION') return 'FOR_CORRECTION';
   if (status === 'PUBLISHED') return 'APPROVED';
   return status;
+}
+
+const REVIEW_APPROVER_ROLES = new Set(['SYSTEM_ADMIN']);
+
+const REVIEW_ACTION_OPTIONS: Record<QuestionStatus, Array<{ value: QuestionStatus; label: string }>> = {
+  'PENDING REVIEW': [
+    { value: 'APPROVED', label: 'Approve' },
+    { value: 'FOR CORRECTION', label: 'Request Correction' },
+    { value: 'REJECTED', label: 'Reject' },
+  ],
+  'APPROVED': [
+    { value: 'FOR CORRECTION', label: 'Request Correction' },
+  ],
+  'FOR CORRECTION': [],
+  'PUBLISHED': [],
+  'REJECTED': [],
+};
+
+const REVIEW_ACTION_LABELS: Record<QuestionStatus, string> = {
+  'PENDING REVIEW': 'Pending Review',
+  'APPROVED': 'Approve',
+  'FOR CORRECTION': 'Request Correction',
+  'PUBLISHED': 'Published',
+  'REJECTED': 'Reject',
+};
+
+function getReviewActionOptions(status: QuestionStatus) {
+  return REVIEW_ACTION_OPTIONS[status] ?? [];
+}
+
+function getReviewActionLabel(status: QuestionStatus | '') {
+  if (!status) return '';
+  return REVIEW_ACTION_LABELS[status] ?? status;
 }
 
 const STATUS_COLORS: Record<QuestionStatus, { bg: string; text: string; border: string; icon: any }> = {
@@ -101,6 +152,7 @@ const STATUS_COLORS: Record<QuestionStatus, { bg: string; text: string; border: 
 };
 
 export default function QuestionBank() {
+  const { user } = usePhilSA();
   const [activeBankTab, setActiveBankTab] = useState<'QUESTIONS' | 'STIMULI' | 'UPLOAD'>('QUESTIONS');
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -178,8 +230,12 @@ export default function QuestionBank() {
   const [newMediaUrl, setNewMediaUrl] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
-  // Helper to check if current user can approve/change status
-  const canApprove = true;
+  const canUseReviewActions = (question: Question) => {
+    if (!user || !REVIEW_APPROVER_ROLES.has(user.role)) return false;
+    if (!question.createdByUserId) return false;
+    if (question.createdByUserId === user.id) return false;
+    return getReviewActionOptions(question.status).length > 0;
+  };
 
   const handleOpenAddModal = () => {
     setEditingId(null);
@@ -291,7 +347,7 @@ export default function QuestionBank() {
       difficulty: newDifficulty === 'LOW' ? 'EASY' : newDifficulty === 'HIGH' ? 'DIFFICULT' : 'MODERATE',
       questionText: newContent,
       points: Number(newPoints) || 5,
-      status: 'APPROVED',
+      status: 'PENDING_REVIEW',
       choices: options.map((optionText, index) => ({ optionText, isCorrect: idealAnswer === optionText, displayOrder: index + 1 })),
       answers: idealAnswer && newType !== 'Multiple Choice' ? [{ answerText: idealAnswer, isPrimaryAnswer: true }] : [],
     };
@@ -365,7 +421,7 @@ export default function QuestionBank() {
 
       const updatedQuestion = mapBackendQuestion(result.data);
       setQuestions(prev => prev.map(q => q.id === updatedQuestion.id ? updatedQuestion : q));
-      setToastMessage(`Question ${updatedQuestion.id} status updated to ${newStatus}`);
+      setToastMessage(`Question ${updatedQuestion.id} review action ${getReviewActionLabel(newStatus)} applied`);
       setTimeout(() => setToastMessage(''), 4000);
       setChangingStatusItem(null);
       setNewStatus('');
@@ -675,18 +731,31 @@ export default function QuestionBank() {
                     </td>
                     <td className="px-8 py-6 text-right">
                        <div className="flex justify-end items-center gap-2">
-                          {canApprove && (
-                            <select 
-                              value={q.status}
-                              onChange={(e) => handleQuickStatusUpdate(q, e.target.value as QuestionStatus)}
-                              className="bg-philsa-bg border border-philsa-border rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-tighter text-philsa-navy focus:ring-1 focus:ring-philsa-red outline-none cursor-pointer"
-                            >
-                              <option value="PENDING REVIEW">Pending</option>
-                              <option value="APPROVED">Approve</option>
-                              <option value="FOR CORRECTION">Correction</option>
-                              <option value="PUBLISHED">Publish</option>
-                              <option value="REJECTED">Reject</option>
-                            </select>
+                          {canUseReviewActions(q) && (
+                            <div className="relative">
+                              <label className="sr-only" htmlFor={`review-action-${q.id}`}>Review actions</label>
+                              <select
+                                id={`review-action-${q.id}`}
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const selectedStatus = e.target.value as QuestionStatus;
+                                  if (!selectedStatus) return;
+                                  handleQuickStatusUpdate(q, selectedStatus);
+                                  e.currentTarget.value = '';
+                                }}
+                                className="bg-philsa-bg border border-philsa-border rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-tighter text-philsa-navy focus:ring-1 focus:ring-philsa-red outline-none cursor-pointer"
+                                aria-label="Review question"
+                              >
+                                <option value="" disabled>
+                                  Review
+                                </option>
+                                {getReviewActionOptions(q.status).map((action) => (
+                                  <option key={action.value} value={action.value}>
+                                    {action.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           )}
                           <button 
                              onClick={() => setViewingDetails(q)}
@@ -730,14 +799,14 @@ export default function QuestionBank() {
                      <AlertCircle className="w-4 h-4 text-philsa-red" />
                   </div>
                   <div>
-                     <h3 className="text-sm font-bold text-philsa-navy">Confirm Question</h3>
+                     <h3 className="text-sm font-bold text-philsa-navy">Confirm Review Action</h3>
                      <p className="text-[10px] text-slate-400 font-semibold font-mono">{changingStatusItem.id}</p>
                   </div>
                </div>
                
                <div className="p-6 space-y-4">
                   <p className="text-xs text-slate-600 leading-relaxed font-semibold">
-                     Are you sure you want to change the status of this question to <span className="text-philsa-red font-black">"{newStatus}"</span>?
+                     Are you sure you want to <span className="text-philsa-red font-black">{newStatus ? getReviewActionLabel(newStatus) : 'continue'}</span> for this question?
                   </p>
 
                   {newStatus === 'FOR CORRECTION' && (

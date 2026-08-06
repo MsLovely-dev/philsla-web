@@ -19,6 +19,7 @@ const apiQuestion = {
   points: 2,
   status: 'draft',
   created_by: 'author-1',
+  created_by_user_id: 'user-1',
   reviewed_by: '',
   approved_by: '',
   reviewed_at: null,
@@ -66,7 +67,16 @@ describe('BackendQuestionBankService', () => {
     const result = await service.listQuestions();
 
     expect(request).toHaveBeenCalledWith('/api/v1/exams/questions/');
-    expect(result).toMatchObject({ ok: true, data: [{ questionCode: 'Q-1001', status: 'DRAFT' }] });
+    expect(result).toMatchObject({ ok: true, data: [{ questionCode: 'Q-1001', status: 'DRAFT', createdByUserId: 'user-1' }] });
+  });
+
+  it('normalizes backend correction status without collapsing it to pending review', async () => {
+    const { request, service } = createService();
+    request.mockResolvedValue({ ok: true, data: [{ ...apiQuestion, status: 'for_correction' }] });
+
+    const result = await service.listQuestions();
+
+    expect(result).toMatchObject({ ok: true, data: [{ questionCode: 'Q-1001', status: 'FOR_CORRECTION' }] });
   });
 
   it('maps createQuestion payload before calling the API', async () => {
@@ -118,6 +128,20 @@ describe('BackendQuestionBankService', () => {
       body: JSON.stringify({ status: 'PENDING_REVIEW', remarks: 'Ready for review' }),
     });
     expect(result).toMatchObject({ ok: true, data: { status: 'PENDING_REVIEW' } });
+  });
+
+  it('sends correction transitions as the correction workflow status', async () => {
+    const { request, service } = createService();
+    const input: QuestionTransitionInput = { status: 'FOR_CORRECTION', remarks: 'Needs revision' };
+    request.mockResolvedValue({ ok: true, data: { ...apiQuestion, status: 'for_correction' } });
+
+    const result = await service.transitionQuestion('Q-1001', input);
+
+    expect(request).toHaveBeenCalledWith('/api/v1/exams/questions/Q-1001/transition/', {
+      method: 'POST',
+      body: JSON.stringify({ status: 'FOR_CORRECTION', remarks: 'Needs revision' }),
+    });
+    expect(result).toMatchObject({ ok: true, data: { status: 'FOR_CORRECTION' } });
   });
 
   it('deletes a question through the service boundary', async () => {

@@ -252,11 +252,25 @@ class QuestionBankApiTests(APITestCase):
             "tags": ["space science", "orbital mechanics"],
         }
 
+    def create_profile(self, username: str, role: str) -> tuple[object, AccountProfile]:
+        User = get_user_model()
+        user = User.objects.create_user(
+            username=username,
+            email=f"{username}@example.test",
+            password="Password1!",
+        )
+        profile = AccountProfile.objects.create(user=user, role=role)
+        return user, profile
+
+    def authenticate_as(self, user) -> None:
+        self.client.force_authenticate(user=user)
+
     def test_create_list_and_transition_questions(self) -> None:
         response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["question_code"], "Q-SCI-001")
-        self.assertEqual(response.data["status"], "DRAFT")
+        self.assertEqual(response.data["status"], "PENDING_REVIEW")
+        self.assertEqual(response.data["created_by_user_id"], str(self.user.id))
         self.assertEqual(len(response.data["choices"]), 4)
         self.assertEqual(response.data["choices"][0]["option_label"], "A")
 
@@ -272,6 +286,79 @@ class QuestionBankApiTests(APITestCase):
         )
         self.assertEqual(transition_response.status_code, 200)
         self.assertEqual(transition_response.data["status"], "PENDING_REVIEW")
+
+    def test_exam_admin_creates_questions_as_pending_review(self) -> None:
+        exam_admin, _ = self.create_profile("exam_admin", PortalRole.EXAM_ADMINISTRATOR.value)
+        self.authenticate_as(exam_admin)
+
+        payload = {**self.payload, "status": "APPROVED", "question_code": "Q-SCI-002"}
+        response = self.client.post(reverse("exams:question_list"), payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "PENDING_REVIEW")
+
+    def test_question_creator_cannot_approve_own_question(self) -> None:
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+        question_id = response.data["id"]
+
+        transition_response = self.client.post(
+            reverse("exams:question_transition", kwargs={"question_id": question_id}),
+            {"status": "APPROVED", "remarks": "Creator cannot self-approve"},
+            format="json",
+        )
+
+        self.assertEqual(transition_response.status_code, 403)
+        self.assertEqual(transition_response.data["error"]["code"], "PERMISSION_DENIED")
+
+    def test_pending_question_request_correction_sets_for_correction(self) -> None:
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+        question_id = response.data["id"]
+        other_admin, _ = self.create_profile("system_admin_reviewer", PortalRole.SYSTEM_ADMIN.value)
+        self.authenticate_as(other_admin)
+
+        transition_response = self.client.post(
+            reverse("exams:question_transition", kwargs={"question_id": question_id}),
+            {"status": "FOR_CORRECTION", "remarks": "Needs a revision"},
+            format="json",
+        )
+
+        self.assertEqual(transition_response.status_code, 200)
+        self.assertEqual(transition_response.data["status"], "FOR_CORRECTION")
+
+    def test_approved_question_request_correction_sets_for_correction(self) -> None:
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+        question_id = response.data["id"]
+        reviewer, _ = self.create_profile("system_admin_reviewer_2", PortalRole.SYSTEM_ADMIN.value)
+        self.authenticate_as(reviewer)
+        self.client.post(
+            reverse("exams:question_transition", kwargs={"question_id": question_id}),
+            {"status": "APPROVED", "remarks": "Approved by another system admin"},
+            format="json",
+        )
+
+        transition_response = self.client.post(
+            reverse("exams:question_transition", kwargs={"question_id": question_id}),
+            {"status": "FOR_CORRECTION", "remarks": "Correction requested after approval"},
+            format="json",
+        )
+
+        self.assertEqual(transition_response.status_code, 200)
+        self.assertEqual(transition_response.data["status"], "FOR_CORRECTION")
+
+    def test_for_correction_resubmission_returns_pending_review(self) -> None:
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+        question = Question.objects.get(pk=response.data["id"])
+        question.status = "FOR_CORRECTION"
+        question.save(update_fields=["status"])
+
+        update_response = self.client.put(
+            reverse("exams:question_detail", kwargs={"question_id": question.pk}),
+            {**self.payload, "question_code": question.question_code, "status": "draft"},
+            format="json",
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.data["status"], "PENDING_REVIEW")
 
     def test_create_question_with_bearer_style_authenticated_user_resolves_profile(self) -> None:
         bearer_user = SimpleNamespace(

@@ -12,6 +12,7 @@ from django.utils.text import slugify
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from apps.accounts.models import AccountProfile
+from apps.accounts.roles import PortalRole, get_user_role
 
 from .models import (
     AcademicYear,
@@ -794,6 +795,8 @@ QUESTION_STATUS_MAP = {
     "PENDING_REVIEW": QuestionStatus.PENDING_REVIEW,
     "PENDING REVIEW": QuestionStatus.PENDING_REVIEW,
     "APPROVED": QuestionStatus.APPROVED,
+    "FOR_CORRECTION": QuestionStatus.FOR_CORRECTION,
+    "FOR CORRECTION": QuestionStatus.FOR_CORRECTION,
     "REJECTED": QuestionStatus.REJECTED,
     "RETIRED": QuestionStatus.RETIRED,
     "ARCHIVED": QuestionStatus.ARCHIVED,
@@ -940,6 +943,7 @@ def serialize_question(question: Question) -> dict[str, Any]:
         "points": float(question.points),
         "status": question.status.upper(),
         "created_by": _question_display_name(question.created_by),
+        "created_by_user_id": str(question.created_by.user_id) if question.created_by_id else "",
         "reviewed_by": _question_display_name(question.reviewed_by),
         "approved_by": _question_display_name(question.approved_by),
         "reviewed_at": question.reviewed_at.isoformat() if question.reviewed_at else None,
@@ -1036,14 +1040,14 @@ def create_or_update_question(
         "question_text": str(_payload_value(payload, "question_text", "content", default=question.question_text if question else "") or ""),
         "explanation": str(_payload_value(payload, "explanation", "ideal_answer", default=question.explanation if question else "") or ""),
         "points": _parse_decimal(_payload_value(payload, "points", "score", default=str(question.points) if question else "1"), "1"),
-        "status": _normalize_question_status(_payload_value(payload, "status", default=question.status if question else "draft")),
+        "status": QuestionStatus.PENDING_REVIEW,
         "created_by": question.created_by if question else actor_profile,
-        "reviewed_by": question.reviewed_by if question else None,
-        "approved_by": question.approved_by if question else None,
-        "reviewed_at": question.reviewed_at if question else None,
-        "approved_at": question.approved_at if question else None,
-        "retired_at": question.retired_at if question else None,
-        "archived_at": question.archived_at if question else None,
+        "reviewed_by": None,
+        "approved_by": None,
+        "reviewed_at": None,
+        "approved_at": None,
+        "retired_at": None,
+        "archived_at": None,
     }
 
     if question is None:
@@ -1087,10 +1091,24 @@ def transition_question(
     remarks: str = "",
 ) -> Question:
     normalized_status = _normalize_question_status(target_status)
+    actor_role = get_user_role(actor_profile)
     previous_status = question.status
+
+    if normalized_status == QuestionStatus.APPROVED:
+        if actor_role != PortalRole.SYSTEM_ADMIN.value:
+            raise PermissionDenied("Only a System Admin can approve questions.")
+        if question.created_by_id == actor_profile.id:
+            raise PermissionDenied("You cannot approve your own question.")
+    elif normalized_status == QuestionStatus.FOR_CORRECTION:
+        if actor_role != PortalRole.SYSTEM_ADMIN.value:
+            raise PermissionDenied("Only a System Admin can request corrections.")
+
     question.status = normalized_status
     now = timezone.now()
     if normalized_status == QuestionStatus.PENDING_REVIEW:
+        question.reviewed_at = now
+        question.reviewed_by = actor_profile
+    elif normalized_status == QuestionStatus.FOR_CORRECTION:
         question.reviewed_at = now
         question.reviewed_by = actor_profile
     elif normalized_status == QuestionStatus.APPROVED:
