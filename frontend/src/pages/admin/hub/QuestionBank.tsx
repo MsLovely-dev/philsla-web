@@ -33,6 +33,8 @@ import { cn } from '../../../lib/utils';
 import StimulusManagement from './StimulusManagement';
 import BulkUpload from './BulkUpload';
 import { MOCK_CENTRAL_ITEM_BANK } from './blueprintMockData';
+import { questionBankService, type QuestionBankItem, type QuestionBankPayload, type QuestionStatus as BackendQuestionStatus } from '../../../services/backendQuestionBankService';
+import { QUESTION_BANK_FALLBACK } from './questionBankFallbackData';
 
 type QuestionStatus = 'PENDING REVIEW' | 'APPROVED' | 'FOR CORRECTION' | 'PUBLISHED' | 'REJECTED';
 type PersonaKey = 'EXAM_ADMIN' | 'SYSTEM_ADMIN' | 'REVIEWER';
@@ -54,6 +56,44 @@ interface Question {
   score?: number;
   history?: { status: QuestionStatus; date: string; user: string; remark?: string }[];
   mediaUrl?: string;
+}
+
+function mapBackendQuestion(question: QuestionBankItem): Question {
+  const type = question.questionType || (question.questionTypeCode === 'MCQ' ? 'Multiple Choice' : question.questionTypeCode);
+  const options = question.choices
+    .slice()
+    .sort((left, right) => left.displayOrder - right.displayOrder)
+    .map((choice) => choice.optionText);
+
+  return {
+    id: question.id,
+    subject: question.subject,
+    type,
+    typeCode: question.questionTypeCode,
+    points: question.points,
+    score: question.points,
+    status: question.status === 'APPROVED' ? 'APPROVED' : question.status === 'REJECTED' ? 'REJECTED' : 'PENDING REVIEW',
+    author: question.createdBy || 'PhilSA Author',
+    content: question.questionText,
+    options,
+    idealAnswer: question.choices.find((choice) => choice.isCorrect)?.optionText ?? question.answers[0]?.answerText ?? '',
+    topic: question.topic,
+    difficulty: question.difficulty === 'EASY' ? 'LOW' : question.difficulty === 'DIFFICULT' ? 'HIGH' : 'MED',
+    competency: question.competency,
+    history: question.workflowHistory.map((entry) => ({
+      status: entry.newStatus === 'APPROVED' ? 'APPROVED' : entry.newStatus === 'REJECTED' ? 'REJECTED' : 'PENDING REVIEW',
+      date: entry.createdAt.slice(0, 10),
+      user: entry.initiatedBy,
+      remark: entry.remarks || undefined,
+    })),
+    mediaUrl: question.attachments[0]?.filePath,
+  };
+}
+
+function toBackendStatus(status: QuestionStatus): BackendQuestionStatus {
+  if (status === 'PENDING REVIEW' || status === 'FOR CORRECTION') return 'PENDING_REVIEW';
+  if (status === 'PUBLISHED') return 'APPROVED';
+  return status;
 }
 
 const MOCK_QUESTIONS: Question[] = [
@@ -198,51 +238,37 @@ export default function QuestionBank() {
     setActivePersona(personaFromRole(user?.role));
   }, [user?.role]);
   
-  const [questions, setQuestions] = useState<Question[]>(() => {
-    // Generate standard initial merged list
-    const initialPool: Question[] = [...MOCK_QUESTIONS];
-    MOCK_CENTRAL_ITEM_BANK.forEach(q => {
-      if (!initialPool.some(item => item.id === q.id)) {
-        initialPool.push({
-          id: q.id,
-          subject: q.subject,
-          type: q.type === 'MCQ' ? 'Multiple Choice' : q.type === 'TF' ? 'True/False' : q.type === 'FIB' ? 'Identification' : 'Essay',
-          typeCode: q.type,
-          points: q.score,
-          score: q.score,
-          status: q.status === 'ACTIVE' ? 'APPROVED' : 'PENDING REVIEW',
-          author: 'PhilSA Central',
-          content: q.text,
-          options: q.type === 'MCQ' ? ['Option A', 'Option B', 'Option C', 'Option D'] : [],
-          idealAnswer: q.type === 'MCQ' ? 'Option A' : '',
-          topic: q.topic,
-          difficulty: q.difficulty === 'EASY' ? 'LOW' : q.difficulty === 'DIFFICULT' ? 'HIGH' : 'MED',
-          competency: q.competency,
-          history: []
-        });
-      }
-    });
-
-    const saved = localStorage.getItem('philsa_hub_questions');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as Question[];
-        const parsedIds = new Set(parsed.map(q => q.id));
-        const missing = initialPool.filter(q => !parsedIds.has(q.id));
-        if (missing.length > 0) {
-          return [...parsed, ...missing];
-        }
-        return parsed;
-      } catch (e) {
-        return initialPool;
-      }
-    }
-    return initialPool;
-  });
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [isQuestionBankLoading, setIsQuestionBankLoading] = useState(true);
 
   useEffect(() => {
-    localStorage.setItem('philsa_hub_questions', JSON.stringify(questions));
-  }, [questions]);
+    let active = true;
+
+    const loadQuestions = async () => {
+      try {
+        const remote = await questionBankService.listQuestions();
+        if (!active) return;
+
+        setQuestions(remote.ok && remote.data.length > 0 ? remote.data.map(mapBackendQuestion) : QUESTION_BANK_FALLBACK);
+      } catch {
+        if (active) setQuestions(QUESTION_BANK_FALLBACK);
+      } finally {
+        if (active) setIsQuestionBankLoading(false);
+      }
+    };
+
+    void loadQuestions();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isQuestionBankLoading) {
+      localStorage.setItem('philsa_hub_questions', JSON.stringify(questions));
+    }
+  }, [isQuestionBankLoading, questions]);
 
   // Form state for adding new questions
   const [newType, setNewType] = useState('Multiple Choice');
@@ -280,6 +306,7 @@ export default function QuestionBank() {
   const [correctionReason, setCorrectionReason] = useState('');
   const [viewingDetails, setViewingDetails] = useState<Question | null>(null);
   const [toastMessage, setToastMessage] = useState<string>('');
+  const [isQuestionMutationPending, setIsQuestionMutationPending] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newMediaUrl, setNewMediaUrl] = useState('');
@@ -337,11 +364,23 @@ export default function QuestionBank() {
     setIsAdding(true);
   };
 
-  const handleDeleteQuestion = (id: string) => {
-    if (confirm(`Are you sure you want to delete question ${id}?`)) {
+  const handleDeleteQuestion = async (id: string) => {
+    if (!confirm(`Are you sure you want to delete question ${id}?`)) return;
+
+    setIsQuestionMutationPending(true);
+    try {
+      const result = await questionBankService.deleteQuestion(id);
+      if (!result.ok) {
+        setToastMessage(result.error.message);
+        return;
+      }
       setQuestions(prev => prev.filter(q => q.id !== id));
       setToastMessage(`Deleted question ${id} from Question Bank`);
       setTimeout(() => setToastMessage(''), 4000);
+    } catch {
+      setToastMessage('The question could not be deleted.');
+    } finally {
+      setIsQuestionMutationPending(false);
     }
   };
 
@@ -359,7 +398,7 @@ export default function QuestionBank() {
     setNewMediaUrl('');
   };
 
-  const handleSaveNewQuestion = () => {
+  const handleSaveNewQuestion = async () => {
     if (!newContent.trim()) {
       alert('Please enter a question prompt.');
       return;
@@ -378,63 +417,39 @@ export default function QuestionBank() {
       idealAnswer = newOptionA;
     }
 
-    // Determine type code for compatibility
-    let typeCode = 'MCQ';
-    if (newType === 'Multiple Choice') typeCode = 'MCQ';
-    else if (newType === 'True/False') typeCode = 'TF';
-    else if (newType === 'Identification') typeCode = 'FIB';
-    else if (newType === 'Essay') typeCode = 'ESSAY';
+    const payload: QuestionBankPayload = {
+      questionType: newType,
+      subject: newSubject,
+      topic: newTopic || 'General Topic',
+      competency: newCompetency || 'General Competency',
+      difficulty: newDifficulty === 'LOW' ? 'EASY' : newDifficulty === 'HIGH' ? 'DIFFICULT' : 'MODERATE',
+      questionText: newContent,
+      points: Number(newPoints) || 5,
+      status: 'APPROVED',
+      choices: options.map((optionText, index) => ({ optionText, isCorrect: idealAnswer === optionText, displayOrder: index + 1 })),
+      answers: idealAnswer && newType !== 'Multiple Choice' ? [{ answerText: idealAnswer, isPrimaryAnswer: true }] : [],
+    };
 
-    if (editingId) {
-      // Edit mode
-      setQuestions(prev => prev.map(q => {
-        if (q.id === editingId) {
-          return {
-            ...q,
-            subject: newSubject,
-            type: newType,
-            typeCode: typeCode,
-            points: Number(newPoints) || 5,
-            score: Number(newPoints) || 5,
-            content: newContent,
-            options,
-            idealAnswer,
-            topic: newTopic || 'General Topic',
-            difficulty: newDifficulty === 'LOW' ? 'LOW' : newDifficulty === 'HIGH' ? 'HIGH' : 'MED',
-            competency: newCompetency || 'General Competency',
-            mediaUrl: newMediaUrl
-          };
-        }
-        return q;
-      }));
-      setToastMessage(`Updated question ${editingId} in Question Bank!`);
+    setIsQuestionMutationPending(true);
+    try {
+      const result = editingId
+        ? await questionBankService.updateQuestion(editingId, payload)
+        : await questionBankService.createQuestion(payload);
+      if (!result.ok) {
+        setToastMessage(result.error.message);
+        return;
+      }
+
+      const updatedQuestion = mapBackendQuestion(result.data);
+      setQuestions(prev => editingId
+        ? prev.map(q => q.id === editingId ? updatedQuestion : q)
+        : [updatedQuestion, ...prev]);
+      setToastMessage(`${editingId ? 'Updated' : 'Created'} question ${updatedQuestion.id} in Question Bank!`);
       setEditingId(null);
-    } else {
-      // Add mode
-      const newId = `Q-${Math.floor(4000 + Math.random() * 5999)}`;
-      const newQuestionObj: Question = {
-        id: newId,
-        subject: newSubject,
-        type: newType,
-        typeCode: typeCode,
-        points: Number(newPoints) || 5,
-        score: Number(newPoints) || 5,
-        status: 'APPROVED',
-        author: user?.name || 'PhilSA Author',
-        content: newContent,
-        options,
-        idealAnswer,
-        topic: newTopic || 'General Topic',
-        difficulty: newDifficulty === 'LOW' ? 'LOW' : newDifficulty === 'HIGH' ? 'HIGH' : 'MED',
-        competency: newCompetency || 'General Competency',
-        mediaUrl: newMediaUrl,
-        history: [
-          { status: 'PENDING REVIEW', date: new Date().toISOString().split('T')[0], user: user?.name || 'System' },
-          { status: 'APPROVED', date: new Date().toISOString().split('T')[0], user: 'Admin' }
-        ]
-      };
-      setQuestions(prev => [newQuestionObj, ...prev]);
-      setToastMessage(`Created new question ${newId} in Question Bank!`);
+    } catch {
+      setToastMessage(`The question could not be ${editingId ? 'updated' : 'created'}.`);
+    } finally {
+      setIsQuestionMutationPending(false);
     }
 
     setIsAdding(false);
@@ -468,33 +483,32 @@ export default function QuestionBank() {
     }
   };
 
-  const handleStatusChangeSubmit = () => {
+  const handleStatusChangeSubmit = async () => {
     if (!newStatus || !changingStatusItem) return;
-    
-    setQuestions(prev => prev.map(q => {
-      if (q.id === changingStatusItem.id) {
-        const updatedHistory = q.history ? [...q.history] : [];
-        updatedHistory.push({
-          status: newStatus,
-          date: new Date().toISOString().split('T')[0],
-          user: user?.name || 'Administrator',
-          remark: correctionReason || undefined
-        });
-        return {
-          ...q,
-          status: newStatus,
-          history: updatedHistory
-        };
+
+    setIsQuestionMutationPending(true);
+    try {
+      const result = await questionBankService.transitionQuestion(changingStatusItem.id, {
+        status: toBackendStatus(newStatus),
+        remarks: correctionReason,
+      });
+      if (!result.ok) {
+        setToastMessage(result.error.message);
+        return;
       }
-      return q;
-    }));
 
-    setToastMessage(`Question ${changingStatusItem.id} status updated to ${newStatus}`);
-    setTimeout(() => setToastMessage(''), 4000);
-
-    setChangingStatusItem(null);
-    setNewStatus('');
-    setCorrectionReason('');
+      const updatedQuestion = mapBackendQuestion(result.data);
+      setQuestions(prev => prev.map(q => q.id === updatedQuestion.id ? updatedQuestion : q));
+      setToastMessage(`Question ${updatedQuestion.id} status updated to ${newStatus}`);
+      setTimeout(() => setToastMessage(''), 4000);
+      setChangingStatusItem(null);
+      setNewStatus('');
+      setCorrectionReason('');
+    } catch {
+      setToastMessage('The question status could not be updated.');
+    } finally {
+      setIsQuestionMutationPending(false);
+    }
   };
 
   const handleQuickStatusUpdate = (q: Question, status: QuestionStatus) => {
@@ -512,6 +526,11 @@ export default function QuestionBank() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      {isQuestionBankLoading && (
+        <div role="status" className="rounded-2xl border border-philsa-border bg-white p-6 text-sm font-semibold text-philsa-gray">
+          Loading question bank...
+        </div>
+      )}
       <div className="card-philsa bg-white border border-philsa-border/70 p-5 sm:p-6 space-y-5 shadow-sm">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
           <div className="space-y-2">
@@ -749,6 +768,13 @@ export default function QuestionBank() {
               </tr>
             </thead>
             <tbody className="divide-y divide-philsa-border bg-white">
+              {filteredQuestions.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-8 py-12 text-center text-sm font-semibold text-philsa-gray">
+                    No questions found.
+                  </td>
+                </tr>
+              )}
               {filteredQuestions.map((q) => {
                 const statusInfo = STATUS_COLORS[q.status];
                 const StatusIcon = statusInfo.icon;
@@ -906,7 +932,7 @@ export default function QuestionBank() {
                   </button>
                   <button 
                     onClick={handleStatusChangeSubmit}
-                    disabled={!newStatus || ((newStatus === 'FOR CORRECTION' || newStatus === 'REJECTED') && !correctionReason.trim())}
+                    disabled={isQuestionMutationPending || !newStatus || ((newStatus === 'FOR CORRECTION' || newStatus === 'REJECTED') && !correctionReason.trim())}
                     className="px-5 py-2 bg-philsa-red text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-philsa-red/10 hover:bg-philsa-red/90 transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Apply Changes
