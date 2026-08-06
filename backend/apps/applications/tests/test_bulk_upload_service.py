@@ -83,7 +83,15 @@ class BulkUploadServiceTests(TestCase):
     def test_template_csv_has_the_active_headers(self):
         rows = list(csv.reader(StringIO(build_bulk_upload_template_csv())))
 
-        self.assertEqual(rows, [BULK_UPLOAD_COLUMNS])
+        self.assertEqual(rows[0], BULK_UPLOAD_COLUMNS)
+
+    def test_template_csv_includes_a_valid_sample_row(self):
+        rows = list(csv.DictReader(StringIO(build_bulk_upload_template_csv())))
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["templateVersion"], BULK_UPLOAD_TEMPLATE_VERSION)
+        self.assertEqual(rows[0]["firstName"], "Sample")
+        self.assertEqual(rows[0]["email"], "sample.student@example.test")
 
     def test_reviewer_can_validate_a_correct_csv(self):
         result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row()]), actor=self.actor)
@@ -93,6 +101,33 @@ class BulkUploadServiceTests(TestCase):
         self.assertTrue(result["canConfirm"])
         self.assertEqual(ApplicationBulkUploadBatch.objects.count(), 1)
         self.assertEqual(ApplicationBulkUploadRowResult.objects.get().status, BulkUploadRowStatus.VALID)
+
+    def test_validation_accepts_browser_csv_content_type_variants(self):
+        uploaded_file = csv_file([valid_row()])
+        uploaded_file.content_type = "application/vnd.ms-excel"
+
+        result = validate_bulk_upload_csv(uploaded_file=uploaded_file, actor=self.actor)
+
+        self.assertEqual(result["status"], "VALIDATED")
+        self.assertEqual(result["totalRows"], 1)
+        self.assertEqual(result["validRows"], 1)
+
+    def test_validation_accepts_utf8_bom_headers(self):
+        stream = StringIO()
+        writer = csv.DictWriter(stream, fieldnames=BULK_UPLOAD_COLUMNS)
+        writer.writeheader()
+        writer.writerow(valid_row())
+        uploaded_file = SimpleUploadedFile(
+            "bulk.csv",
+            f"\ufeff{stream.getvalue()}".encode("utf-8"),
+            content_type="text/csv",
+        )
+
+        result = validate_bulk_upload_csv(uploaded_file=uploaded_file, actor=self.actor)
+
+        self.assertEqual(result["status"], "VALIDATED")
+        self.assertEqual(result["totalRows"], 1)
+        self.assertEqual(result["validRows"], 1)
 
     def test_validation_denies_an_actor_without_an_allowed_role_before_creating_a_batch(self):
         with self.assertRaises(PermissionDenied):
@@ -146,13 +181,17 @@ class BulkUploadServiceTests(TestCase):
         result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(lrn="123")]), actor=self.actor)
 
         self.assertEqual(result["fieldErrorRows"], 1)
-        self.assertEqual(ApplicationBulkUploadRowResult.objects.get().errors[0]["field"], "lrn")
+        error = ApplicationBulkUploadRowResult.objects.get().errors[0]
+        self.assertEqual(error["field"], "lrn")
+        self.assertIn("Example: 123456789012", error["reason"])
 
     def test_validation_rejects_an_invalid_date_of_birth(self):
         result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(dateOfBirth="15-05-2008")]), actor=self.actor)
 
         self.assertEqual(result["fieldErrorRows"], 1)
-        self.assertEqual(ApplicationBulkUploadRowResult.objects.get().errors[0]["field"], "dateOfBirth")
+        error = ApplicationBulkUploadRowResult.objects.get().errors[0]
+        self.assertEqual(error["field"], "dateOfBirth")
+        self.assertIn("Example: 2008-05-15", error["reason"])
 
     def test_validation_rejects_a_compact_date_of_birth(self):
         result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(dateOfBirth="20080515")]), actor=self.actor)
@@ -224,6 +263,14 @@ class BulkUploadServiceTests(TestCase):
         self.assertEqual(result["status"], "FAILED")
         self.assertEqual(result["totalRows"], 0)
         self.assertFalse(result["canConfirm"])
+
+    def test_stale_template_reason_includes_the_active_template_version(self):
+        result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(templateVersion="1.0")]), actor=self.actor)
+
+        self.assertEqual(result["fieldErrorRows"], 1)
+        error = ApplicationBulkUploadRowResult.objects.get().errors[0]
+        self.assertEqual(error["field"], "templateVersion")
+        self.assertIn(BULK_UPLOAD_TEMPLATE_VERSION, error["reason"])
 
     def test_validation_rejects_a_row_with_extra_unnamed_cells(self):
         stream = StringIO()

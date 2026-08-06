@@ -34,6 +34,11 @@ The baseline health and authentication boundaries, the first student-application
 | `PATCH` | `/api/v1/applications/{applicationId}/` | Required bearer access token | Owning `STUDENT` | Update an editable owned application using optimistic concurrency | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/submit/` | Required bearer access token | Owning `STUDENT` | Validate and submit or resubmit an application | Implemented |
 | `GET` | `/api/v1/applications/review-queue/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | List submitted registration applications for admissions review | Implemented |
+| `GET` | `/api/v1/applications/bulk-upload/template/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Download the active student-application bulk upload CSV template | Implemented |
+| `POST` | `/api/v1/applications/bulk-upload/validate/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Validate a CSV and create durable batch and row results before import | Implemented |
+| `GET` | `/api/v1/applications/bulk-upload/{batchId}/` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Read stored validation/import summary and row errors | Implemented |
+| `GET` | `/api/v1/applications/bulk-upload/{batchId}/errors.csv` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Download stored row errors as CSV for correction | Implemented |
+| `POST` | `/api/v1/applications/bulk-upload/{batchId}/confirm/` | Required bearer access token | Uploading `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Confirm a validated batch and import only eligible rows | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
 | `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
@@ -307,6 +312,29 @@ Step 2 accepts `multipart/form-data` containing `mediaType` (`STUDENT_ID_FRONT` 
 In Student ID mode, the backend extracts the Student ID name and compares its normalized value with the full name returned by the verified LRN record. The configured name threshold is authoritative. The API returns both compared names, the score, and `informationComparisonPassed`. Local/test settings use a deterministic mock recognizer for the Lovely Mae R Chavez fixture. Production explicitly rejects that mock provider and routes unavailable real recognition to manual review or rejection according to the captured configuration.
 
 Admissions reviewers can load the review ledger with `GET /api/v1/applications/review-queue/`. The queue excludes `DRAFT` applications and includes submitted, resubmitted, correction, approved, and rejected registration records ordered by latest submission/creation time. Admissions reviewers and system admins can read a non-draft application detail with `GET /api/v1/applications/{applicationId}/`; draft detail remains limited to the owning student. Authorized callers can render application identity images through `GET /api/v1/applications/{applicationId}/identity-media/{mediaType}/`, where `mediaType` is a stored identity media value such as `SELFIE` or `STUDENT_ID_FRONT`. Student and unauthenticated callers are denied from the review queue.
+
+Admissions reviewers and system admins can create submitted applications through CSV-only bulk upload under `/api/v1/applications/bulk-upload/`. The active template columns are:
+
+```csv
+templateVersion,firstName,middleName,lastName,suffix,dateOfBirth,sex,email,mobile,region,province,city,barangay,street,postalCode,lrn,schoolId,schoolName,academicTrack,gradeLevel,enrollmentStatus,schoolYear,gwa,firstChoiceUniversity,firstChoiceCourse,secondChoiceUniversity,secondChoiceCourse,thirdChoiceUniversity,thirdChoiceCourse,privacyConsent,declarationAccepted
+```
+
+`POST /api/v1/applications/bulk-upload/validate/` accepts multipart form data with `file`. The backend rejects non-CSV files, stale or mismatched headers, unknown columns, missing required values, invalid `YYYY-MM-DD` dates, invalid 12-digit LRNs, invalid emails, false consent/declaration values, incomplete optional preference pairs, duplicate LRN/email values in the CSV, and existing application/account conflicts. Validation creates a durable batch and row results before returning:
+
+```json
+{
+  "batchId": "opaque-batch-id",
+  "status": "VALIDATED",
+  "totalRows": 1,
+  "validRows": 1,
+  "failedRows": 0,
+  "conflictRows": 0,
+  "fieldErrorRows": 0,
+  "canConfirm": true
+}
+```
+
+`POST /api/v1/applications/bulk-upload/{batchId}/confirm/` is idempotent. It imports only rows still marked valid, rechecks LRN/email conflicts before each row is created, marks newly conflicting rows without blocking other rows, and returns the same summary shape plus `importedRows` and `rejectedRows`. Imported applications are created with `status = SUBMITTED`, `completionStatus = PENDING_STUDENT_COMPLETION`, `submissionSource = ADMISSIONS_BULK_UPLOAD`, `submittedByUserId`, `bulkUploadBatchId`, and `bulkUploadRowNumber`. Bulk upload does not create Student accounts, does not accept selfie/student-ID/document files, and approval is blocked while `completionStatus = PENDING_STUDENT_COMPLETION`.
 
 The applicant registration audit log displays:
 

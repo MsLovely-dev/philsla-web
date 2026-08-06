@@ -1,5 +1,8 @@
+import csv
+from io import StringIO
+
 from django.shortcuts import get_object_or_404
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -12,7 +15,8 @@ from apps.accounts.permissions import ObjectScopePermission, RoleRequiredPermiss
 from apps.accounts.roles import PortalRole, get_user_role
 
 from .audit import record_application_event
-from .models import ApplicationStatus, StudentApplication
+from .bulk_upload import build_bulk_upload_template_csv, confirm_bulk_upload_batch, validate_bulk_upload_csv
+from .models import ApplicationBulkUploadBatch, ApplicationCompletionStatus, ApplicationStatus, StudentApplication
 from .models import ApplicationAuditLog
 from .serializers import (
     ApplicationAuditLogSerializer,
@@ -20,6 +24,8 @@ from .serializers import (
     ApplicationSerializer,
     ApplicationSubmitSerializer,
     ApplicationUpdateSerializer,
+    BulkUploadBatchSerializer,
+    BulkUploadValidateSerializer,
     LrnVerificationSerializer,
     RegistrationAttachmentSerializer,
     RegistrationAttachmentUploadSerializer,
@@ -33,6 +39,7 @@ from .serializers import (
     Step2ManualDecisionSerializer,
 )
 from .services import (active_step2_configuration, create_draft, decide_application,
+                       ApplicationConflict,
                        decide_step2_manual_review, get_step2_verification, serialize_step2, submit_application,
                        update_draft, upload_step2_media, validate_manual_registration_selfie_face,
                        validate_registration_selfie_face, request_registration_email_otp,
@@ -271,14 +278,19 @@ class ApplicationReviewQueueView(APIView):
         search = request.query_params.get("search", "").strip()
 
         if status_filter:
-            status_map = {
-                "PENDING": [ApplicationStatus.SUBMITTED, ApplicationStatus.RESUBMITTED],
-                "ACCEPTED": [ApplicationStatus.APPROVED],
-                "APPROVED": [ApplicationStatus.APPROVED],
-                "REJECTED": [ApplicationStatus.REJECTED],
-                "FOR_CORRECTION": [ApplicationStatus.FOR_CORRECTION],
-            }
-            applications = applications.filter(status__in=status_map.get(status_filter, [status_filter]))
+            if status_filter == ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION:
+                applications = applications.filter(
+                    completion_status=ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION
+                )
+            else:
+                status_map = {
+                    "PENDING": [ApplicationStatus.SUBMITTED, ApplicationStatus.RESUBMITTED],
+                    "ACCEPTED": [ApplicationStatus.APPROVED],
+                    "APPROVED": [ApplicationStatus.APPROVED],
+                    "REJECTED": [ApplicationStatus.REJECTED],
+                    "FOR_CORRECTION": [ApplicationStatus.FOR_CORRECTION],
+                }
+                applications = applications.filter(status__in=status_map.get(status_filter, [status_filter]))
 
         if school_id:
             applications = applications.filter(school_info__school_id=school_id)
@@ -299,6 +311,88 @@ class ApplicationReviewQueueView(APIView):
                 | Q(course_preference_rows__university__icontains=search)
             ).distinct()
         return Response(ApplicationSerializer(applications, many=True, context={"request": request}).data)
+
+
+class BulkUploadTemplateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request) -> HttpResponse:
+        response = HttpResponse(build_bulk_upload_template_csv(), content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="student-application-bulk-upload-template.csv"'
+        return response
+
+
+class BulkUploadValidateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request) -> Response:
+        serializer = BulkUploadValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = validate_bulk_upload_csv(uploaded_file=serializer.validated_data["file"], actor=request.user)
+        record_application_event(event="application_bulk_upload_validated", outcome="success", request=request, user=request.user)
+        batch = ApplicationBulkUploadBatch.objects.prefetch_related("row_results").get(id=result["batchId"])
+        return Response(BulkUploadBatchSerializer(batch).data)
+
+
+class BulkUploadBatchMixin:
+    def get_batch(self, request, batch_id):
+        batch = get_object_or_404(
+            ApplicationBulkUploadBatch.objects.prefetch_related("row_results"),
+            id=batch_id,
+        )
+        role = get_user_role(request.user)
+        user_id = getattr(request.user, "user_id", getattr(request.user, "id", None))
+        if role != PortalRole.SYSTEM_ADMIN.value and str(batch.uploaded_by_user_id) != str(user_id):
+            raise Http404("Bulk upload batch not found.")
+        return batch
+
+
+class BulkUploadBatchDetailView(BulkUploadBatchMixin, APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request, batch_id) -> Response:
+        batch = self.get_batch(request, batch_id)
+        return Response(BulkUploadBatchSerializer(batch).data)
+
+
+class BulkUploadErrorsCsvView(BulkUploadBatchMixin, APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request, batch_id) -> HttpResponse:
+        batch = self.get_batch(request, batch_id)
+        stream = StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["rowNumber", "field", "code", "reason"])
+        for row in batch.row_results.all():
+            for error in row.errors:
+                writer.writerow([
+                    row.row_number,
+                    error.get("field", ""),
+                    error.get("code", ""),
+                    error.get("reason", ""),
+                ])
+        response = HttpResponse(stream.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="student-application-bulk-upload-errors-{batch.public_id}.csv"'
+        return response
+
+
+class BulkUploadConfirmView(BulkUploadBatchMixin, APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def post(self, request, batch_id) -> Response:
+        self.get_batch(request, batch_id)
+        try:
+            result = confirm_bulk_upload_batch(batch_id=batch_id, actor=request.user)
+        except ValueError as exc:
+            raise ApplicationConflict(str(exc)) from exc
+        record_application_event(event="application_bulk_upload_confirmed", outcome="success", request=request, user=request.user)
+        return Response(result)
 
 
 class ApplicationReviewerDecisionView(APIView):
