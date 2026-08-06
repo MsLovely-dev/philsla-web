@@ -147,20 +147,31 @@ interface ProtectedRouteProps {
   allowedRoles: readonly UserRole[];
   children: ReactNode;
   layout?: 'dashboard' | 'standalone';
+  /**
+   * When set, this is the exclusive authorization check: `allowedRoles`
+   * and the module-permission fallback are both bypassed. A disallowed
+   * role cannot use module permissions to open a strict-access route.
+   */
+  strictAccess?: (user: User) => boolean;
 }
 
-export function ProtectedRoute({ allowedRoles, children, layout = 'dashboard' }: ProtectedRouteProps) {
+export function ProtectedRoute({ allowedRoles, children, layout = 'dashboard', strictAccess }: ProtectedRouteProps) {
   const { user, isAuthInitialized, isLoading, maintenanceModules } = useProtectedAuth();
   const location = useLocation();
   const modules = maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES;
 
   if (!isAuthInitialized || isLoading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  if (!allowedRoles.includes(user.role) && !canAccessRouteByModulePermission(user, location.pathname, modules)) {
-    return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
-  }
-  if (!canReadCurrentModule(user, location.pathname, modules)) {
-    return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+
+  if (strictAccess) {
+    if (!strictAccess(user)) return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+  } else {
+    if (!allowedRoles.includes(user.role) && !canAccessRouteByModulePermission(user, location.pathname, modules)) {
+      return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+    }
+    if (!canReadCurrentModule(user, location.pathname, modules)) {
+      return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+    }
   }
 
   const content = <MaintenanceGuard>{children}</MaintenanceGuard>;

@@ -113,6 +113,92 @@ describe('BackendAuthService', () => {
     }
   });
 
+  it('retains the exact backend role alongside the existing frontend display role', async () => {
+    function sessionFetcher(backendRole: string) {
+      return vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            user: {
+              id: `user-${backendRole}`,
+              role: backendRole,
+              securityTier: 3,
+              permissions: [],
+              scopes: {},
+            },
+            session: {
+              authenticated: true,
+              expiresAt: '2026-07-13T10:00:00Z',
+            },
+          },
+          { status: 200 },
+        ),
+      );
+    }
+
+    const depedClient = new ApiClient({ baseUrl: 'http://backend.test', fetcher: sessionFetcher('DEPED_ADMIN') });
+    depedClient.setBearerToken('access-token');
+    const depedSession = await new BackendAuthService(depedClient).getCurrentSession();
+    expect(depedSession.ok).toBe(true);
+    if (depedSession.ok) {
+      expect(depedSession.data?.user).toMatchObject({ role: 'GOVERNMENT', backendRole: 'DEPED_ADMIN' });
+    }
+
+    const chedClient = new ApiClient({ baseUrl: 'http://backend.test', fetcher: sessionFetcher('CHED_ADMIN') });
+    chedClient.setBearerToken('access-token');
+    const chedSession = await new BackendAuthService(chedClient).getCurrentSession();
+    expect(chedSession.ok).toBe(true);
+    if (chedSession.ok) {
+      expect(chedSession.data?.user).toMatchObject({ role: 'GOVERNMENT', backendRole: 'CHED_ADMIN' });
+    }
+
+    const tesdaClient = new ApiClient({ baseUrl: 'http://backend.test', fetcher: sessionFetcher('TESDA_ADMIN') });
+    tesdaClient.setBearerToken('access-token');
+    const tesdaSession = await new BackendAuthService(tesdaClient).getCurrentSession();
+    expect(tesdaSession.ok).toBe(true);
+    if (tesdaSession.ok) {
+      expect(tesdaSession.data?.user).toMatchObject({ role: 'GOVERNMENT', backendRole: 'TESDA_ADMIN' });
+    }
+
+    const systemClient = new ApiClient({ baseUrl: 'http://backend.test', fetcher: sessionFetcher('SYSTEM_ADMIN') });
+    systemClient.setBearerToken('access-token');
+    const systemSession = await new BackendAuthService(systemClient).getCurrentSession();
+    expect(systemSession.ok).toBe(true);
+    if (systemSession.ok) {
+      expect(systemSession.data?.user).toMatchObject({ role: 'SYSTEM_ADMIN', backendRole: 'SYSTEM_ADMIN' });
+    }
+  });
+
+  it('never accepts an unrecognized backend role value as backendRole', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          user: {
+            id: 'user-unknown',
+            role: 'SOMETHING_UNEXPECTED',
+            securityTier: 1,
+            permissions: [],
+            scopes: {},
+          },
+          session: {
+            authenticated: true,
+            expiresAt: '2026-07-13T10:00:00Z',
+          },
+        },
+        { status: 200 },
+      ),
+    );
+    const client = new ApiClient({ baseUrl: 'http://backend.test', fetcher });
+    client.setBearerToken('access-token');
+    const service = new BackendAuthService(client);
+
+    const result = await service.getCurrentSession();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data?.user.backendRole).toBeUndefined();
+    }
+  });
+
   it('uses backend login boundary and maps safe backend auth errors', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(
