@@ -26,6 +26,7 @@ from apps.applications.models import (
     StudentApplication,
     StudentApplicationAdditionalField,
     StudentApplicationAdditionalAttachment,
+    generate_candidate_id,
 )
 from apps.configuration.models import ConfigurableField
 
@@ -110,6 +111,12 @@ class ApplicationEndpointTests(TestCase):
         body = dict(payload or {})
         body["verificationToken"] = verification.data["verificationToken"]
         return self.client.post(reverse("applications:create"), body, format="json")
+
+    def test_generate_candidate_id_uses_phl_prefix(self):
+        candidate_id = generate_candidate_id(year=2027)
+
+        self.assertRegex(candidate_id, r"^PHL-2027-[A-Z0-9]{6}$")
+        self.assertNotIn("PS-", candidate_id)
 
     def test_student_can_create_read_and_update_own_draft(self):
         created = self.create({"personal": {"firstName": "Draft"}})
@@ -248,7 +255,7 @@ class ApplicationEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], ApplicationStatus.SUBMITTED)
-        self.assertRegex(response.data["candidateId"], r"^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+        self.assertRegex(response.data["candidateId"], r"^PHL-\d{4}-[A-Z0-9]{6}$")
         self.assertIsNotNone(response.data["submittedAt"])
         application = StudentApplication.objects.get(id=response.data["id"])
         self.assertEqual(application.candidate_id, response.data["candidateId"])
@@ -281,7 +288,7 @@ class ApplicationEndpointTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 201)
-        self.assertRegex(response.data["candidateId"], r"^PS-\d{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$")
+        self.assertRegex(response.data["candidateId"], r"^PHL-\d{4}-[A-Z0-9]{6}$")
         audit_log = ApplicationAuditLog.objects.get(application_id=response.data["id"])
         self.assertEqual(audit_log.action, "REGISTRATION_SUBMITTED")
         self.assertEqual(audit_log.outcome, "success")
@@ -814,6 +821,14 @@ class ApplicationEndpointTests(TestCase):
             size=12,
             sha256="abc123",
         )
+        ApplicationIdentityMedia.objects.create(
+            verification=verification,
+            media_type=IdentityMediaType.STUDENT_ID_FRONT,
+            file="private/registration-identity/student-id-front.jpg",
+            content_type="image/jpeg",
+            size=34,
+            sha256="def456",
+        )
         self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
 
         response = self.client.get(reverse("applications:detail", args=[submitted.id]))
@@ -914,6 +929,19 @@ class ApplicationEndpointTests(TestCase):
         response = self.client.get(reverse("applications:review-queue"))
         self.assertEqual(response.status_code, 403)
 
+    def test_application_by_lrn_lookup_is_not_exposed(self):
+        StudentApplication.objects.create(
+            owner=self.user,
+            lrn="123456789012",
+            status=ApplicationStatus.SUBMITTED,
+            submitted_at=timezone.now(),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.SYSTEM_ADMIN.value))
+
+        response = self.client.get("/api/v1/applications/by-lrn/123456789012/")
+
+        self.assertEqual(response.status_code, 404)
+
     def test_reviewer_decision_updates_application_status_in_database(self):
         payload = complete_payload()
         payload["personal"]["email"] = "approved.student@example.test"
@@ -970,6 +998,7 @@ class ApplicationEndpointTests(TestCase):
 
     def test_reviewer_reject_clears_pending_password_hash(self):
         payload = complete_payload()
+        payload["personal"]["email"] = "rejected.student@example.test"
         application = StudentApplication.objects.create(
             owner=None,
             lrn="123456789012",
@@ -994,6 +1023,51 @@ class ApplicationEndpointTests(TestCase):
         application.refresh_from_db()
         self.assertEqual(application.status, ApplicationStatus.REJECTED)
         self.assertEqual(application.password_hash, "")
+        self.assertIsNone(application.owner_id)
+        self.assertFalse(get_user_model().objects.filter(email=payload["personal"]["email"]).exists())
+        self.assertFalse(AccountProfile.objects.filter(lrn="123456789012", role=PortalRole.STUDENT.value).exists())
+
+    def test_system_admin_can_reject_submitted_application(self):
+        payload = complete_payload()
+        application = StudentApplication.objects.create(
+            owner=None,
+            lrn="123456789012",
+            exam_cycle_id="2026",
+            status=ApplicationStatus.SUBMITTED,
+            personal=payload["personal"],
+            address=payload["address"],
+            school=payload["school"],
+            course_preferences=payload["coursePreferences"],
+            review_step=payload["reviewStep"],
+            password_hash=make_password(payload["password"]),
+        )
+        self.client.force_authenticate(user=principal(self.user, PortalRole.SYSTEM_ADMIN.value))
+
+        response = self.client.post(
+            reverse("applications:review-decision", args=[application.id]),
+            {"decision": "REJECT", "reason": "Rejected by system admin."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.REJECTED)
+        self.assertEqual(application.review_step["reviewerDecision"], "REJECT")
+        self.assertEqual(application.password_hash, "")
+
+    def test_reviewer_decision_rejects_invalid_current_state(self):
+        application = StudentApplication.objects.create(status=ApplicationStatus.APPROVED)
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.post(
+            reverse("applications:review-decision", args=[application.id]),
+            {"decision": "REJECT", "reason": "Too late."},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        application.refresh_from_db()
+        self.assertEqual(application.status, ApplicationStatus.APPROVED)
 
     def test_student_cannot_decide_application(self):
         application = StudentApplication.objects.create(status=ApplicationStatus.SUBMITTED)

@@ -68,6 +68,7 @@ export interface BlueprintHistoryEntry {
 
 export interface Blueprint {
   id: string;
+  currentVersionId?: string;
   code: string; // e.g. BP-2026-SPACE-01
   name: string;
   description: string;

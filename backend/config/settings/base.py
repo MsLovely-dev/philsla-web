@@ -45,13 +45,20 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "apps.accounts",
     "apps.applications",
+    "apps.analytics",
     "apps.configuration",
+    "apps.exam_reviews",
+    "apps.results",
     "apps.core",
     "apps.exams",
+    "apps.schools",
+    "apps.universities",
+    "apps.attendance",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "apps.core.middleware.CorrelationIdMiddleware",
     "apps.core.middleware.CorsAllowlistMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -88,9 +95,19 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_ROOT = BASE_DIR / "private-media"
 MEDIA_URL = "/private-media/"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 STEP2_MAX_IMAGE_BYTES = env_int("STEP2_MAX_IMAGE_BYTES", 5 * 1024 * 1024)
+EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES = env_int("EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES", 10 * 1024 * 1024)
 REGISTRATION_ATTACHMENT_MAX_BYTES = env_int("REGISTRATION_ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024)
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = os.environ.get("STEP2_DOCUMENT_RECOGNITION_PROVIDER", "unavailable")
 STEP1_SELFIE_FACE_PROVIDER = os.environ.get("STEP1_SELFIE_FACE_PROVIDER", "unavailable")
@@ -122,7 +139,7 @@ REST_FRAMEWORK = {
         "registration_email_otp": "5/min",
         "registration_selfie_face": "30/min",
     },
-    "PAGE_SIZE": 25,
+    "PAGE_SIZE": 10,
 }
 
 AUTH_ACCESS_TOKEN_LIFETIME_MINUTES = env_int("AUTH_ACCESS_TOKEN_LIFETIME_MINUTES", 20)
@@ -166,6 +183,7 @@ SIMPLE_JWT = {
 }
 
 ACTIVE_EXAM_CYCLE_ID = os.environ.get("ACTIVE_EXAM_CYCLE_ID", "TBD")
+EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS = False
 LRN_REGISTRY_PROVIDER = os.environ.get("LRN_REGISTRY_PROVIDER", "unavailable")
 LRN_VERIFICATION_TTL_MINUTES = env_int("LRN_VERIFICATION_TTL_MINUTES", 15)
 LRN_MAX_FAILED_ATTEMPTS = env_int("LRN_MAX_FAILED_ATTEMPTS", 5)

@@ -9,7 +9,7 @@ from django.db.models import Prefetch
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.utils.text import slugify
-from rest_framework.exceptions import APIException, PermissionDenied
+from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from apps.accounts.models import AccountProfile
 
@@ -70,6 +70,30 @@ QUESTION_TYPE_CODE_MAP = {
     "fib": "IDENTIFICATION",
     "essay": "ESSAY",
 }
+
+
+class ExamSetLifecycleConflict(APIException):
+    status_code = 409
+    default_code = "exam_set_lifecycle_conflict"
+    default_detail = "The requested Exam Set lifecycle action is not allowed."
+
+
+class ExamSetValidationConflict(APIException):
+    status_code = 409
+    default_code = "exam_set_validation_conflict"
+    default_detail = "The Exam Set must satisfy its validation requirements before this transition."
+
+
+EXAM_SET_ALLOWED_TRANSITIONS = {
+    ExamSetStatus.DRAFT: {ExamSetStatus.ACADEMIC_REVIEW},
+    ExamSetStatus.ACADEMIC_REVIEW: {ExamSetStatus.REVISION_REQUIRED, ExamSetStatus.APPROVED},
+    ExamSetStatus.REVISION_REQUIRED: {ExamSetStatus.ACADEMIC_REVIEW},
+    ExamSetStatus.APPROVED: {ExamSetStatus.PUBLISHED},
+    ExamSetStatus.PUBLISHED: {ExamSetStatus.ARCHIVED},
+    ExamSetStatus.ARCHIVED: set(),
+}
+
+EXAM_SET_EDITABLE_STATUSES = {ExamSetStatus.DRAFT, ExamSetStatus.REVISION_REQUIRED}
 
 
 class BlueprintTransitionConflict(APIException):
@@ -464,6 +488,7 @@ def serialize_blueprint(blueprint: ExamBlueprint) -> dict[str, Any]:
     if version is None:
         return {
             "id": str(blueprint.pk),
+            "current_version_id": None,
             "code": blueprint.spec_code,
             "name": "",
             "description": "",
@@ -493,6 +518,7 @@ def serialize_blueprint(blueprint: ExamBlueprint) -> dict[str, Any]:
 
     return {
         "id": str(blueprint.pk),
+        "current_version_id": str(version.pk),
         "code": blueprint.spec_code,
         "name": version.name,
         "description": version.description,
@@ -1273,28 +1299,52 @@ def serialize_exam_set(exam_set: ExamSet) -> dict[str, Any]:
 
 
 def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], actor_profile: AccountProfile) -> None:
-    exam_set.items.all().delete()
+    resolved_items: list[tuple[Question, BlueprintSection | None, int, Decimal, str]] = []
+    seen_question_ids: set[int] = set()
     for index, item_payload in enumerate(items, start=1):
         question_id = _payload_value(item_payload, "question_id", "questionId")
         question_code = _payload_value(item_payload, "question_code", "questionCode")
         question = None
         if question_id not in (None, ""):
             question = Question.objects.filter(pk=question_id).first()
-        if question is None and question_code not in (None, ""):
+            if question is None:
+                raise ValidationError({"items": [f"Item {index} references an unknown question."]})
+            if question_code not in (None, "") and question.question_code != str(question_code).strip():
+                raise ValidationError({"items": [f"Item {index} contains conflicting question references."]})
+        elif question_code not in (None, ""):
             question = Question.objects.filter(question_code=str(question_code)).first()
         if question is None:
-            continue
+            raise ValidationError({"items": [f"Item {index} must reference a valid question."]})
+        if question.pk in seen_question_ids:
+            raise ValidationError({"items": [f"Item {index} duplicates a question already in the Exam Set."]})
+        seen_question_ids.add(question.pk)
+
         blueprint_section = None
         blueprint_section_id = _payload_value(item_payload, "blueprint_section_id", "blueprintSectionId")
         if blueprint_section_id not in (None, ""):
-            blueprint_section = BlueprintSection.objects.filter(pk=blueprint_section_id).first()
+            blueprint_section = BlueprintSection.objects.filter(
+                pk=blueprint_section_id,
+                blueprint_version_id=exam_set.blueprint_version_id,
+            ).first()
+            if blueprint_section is None:
+                raise ValidationError({"items": [f"Item {index} references a section outside the selected Blueprint Version."]})
+        resolved_items.append((
+            question,
+            blueprint_section,
+            int(_payload_value(item_payload, "display_order", "displayOrder", index) or index),
+            _parse_decimal(_payload_value(item_payload, "points", default=str(question.points)), str(question.points)),
+            _normalize_selection_method(_payload_value(item_payload, "selection_method", "selectionMethod", SelectionMethod.MANUAL)),
+        ))
+
+    exam_set.items.all().delete()
+    for question, blueprint_section, display_order, points, selection_method in resolved_items:
         ExamSetQuestion.objects.create(
             exam_set=exam_set,
             question=question,
             blueprint_section=blueprint_section,
-            display_order=int(_payload_value(item_payload, "display_order", "displayOrder", index) or index),
-            points=_parse_decimal(_payload_value(item_payload, "points", default=str(question.points)), str(question.points)),
-            selection_method=_normalize_selection_method(_payload_value(item_payload, "selection_method", "selectionMethod", SelectionMethod.MANUAL)),
+            display_order=display_order,
+            points=points,
+            selection_method=selection_method,
             selected_by=actor_profile,
         )
 
@@ -1341,20 +1391,36 @@ def create_or_update_exam_set(
     actor_profile: AccountProfile,
     exam_set: ExamSet | None = None,
 ) -> ExamSet:
-    blueprint_version_id = _payload_value(payload, "blueprint_version_id", "blueprintVersionId")
+    if exam_set is not None:
+        exam_set = ExamSet.objects.select_for_update().get(pk=exam_set.pk)
+        if exam_set.status not in EXAM_SET_EDITABLE_STATUSES:
+            raise ExamSetLifecycleConflict("Only draft or revision-required Exam Sets can be edited.")
+
+    blueprint_version_id = _payload_value(
+        payload,
+        "blueprint_version_id",
+        "blueprintVersionId",
+        default=exam_set.blueprint_version_id if exam_set else None,
+    )
     blueprint_version = BlueprintVersion.objects.filter(pk=blueprint_version_id).select_related("blueprint").first() if blueprint_version_id not in (None, "") else None
     if blueprint_version is None:
-        raise ValueError("A valid blueprint version is required.")
+        raise ValidationError({"blueprint_version_id": ["Select a valid Blueprint Version."]})
 
     academic_year_value = _payload_value(payload, "academic_year_id", "academicYearId")
     academic_year_name = _payload_value(payload, "academic_year", "academicYear")
     academic_year = None
     if academic_year_value not in (None, ""):
         academic_year = AcademicYear.objects.filter(pk=academic_year_value).first()
-    if academic_year is None and academic_year_name not in (None, ""):
+        if academic_year is None:
+            raise ValidationError({"academic_year_id": ["Select a valid academic year."]})
+        if academic_year_name not in (None, "") and academic_year.name != str(academic_year_name).strip():
+            raise ValidationError({"academic_year": ["Academic year references must identify the same record."]})
+    elif academic_year_name not in (None, ""):
         academic_year = AcademicYear.objects.filter(name=str(academic_year_name).strip()).first()
+    elif exam_set is not None:
+        academic_year = exam_set.academic_year
     if academic_year is None:
-        raise ValueError("A valid academic year is required.")
+        raise ValidationError({"academic_year_id": ["Select a valid academic year."]})
 
     title = str(_payload_value(payload, "title", default=exam_set.title if exam_set else "") or "").strip()
     if not title:
@@ -1373,7 +1439,7 @@ def create_or_update_exam_set(
         "exam_type": _normalize_exam_type(_payload_value(payload, "exam_type", "examType", default=exam_set.exam_type if exam_set else ExamType.ADMISSION)),
         "instructions": str(_payload_value(payload, "instructions", default=exam_set.instructions if exam_set else "") or ""),
         "duration_minutes": int(_payload_value(payload, "duration_minutes", "durationMinutes", default=exam_set.duration_minutes if exam_set else 0) or 0),
-        "status": _normalize_exam_set_status(_payload_value(payload, "status", default=exam_set.status if exam_set else ExamSetStatus.DRAFT)),
+        "status": exam_set.status if exam_set else ExamSetStatus.DRAFT,
         "cloned_from_exam_set": exam_set.cloned_from_exam_set if exam_set and exam_set.cloned_from_exam_set else None,
         "created_by": exam_set.created_by if exam_set else actor_profile,
         "approved_by": exam_set.approved_by if exam_set else None,
@@ -1419,8 +1485,28 @@ def transition_exam_set(
     actor_profile: AccountProfile,
     remarks: str = "",
 ) -> ExamSet:
+    exam_set = ExamSet.objects.select_for_update().get(pk=exam_set.pk)
     normalized_status = _normalize_exam_set_status(target_status)
     previous_status = exam_set.status
+    if normalized_status not in EXAM_SET_ALLOWED_TRANSITIONS.get(previous_status, set()):
+        raise ExamSetLifecycleConflict(
+            f"Exam Sets cannot transition from {previous_status.upper()} to {normalized_status.upper()}.",
+        )
+
+    if normalized_status in {
+        ExamSetStatus.ACADEMIC_REVIEW,
+        ExamSetStatus.APPROVED,
+        ExamSetStatus.PUBLISHED,
+    }:
+        _record_exam_set_validation_results(exam_set)
+        validation_results = list(exam_set.validation_results.values_list("result", flat=True))
+        if ValidationResult.FAILED in validation_results:
+            raise ExamSetValidationConflict("Resolve failed Exam Set validations before continuing.")
+        if normalized_status in {ExamSetStatus.APPROVED, ExamSetStatus.PUBLISHED} and any(
+            result != ValidationResult.PASSED for result in validation_results
+        ):
+            raise ExamSetValidationConflict("Resolve Exam Set validation warnings before approval or publication.")
+
     exam_set.status = normalized_status
     now = timezone.now()
     if normalized_status == ExamSetStatus.APPROVED:

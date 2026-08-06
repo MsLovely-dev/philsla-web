@@ -1,21 +1,21 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  GraduationCap, 
-  Search, 
-  Plus, 
-  Edit3, 
-  Trash2, 
-  BookOpen, 
-  Building2, 
-  ChevronRight, 
-  ArrowLeft, 
-  Check, 
-  X, 
-  MapPin, 
-  Mail, 
-  Phone, 
-  Award, 
-  Download, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  GraduationCap,
+  Search,
+  Plus,
+  Edit3,
+  Trash2,
+  BookOpen,
+  Building2,
+  ChevronRight,
+  ArrowLeft,
+  Check,
+  X,
+  MapPin,
+  Mail,
+  Phone,
+  Award,
+  Download,
   Layers,
   Sparkles,
   ExternalLink,
@@ -24,50 +24,55 @@ import {
   LayoutGrid
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { PHILIPPINE_REGIONS, regionLabel } from '../../../data/philippineRegions';
+import {
+  universityService,
+  type CollegeCoursePayload,
+  type CollegeCourseRecord,
+  DEGREE_TYPE_SUGGESTIONS,
+  type UniversityClassification,
+  type UniversityPayload,
+  type UniversityRecord,
+} from '../../../services/backendUniversityService';
+import type { ServiceFailure } from '../../../services/serviceResult';
+import { ConfirmationDialog } from '../../../components/ui';
 
-export interface CollegeCourse {
-  id: string;
-  universityId: string;
-  universityCode: string;
-  collegeName: string; // e.g. College of Engineering
-  programCode: string; // e.g. BSCS
-  programName: string; // e.g. Bachelor of Science in Computer Science
-  degreeType: 'Bachelor of Science' | 'Bachelor of Arts' | 'Bachelor of Fine Arts' | 'Associate';
-  majorSpecialization: string;
-  durationYears: number;
-  totalUnits: number;
-  cutoffPercentile: number; // e.g. 85.0
-  status: 'Active' | 'Inactive';
-}
-
-export interface UniversityItem {
-  id: string;
-  code: string;
-  name: string;
-  classification: 'Public' | 'Private';
-  region: string;
-  city: string;
-  presidentRector: string;
-  email: string;
-  phone: string;
-  establishedYear: number;
-  status: 'Active' | 'Inactive';
-}
-
-function isUniversityClassification(value: string): value is UniversityItem['classification'] {
+function isUniversityClassification(value: string): value is UniversityClassification {
   return value === 'Public' || value === 'Private';
 }
 
-function isDegreeType(value: string): value is CollegeCourse['degreeType'] {
-  return ['Bachelor of Science', 'Bachelor of Arts', 'Bachelor of Fine Arts', 'Associate'].includes(value);
-}
+const EMPTY_COURSE_FORM: CollegeCoursePayload = {
+  collegeName: '',
+  programCode: '',
+  programName: '',
+  degreeType: '',
+  majorSpecialization: '',
+  durationYears: 4,
+  totalUnits: 150,
+  cutoffPercentile: 80.0,
+  status: 'Active',
+};
+
+const EMPTY_UNI_FORM: UniversityPayload = {
+  classification: 'Public',
+  name: '',
+  region: PHILIPPINE_REGIONS[0].code,
+  city: '',
+  presidentRector: '',
+  email: '',
+  phone: '',
+  establishedYear: null,
+  status: 'Active',
+};
 
 export default function UniversitiesListMaintenance() {
-  const [universities, setUniversities] = useState<UniversityItem[]>([]);
-  const [courses, setCourses] = useState<CollegeCourse[]>([]);
+  const [universities, setUniversities] = useState<UniversityRecord[]>([]);
+  const [courses, setCourses] = useState<CollegeCourseRecord[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Selected University State (drill-down into College Courses)
-  const [selectedUniversity, setSelectedUniversity] = useState<UniversityItem | null>(null);
+  const [selectedUniversity, setSelectedUniversity] = useState<UniversityRecord | null>(null);
 
   // Search & Filter for Universities
   const [uniSearch, setUniSearch] = useState('');
@@ -81,25 +86,71 @@ export default function UniversitiesListMaintenance() {
 
   // Modals
   const [isUniModalOpen, setIsUniModalOpen] = useState(false);
-  const [editingUniversity, setEditingUniversity] = useState<UniversityItem | null>(null);
-  const [uniFormData, setUniFormData] = useState<Partial<UniversityItem>>({});
+  const [editingUniversity, setEditingUniversity] = useState<UniversityRecord | null>(null);
+  const [uniFormData, setUniFormData] = useState<UniversityPayload>(EMPTY_UNI_FORM);
+
+  const [pendingDelete, setPendingDelete] = useState<UniversityRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
-  const [editingCourse, setEditingCourse] = useState<CollegeCourse | null>(null);
-  const [courseFormData, setCourseFormData] = useState<Partial<CollegeCourse>>({});
+  const [editingCourse, setEditingCourse] = useState<CollegeCourseRecord | null>(null);
+  const [courseFormData, setCourseFormData] = useState<CollegeCoursePayload>(EMPTY_COURSE_FORM);
+  const [isSavingCourse, setIsSavingCourse] = useState(false);
+  const [pendingCourseDelete, setPendingCourseDelete] = useState<CollegeCourseRecord | null>(null);
+  const [isDeletingCourse, setIsDeletingCourse] = useState(false);
 
-  const saveUniversities = (updated: UniversityItem[]) => {
-    setUniversities(updated);
+  useEffect(() => {
+    let active = true;
+    universityService.listUniversities().then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setUniversities(result.data);
+      } else {
+        setError((result as ServiceFailure).error.message);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Load the selected university's courses from the nested endpoint on drill-down.
+  useEffect(() => {
+    if (!selectedUniversity) {
+      setCourses([]);
+      return;
+    }
+    let active = true;
+    universityService.listCourses(selectedUniversity.id).then((result) => {
+      if (!active) return;
+      if (result.ok) {
+        setCourses(result.data);
+      } else {
+        setError((result as ServiceFailure).error.message);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedUniversity]);
+
+  // Keep the in-memory university list's course count in step with course changes,
+  // so the list-view column and totals stay accurate without a full refetch.
+  const applyCourseCountDelta = (universityId: string, delta: number) => {
+    setUniversities((prev) =>
+      prev.map((u) => (u.id === universityId ? { ...u, courseCount: Math.max(0, u.courseCount + delta) } : u)),
+    );
   };
 
-  const saveCourses = (updated: CollegeCourse[]) => {
-    setCourses(updated);
-  };
-
-  // Helper to count courses for each university
+  // Helper to count courses for each university (server-provided on the list payload).
   const getCourseCountForUniversity = (uniId: string) => {
-    return courses.filter(c => c.universityId === uniId).length;
+    return universities.find((u) => u.id === uniId)?.courseCount ?? 0;
   };
+
+  const totalCourses = useMemo(
+    () => universities.reduce((sum, u) => sum + u.courseCount, 0),
+    [universities],
+  );
 
   const uniqueUniRegions = useMemo(() => {
     return Array.from(new Set(universities.map(u => u.region))).sort();
@@ -147,130 +198,160 @@ export default function UniversitiesListMaintenance() {
   // Handle University Add / Edit / Delete
   const handleOpenAddUniModal = () => {
     setEditingUniversity(null);
+    setError(null);
+    setUniFormData({ ...EMPTY_UNI_FORM, region: uniqueUniRegions[0] ?? PHILIPPINE_REGIONS[0].code });
+    setIsUniModalOpen(true);
+  };
+
+  const handleOpenEditUniModal = (uni: UniversityRecord, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingUniversity(uni);
+    setError(null);
     setUniFormData({
-      code: `UNI-${Math.floor(100 + Math.random() * 900)}`,
-      name: '',
-      classification: 'Public',
-      region: uniqueUniRegions[0] || 'NCR - National Capital Region',
-      city: '',
-      presidentRector: '',
-      email: '',
-      phone: '',
-      establishedYear: 1950,
-      status: 'Active'
+      classification: uni.classification,
+      name: uni.name,
+      region: uni.region,
+      city: uni.city,
+      presidentRector: uni.presidentRector,
+      email: uni.email,
+      phone: uni.phone,
+      establishedYear: uni.establishedYear,
+      status: uni.status,
     });
     setIsUniModalOpen(true);
   };
 
-  const handleOpenEditUniModal = (uni: UniversityItem, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingUniversity(uni);
-    setUniFormData({ ...uni });
-    setIsUniModalOpen(true);
-  };
-
-  const handleSaveUni = (e: React.FormEvent) => {
+  const handleSaveUni = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uniFormData.name || !uniFormData.code || !uniFormData.city) return;
+    if (!uniFormData.name.trim() || !uniFormData.city.trim() || isSaving) return;
+
+    setIsSaving(true);
+    setError(null);
+    const result = editingUniversity
+      ? await universityService.updateUniversity(editingUniversity.id, uniFormData)
+      : await universityService.createUniversity(uniFormData);
+    setIsSaving(false);
+
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      return;
+    }
 
     if (editingUniversity) {
-      const updated = universities.map(u => u.id === editingUniversity.id ? { ...u, ...uniFormData } as UniversityItem : u);
-      saveUniversities(updated);
-      if (selectedUniversity?.id === editingUniversity.id) {
-        setSelectedUniversity({ ...selectedUniversity, ...uniFormData } as UniversityItem);
+      setUniversities((prev) => prev.map((u) => (u.id === result.data.id ? result.data : u)));
+      if (selectedUniversity?.id === result.data.id) {
+        setSelectedUniversity(result.data);
       }
     } else {
-      const newUni: UniversityItem = {
-        id: `uni-${Date.now()}`,
-        code: uniFormData.code || 'UNI-NEW',
-        name: uniFormData.name || 'New University',
-        classification: uniFormData.classification || 'Public',
-        region: uniFormData.region || 'NCR - National Capital Region',
-        city: uniFormData.city || 'City',
-        presidentRector: uniFormData.presidentRector || 'President',
-        email: uniFormData.email || 'info@university.edu.ph',
-        phone: uniFormData.phone || '0917-000-0000',
-        establishedYear: Number(uniFormData.establishedYear) || 1980,
-        status: uniFormData.status || 'Active'
-      };
-      saveUniversities([newUni, ...universities]);
+      setUniversities((prev) => [result.data, ...prev]);
     }
 
     setIsUniModalOpen(false);
   };
 
-  const handleDeleteUni = (id: string, e: React.MouseEvent) => {
+  const requestDeleteUni = (uni: UniversityRecord, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Are you sure you want to delete this university? All associated college courses will also be removed.')) {
-      const updatedUni = universities.filter(u => u.id !== id);
-      const updatedCourses = courses.filter(c => c.universityId !== id);
-      saveUniversities(updatedUni);
-      saveCourses(updatedCourses);
-      if (selectedUniversity?.id === id) {
-        setSelectedUniversity(null);
-      }
+    setError(null);
+    setPendingDelete(uni);
+  };
+
+  const handleConfirmDeleteUni = async () => {
+    if (!pendingDelete) return;
+    setIsDeleting(true);
+    const result = await universityService.deleteUniversity(pendingDelete.id);
+    setIsDeleting(false);
+
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      setPendingDelete(null);
+      return;
     }
+
+    const removedId = pendingDelete.id;
+    setUniversities((prev) => prev.filter((u) => u.id !== removedId));
+    setCourses((prev) => prev.filter((c) => c.universityId !== removedId));
+    if (selectedUniversity?.id === removedId) {
+      setSelectedUniversity(null);
+    }
+    setPendingDelete(null);
   };
 
   // Handle Course Add / Edit / Delete
   const handleOpenAddCourseModal = () => {
     if (!selectedUniversity) return;
     setEditingCourse(null);
+    setError(null);
     setCourseFormData({
-      universityId: selectedUniversity.id,
-      universityCode: selectedUniversity.code,
-      collegeName: uniqueCollegesInUniversity[0] || 'College of Science',
-      programCode: 'BSCS',
-      programName: '',
-      degreeType: 'Bachelor of Science',
-      majorSpecialization: 'General',
-      durationYears: 4,
-      totalUnits: 150,
-      cutoffPercentile: 80.0,
-      status: 'Active'
+      ...EMPTY_COURSE_FORM,
+      collegeName: uniqueCollegesInUniversity[0] || '',
     });
     setIsCourseModalOpen(true);
   };
 
-  const handleOpenEditCourseModal = (course: CollegeCourse) => {
+  const handleOpenEditCourseModal = (course: CollegeCourseRecord) => {
     setEditingCourse(course);
-    setCourseFormData({ ...course });
+    setError(null);
+    setCourseFormData({
+      collegeName: course.collegeName,
+      programCode: course.programCode,
+      programName: course.programName,
+      degreeType: course.degreeType,
+      majorSpecialization: course.majorSpecialization,
+      durationYears: course.durationYears,
+      totalUnits: course.totalUnits,
+      cutoffPercentile: course.cutoffPercentile,
+      status: course.status,
+    });
     setIsCourseModalOpen(true);
   };
 
-  const handleSaveCourse = (e: React.FormEvent) => {
+  const handleSaveCourse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUniversity || !courseFormData.programName || !courseFormData.programCode) return;
-
-    if (editingCourse) {
-      const updated = courses.map(c => c.id === editingCourse.id ? { ...c, ...courseFormData } as CollegeCourse : c);
-      saveCourses(updated);
-    } else {
-      const newCourse: CollegeCourse = {
-        id: `crs-${Date.now()}`,
-        universityId: selectedUniversity.id,
-        universityCode: selectedUniversity.code,
-        collegeName: courseFormData.collegeName || 'College of General Studies',
-        programCode: courseFormData.programCode || 'BS-NEW',
-        programName: courseFormData.programName || 'New Program',
-        degreeType: courseFormData.degreeType || 'Bachelor of Science',
-        majorSpecialization: courseFormData.majorSpecialization || 'General',
-        durationYears: Number(courseFormData.durationYears) || 4,
-        totalUnits: Number(courseFormData.totalUnits) || 150,
-        cutoffPercentile: Number(courseFormData.cutoffPercentile) || 80.0,
-        status: courseFormData.status || 'Active'
-      };
-      saveCourses([...courses, newCourse]);
+    if (
+      !selectedUniversity ||
+      !courseFormData.programName.trim() ||
+      !courseFormData.programCode.trim() ||
+      isSavingCourse
+    ) {
+      return;
     }
 
+    setIsSavingCourse(true);
+    setError(null);
+    const result = editingCourse
+      ? await universityService.updateCourse(selectedUniversity.id, editingCourse.id, courseFormData)
+      : await universityService.createCourse(selectedUniversity.id, courseFormData);
+    setIsSavingCourse(false);
+
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      return;
+    }
+
+    if (editingCourse) {
+      setCourses((prev) => prev.map((c) => (c.id === result.data.id ? result.data : c)));
+    } else {
+      setCourses((prev) => [...prev, result.data]);
+      applyCourseCountDelta(selectedUniversity.id, 1);
+    }
     setIsCourseModalOpen(false);
   };
 
-  const handleDeleteCourse = (id: string) => {
-    if (confirm('Are you sure you want to delete this college course?')) {
-      const updated = courses.filter(c => c.id !== id);
-      saveCourses(updated);
+  const handleConfirmDeleteCourse = async () => {
+    if (!pendingCourseDelete || !selectedUniversity) return;
+    setIsDeletingCourse(true);
+    const result = await universityService.deleteCourse(selectedUniversity.id, pendingCourseDelete.id);
+    setIsDeletingCourse(false);
+
+    if (!result.ok) {
+      setError((result as ServiceFailure).error.message);
+      setPendingCourseDelete(null);
+      return;
     }
+    const removedId = pendingCourseDelete.id;
+    setCourses((prev) => prev.filter((c) => c.id !== removedId));
+    applyCourseCountDelta(selectedUniversity.id, -1);
+    setPendingCourseDelete(null);
   };
 
   const exportCSV = () => {
@@ -301,11 +382,11 @@ export default function UniversitiesListMaintenance() {
         `"${u.code}"`,
         `"${u.name}"`,
         `"${u.classification}"`,
-        `"${u.region}"`,
+        `"${regionLabel(u.region)}"`,
         `"${u.city}"`,
         `"${u.presidentRector}"`,
         `"${u.email}"`,
-        u.establishedYear,
+        u.establishedYear ?? '',
         getCourseCountForUniversity(u.id),
         `"${u.status}"`
       ]);
@@ -322,14 +403,14 @@ export default function UniversitiesListMaintenance() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
+
       {/* Breadcrumb Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-xs text-philsa-gray">
           <Link to="/admin/maintenance" className="hover:text-philsa-navy font-bold">Maintenance Center</Link>
           <ChevronRight className="w-3.5 h-3.5" />
-          <button 
-            onClick={() => setSelectedUniversity(null)} 
+          <button
+            onClick={() => setSelectedUniversity(null)}
             className={`hover:text-philsa-navy font-bold ${!selectedUniversity ? 'text-philsa-navy font-black' : ''}`}
           >
             List of Universities
@@ -351,6 +432,12 @@ export default function UniversitiesListMaintenance() {
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="card-philsa bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-4">
+          {error}
+        </div>
+      )}
 
       {/* VIEW 1: UNIVERSITIES LIST (When no university is selected) */}
       {!selectedUniversity ? (
@@ -397,16 +484,16 @@ export default function UniversitiesListMaintenance() {
                 <div className="text-2xl font-black text-philsa-navy mt-1">{universities.length}</div>
               </div>
               <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
-                <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">State / SUCs</div>
-                <div className="text-2xl font-black text-blue-900 mt-1">{universities.filter(u => u.classification.includes('State')).length}</div>
+                <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public / State</div>
+                <div className="text-2xl font-black text-blue-900 mt-1">{universities.filter(u => u.classification === 'Public').length}</div>
               </div>
               <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
-                <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private Autonomous</div>
-                <div className="text-2xl font-black text-purple-900 mt-1">{universities.filter(u => u.classification.includes('Private')).length}</div>
+                <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private</div>
+                <div className="text-2xl font-black text-purple-900 mt-1">{universities.filter(u => u.classification === 'Private').length}</div>
               </div>
               <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Degree Courses</div>
-                <div className="text-2xl font-black text-emerald-900 mt-1">{courses.length}</div>
+                <div className="text-2xl font-black text-emerald-900 mt-1">{totalCourses}</div>
               </div>
             </div>
           </div>
@@ -454,7 +541,7 @@ export default function UniversitiesListMaintenance() {
                   >
                     <option value="ALL">All Regions</option>
                     {uniqueUniRegions.map(r => (
-                      <option key={r} value={r}>{r}</option>
+                      <option key={r} value={r}>{regionLabel(r)}</option>
                     ))}
                   </select>
                 </div>
@@ -514,8 +601,8 @@ export default function UniversitiesListMaintenance() {
                       filteredUniversities.map((uni) => {
                         const count = getCourseCountForUniversity(uni.id);
                         return (
-                          <tr 
-                            key={uni.id} 
+                          <tr
+                            key={uni.id}
                             className="hover:bg-slate-50/80 transition-all group"
                           >
                             <td className="py-3.5 px-4">
@@ -524,19 +611,19 @@ export default function UniversitiesListMaintenance() {
                               </span>
                             </td>
                             <td className="py-3.5 px-4 space-y-0.5">
-                              <div 
+                              <div
                                 onClick={() => setSelectedUniversity(uni)}
                                 className="font-black text-philsa-navy hover:text-blue-700 transition-colors cursor-pointer text-sm"
                                 title="Click to view offered college courses"
                               >
                                 {uni.name}
                               </div>
-                              <div className="text-[10px] text-slate-400 font-medium">Est. {uni.establishedYear}</div>
+                              <div className="text-[10px] text-slate-400 font-medium">Est. {uni.establishedYear ?? '—'}</div>
                             </td>
                             <td className="py-3.5 px-4">
                               <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${
-                                uni.classification === 'Public' 
-                                  ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                uni.classification === 'Public'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
                                   : 'bg-purple-50 text-purple-700 border-purple-200'
                               }`}>
                                 {uni.classification}
@@ -544,7 +631,7 @@ export default function UniversitiesListMaintenance() {
                             </td>
                             <td className="py-3.5 px-4 space-y-0.5">
                               <div className="font-bold text-slate-800">{uni.city}</div>
-                              <div className="text-[10px] text-slate-400">{uni.region}</div>
+                              <div className="text-[10px] text-slate-400">{regionLabel(uni.region)}</div>
                             </td>
                             <td className="py-3.5 px-4 space-y-0.5">
                               <div className="font-bold text-philsa-navy">{uni.presidentRector}</div>
@@ -558,8 +645,8 @@ export default function UniversitiesListMaintenance() {
                             </td>
                             <td className="py-3.5 px-4 text-center">
                               <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${
-                                uni.status === 'Active' 
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                uni.status === 'Active'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : 'bg-slate-100 text-slate-500 border-slate-200'
                               }`}>
                                 {uni.status}
@@ -575,7 +662,7 @@ export default function UniversitiesListMaintenance() {
                                   <Edit3 className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={(e) => handleDeleteUni(uni.id, e)}
+                                  onClick={(e) => requestDeleteUni(uni, e)}
                                   className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
                                   title="Delete University"
                                 >
@@ -612,7 +699,7 @@ export default function UniversitiesListMaintenance() {
                             <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
                               {uni.code}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-400">Est. {uni.establishedYear}</span>
+                            <span className="text-[10px] font-bold text-slate-400">Est. {uni.establishedYear ?? '—'}</span>
                           </div>
                           <h3 className="text-base font-black text-philsa-navy group-hover:text-blue-700 transition-colors">
                             {uni.name}
@@ -629,7 +716,7 @@ export default function UniversitiesListMaintenance() {
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={(e) => handleDeleteUni(uni.id, e)}
+                          onClick={(e) => requestDeleteUni(uni, e)}
                           className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                           title="Delete University"
                         >
@@ -641,7 +728,7 @@ export default function UniversitiesListMaintenance() {
                     <div className="space-y-2 text-xs">
                       <div className="flex items-center gap-2 text-slate-600 font-medium">
                         <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{uni.city}, {uni.region}</span>
+                        <span>{uni.city}, {regionLabel(uni.region)}</span>
                       </div>
                       <div className="flex items-center gap-2 text-slate-600 font-medium">
                         <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -672,7 +759,7 @@ export default function UniversitiesListMaintenance() {
       ) : (
         /* VIEW 2: COLLEGE COURSES FOR SELECTED UNIVERSITY */
         <div className="space-y-6">
-          
+
           {/* Selected University Details Header */}
           <div className="card-philsa bg-white p-6 border border-slate-200 rounded-2xl space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -682,20 +769,20 @@ export default function UniversitiesListMaintenance() {
                     {selectedUniversity.code}
                   </span>
                   <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
-                    selectedUniversity.classification === 'Public' 
-                      ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                    selectedUniversity.classification === 'Public'
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
                       : 'bg-purple-50 text-purple-700 border-purple-200'
                   }`}>
                     {selectedUniversity.classification}
                   </span>
-                  <span className="text-xs text-slate-400">Est. {selectedUniversity.establishedYear}</span>
+                  <span className="text-xs text-slate-400">Est. {selectedUniversity.establishedYear ?? '—'}</span>
                 </div>
                 <h1 className="text-2xl font-black text-philsa-navy tracking-tight flex items-center gap-2.5">
                   <GraduationCap className="w-7 h-7 text-philsa-navy" />
                   {selectedUniversity.name}
                 </h1>
                 <div className="text-xs text-slate-600 flex items-center gap-3 flex-wrap font-medium">
-                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" /> {selectedUniversity.city}, {selectedUniversity.region}</span>
+                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" /> {selectedUniversity.city}, {regionLabel(selectedUniversity.region)}</span>
                   <span>•</span>
                   <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-slate-400" /> {selectedUniversity.email}</span>
                   <span>•</span>
@@ -786,7 +873,7 @@ export default function UniversitiesListMaintenance() {
                               <Edit3 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleDeleteCourse(crs.id)}
+                              onClick={() => { setError(null); setPendingCourseDelete(crs); }}
                               className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
                               title="Delete Course"
                             >
@@ -824,20 +911,19 @@ export default function UniversitiesListMaintenance() {
             <form onSubmit={handleSaveUni} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">University Code *</label>
+                  <label className="font-bold text-slate-700">University Code</label>
                   <input
                     type="text"
-                    required
-                    value={uniFormData.code || ''}
-                    onChange={e => setUniFormData({ ...uniFormData, code: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="e.g. UP-DIL"
+                    disabled
+                    readOnly
+                    value={editingUniversity ? editingUniversity.code : 'Auto-generated (UNI-#####)'}
+                    className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl font-mono text-xs text-slate-500 cursor-not-allowed"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Classification *</label>
                   <select
-                    value={uniFormData.classification || 'Public'}
+                    value={uniFormData.classification}
                     onChange={e => {
                       if (isUniversityClassification(e.target.value)) {
                         setUniFormData({ ...uniFormData, classification: e.target.value });
@@ -856,7 +942,7 @@ export default function UniversitiesListMaintenance() {
                 <input
                   type="text"
                   required
-                  value={uniFormData.name || ''}
+                  value={uniFormData.name}
                   onChange={e => setUniFormData({ ...uniFormData, name: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   placeholder="Official name of university..."
@@ -866,21 +952,22 @@ export default function UniversitiesListMaintenance() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Region *</label>
-                  <input
-                    type="text"
-                    required
-                    value={uniFormData.region || ''}
+                  <select
+                    value={uniFormData.region}
                     onChange={e => setUniFormData({ ...uniFormData, region: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                    placeholder="e.g. NCR - National Capital Region"
-                  />
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                  >
+                    {PHILIPPINE_REGIONS.map((region) => (
+                      <option key={region.code} value={region.code}>{region.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Main Campus City *</label>
                   <input
                     type="text"
                     required
-                    value={uniFormData.city || ''}
+                    value={uniFormData.city}
                     onChange={e => setUniFormData({ ...uniFormData, city: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     placeholder="e.g. Quezon City"
@@ -892,7 +979,7 @@ export default function UniversitiesListMaintenance() {
                 <label className="font-bold text-slate-700">President / Rector</label>
                 <input
                   type="text"
-                  value={uniFormData.presidentRector || ''}
+                  value={uniFormData.presidentRector}
                   onChange={e => setUniFormData({ ...uniFormData, presidentRector: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   placeholder="e.g. Dr. Angelo A. Jimenez"
@@ -904,7 +991,7 @@ export default function UniversitiesListMaintenance() {
                   <label className="font-bold text-slate-700">Official Email</label>
                   <input
                     type="email"
-                    value={uniFormData.email || ''}
+                    value={uniFormData.email}
                     onChange={e => setUniFormData({ ...uniFormData, email: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     placeholder="info@university.edu.ph"
@@ -914,11 +1001,37 @@ export default function UniversitiesListMaintenance() {
                   <label className="font-bold text-slate-700">Contact Number</label>
                   <input
                     type="text"
-                    value={uniFormData.phone || ''}
+                    value={uniFormData.phone}
                     onChange={e => setUniFormData({ ...uniFormData, phone: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     placeholder="(02) 8981-8500"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Year Established</label>
+                  <input
+                    type="number"
+                    min={1500}
+                    max={new Date().getFullYear()}
+                    value={uniFormData.establishedYear ?? ''}
+                    onChange={e => setUniFormData({ ...uniFormData, establishedYear: e.target.value ? Number(e.target.value) : null })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                    placeholder="e.g. 1908"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Status</label>
+                  <select
+                    value={uniFormData.status}
+                    onChange={e => setUniFormData({ ...uniFormData, status: e.target.value === 'Inactive' ? 'Inactive' : 'Active' })}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
                 </div>
               </div>
 
@@ -932,9 +1045,10 @@ export default function UniversitiesListMaintenance() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+                  disabled={isSaving}
+                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-4 h-4" /> Save University
+                  <Check className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save University'}
                 </button>
               </div>
             </form>
@@ -974,20 +1088,19 @@ export default function UniversitiesListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Degree Type</label>
-                  <select
-                    value={courseFormData.degreeType || 'Bachelor of Science'}
-                    onChange={e => {
-                      if (isDegreeType(e.target.value)) {
-                        setCourseFormData({ ...courseFormData, degreeType: e.target.value });
-                      }
-                    }}
+                  <input
+                    type="text"
+                    list="degree-type-suggestions"
+                    value={courseFormData.degreeType}
+                    onChange={e => setCourseFormData({ ...courseFormData, degreeType: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  >
-                    <option value="Bachelor of Science">Bachelor of Science</option>
-                    <option value="Bachelor of Arts">Bachelor of Arts</option>
-                    <option value="Bachelor of Fine Arts">Bachelor of Fine Arts</option>
-                    <option value="Associate">Associate Degree</option>
-                  </select>
+                    placeholder="Choose or type a degree type..."
+                  />
+                  <datalist id="degree-type-suggestions">
+                    {DEGREE_TYPE_SUGGESTIONS.map((degree) => (
+                      <option key={degree} value={degree} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -1073,15 +1186,40 @@ export default function UniversitiesListMaintenance() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+                  disabled={isSavingCourse}
+                  className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-4 h-4" /> Save College Course
+                  <Check className="w-4 h-4" /> {isSavingCourse ? 'Saving...' : 'Save College Course'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ConfirmationDialog
+        isOpen={pendingDelete !== null}
+        title={pendingDelete ? `Are you sure you want to remove ${pendingDelete.name} at Maintenance Table?` : ''}
+        message="This will be removed to other modules. All associated college courses will also be removed."
+        details={pendingDelete ? `${pendingDelete.name} • ${pendingDelete.code}` : ''}
+        confirmLabel="Agree"
+        tone="danger"
+        isConfirming={isDeleting}
+        onConfirm={handleConfirmDeleteUni}
+        onCancel={() => setPendingDelete(null)}
+      />
+
+      <ConfirmationDialog
+        isOpen={pendingCourseDelete !== null}
+        title={pendingCourseDelete ? `Remove ${pendingCourseDelete.programCode} from ${selectedUniversity?.code ?? ''}?` : ''}
+        message="This college course will be removed from this university."
+        details={pendingCourseDelete ? `${pendingCourseDelete.programName} • ${pendingCourseDelete.programCode}` : ''}
+        confirmLabel="Agree"
+        tone="danger"
+        isConfirming={isDeletingCourse}
+        onConfirm={handleConfirmDeleteCourse}
+        onCancel={() => setPendingCourseDelete(null)}
+      />
 
     </div>
   );

@@ -145,6 +145,14 @@ IMPLEMENTED_ENDPOINT_CONTRACTS = (
         "doc_test_reference": "backend/apps/applications/tests/test_registration_email_otp.py",
         "route_namespace": "applications",
     },
+    {
+        "method": "GET",
+        "path": "/api/v1/analytics/national/overview/",
+        "response": None,
+        "doc_heading": "### `GET /api/v1/analytics/national/overview/`",
+        "doc_test_reference": "backend/apps/analytics/tests/test_national_overview.py",
+        "route_namespace": "analytics",
+    },
 )
 
 
@@ -154,7 +162,7 @@ class ApiContractTests(TestCase):
         endpoint_docs = API_ENDPOINTS_DOC.read_text(encoding="utf-8")
 
         for contract in IMPLEMENTED_ENDPOINT_CONTRACTS:
-            table_path = f"| `{contract['method']}` | `{contract['path']}` |"
+            table_path = f"| `{contract['method']}` | `{contract.get('doc_path', contract['path'])}` |"
 
             self.assertIn(table_path, endpoint_docs)
             self.assertIn(contract["doc_heading"], endpoint_docs)

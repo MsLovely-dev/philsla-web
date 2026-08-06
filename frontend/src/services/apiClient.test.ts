@@ -56,6 +56,45 @@ describe('ApiClient', () => {
     );
   });
 
+  it('refreshes an expired bearer token and retries a protected blob request once', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(
+        { error: { code: 'AUTHENTICATION_FAILED', message: 'Invalid or expired bearer token.', fields: {} } },
+        { status: 401 },
+      ))
+      .mockResolvedValueOnce(jsonResponse(
+        {
+          accessToken: 'fresh-access-token',
+          tokenType: 'Bearer',
+          expiresInSeconds: 1200,
+          expiresAt: '2026-07-13T10:20:00Z',
+        },
+        { status: 200 },
+      ))
+      .mockResolvedValueOnce(new Response('candidate_id\nPHL-2027-000001\n', { status: 200, headers: { 'Content-Type': 'text/csv' } }));
+    const client = new ApiClient({ baseUrl: 'http://backend.test', fetcher });
+    client.setBearerToken('expired-access-token');
+
+    const result = await client.requestBlob('/api/v1/results/score-management/batches/SESSION-2027-REGULAR/export/');
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      'http://backend.test/api/v1/results/score-management/batches/SESSION-2027-REGULAR/export/',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer expired-access-token' }),
+      }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      3,
+      'http://backend.test/api/v1/results/score-management/batches/SESSION-2027-REGULAR/export/',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer fresh-access-token' }),
+      }),
+    );
+  });
+
   it('does not refresh for auth-flow failures', async () => {
     const fetcher = vi.fn().mockResolvedValue(jsonResponse(
       { error: { code: 'AUTHENTICATION_FAILED', message: 'Identifier not found or invalid.', fields: {} } },

@@ -26,6 +26,7 @@ ROLE_PERMISSION_RULES: dict[str, tuple[tuple[tuple[str, ...], tuple[str, ...]], 
     PortalRole.UNIVERSITY_ADMIN.value: (
         (("1", "10", "15"), READ_ONLY),
         (("11", "12", "13", "14", "36", "38", "39", "43", "44", "45"), OPERATE),
+        (("37",), MANAGE),
         (("20",), DECIDE),
     ),
     PortalRole.TESTING_CENTER_ADMIN.value: (

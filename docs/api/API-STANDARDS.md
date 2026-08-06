@@ -30,14 +30,14 @@ Collection endpoints use page-number pagination by default:
 | Query parameter | Meaning |
 | --- | --- |
 | `page` | 1-based page number. |
-| `pageSize` | Requested page size, capped at 100. |
+| `pageSize` | Requested page size, capped at 10. |
 
-Default page size is 25. Standard paginated responses use the DRF page-number shape:
+Default page size is 10. Standard paginated responses use the DRF page-number shape:
 
 ```json
 {
   "count": 125,
-  "next": "https://api.example.test/api/v1/resources/?page=2&pageSize=25",
+  "next": "https://api.example.test/api/v1/resources/?page=2&pageSize=10",
   "previous": null,
   "results": []
 }
