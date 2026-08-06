@@ -99,6 +99,14 @@ export interface StudentRegistrationFieldListParams {
   inputType?: string;
 }
 
+export interface ReviewQueueFilters {
+  search?: string;
+  status?: string;
+  schoolId?: string;
+  schoolName?: string;
+  submitted?: 'today';
+}
+
 export interface Step2VerificationResult {
   id: string;
   status: 'IN_PROGRESS' | 'PASSED' | 'MANUAL_REVIEW' | 'REJECTED';
@@ -370,8 +378,16 @@ export class BackendApplicationService {
     return this.createDraft({ ...input, submitOnCreate: true }, options);
   }
 
-  async listReviewQueue(): Promise<ServiceResult<BackendApplication[]>> {
-    return this.apiClient.request<BackendApplication[]>('/api/v1/applications/review-queue/');
+  async listReviewQueue(filters: ReviewQueueFilters = {}): Promise<ServiceResult<BackendApplication[]>> {
+    const searchParams = new URLSearchParams();
+    if (filters.search) searchParams.set('search', filters.search);
+    if (filters.status) searchParams.set('status', filters.status);
+    if (filters.schoolId) searchParams.set('schoolId', filters.schoolId);
+    if (filters.schoolName) searchParams.set('schoolName', filters.schoolName);
+    if (filters.submitted) searchParams.set('submitted', filters.submitted);
+    const query = searchParams.toString();
+
+    return this.apiClient.request<BackendApplication[]>(`/api/v1/applications/review-queue/${query ? `?${query}` : ''}`);
   }
 
   async listRegistrationSubmittedAuditLogs(): Promise<ServiceResult<BackendRegistrationSubmittedAuditLog[]>> {
