@@ -39,7 +39,7 @@ The original sprint brief described Exam Sets as a prototype-only screen because
 - [x] Rehearse the Exam Sets demo using synthetic data only. (Completed 2026-08-06 against real dev servers with a real login and real, unmocked API calls. Found and fixed a P0 blocker in the process — `_actor_profile()` rejected every real (non-`force_authenticate`) login with 403 on all Exam Set/Blueprint/Question write operations; see implementation log for root cause, fix, and the new regression test.)
 - [x] Before production use, complete a PostgreSQL-compatible migration rehearsal. (Completed 2026-08-06 against a disposable `postgres:16` container: full migration graph applies cleanly, `apps.results`/`apps.exams` suites pass, full suite parity with SQLite. See implementation log.)
 - [x] Security review of this diff. (Completed 2026-08-06: no high/medium findings in the code changes; a pre-existing, repository-wide dependency vulnerability scan is recorded in the implementation log for release-review visibility. See implementation log.)
-- [ ] Formal release sign-off by a designated reviewer. This is an approval step, not something I can self-certify as the feature owner — the implementation log has everything a reviewer needs.
+- [x] Formal release sign-off by a designated reviewer. Approved 2026-08-06 by Ian Chris Sandoval on review of the recorded evidence. See the implementation log's "Release sign-off" entry.
 
 ### Maintenance Table — Exam Blueprint (Ticket 001)
 

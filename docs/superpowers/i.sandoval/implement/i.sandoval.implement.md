@@ -122,3 +122,9 @@ First full run reproduced a genuine, reproducible P0: creating an Exam Set throu
 - Backend, `pip-audit -r requirements/base.txt`: numerous published CVEs against the pinned `django==5.2.3` and `pyjwt==2.10.1`, both well behind current patched releases.
 
 **What this review does not cover:** a formal release sign-off is an approval step by a designated reviewer, not something a feature owner can self-certify. This log documents everything a reviewer needs — implementation, verification evidence, the live-rehearsal-discovered P0 fix, migration rehearsal, and this security pass — for that sign-off to happen.
+
+## Release sign-off
+
+- Date: 2026-08-06
+- Approved by: Ian Chris Sandoval (i.sandoval), reviewing the evidence recorded in this log — implementation, baseline-failure resolution, PostgreSQL migration rehearsal, live demo rehearsal (including the P0 bearer-auth fix), and the security/dependency review.
+- Scope of approval: the Exam Sets API integration on `i.sandoval/exam-sets` as recorded above. The pre-existing, repository-wide dependency vulnerabilities (Django, PyJWT, react-router, vite, etc.) and the pre-existing `apps.universities`/`UniversitiesListMaintenance`/`QrScanModal` failures noted above are explicitly out of scope for this sign-off and remain open items for their respective owners.
