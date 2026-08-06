@@ -51,6 +51,7 @@ interface ApiBlueprintHistoryEntry {
 
 interface ApiBlueprint {
   id: string;
+  current_version_id: string | null;
   code: string;
   name: string;
   description: string;
@@ -162,15 +163,15 @@ export class BackendExamBlueprintService {
   }
 
   private mapListResult(result: BlueprintListResult): ServiceResult<Blueprint[]> {
-    if (!result.ok) {
-      return result;
+    if (result.ok === false) {
+      return { ok: false, error: result.error };
     }
     return { ...result, data: result.data.map((item) => this.fromApiBlueprint(item)) };
   }
 
   private mapItemResult(result: BlueprintItemResult): ServiceResult<Blueprint> {
-    if (!result.ok) {
-      return result;
+    if (result.ok === false) {
+      return { ok: false, error: result.error };
     }
     return { ...result, data: this.fromApiBlueprint(result.data) };
   }
@@ -178,6 +179,7 @@ export class BackendExamBlueprintService {
   private fromApiBlueprint(blueprint: ApiBlueprint): Blueprint {
     return {
       id: blueprint.id,
+      currentVersionId: blueprint.current_version_id ?? undefined,
       code: blueprint.code,
       name: blueprint.name,
       description: blueprint.description,
@@ -234,6 +236,13 @@ export class BackendExamBlueprintService {
       maxReuseLimit: rules.max_reuse_limit,
       versionCompatibility: rules.version_compatibility,
       activeItemOnly: rules.active_item_only,
+      accessibilityAccommodations: {
+        screenReader: false,
+        extendedTimeAllowance: false,
+        highContrastMode: false,
+        dyslexiaTypography: false,
+        audioPrompts: false,
+      },
     };
   }
 
