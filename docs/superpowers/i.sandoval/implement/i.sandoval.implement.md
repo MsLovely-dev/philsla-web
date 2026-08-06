@@ -133,17 +133,20 @@ First full run reproduced a genuine, reproducible P0: creating an Exam Set throu
 ### Implemented
 
 - Added backend admin APIs for Subject, QuestionType, and Topic (CRUD endpoints in `apps/exams` views, serializers, and permissions).
+- Fixed Subject API validation error handling in response to code review (two review-driven fix commits addressing validation layer gaps found during implementation).
 - Added frontend service layer for backend Exam Blueprint Maintenance APIs with transport mapping for list and create operations.
 - Wired `ExamBlueprintMaintenance.tsx` page to real backend services for Subject, Topic, and QuestionType management.
 - Added `MaintenancePageTemplate.tsx` as a reusable template component for maintenance center pages with pagination, loading, error, and empty states.
-- Fixed a dead Delete button in the template component (removed non-functional delete UI element as authorized scope expansion during Task 5).
-- Split `MaintenanceCenterTables.test.tsx` into separate test files for better organization (authorized scope expansion during Task 5 code review).
+- Conditionally hid the Delete button in the template component (wrapped in `{onDelete && (...)}` conditional render) to avoid showing an inert button on pages with no delete endpoint (authorized scope expansion during Task 5). Verified all 14 other consumers of the template still pass a real `onDelete` prop and are unaffected.
+- Reorganized `MaintenanceCenterTables.test.tsx`: removed `ExamBlueprintMaintenance` from the synchronous `it.each` array (component is no longer synchronous after Tasks 5-6 rewrites) and added a dedicated async test that mocks the three backend service endpoints and verifies the empty-state render (authorized scope expansion during Task 5 code review).
 - Fixed form state synchronization: submitted `isActive` state now matches the visible toggle state on creation (Task 5 bug fix).
-- **Corrected route permissions bug (Task 6):** `routes.tsx` line 160 had incorrect role restrictions (`UNIVERSITY_ADMIN`, `ADMISSIONS_REVIEWER`). Changed to correct roles: `ITEM_WRITER`, `ACADEMIC_REVIEWER`, `EXAM_ADMINISTRATOR`. This was a post-implementation discovery corrected before merge.
+- **Corrected route permissions bug (Task 6):** `routes.tsx` line 160 had incorrect role restrictions (`UNIVERSITY_ADMIN`, `ADMISSIONS_REVIEWER`). Changed to correct roles: `ITEM_WRITER`, `ACADEMIC_REVIEWER`, `EXAM_ADMINISTRATOR`. Additionally corrected the same role lists in navigation gates (`MaintenanceHub.tsx` tile on lines 50-57 and `DashboardLayout.tsx` section/sub-item rules on lines 174-185) to make the page actually reachable for the intended roles. This was a post-implementation discovery corrected before merge.
 
 ### Commits
 
 - `8ef426e feat(exam-blueprint-maintenance): add Subject admin API`
+- `b442bf7 fix: correct validation error handling for subject creation`
+- `49502c3 fix: convert non-uniqueness validation errors to DRF 400 response`
 - `028f81e feat(exam-blueprint-maintenance): add QuestionType admin API`
 - `948556f feat(exam-blueprint-maintenance): add Topic admin API`
 - `9217b17 feat(exam-blueprint-maintenance): add frontend service layer`
@@ -168,8 +171,8 @@ Frontend, from `frontend/`:
 
 ### Scope clarifications from code review (Task 5)
 
-- **MaintenancePageTemplate.tsx Delete button fix:** Route review revealed the template's Delete button was dead (no handler wired). Removed non-functional UI to clean up the component before it became a template for other pages.
-- **MaintenanceCenterTables.test.tsx split:** The test file grew large enough during implementation that review recommended splitting it into separate files for each table component. This was approved as a quality-of-life improvement aligned with test maintainability.
+- **MaintenancePageTemplate.tsx Delete button fix:** Route review revealed the template's Delete button was inert on pages with no delete endpoint (like `ExamBlueprintMaintenance`). Wrapped the button in a conditional `{onDelete && (...)}` so it only renders when a handler is actually passed. Verified backward compatibility: all 14 other consumers of the template (`StudentRegistrationMaintenance`, `UniversitiesListMaintenance`, `SchoolsListMaintenance`, etc.) still pass a real `onDelete` handler, so they continue to render the delete button as before.
+- **MaintenanceCenterTables.test.tsx reorganization:** Code review found that `ExamBlueprintMaintenance` no longer belongs in the synchronous `it.each` test case (shared with `StudentRegistrationMaintenance`, which is still local-state) because the component was rewritten to use real backend services and is now async. Removed the component from the sync array and added a dedicated async test that mocks the three `examBlueprintMaintenanceService` endpoints and verifies the empty-state render. This improved test accuracy without splitting the file into separate files.
 
 ### Remaining before production use
 
