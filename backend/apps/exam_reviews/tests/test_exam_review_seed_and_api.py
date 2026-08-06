@@ -12,7 +12,8 @@ from rest_framework.test import APIClient
 
 from apps.accounts.roles import PortalRole
 from apps.applications.models import StudentApplication
-from apps.results.models import ExamReviewAnswerSheet, ExamReviewItem, ExamReviewRecord
+from apps.exam_reviews.models import ExamReviewAnswerSheet, ExamReviewItem, ExamReviewRecord
+from apps.results.models import CandidateScore
 
 
 def principal(user, role: str) -> SimpleNamespace:
@@ -60,7 +61,7 @@ class ExamReviewQueueApiTests(TestCase):
     def test_exam_administrator_can_list_seeded_reviews(self):
         self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
 
-        response = self.client.get(reverse("results:exam-review-queue"))
+        response = self.client.get(reverse("exam_reviews:exam-review-queue"))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 7)
@@ -70,10 +71,24 @@ class ExamReviewQueueApiTests(TestCase):
         self.assertNotIn("examItems", response.data[0])
         self.assertNotIn("answers", response.data[0])
 
+    def test_release_finalizes_without_creating_score_management_record(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+        record = ExamReviewRecord.objects.filter(status="GRADED").first()
+        score_count_before = CandidateScore.objects.count()
+
+        response = self.client.post(
+            reverse("exam_reviews:exam-review-release", args=[record.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        record.refresh_from_db()
+        self.assertEqual(record.status, "FINALIZED")
+        self.assertEqual(CandidateScore.objects.count(), score_count_before)
+
     def test_student_cannot_list_exam_reviews(self):
         self.authenticate_as(PortalRole.STUDENT.value)
 
-        response = self.client.get(reverse("results:exam-review-queue"))
+        response = self.client.get(reverse("exam_reviews:exam-review-queue"))
 
         self.assertEqual(response.status_code, 403)
 
@@ -81,7 +96,7 @@ class ExamReviewQueueApiTests(TestCase):
         self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
         record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-001")
 
-        response = self.client.get(reverse("results:exam-review-detail", args=[record.id]))
+        response = self.client.get(reverse("exam_reviews:exam-review-detail", args=[record.id]))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["candidateName"], "Demo Candidate 001")
@@ -107,7 +122,7 @@ class ExamReviewQueueApiTests(TestCase):
         item = record.review_items.get(subject="ENGLISH", item_number=5)
 
         response = self.client.post(
-            reverse("results:exam-review-item-score", args=[record.id, item.id]),
+            reverse("exam_reviews:exam-review-item-score", args=[record.id, item.id]),
             {"points": 8},
             format="json",
         )
@@ -125,7 +140,7 @@ class ExamReviewQueueApiTests(TestCase):
         item = record.review_items.get(subject="MATH", item_number=5)
 
         response = self.client.post(
-            reverse("results:exam-review-item-score", args=[record.id, item.id]),
+            reverse("exam_reviews:exam-review-item-score", args=[record.id, item.id]),
             {"points": 7},
             format="json",
         )
@@ -133,13 +148,13 @@ class ExamReviewQueueApiTests(TestCase):
         self.assertEqual(response.status_code, 409)
 
     def test_unauthenticated_request_is_rejected(self):
-        response = self.client.get(reverse("results:exam-review-queue"))
+        response = self.client.get(reverse("exam_reviews:exam-review-queue"))
 
         self.assertEqual(response.status_code, 401)
 
     @override_settings(EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS=True)
     def test_local_prototype_session_can_list_only_synthetic_reviews(self):
-        response = self.client.get(reverse("results:exam-review-queue"))
+        response = self.client.get(reverse("exam_reviews:exam-review-queue"))
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 7)
@@ -149,7 +164,7 @@ class ExamReviewQueueApiTests(TestCase):
     def test_authenticated_student_remains_denied_in_local_mode(self):
         self.authenticate_as(PortalRole.STUDENT.value)
 
-        response = self.client.get(reverse("results:exam-review-queue"))
+        response = self.client.get(reverse("exam_reviews:exam-review-queue"))
 
         self.assertEqual(response.status_code, 403)
 
@@ -159,7 +174,7 @@ class ExamReviewQueueApiTests(TestCase):
         demo_record.application.exam_cycle_id = "2026"
         demo_record.application.save(update_fields=["exam_cycle_id"])
 
-        response = self.client.get(reverse("results:exam-review-detail", args=[demo_record.id]))
+        response = self.client.get(reverse("exam_reviews:exam-review-detail", args=[demo_record.id]))
 
         self.assertEqual(response.status_code, 404)
 
@@ -168,7 +183,7 @@ class ExamReviewQueueApiTests(TestCase):
         record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
 
         response = self.client.post(
-            reverse("results:exam-review-release", args=[record.id]),
+            reverse("exam_reviews:exam-review-release", args=[record.id]),
             format="json",
         )
 
@@ -184,7 +199,7 @@ class ExamReviewQueueApiTests(TestCase):
         record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-001")
 
         response = self.client.post(
-            reverse("results:exam-review-release", args=[record.id]),
+            reverse("exam_reviews:exam-review-release", args=[record.id]),
             format="json",
         )
 
@@ -193,7 +208,7 @@ class ExamReviewQueueApiTests(TestCase):
     @override_settings(EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS=True)
     def test_local_prototype_session_can_mark_graded_and_return_to_pending(self):
         record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-001")
-        endpoint = reverse("results:exam-review-grading-status", args=[record.id])
+        endpoint = reverse("exam_reviews:exam-review-grading-status", args=[record.id])
 
         graded_response = self.client.post(endpoint, {"status": "GRADED"}, format="json")
 
@@ -214,7 +229,7 @@ class ExamReviewQueueApiTests(TestCase):
         record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-003")
 
         response = self.client.post(
-            reverse("results:exam-review-grading-status", args=[record.id]),
+            reverse("exam_reviews:exam-review-grading-status", args=[record.id]),
             {"status": "SUBMITTED"},
             format="json",
         )
@@ -230,7 +245,7 @@ class ExamReviewQueueApiTests(TestCase):
         upload = SimpleUploadedFile("answer-sheet.pdf", content, content_type="application/pdf")
 
         response = self.client.post(
-            reverse("results:exam-review-answer-sheet-upload", args=[record.id]),
+            reverse("exam_reviews:exam-review-answer-sheet-upload", args=[record.id]),
             {"file": upload, "templateSource": "HANDWRITTEN_OCR"},
             format="multipart",
         )
@@ -251,7 +266,7 @@ class ExamReviewQueueApiTests(TestCase):
         upload = SimpleUploadedFile("answer-sheet.pdf", b"not a real PDF", content_type="application/pdf")
 
         response = self.client.post(
-            reverse("results:exam-review-answer-sheet-upload", args=[record.id]),
+            reverse("exam_reviews:exam-review-answer-sheet-upload", args=[record.id]),
             {"file": upload},
             format="multipart",
         )
@@ -265,7 +280,7 @@ class ExamReviewQueueApiTests(TestCase):
         upload = SimpleUploadedFile("answer-sheet.pdf", b"%PDF-1.4\nsynthetic", content_type="application/pdf")
 
         response = self.client.post(
-            reverse("results:exam-review-answer-sheet-upload", args=[record.id]),
+            reverse("exam_reviews:exam-review-answer-sheet-upload", args=[record.id]),
             {"file": upload},
             format="multipart",
         )
