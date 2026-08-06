@@ -412,18 +412,18 @@ export default function ExamBlueprints() {
   const handleHubTabChange = (tab: ExamHubTabKey) => {
     if (tab === 'blueprints') return;
     if (tab === 'setAssembly') {
-      navigate('/admin/hub/exam-sets/content#dashboard');
+      navigate('/admin/hub/exam-sets/assembly');
       return;
     }
     if (tab === 'builder') {
-      navigate('/admin/hub/exam-sets/content#assembly');
+      navigate('/admin/hub/exam-sets/assembly');
       return;
     }
     if (tab === 'published') {
-      navigate('/admin/hub/exam-sets/content#packages');
+      navigate('/admin/hub/exam-sets/published');
       return;
     }
-    navigate('/admin/hub/exam-sets/content#audit');
+    navigate('/admin/hub/exam-sets/audit');
   };
 
   const openDetails = (blueprint: Blueprint) => {
