@@ -307,12 +307,14 @@ export default function MaintenancePageTemplate<TRow extends object>({
                           >
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => onDelete?.(row)}
-                            className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {onDelete && (
+                            <button
+                              onClick={() => onDelete(row)}
+                              className="p-2.5 bg-white border border-philsa-border rounded-xl text-philsa-gray hover:text-philsa-red transition-all shadow-sm"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>

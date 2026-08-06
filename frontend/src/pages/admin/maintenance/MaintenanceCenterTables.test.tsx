@@ -6,6 +6,7 @@ import SchoolsListMaintenance from './SchoolsListMaintenance';
 import StudentRegistrationMaintenance from './StudentRegistrationMaintenance';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
 import { backendUniversityService } from '../../../services/backendUniversityService';
+import { examBlueprintMaintenanceService } from '../../../services/backendExamBlueprintMaintenanceService';
 import { serviceSuccess } from '../../../services/serviceResult';
 
 describe('active Maintenance Center tables', () => {
@@ -15,7 +16,6 @@ describe('active Maintenance Center tables', () => {
 
   it.each([
     ['student registration', <StudentRegistrationMaintenance />],
-    ['exam blueprint', <ExamBlueprintMaintenance />],
   ])('starts the %s table without mock records', (_name, component) => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
 
@@ -47,6 +47,19 @@ describe('active Maintenance Center tables', () => {
 
     expect(await screen.findByText('No universities match your search and filter criteria.')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock University')).not.toBeInTheDocument();
+    await waitFor(() => expect(setItem).not.toHaveBeenCalled());
+    setItem.mockRestore();
+  });
+
+  it('loads an empty exam blueprint table from the backend', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    vi.spyOn(examBlueprintMaintenanceService, 'listSubjects').mockResolvedValue(serviceSuccess([]));
+    vi.spyOn(examBlueprintMaintenanceService, 'listQuestionTypes').mockResolvedValue(serviceSuccess([]));
+    vi.spyOn(examBlueprintMaintenanceService, 'listTopics').mockResolvedValue(serviceSuccess([]));
+
+    render(<MemoryRouter><ExamBlueprintMaintenance /></MemoryRouter>);
+
+    expect(await screen.findByText('No Records Found')).toBeInTheDocument();
     await waitFor(() => expect(setItem).not.toHaveBeenCalled());
     setItem.mockRestore();
   });
