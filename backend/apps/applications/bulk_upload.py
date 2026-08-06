@@ -8,9 +8,10 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
 from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 
 from apps.accounts.models import AccountProfile
-from apps.accounts.roles import PortalRole
+from apps.accounts.roles import PortalRole, get_user_role
 from apps.applications.models import (
     ApplicationBulkUploadBatch,
     ApplicationBulkUploadRowResult,
@@ -91,6 +92,7 @@ def build_bulk_upload_template_csv() -> str:
 
 
 def validate_bulk_upload_csv(*, uploaded_file, actor) -> dict:
+    _require_bulk_upload_role(actor)
     batch = ApplicationBulkUploadBatch.objects.create(
         template_version=BULK_UPLOAD_TEMPLATE_VERSION,
         exam_cycle_id=settings.ACTIVE_EXAM_CYCLE_ID,
@@ -109,9 +111,14 @@ def validate_bulk_upload_csv(*, uploaded_file, actor) -> dict:
     seen_emails = set()
     row_results = []
     for row_number, submitted_row in enumerate(rows, start=2):
-        row = {column: (value or "").strip() for column, value in submitted_row.items()}
+        extra_values = submitted_row.get(None, [])
+        row = {column: (submitted_row.get(column) or "").strip() for column in BULK_UPLOAD_COLUMNS}
         row["email"] = row["email"].lower()
         field_errors = _field_errors(row)
+        if extra_values:
+            field_errors.append(
+                _error("row", "", "unexpected_fields", "Row contains more values than the CSV header.")
+            )
         conflict_errors = [] if field_errors else _conflict_errors(row, seen_lrns, seen_emails)
         status = BulkUploadRowStatus.FIELD_ERROR if field_errors else (
             BulkUploadRowStatus.CONFLICT if conflict_errors else BulkUploadRowStatus.VALID
@@ -162,6 +169,8 @@ def _field_errors(row: dict) -> list[dict]:
         errors.append(_error("templateVersion", row["templateVersion"], "stale_template", "Template version is not supported."))
     if row["dateOfBirth"]:
         try:
+            if not _has_yyyy_mm_dd_format(row["dateOfBirth"]):
+                raise ValueError
             date.fromisoformat(row["dateOfBirth"])
         except ValueError:
             errors.append(_error("dateOfBirth", row["dateOfBirth"], "invalid_date", "Use YYYY-MM-DD."))
@@ -183,6 +192,17 @@ def _field_errors(row: dict) -> list[dict]:
             missing_field = course_field if row[university_field] else university_field
             errors.append(_error(missing_field, row[missing_field], "incomplete_preference", "University and course are required together."))
     return errors
+
+
+def _require_bulk_upload_role(actor) -> None:
+    if not getattr(actor, "is_authenticated", False) or not getattr(actor, "is_active", True):
+        raise PermissionDenied("Authenticated active admissions access is required.")
+    if get_user_role(actor) not in {PortalRole.ADMISSIONS_REVIEWER.value, PortalRole.SYSTEM_ADMIN.value}:
+        raise PermissionDenied("Admissions reviewer or system administrator access is required.")
+
+
+def _has_yyyy_mm_dd_format(value: str) -> bool:
+    return len(value) == 10 and value[4] == "-" and value[7] == "-" and value.replace("-", "").isdigit()
 
 
 def _conflict_errors(row: dict, seen_lrns: set, seen_emails: set) -> list[dict]:

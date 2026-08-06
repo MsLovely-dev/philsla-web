@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from rest_framework.exceptions import PermissionDenied
 
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
@@ -93,6 +94,15 @@ class BulkUploadServiceTests(TestCase):
         self.assertEqual(ApplicationBulkUploadBatch.objects.count(), 1)
         self.assertEqual(ApplicationBulkUploadRowResult.objects.get().status, BulkUploadRowStatus.VALID)
 
+    def test_validation_denies_an_actor_without_an_allowed_role_before_creating_a_batch(self):
+        with self.assertRaises(PermissionDenied):
+            validate_bulk_upload_csv(
+                uploaded_file=csv_file([valid_row()]),
+                actor=actor(self.user, role=PortalRole.STUDENT.value),
+            )
+
+        self.assertEqual(ApplicationBulkUploadBatch.objects.count(), 0)
+
     def test_validation_records_missing_required_fields_as_field_errors(self):
         result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(firstName="")]), actor=self.actor)
 
@@ -110,6 +120,12 @@ class BulkUploadServiceTests(TestCase):
 
     def test_validation_rejects_an_invalid_date_of_birth(self):
         result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(dateOfBirth="15-05-2008")]), actor=self.actor)
+
+        self.assertEqual(result["fieldErrorRows"], 1)
+        self.assertEqual(ApplicationBulkUploadRowResult.objects.get().errors[0]["field"], "dateOfBirth")
+
+    def test_validation_rejects_a_compact_date_of_birth(self):
+        result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row(dateOfBirth="20080515")]), actor=self.actor)
 
         self.assertEqual(result["fieldErrorRows"], 1)
         self.assertEqual(ApplicationBulkUploadRowResult.objects.get().errors[0]["field"], "dateOfBirth")
@@ -178,3 +194,22 @@ class BulkUploadServiceTests(TestCase):
         self.assertEqual(result["status"], "FAILED")
         self.assertEqual(result["totalRows"], 0)
         self.assertFalse(result["canConfirm"])
+
+    def test_validation_rejects_a_row_with_extra_unnamed_cells(self):
+        stream = StringIO()
+        writer = csv.DictWriter(stream, fieldnames=BULK_UPLOAD_COLUMNS)
+        writer.writeheader()
+        writer.writerow(valid_row())
+        uploaded_file = SimpleUploadedFile(
+            "bulk.csv",
+            f"{stream.getvalue().rstrip()},unexpected\\n".encode("utf-8"),
+            content_type="text/csv",
+        )
+
+        result = validate_bulk_upload_csv(uploaded_file=uploaded_file, actor=self.actor)
+
+        self.assertEqual(result["fieldErrorRows"], 1)
+        row_result = ApplicationBulkUploadRowResult.objects.get()
+        self.assertEqual(row_result.status, BulkUploadRowStatus.FIELD_ERROR)
+        self.assertEqual(row_result.errors[0]["code"], "unexpected_fields")
+        self.assertNotIn(None, row_result.row_snapshot)
