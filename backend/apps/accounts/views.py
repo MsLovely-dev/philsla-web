@@ -22,6 +22,7 @@ from .serializers import (
     OtpResendLoginSerializer,
     AdminAccountRecoveryRequestSerializer,
     PasswordLoginSerializer,
+    TemporaryPasswordChangeSerializer,
     PasswordRecoveryCompletionSerializer,
     PasswordRecoveryInspectionSerializer,
     PasswordRecoveryRequestSerializer,
@@ -38,6 +39,7 @@ from .services import (
     create_admin_user_account,
     deactivate_admin_user_account,
     complete_staff_activation,
+    complete_temporary_password_change,
     complete_password_recovery,
     complete_login_selfie,
     inspect_password_recovery,
@@ -160,6 +162,29 @@ class PasswordLoginView(APIView):
             record_auth_event(event="auth.password_submitted", outcome="rejected", request=request)
             raise
         record_auth_event(event="auth.password_submitted", outcome="accepted", request=request)
+        return Response(result, status=202)
+
+
+class TemporaryPasswordChangeView(APIView):
+    authentication_classes: list[type] = []
+    permission_classes: list[type] = []
+    throttle_classes = [AuthScopedRateThrottle]
+    throttle_scope = "auth_sensitive"
+
+    def post(self, request) -> Response:
+        serializer = TemporaryPasswordChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            result = complete_temporary_password_change(
+                password_change_token=serializer.validated_data["passwordChangeToken"],
+                password=serializer.validated_data["password"],
+                request=request,
+            )
+        except LoginFlowRejected:
+            record_auth_event(event="auth.temporary_password_changed", outcome="rejected", request=request)
+            raise
+        record_auth_event(event="auth.temporary_password_changed", outcome="accepted", request=request)
         return Response(result, status=202)
 
 

@@ -1,5 +1,5 @@
 import type { User, UserRole } from '../types';
-import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthPasswordResult, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
 import { sharedApiClient, type ApiClient } from './apiClient';
 import { authorizationError, serviceSuccess } from './serviceResult';
 import type { ServiceFailure, ServiceResult } from './serviceResult';
@@ -84,6 +84,10 @@ export class BackendAuthService implements AuthService {
       );
     }
 
+    if (passwordResult.data.nextStep === 'password_change') {
+      return authorizationError('Change your temporary password before continuing.', 'PASSWORD_CHANGE_REQUIRED');
+    }
+
     const otpResult = await this.verifyLoginOtp(passwordResult.data.otpPendingAuthToken, credentials.otp);
     if (otpResult.ok === false) return otpResult as ServiceFailure;
     return authorizationError('Selfie photo log is required before creating the backend session.', 'SELFIE_REQUIRED');
@@ -96,12 +100,27 @@ export class BackendAuthService implements AuthService {
     });
   }
 
-  async verifyLoginPassword(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>> {
-    return this.apiClient.request<AuthOtpChallenge>('/api/v1/auth/login/password/', {
+  async verifyLoginPassword(pendingAuthToken: string, password: string): Promise<ServiceResult<AuthPasswordResult>> {
+    return this.apiClient.request<AuthPasswordResult>('/api/v1/auth/login/password/', {
       method: 'POST',
       body: JSON.stringify({
         pendingAuthToken,
         password,
+      }),
+    });
+  }
+
+  async completeTemporaryPasswordChange(
+    passwordChangeToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<AuthOtpChallenge>> {
+    return this.apiClient.request<AuthOtpChallenge>('/api/v1/auth/login/password/change/', {
+      method: 'POST',
+      body: JSON.stringify({
+        passwordChangeToken,
+        password,
+        confirmPassword,
       }),
     });
   }
