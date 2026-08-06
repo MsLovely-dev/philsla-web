@@ -127,7 +127,7 @@ docs/superpowers/
 | **Ian Chris Sandoval (I.Sandoval)** | Maintenance Table – Exam Blueprint | Maintenance & Config | Not started | 🟡 deferred | `worktrees/i.sandoval/` | *(parked — no branch yet)* | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (.NET Student) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-student` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
 | **bienvenido.mendoza (B.Mendoza)** | Desktop Exam App (Proctor) | BRD-04/04A Exam Delivery | Not started | 🔴 no Tauri app exists | `worktrees/b.mendoza/` | `b.mendoza/desktop-app-proctor` | `docs/superpowers/b.mendoza/b.mendoza.task.md` |
-| **Prince Barachiel Malonzo (P.Malonzo)** | Exam Review | BRD-05 Scoring & Results | In progress | 🔴 no backend entity | `worktrees/p.malonzo/` | `p.malonzo/exam-review` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
+| **Prince Barachiel Malonzo (P.Malonzo)** | Exam Review | BRD-05 Scoring & Results | Scoped demo path complete; locally verified, PostgreSQL concurrency rehearsal pending | 🟢 real backend/API grading, item scoring, answer-sheet upload, and atomic Score Management handoff | `worktrees/p.malonzo/` | `p.malonzo/exam-review` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
 | **Prince Barachiel Malonzo (P.Malonzo)** | Exam Results Release & Analytics | BRD-05 Scoring & Results | Not started | 🔴 no backend entity | `worktrees/p.malonzo/` | `p.malonzo/results-release` | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
 | **Prince Barachiel Malonzo (P.Malonzo)** | Student Portal | Student Portal | Not started | 🟡 out of scope this sprint | `worktrees/p.malonzo/` | *(parked — no branch yet)* | `docs/superpowers/p.malonzo/p.malonzo.task.md` |
 | **Alvy Depositar (A.Depositar)** | Score Management | BRD-05 Scoring & Results | ~80% complete overall; 85-90% excluding integration/distribution | 🟢 real backend/API/demo seed path now exists | `worktrees/a.depositar/` | `a.depositar/score-management` | `docs/superpowers/a.depositar/a.depositar.task.md` |
@@ -169,9 +169,9 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - On branches `b.mendoza/desktop-app-student` and `b.mendoza/desktop-app-proctor`: agree scope for both — Friday deliverable is a polished walkthrough of the existing simulation plus a one-pager on the real architecture plan (encrypted local store, package unlock via `schedule_id`, device enrollment via cert/mTLS per ADR-011) — not working software.
 - **Deliverable:** scope agreement confirmed for both stories.
 
-### Prince Barachiel Malonzo (P.Malonzo) 🔴 / 🟡 — `worktrees/p.malonzo/`
-- Confirm `backend/apps/results` is an empty stub; `ExamReviewList.tsx` / `ExamReviewDetail.tsx` run entirely on mock data.
-- On branch `p.malonzo/exam-review` and `p.malonzo/results-release`: agree scope — Exam Review becomes a polished list → detail walkthrough; Results Release & Analytics becomes a roadmap narrative, not a build.
+### Prince Barachiel Malonzo (P.Malonzo) 🟢 / 🟡 — `worktrees/p.malonzo/`
+- Confirmed `backend/apps/exam_reviews` owns the real Exam Review models, API views, grading states, item scoring, answer-sheet upload, and finalization flow; `apps.results` owns the atomic CandidateScore intake used by release, and `ExamReviewList.tsx` / `ExamReviewDetail.tsx` consume the API through the frontend service.
+- On branch `p.malonzo/exam-review`: grading-readiness hardening and the real Exam Review → Score Management score handoff are implemented. Results Release & Analytics remains a separate roadmap narrative, not a build.
 - Student Portal: confirm this stays **out of scope** for this sprint entirely, no branch cut — three stories solo is already a full load.
 - **Deliverable:** scope agreement confirmed for both active branches; Student Portal explicitly parked.
 
@@ -224,8 +224,8 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 ### bienvenido.mendoza (B.Mendoza) 🔴
 - **All day, on `desktop-app-student` then `desktop-app-proctor`:** No backend work. Polish `ExamDelivery.tsx`'s flow (readiness check → webcam check → offline DB check → exam → submit) for a clean walkthrough. Draft the Tauri architecture one-pager for both variants.
 
-### Prince Barachiel Malonzo (P.Malonzo) 🔴
-- **AM–Midday, on `exam-review`:** Fix broken mock-data references between `ExamReviewList.tsx` and `ExamReviewDetail.tsx`; polish the rubric/grading display.
+### Prince Barachiel Malonzo (P.Malonzo) 🟢 / 🟡
+- **AM–Midday, on `exam-review`:** Complete backend and frontend grading-readiness guards, verify list → detail scoring and release, and polish the missing-rubric display.
 - **PM, on `results-release`:** Draft the Results Release & Analytics roadmap narrative (readiness gating, holds, government reporting interface — all currently unbuilt).
 
 ### Alvy Depositar (A.Depositar) 🟢 / 🟡

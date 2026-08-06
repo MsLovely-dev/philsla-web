@@ -73,7 +73,7 @@ export default function ExamReviewDetail() {
   }, [id]);
 
   const handleRelease = async () => {
-    if (!review || review.status !== 'GRADED') return;
+    if (!review || review.status !== 'GRADED' || review.pendingSubjectiveItems > 0) return;
     setReleaseError(null);
     setIsReleasing(true);
     const result = await backendExamReviewService.release(review.id);
@@ -138,6 +138,7 @@ export default function ExamReviewDetail() {
   }
 
   const manualScore = Math.max(0, review.totalScore - review.systemInitialScore);
+  const isReleaseReady = review.status === 'GRADED' && review.pendingSubjectiveItems === 0;
   const activeSubjectItems = review.examItems.filter(item => item.subject === activeSubject);
 
   return (
@@ -152,7 +153,7 @@ export default function ExamReviewDetail() {
         </button>
         <div className="flex flex-col items-end gap-2">
           <div className="flex flex-wrap items-center justify-end gap-3">
-            {review.status === 'GRADED' && (
+            {isReleaseReady && (
               <button
                 type="button"
                 onClick={() => void handleRelease()}
@@ -171,6 +172,12 @@ export default function ExamReviewDetail() {
           {releaseError && (
             <p role="alert" className="flex items-center gap-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-500">
               <Info className="h-3 w-3" /> {releaseError}
+            </p>
+          )}
+          {review.status === 'GRADED' && review.pendingSubjectiveItems > 0 && (
+            <p role="status" className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+              <Info className="h-4 w-4" />
+              {review.pendingSubjectiveItems} subjective {review.pendingSubjectiveItems === 1 ? 'item still requires' : 'items still require'} an official score before release.
             </p>
           )}
         </div>
@@ -426,7 +433,7 @@ function ExamItemCard({
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Official Rubric</p>
-                <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700">{item.rubric}</p>
+                <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-700">{item.rubric.trim() || 'No rubric provided for this item.'}</p>
               </div>
               <div>
                 <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">AI System Proposed Score</p>

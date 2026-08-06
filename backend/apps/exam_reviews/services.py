@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
 
 from apps.accounts.roles import get_user_role
+from apps.results.services import ExamReviewScoreInput, ScoreIntakeConflict, accept_exam_review_score
 
 from .models import ExamReviewAnswerSheet, ExamReviewItem, ExamReviewItemType, ExamReviewRecord, ExamReviewStatus
 
@@ -29,11 +30,48 @@ class ExamReviewItemScoreConflict(APIException):
     default_detail = "Released Exam Review records cannot be rescored."
 
 
+def _pending_subjective_message(record: ExamReviewRecord, *, action: str) -> str:
+    count = record.pending_subjective_items
+    noun = "item" if count == 1 else "items"
+    return f"Score the remaining {count} subjective {noun} before this Exam Review can be {action}."
+
+
+def _candidate_name(record: ExamReviewRecord) -> str:
+    personal = record.application.personal
+    return " ".join(
+        part.strip()
+        for part in (
+            personal.get("firstName", ""),
+            personal.get("middleName", ""),
+            personal.get("lastName", ""),
+            personal.get("suffix", ""),
+        )
+        if part and part.strip()
+    )
+
+
 @transaction.atomic
 def release_exam_review(*, review_id, actor: object) -> ExamReviewRecord:
     record = ExamReviewRecord.objects.select_for_update().get(id=review_id)
     if record.status != ExamReviewStatus.GRADED:
         raise ExamReviewReleaseConflict()
+    if record.pending_subjective_items:
+        raise ExamReviewReleaseConflict(_pending_subjective_message(record, action="released"))
+
+    try:
+        accept_exam_review_score(
+            payload=ExamReviewScoreInput(
+                review_id=record.id,
+                exam_set_code=record.exam_set_code,
+                candidate_id=record.application.candidate_id,
+                lrn=record.application.lrn,
+                candidate_name=_candidate_name(record),
+                raw_score=record.total_score,
+                max_score=record.max_score,
+            ),
+        )
+    except ScoreIntakeConflict as exc:
+        raise ExamReviewReleaseConflict(str(exc)) from exc
 
     record.status = ExamReviewStatus.FINALIZED
     record.reviewed_by = get_user_role(actor) or "LOCAL_PROTOTYPE"
@@ -47,6 +85,8 @@ def set_exam_review_grading_status(*, review_id, status: str, actor: object) -> 
     record = ExamReviewRecord.objects.select_for_update().get(id=review_id)
     if record.status == ExamReviewStatus.FINALIZED:
         raise ExamReviewGradingStatusConflict()
+    if status == ExamReviewStatus.GRADED and record.pending_subjective_items:
+        raise ExamReviewGradingStatusConflict(_pending_subjective_message(record, action="marked graded"))
 
     record.status = status
     if status == ExamReviewStatus.GRADED:

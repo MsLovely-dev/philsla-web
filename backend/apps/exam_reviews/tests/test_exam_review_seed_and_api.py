@@ -1,5 +1,6 @@
 from io import StringIO
 import hashlib
+from decimal import Decimal
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
@@ -12,8 +13,15 @@ from rest_framework.test import APIClient
 
 from apps.accounts.roles import PortalRole
 from apps.applications.models import StudentApplication
-from apps.exam_reviews.models import ExamReviewAnswerSheet, ExamReviewItem, ExamReviewRecord
-from apps.results.models import CandidateScore
+from apps.exam_reviews.models import ExamReviewAnswerSheet, ExamReviewItem, ExamReviewRecord, ExamReviewStatus
+from apps.results.models import (
+    CandidateScore,
+    ExamSet,
+    ExaminationSession,
+    RankingPopulation,
+    ScoreReleaseStatus,
+    ScoreReviewStatus,
+)
 
 
 def principal(user, role: str) -> SimpleNamespace:
@@ -39,6 +47,13 @@ class ExamReviewSeedTests(TestCase):
         self.assertEqual(ExamReviewRecord.objects.filter(status="SUBMITTED").count(), 5)
         self.assertEqual(ExamReviewItem.objects.count(), 140)
         self.assertTrue(all(review.review_items.count() == 20 for review in ExamReviewRecord.objects.all()))
+        demo_lrns = list(
+            StudentApplication.objects.filter(exam_cycle_id="DEMO-2026")
+            .order_by("candidate_id")
+            .values_list("lrn", flat=True),
+        )
+        self.assertEqual(demo_lrns, [f"10900000000{index}" for index in range(1, 8)])
+        self.assertEqual(set(ExamReviewRecord.objects.values_list("exam_set_code", flat=True)), {"ES-BP0001"})
         self.assertIn("Created: 7", first_output.getvalue())
         self.assertIn("Updated: 7", second_output.getvalue())
 
@@ -58,6 +73,21 @@ class ExamReviewQueueApiTests(TestCase):
     def authenticate_as(self, role: str) -> None:
         self.client.force_authenticate(user=principal(self.user, role))
 
+    def create_score_management_target(self, record, *, session_id="SESSION-HANDOFF"):
+        session = ExaminationSession.objects.create(id=session_id, name=f"{session_id} Session")
+        population = RankingPopulation.objects.create(
+            id=f"POP-{session_id}",
+            session=session,
+            name="Regular",
+        )
+        exam_set = ExamSet.objects.create(
+            id=f"SET-{session_id}",
+            session=session,
+            ranking_population=population,
+            code=record.exam_set_code,
+        )
+        return session, population, exam_set
+
     def test_exam_administrator_can_list_seeded_reviews(self):
         self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
 
@@ -71,10 +101,12 @@ class ExamReviewQueueApiTests(TestCase):
         self.assertNotIn("examItems", response.data[0])
         self.assertNotIn("answers", response.data[0])
 
-    def test_release_finalizes_without_creating_score_management_record(self):
+    def test_release_creates_score_management_record(self):
         self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
-        record = ExamReviewRecord.objects.filter(status="GRADED").first()
-        score_count_before = CandidateScore.objects.count()
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        record.application.lrn = "109000000002"
+        record.application.save(update_fields=("lrn", "updated_at"))
+        session, population, exam_set = self.create_score_management_target(record)
 
         response = self.client.post(
             reverse("exam_reviews:exam-review-release", args=[record.id])
@@ -83,7 +115,150 @@ class ExamReviewQueueApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         record.refresh_from_db()
         self.assertEqual(record.status, "FINALIZED")
-        self.assertEqual(CandidateScore.objects.count(), score_count_before)
+        score = CandidateScore.objects.get(session=session, candidate_id="PS-DEMO-0002")
+        self.assertEqual(score.ranking_population, population)
+        self.assertEqual(score.exam_set, exam_set)
+        self.assertEqual(score.lrn, "109000000002")
+        self.assertEqual(score.candidate_name, "Demo Candidate 002")
+        self.assertEqual(score.raw_score, 84)
+        self.assertEqual(score.max_score, 120)
+        self.assertEqual(score.final_score, Decimal("70.00"))
+        self.assertEqual(score.review_status, ScoreReviewStatus.APPROVED)
+        self.assertEqual(score.release_status, ScoreReleaseStatus.NOT_RELEASED)
+
+    def test_release_conflict_rolls_back_when_score_management_exam_set_is_missing(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        record.application.lrn = "109000000002"
+        record.application.save(update_fields=("lrn", "updated_at"))
+
+        response = self.client.post(reverse("exam_reviews:exam-review-release", args=[record.id]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("exactly one Score Management Exam Set", response.data["error"]["message"])
+        record.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.GRADED)
+        self.assertFalse(CandidateScore.objects.exists())
+
+    def test_release_conflict_rolls_back_when_exam_set_match_is_ambiguous(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        record.application.lrn = "109000000002"
+        record.application.save(update_fields=("lrn", "updated_at"))
+        self.create_score_management_target(record, session_id="SESSION-A")
+        self.create_score_management_target(record, session_id="SESSION-B")
+
+        response = self.client.post(reverse("exam_reviews:exam-review-release", args=[record.id]))
+
+        self.assertEqual(response.status_code, 409)
+        record.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.GRADED)
+        self.assertFalse(CandidateScore.objects.exists())
+
+    def test_release_conflict_preserves_processed_score_and_graded_review(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        record.application.lrn = "109000000002"
+        record.application.save(update_fields=("lrn", "updated_at"))
+        session, population, exam_set = self.create_score_management_target(record)
+        existing = CandidateScore.objects.create(
+            id="EXISTING-HANDOFF-SCORE",
+            session=session,
+            ranking_population=population,
+            exam_set=exam_set,
+            candidate_id=record.application.candidate_id,
+            lrn=record.application.lrn,
+            candidate_name="Original Candidate",
+            raw_score=50,
+            max_score=100,
+            final_score=Decimal("50.00"),
+            review_status=ScoreReviewStatus.APPROVED,
+            overall_rank=1,
+        )
+
+        response = self.client.post(reverse("exam_reviews:exam-review-release", args=[record.id]))
+
+        self.assertEqual(response.status_code, 409)
+        record.refresh_from_db()
+        existing.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.GRADED)
+        self.assertEqual(existing.raw_score, 50)
+        self.assertEqual(existing.candidate_name, "Original Candidate")
+        self.assertEqual(existing.overall_rank, 1)
+
+    def test_release_conflict_preserves_released_score_and_graded_review(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        session, population, exam_set = self.create_score_management_target(record)
+        existing = CandidateScore.objects.create(
+            id="RELEASED-HANDOFF-SCORE",
+            session=session,
+            ranking_population=population,
+            exam_set=exam_set,
+            candidate_id=record.application.candidate_id,
+            lrn=record.application.lrn,
+            candidate_name="Released Candidate",
+            raw_score=50,
+            max_score=100,
+            final_score=Decimal("50.00"),
+            review_status=ScoreReviewStatus.APPROVED,
+            release_status=ScoreReleaseStatus.RELEASED,
+        )
+
+        response = self.client.post(reverse("exam_reviews:exam-review-release", args=[record.id]))
+
+        self.assertEqual(response.status_code, 409)
+        record.refresh_from_db()
+        existing.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.GRADED)
+        self.assertEqual(existing.release_status, ScoreReleaseStatus.RELEASED)
+        self.assertEqual(existing.raw_score, 50)
+
+    def test_release_conflict_rejects_invalid_candidate_identity_without_partial_write(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        record.application.lrn = ""
+        record.application.save(update_fields=("lrn", "updated_at"))
+        self.create_score_management_target(record)
+
+        response = self.client.post(reverse("exam_reviews:exam-review-release", args=[record.id]))
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("valid 12-digit LRN", response.data["error"]["message"])
+        record.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.GRADED)
+        self.assertFalse(CandidateScore.objects.exists())
+
+    def test_release_updates_eligible_existing_score_without_duplication(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        record.application.lrn = "109000000002"
+        record.application.save(update_fields=("lrn", "updated_at"))
+        session, population, exam_set = self.create_score_management_target(record)
+        existing = CandidateScore.objects.create(
+            id="EXISTING-HANDOFF-SCORE",
+            session=session,
+            ranking_population=population,
+            exam_set=exam_set,
+            candidate_id=record.application.candidate_id,
+            lrn="109000000009",
+            candidate_name="Original Candidate",
+            raw_score=50,
+            max_score=100,
+            final_score=Decimal("50.00"),
+            review_status=ScoreReviewStatus.PENDING,
+        )
+
+        response = self.client.post(reverse("exam_reviews:exam-review-release", args=[record.id]))
+
+        self.assertEqual(response.status_code, 200)
+        record.refresh_from_db()
+        existing.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.FINALIZED)
+        self.assertEqual(CandidateScore.objects.count(), 1)
+        self.assertEqual(existing.raw_score, 84)
+        self.assertEqual(existing.final_score, Decimal("70.00"))
+        self.assertEqual(existing.candidate_name, "Demo Candidate 002")
 
     def test_student_cannot_list_exam_reviews(self):
         self.authenticate_as(PortalRole.STUDENT.value)
@@ -181,6 +356,7 @@ class ExamReviewQueueApiTests(TestCase):
     @override_settings(EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS=True)
     def test_local_prototype_session_can_release_a_graded_demo_review(self):
         record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-002")
+        self.create_score_management_target(record)
 
         response = self.client.post(
             reverse("exam_reviews:exam-review-release", args=[record.id]),
@@ -206,8 +382,41 @@ class ExamReviewQueueApiTests(TestCase):
         self.assertEqual(response.status_code, 409)
 
     @override_settings(EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS=True)
+    def test_review_with_pending_subjective_items_cannot_be_marked_graded(self):
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-001")
+
+        response = self.client.post(
+            reverse("exam_reviews:exam-review-grading-status", args=[record.id]),
+            {"status": "GRADED"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("2 subjective items", response.data["error"]["message"])
+        record.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.SUBMITTED)
+
+    @override_settings(EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS=True)
+    def test_graded_review_with_pending_subjective_items_cannot_be_released(self):
+        record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-001")
+        record.status = ExamReviewStatus.GRADED
+        record.save(update_fields=("status", "updated_at"))
+
+        response = self.client.post(
+            reverse("exam_reviews:exam-review-release", args=[record.id]),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("2 subjective items", response.data["error"]["message"])
+        record.refresh_from_db()
+        self.assertEqual(record.status, ExamReviewStatus.GRADED)
+
+    @override_settings(EXAM_REVIEW_ALLOW_SYNTHETIC_DEV_ACCESS=True)
     def test_local_prototype_session_can_mark_graded_and_return_to_pending(self):
         record = ExamReviewRecord.objects.get(attempt_code="DEMO-ATTEMPT-001")
+        record.pending_subjective_items = 0
+        record.save(update_fields=("pending_subjective_items", "updated_at"))
         endpoint = reverse("exam_reviews:exam-review-grading-status", args=[record.id])
 
         graded_response = self.client.post(endpoint, {"status": "GRADED"}, format="json")
