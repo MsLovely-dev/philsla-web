@@ -275,6 +275,48 @@ describe('BackendAuthService', () => {
     );
   });
 
+  it('submits temporary password change and returns an OTP challenge', async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(
+      jsonResponse(
+        {
+          otpPendingAuthToken: 'otp-token',
+          nextStep: 'otp',
+          expiresInSeconds: 300,
+          resendCooldownSeconds: 60,
+        },
+        { status: 202 },
+      ),
+    );
+    const service = new BackendAuthService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.completeTemporaryPasswordChange(
+      'password-change-token',
+      'Permanent1!',
+      'Permanent1!',
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        otpPendingAuthToken: 'otp-token',
+        nextStep: 'otp',
+        expiresInSeconds: 300,
+        resendCooldownSeconds: 60,
+      },
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/auth/login/password/change/',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          passwordChangeToken: 'password-change-token',
+          password: 'Permanent1!',
+          confirmPassword: 'Permanent1!',
+        }),
+      }),
+    );
+  });
+
   it('requests a replacement login OTP from the backend', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(

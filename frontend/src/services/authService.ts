@@ -1,7 +1,7 @@
 import type { Application, User } from '../types';
 import { MOCK_USERS } from '../lib/utils';
 import { BackendAuthService } from './backendAuthService';
-import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
+import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthPasswordResult, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
 import { authorizationError, serviceSuccess, validationError } from './serviceResult';
 import type { ServiceResult } from './serviceResult';
 
@@ -69,7 +69,7 @@ export class LocalStorageAuthService implements AuthService {
     });
   }
 
-  async verifyLoginPassword(_pendingAuthToken: string, password: string): Promise<ServiceResult<AuthOtpChallenge>> {
+  async verifyLoginPassword(_pendingAuthToken: string, password: string): Promise<ServiceResult<AuthPasswordResult>> {
     await this.delay();
 
     if (!this.pendingIdentifier) {
@@ -78,6 +78,26 @@ export class LocalStorageAuthService implements AuthService {
 
     if (!password) {
       return authorizationError('Incorrect email or password.', 'AUTHENTICATION_FAILED');
+    }
+
+    return serviceSuccess({
+      otpPendingAuthToken: 'prototype-otp-pending-auth',
+      nextStep: 'otp',
+      expiresInSeconds: 300,
+      resendCooldownSeconds: 60,
+      devOtp: '000000',
+    });
+  }
+
+  async completeTemporaryPasswordChange(
+    _passwordChangeToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<AuthOtpChallenge>> {
+    await this.delay();
+
+    if (!password || password !== confirmPassword) {
+      return authorizationError('Passwords do not match.', 'VALIDATION_FAILED');
     }
 
     return serviceSuccess({
