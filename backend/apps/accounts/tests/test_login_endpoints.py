@@ -9,7 +9,7 @@ from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from apps.accounts.models import AccountProfile, LoginSelfieLog
+from apps.accounts.models import AccountProfile, LoginSelfieLog, PasswordLoginLockout
 from apps.accounts.roles import PortalRole
 from apps.accounts.services import OTP_ACCOUNT_RATE_PREFIX, PENDING_OTP_PREFIX, _safe_account_rate_key
 
@@ -28,6 +28,29 @@ class LoginEndpointTests(TestCase):
         )
         AccountProfile.objects.create(user=user, role=PortalRole.STUDENT.value, lrn="123456789012")
         return user
+
+    def start_student_password_login(self):
+        user = self.create_student_account()
+        identifier_response = self.client.post(
+            '/api/v1/auth/login/identifier/',
+            data={'identifier': 'student@example.test'},
+            content_type='application/json',
+        )
+        self.assertEqual(identifier_response.status_code, 202)
+        return user, identifier_response.json()['pendingAuthToken']
+
+    def post_password(self, *, pending_auth_token: str, password: str):
+        return self.client.post(
+            '/api/v1/auth/login/password/',
+            data={'pendingAuthToken': pending_auth_token, 'password': password},
+            content_type='application/json',
+        )
+
+    def assert_generic_password_failure(self, response) -> None:
+        self.assertEqual(response.status_code, 401)
+        payload = response.json()
+        self.assertEqual(payload['error']['code'], 'AUTHENTICATION_FAILED')
+        self.assertEqual(payload['error']['message'], 'Incorrect email/LRN or password.')
 
     def start_student_otp_login(self) -> dict:
         self.create_student_account()
@@ -137,6 +160,67 @@ class LoginEndpointTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["error"]["code"], "AUTHENTICATION_FAILED")
         self.assertEqual(payload["error"]["message"], "Your session has expired. Please start again.")
+
+    def test_first_four_wrong_passwords_do_not_lock_account(self) -> None:
+        user, pending_token = self.start_student_password_login()
+
+        for _ in range(4):
+            response = self.post_password(pending_auth_token=pending_token, password='WrongPassword1!')
+            self.assert_generic_password_failure(response)
+
+        state = PasswordLoginLockout.objects.get(user=user)
+        self.assertEqual(state.failed_attempts, 4)
+        self.assertIsNone(state.locked_until)
+
+    def test_fifth_wrong_password_locks_account_for_fifteen_minutes(self) -> None:
+        user, pending_token = self.start_student_password_login()
+        for _ in range(4):
+            self.post_password(pending_auth_token=pending_token, password='WrongPassword1!')
+
+        before_fifth_attempt = timezone.now()
+        response = self.post_password(pending_auth_token=pending_token, password='WrongPassword1!')
+
+        self.assert_generic_password_failure(response)
+        state = PasswordLoginLockout.objects.get(user=user)
+        self.assertEqual(state.failed_attempts, 5)
+        self.assertGreaterEqual(state.locked_until, before_fifth_attempt + timedelta(minutes=15))
+        self.assertLessEqual(state.locked_until, timezone.now() + timedelta(minutes=15))
+
+    def test_correct_password_is_denied_during_active_lockout(self) -> None:
+        _, pending_token = self.start_student_password_login()
+        for _ in range(5):
+            self.post_password(pending_auth_token=pending_token, password='WrongPassword1!')
+
+        response = self.post_password(pending_auth_token=pending_token, password='Password1!')
+
+        self.assert_generic_password_failure(response)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_correct_password_is_accepted_after_lockout_expires(self) -> None:
+        user, pending_token = self.start_student_password_login()
+        for _ in range(5):
+            self.post_password(pending_auth_token=pending_token, password='WrongPassword1!')
+        lockout_model = PasswordLoginLockout
+        state = lockout_model.objects.get(user=user)
+        state.locked_until = timezone.now() - timedelta(seconds=1)
+        state.save(update_fields=['locked_until', 'updated_at'])
+
+        response = self.post_password(pending_auth_token=pending_token, password='Password1!')
+
+        self.assertEqual(response.status_code, 202)
+        self.assertFalse(lockout_model.objects.filter(user=user).exists())
+
+    def test_successful_password_clears_failure_state(self) -> None:
+        user, pending_token = self.start_student_password_login()
+        for _ in range(3):
+            self.post_password(pending_auth_token=pending_token, password='WrongPassword1!')
+        lockout_model = PasswordLoginLockout
+        self.assertEqual(lockout_model.objects.get(user=user).failed_attempts, 3)
+
+        response = self.post_password(pending_auth_token=pending_token, password='Password1!')
+
+        self.assertEqual(response.status_code, 202)
+        self.assertFalse(lockout_model.objects.filter(user=user).exists())
 
     def test_otp_step_requires_six_digit_code(self) -> None:
         response = self.client.post(

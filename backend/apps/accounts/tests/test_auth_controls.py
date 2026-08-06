@@ -1,6 +1,9 @@
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 
+from apps.accounts.models import AccountProfile, PasswordLoginLockout
 from apps.accounts.roles import PortalRole
 from apps.accounts.views import AdminAccountRecoveryRequestView, StudentRegistrationActivationView
 
@@ -68,6 +71,10 @@ class AuthThrottleTests(TestCase):
 
 @override_settings(ROOT_URLCONF="config.urls")
 class AuthAuditBoundaryTests(TestCase):
+    def tearDown(self) -> None:
+        cache.clear()
+        super().tearDown()
+
     def test_identifier_login_records_safe_audit_event(self) -> None:
         identifier = "student@example.test"
 
@@ -86,6 +93,64 @@ class AuthAuditBoundaryTests(TestCase):
         self.assertEqual(record.outcome, "rejected")
         self.assertEqual(record.correlation_id, response.headers["X-Correlation-ID"])
         self.assertNotIn(identifier, captured.output[0])
+
+    def test_lockout_state_and_audit_event_exclude_authentication_secrets(self) -> None:
+        email = 'lockout-user@example.test'
+        lrn = '987654321098'
+        wrong_password = 'WrongPassword1!'
+        user = get_user_model().objects.create_user(
+            username='lockout-user',
+            email=email,
+            password='Password1!',
+        )
+        AccountProfile.objects.create(user=user, role=PortalRole.STUDENT.value, lrn=lrn)
+        identifier_response = self.client.post(
+            '/api/v1/auth/login/identifier/',
+            data={'identifier': email},
+            content_type='application/json',
+        )
+        pending_token = identifier_response.json()['pendingAuthToken']
+
+        for _ in range(4):
+            self.client.post(
+                '/api/v1/auth/login/password/',
+                data={'pendingAuthToken': pending_token, 'password': wrong_password},
+                content_type='application/json',
+            )
+
+        with self.assertLogs('philsa.audit', level='INFO') as captured:
+            response = self.client.post(
+                '/api/v1/auth/login/password/',
+                data={'pendingAuthToken': pending_token, 'password': wrong_password},
+                content_type='application/json',
+            )
+
+        state = PasswordLoginLockout.objects.get(user=user)
+        persisted_values = ' '.join(
+            str(value) for key, value in state.__dict__.items() if key != '_state'
+        )
+
+        lockout_records = [record for record in captured.records if record.event == 'auth.lockout']
+        self.assertEqual(len(lockout_records), 1)
+        lockout_record = lockout_records[0]
+        self.assertEqual(lockout_record.outcome, 'enforced')
+        self.assertEqual(lockout_record.user_id, str(user.id))
+        self.assertEqual(lockout_record.correlation_id, response.headers['X-Correlation-ID'])
+        self.assertEqual(lockout_record.metadata, {})
+
+        audit_values = ' '.join(
+            [
+                lockout_record.event,
+                lockout_record.outcome,
+                lockout_record.correlation_id,
+                lockout_record.user_id,
+                str(lockout_record.metadata),
+                *captured.output,
+            ]
+        )
+        for sensitive_value in (email, lrn, wrong_password, pending_token):
+            self.assertNotIn(sensitive_value, persisted_values)
+            self.assertNotIn(sensitive_value, audit_values)
 
 
 class AuthPermissionBoundaryTests(TestCase):

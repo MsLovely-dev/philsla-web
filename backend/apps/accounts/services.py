@@ -24,7 +24,13 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from .audit import record_auth_event
-from .models import AccountProfile, AuthRefreshSession, LoginSelfieLog, PasswordRecoveryToken
+from .models import (
+    AccountProfile,
+    AuthRefreshSession,
+    LoginSelfieLog,
+    PasswordLoginLockout,
+    PasswordRecoveryToken,
+)
 from .permission_codes import (
     default_role_permission_codes,
     ensure_account_assignment,
@@ -843,6 +849,66 @@ def start_identifier_login(*, identifier: str) -> dict[str, Any]:
     }
 
 
+def _password_matches_and_updates_lockout(
+    *,
+    user: object,
+    password: str,
+    request: object | None,
+) -> bool:
+    '''Verify a password while serializing its durable attempt state.'''
+
+    now = timezone.now()
+    password_matches = user.check_password(password)
+    became_locked = False
+
+    with transaction.atomic():
+        state, _ = PasswordLoginLockout.objects.select_for_update().get_or_create(user=user)
+        lockout_is_active = state.locked_until is not None and state.locked_until > now
+
+        if lockout_is_active:
+            password_accepted = False
+        else:
+            attempt_window = timedelta(minutes=settings.AUTH_PASSWORD_LOCKOUT_MINUTES)
+            lockout_expired = state.locked_until is not None
+            window_expired = (
+                state.window_started_at is not None
+                and state.window_started_at + attempt_window <= now
+            )
+            if lockout_expired or window_expired:
+                state.failed_attempts = 0
+                state.window_started_at = None
+                state.locked_until = None
+
+            if password_matches:
+                state.delete()
+                password_accepted = True
+            else:
+                if state.window_started_at is None:
+                    state.window_started_at = now
+                state.failed_attempts += 1
+                if state.failed_attempts >= settings.AUTH_PASSWORD_MAX_ATTEMPTS:
+                    state.locked_until = now + timedelta(minutes=settings.AUTH_PASSWORD_LOCKOUT_MINUTES)
+                    became_locked = True
+                state.save(
+                    update_fields=[
+                        'failed_attempts',
+                        'window_started_at',
+                        'locked_until',
+                        'updated_at',
+                    ]
+                )
+                password_accepted = False
+
+    if became_locked:
+        record_auth_event(
+            event='auth.lockout',
+            outcome='enforced',
+            request=request,
+            user=user,
+        )
+    return password_accepted
+
+
 def verify_login_password(*, pending_auth_token: str, password: str, request: object | None = None) -> dict[str, Any]:
     """Validate the password and issue an OTP-scoped pending-auth token."""
 
@@ -853,7 +919,11 @@ def verify_login_password(*, pending_auth_token: str, password: str, request: ob
 
     account = pending["account"]
     user = _get_user_for_account(account)
-    if user is None or not user.check_password(password):
+    if user is None or not _password_matches_and_updates_lockout(
+        user=user,
+        password=password,
+        request=request,
+    ):
         raise LoginFlowRejected("Incorrect email/LRN or password.")
 
     _record_otp_request(account=account, request=request)
