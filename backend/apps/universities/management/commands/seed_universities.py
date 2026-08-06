@@ -3,7 +3,6 @@ from django.db import transaction
 
 from apps.universities.models import (
     CollegeCourse,
-    DegreeType,
     PhilippineRegion,
     University,
     UniversityClassification,
@@ -24,9 +23,9 @@ SEED_UNIVERSITIES = (
         "phone": "(02) 8981-8500",
         "established_year": 1908,
         "courses": (
-            ("College of Engineering", "BSCS", "Bachelor of Science in Computer Science", DegreeType.BACHELOR_OF_SCIENCE, "Software Engineering", 4, 158, 92.0),
-            ("College of Science", "BSBIO", "Bachelor of Science in Biology", DegreeType.BACHELOR_OF_SCIENCE, "General Biology", 4, 150, 88.0),
-            ("College of Arts and Letters", "ABCOM", "Bachelor of Arts in Communication", DegreeType.BACHELOR_OF_ARTS, "Media Studies", 4, 144, 85.0),
+            ("College of Engineering", "BSCS", "Bachelor of Science in Computer Science", "Bachelor of Science", "Software Engineering", 4, 158, 92.0),
+            ("College of Science", "BSBIO", "Bachelor of Science in Biology", "Bachelor of Science", "General Biology", 4, 150, 88.0),
+            ("College of Arts and Letters", "ABCOM", "Bachelor of Arts in Communication", "Bachelor of Arts", "Media Studies", 4, 144, 85.0),
         ),
     },
     {
@@ -39,8 +38,8 @@ SEED_UNIVERSITIES = (
         "phone": "(02) 8426-6001",
         "established_year": 1859,
         "courses": (
-            ("John Gokongwei School of Management", "BSMGT", "Bachelor of Science in Management", DegreeType.BACHELOR_OF_SCIENCE, "Business Management", 4, 150, 90.0),
-            ("School of Humanities", "ABPSY", "Bachelor of Arts in Psychology", DegreeType.BACHELOR_OF_ARTS, "General Psychology", 4, 144, 87.0),
+            ("John Gokongwei School of Management", "BSMGT", "Bachelor of Science in Management", "Bachelor of Science", "Business Management", 4, 150, 90.0),
+            ("School of Humanities", "ABPSY", "Bachelor of Arts in Psychology", "Bachelor of Arts", "General Psychology", 4, 144, 87.0),
         ),
     },
     {
@@ -53,8 +52,8 @@ SEED_UNIVERSITIES = (
         "phone": "(02) 8524-4611",
         "established_year": 1911,
         "courses": (
-            ("Gokongwei College of Engineering", "BSECE", "Bachelor of Science in Electronics Engineering", DegreeType.BACHELOR_OF_SCIENCE, "Electronics", 5, 175, 89.0),
-            ("College of Computer Studies", "BSIT", "Bachelor of Science in Information Technology", DegreeType.BACHELOR_OF_SCIENCE, "Network Administration", 4, 155, 86.0),
+            ("Gokongwei College of Engineering", "BSECE", "Bachelor of Science in Electronics Engineering", "Bachelor of Science", "Electronics", 5, 175, 89.0),
+            ("College of Computer Studies", "BSIT", "Bachelor of Science in Information Technology", "Bachelor of Science", "Network Administration", 4, 155, 86.0),
         ),
     },
     {
@@ -67,8 +66,8 @@ SEED_UNIVERSITIES = (
         "phone": "(02) 8406-1611",
         "established_year": 1611,
         "courses": (
-            ("Faculty of Medicine and Surgery", "BSBIO", "Bachelor of Science in Biology", DegreeType.BACHELOR_OF_SCIENCE, "Medical Biology", 4, 152, 88.0),
-            ("College of Fine Arts and Design", "BFAAD", "Bachelor of Fine Arts in Advertising", DegreeType.BACHELOR_OF_FINE_ARTS, "Advertising Arts", 4, 144, 82.0),
+            ("Faculty of Medicine and Surgery", "BSBIO", "Bachelor of Science in Biology", "Bachelor of Science", "Medical Biology", 4, 152, 88.0),
+            ("College of Fine Arts and Design", "BFAAD", "Bachelor of Fine Arts in Advertising", "Bachelor of Fine Arts", "Advertising Arts", 4, 144, 82.0),
         ),
     },
     {
@@ -81,8 +80,8 @@ SEED_UNIVERSITIES = (
         "phone": "(074) 442-2793",
         "established_year": 1911,
         "courses": (
-            ("School of Engineering and Architecture", "BSCE", "Bachelor of Science in Civil Engineering", DegreeType.BACHELOR_OF_SCIENCE, "Structural Engineering", 5, 172, 84.0),
-            ("School of Accountancy and Business Management", "BSA", "Bachelor of Science in Accountancy", DegreeType.BACHELOR_OF_SCIENCE, "Public Accounting", 4, 160, 85.0),
+            ("School of Engineering and Architecture", "BSCE", "Bachelor of Science in Civil Engineering", "Bachelor of Science", "Structural Engineering", 5, 172, 84.0),
+            ("School of Accountancy and Business Management", "BSA", "Bachelor of Science in Accountancy", "Bachelor of Science", "Public Accounting", 4, 160, 85.0),
         ),
     },
     {
@@ -95,8 +94,8 @@ SEED_UNIVERSITIES = (
         "phone": "(032) 230-0100",
         "established_year": 1595,
         "courses": (
-            ("School of Arts and Sciences", "ABENG", "Bachelor of Arts in English Language Studies", DegreeType.BACHELOR_OF_ARTS, "Applied Linguistics", 4, 144, 80.0),
-            ("School of Engineering", "BSME", "Bachelor of Science in Mechanical Engineering", DegreeType.BACHELOR_OF_SCIENCE, "Mechatronics", 5, 170, 83.0),
+            ("School of Arts and Sciences", "ABENG", "Bachelor of Arts in English Language Studies", "Bachelor of Arts", "Applied Linguistics", 4, 144, 80.0),
+            ("School of Engineering", "BSME", "Bachelor of Science in Mechanical Engineering", "Bachelor of Science", "Mechatronics", 5, 170, 83.0),
         ),
     },
 )

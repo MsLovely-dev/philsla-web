@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import CollegeCourse, DegreeType, University
+from .models import CollegeCourse, University
 
 
 class UniversitySerializer(serializers.ModelSerializer):
@@ -53,7 +53,9 @@ class CollegeCourseSerializer(serializers.ModelSerializer):
     collegeName = serializers.CharField(source="college_name")
     programCode = serializers.CharField(source="program_code")
     programName = serializers.CharField(source="program_name")
-    degreeType = serializers.ChoiceField(source="degree_type", choices=DegreeType.choices)
+    degreeType = serializers.CharField(
+        source="degree_type", required=False, allow_blank=True, default="Bachelor of Science"
+    )
     majorSpecialization = serializers.CharField(
         source="major_specialization", required=False, allow_blank=True, default=""
     )

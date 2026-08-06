@@ -192,13 +192,15 @@ class CollegeCourseApiTests(APITestCase):
         response = self.client.get(self._list_url(university_id=999999))
         self.assertEqual(response.status_code, 404)
 
-    def test_invalid_degree_type_is_rejected(self) -> None:
+    def test_free_form_degree_type_is_accepted(self) -> None:
+        # degree_type is a free string field (no enum), so any value is stored as-is.
         response = self.client.post(
             self._list_url(),
-            {**self.course_payload, "degreeType": "Doctorate"},
+            {**self.course_payload, "degreeType": "Doctor of Philosophy"},
             format="json",
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["degreeType"], "Doctor of Philosophy")
 
     def test_unprivileged_role_cannot_manage_courses(self) -> None:
         User = get_user_model()
