@@ -72,6 +72,46 @@ class SchoolApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_duplicate_name_in_same_region_is_rejected(self) -> None:
+        first = self.client.post(reverse("schools:school_list"), self.payload, format="json")
+        self.assertEqual(first.status_code, 201)
+
+        # Same name in a different case, same region -> rejected (case-insensitive).
+        duplicate = self.client.post(
+            reverse("schools:school_list"),
+            {**self.payload, "name": self.payload["name"].upper()},
+            format="json",
+        )
+        self.assertContains(duplicate, "already exists", status_code=400)
+
+    def test_same_name_is_allowed_in_a_different_region(self) -> None:
+        first = self.client.post(reverse("schools:school_list"), self.payload, format="json")
+        self.assertEqual(first.status_code, 201)
+
+        other_region = self.client.post(
+            reverse("schools:school_list"),
+            {**self.payload, "region": "Region III"},
+            format="json",
+        )
+        self.assertEqual(other_region.status_code, 201)
+
+    def test_update_into_a_duplicate_name_is_rejected(self) -> None:
+        self.client.post(reverse("schools:school_list"), self.payload, format="json")
+        second = self.client.post(
+            reverse("schools:school_list"),
+            {**self.payload, "name": "Manila Science High School"},
+            format="json",
+        )
+        second_id = second.data["id"]
+
+        # Renaming the second school onto the first's name (same region) -> rejected.
+        collision = self.client.patch(
+            reverse("schools:school_detail", kwargs={"school_id": second_id}),
+            {"name": self.payload["name"]},
+            format="json",
+        )
+        self.assertContains(collision, "already exists", status_code=400)
+
     def test_unprivileged_role_cannot_manage_schools(self) -> None:
         User = get_user_model()
         student = User.objects.create_user(

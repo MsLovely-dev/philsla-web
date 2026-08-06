@@ -27,3 +27,18 @@ class SchoolSerializer(serializers.ModelSerializer):
         if not cleaned:
             raise serializers.ValidationError("School name is required.")
         return cleaned
+
+    def validate(self, attrs):
+        # A school name must be unique within a region (case-insensitive).
+        # Names may repeat across regions (real DepEd SHS naming).
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        region = attrs.get("region", getattr(self.instance, "region", None))
+        if name and region:
+            duplicates = School.objects.filter(name__iexact=name.strip(), region=region)
+            if self.instance is not None:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise serializers.ValidationError(
+                    {"name": "A school with this name already exists in this region."}
+                )
+        return attrs
