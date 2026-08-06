@@ -226,14 +226,14 @@ export class BackendQuestionBankService {
   }
 
   private mapListResult(result: QuestionListResult): ServiceResult<QuestionBankItem[]> {
-    if (!result.ok) {
+    if (result.ok === false) {
       return result;
     }
     return { ...result, data: result.data.map((item) => this.fromApiQuestion(item)) };
   }
 
   private mapItemResult(result: QuestionItemResult): ServiceResult<QuestionBankItem> {
-    if (!result.ok) {
+    if (result.ok === false) {
       return result;
     }
     return { ...result, data: this.fromApiQuestion(result.data) };

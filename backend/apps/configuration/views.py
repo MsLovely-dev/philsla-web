@@ -1,6 +1,6 @@
-from django.shortcuts import get_object_or_404
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
@@ -12,8 +12,26 @@ from apps.accounts.roles import PortalRole
 from apps.core.pagination import StandardPageNumberPagination
 
 from .audit import record_configuration_event
-from .models import ConfigurableField
-from .serializers import ConfigurableFieldSerializer
+from .models import CollegeCourse, ConfigurableField, University
+from .permissions import UniversityRegistryPermission, assigned_university_ids
+from .serializers import (
+    CollegeCourseInputSerializer,
+    CollegeCourseListQuerySerializer,
+    CollegeCourseSerializer,
+    ConfigurableFieldSerializer,
+    RegistryVersionSerializer,
+    UniversityInputSerializer,
+    UniversityListQuerySerializer,
+    UniversitySerializer,
+)
+from .services import (
+    create_college_course,
+    create_university,
+    delete_college_course,
+    delete_university,
+    update_college_course,
+    update_university,
+)
 
 
 STUDENT_REGISTRATION_MODULE = "student_registration"
@@ -202,4 +220,232 @@ class ConfigurableFieldAdminDetailView(APIView):
             assert_can_delete(field)
             field.delete()
         record_configuration_event(event="configurable_field_deleted", outcome="success", request=request, user=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+UNIVERSITY_ORDERING = {
+    "code": "code",
+    "name": "name",
+    "region": "region",
+    "city": "city",
+    "createdAt": "created_at",
+    "-createdAt": "-created_at",
+}
+COURSE_ORDERING = {
+    "programCode": "program_code",
+    "programName": "program_name",
+    "collegeName": "college_name",
+    "createdAt": "created_at",
+    "-createdAt": "-created_at",
+}
+
+
+def actor_id(request):
+    return getattr(request.user, "user_id", request.user.id)
+
+
+def restrict_universities_to_assigned_scope(request, universities):
+    assigned_ids = assigned_university_ids(request)
+    if assigned_ids is None:
+        return universities
+    return universities.filter(id__in=assigned_ids)
+
+
+class UniversityAdminListView(APIView):
+    permission_classes = [UniversityRegistryPermission]
+    creates_university = True
+
+    def get(self, request) -> Response:
+        query_serializer = UniversityListQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        query = query_serializer.validated_data
+        scoped_universities = restrict_universities_to_assigned_scope(request, University.objects.all())
+        summary = scoped_universities.aggregate(
+            totalUniversities=Count("id", distinct=True),
+            publicUniversities=Count("id", filter=Q(classification="Public"), distinct=True),
+            privateUniversities=Count("id", filter=Q(classification="Private"), distinct=True),
+            totalDegreeCourses=Count("college_courses"),
+        )
+        universities = scoped_universities.annotate(course_count=Count("college_courses"))
+        if query.get("search"):
+            search = query["search"]
+            universities = universities.filter(
+                Q(code__icontains=search)
+                | Q(name__icontains=search)
+                | Q(city__icontains=search)
+            )
+        if query.get("classification"):
+            universities = universities.filter(classification=query["classification"])
+        if query.get("region"):
+            universities = universities.filter(region=query["region"])
+        if query.get("status"):
+            universities = universities.filter(status=query["status"])
+        universities = universities.order_by(UNIVERSITY_ORDERING[query["ordering"]], "id")
+
+        paginator = StandardPageNumberPagination()
+        page = paginator.paginate_queryset(universities, request, view=self)
+        response = paginator.get_paginated_response(UniversitySerializer(page, many=True).data)
+        response.data["summary"] = summary
+        return response
+
+    def post(self, request) -> Response:
+        serializer = UniversityInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        data.pop("expected_version", None)
+        university = create_university(actor_id=actor_id(request), data=data)
+        record_configuration_event(event="university_created", outcome="success", request=request, user=request.user)
+        return Response(UniversitySerializer(university).data, status=status.HTTP_201_CREATED)
+
+
+class UniversityAdminDetailView(APIView):
+    permission_classes = [UniversityRegistryPermission]
+
+    def get_object(self, request, university_id) -> University:
+        university = get_object_or_404(University.objects.annotate(course_count=Count("college_courses")), id=university_id)
+        self.check_object_permissions(request, university)
+        return university
+
+    def get(self, request, university_id) -> Response:
+        return Response(UniversitySerializer(self.get_object(request, university_id)).data)
+
+    def patch(self, request, university_id) -> Response:
+        current = self.get_object(request, university_id)
+        serializer = UniversityInputSerializer(current, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        expected_version = data.pop("expected_version")
+        university = update_university(university_id=university_id, expected_version=expected_version, data=data)
+        record_configuration_event(event="university_updated", outcome="success", request=request, user=request.user)
+        return Response(UniversitySerializer(university).data)
+
+    def put(self, request, university_id) -> Response:
+        current = self.get_object(request, university_id)
+        serializer = UniversityInputSerializer(current, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        expected_version = data.pop("expected_version")
+        university = update_university(university_id=university_id, expected_version=expected_version, data=data)
+        record_configuration_event(event="university_updated", outcome="success", request=request, user=request.user)
+        return Response(UniversitySerializer(university).data)
+
+    def delete(self, request, university_id) -> Response:
+        self.get_object(request, university_id)
+        version_serializer = RegistryVersionSerializer(data=request.query_params)
+        version_serializer.is_valid(raise_exception=True)
+        delete_university(university_id=university_id, expected_version=version_serializer.validated_data["version"])
+        record_configuration_event(event="university_deleted", outcome="success", request=request, user=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CollegeCourseAdminListView(APIView):
+    permission_classes = [UniversityRegistryPermission]
+
+    def get_university(self, request, university_id) -> University:
+        university = get_object_or_404(University, id=university_id)
+        self.check_object_permissions(request, university)
+        return university
+
+    def get(self, request, university_id) -> Response:
+        university = self.get_university(request, university_id)
+        query_serializer = CollegeCourseListQuerySerializer(data=request.query_params)
+        query_serializer.is_valid(raise_exception=True)
+        query = query_serializer.validated_data
+        courses = university.college_courses.select_related("university")
+        if query.get("search"):
+            search = query["search"]
+            courses = courses.filter(
+                Q(program_code__icontains=search)
+                | Q(program_name__icontains=search)
+                | Q(college_name__icontains=search)
+            )
+        if query.get("collegeName"):
+            courses = courses.filter(college_name=query["collegeName"])
+        if query.get("status"):
+            courses = courses.filter(status=query["status"])
+        courses = courses.order_by(COURSE_ORDERING[query["ordering"]], "id")
+
+        paginator = StandardPageNumberPagination()
+        page = paginator.paginate_queryset(courses, request, view=self)
+        return paginator.get_paginated_response(CollegeCourseSerializer(page, many=True).data)
+
+    def post(self, request, university_id) -> Response:
+        university = self.get_university(request, university_id)
+        serializer = CollegeCourseInputSerializer(data=request.data, context={"university_id": university.id})
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        data.pop("expected_version", None)
+        course = create_college_course(
+            university=university,
+            actor_id=actor_id(request),
+            data=data,
+        )
+        record_configuration_event(event="college_course_created", outcome="success", request=request, user=request.user)
+        return Response(CollegeCourseSerializer(course).data, status=status.HTTP_201_CREATED)
+
+
+class CollegeCourseAdminDetailView(APIView):
+    permission_classes = [UniversityRegistryPermission]
+
+    def get_object(self, request, university_id, course_id) -> CollegeCourse:
+        course = get_object_or_404(
+            CollegeCourse.objects.select_related("university"),
+            id=course_id,
+            university_id=university_id,
+        )
+        self.check_object_permissions(request, course)
+        return course
+
+    def get(self, request, university_id, course_id) -> Response:
+        return Response(CollegeCourseSerializer(self.get_object(request, university_id, course_id)).data)
+
+    def patch(self, request, university_id, course_id) -> Response:
+        current = self.get_object(request, university_id, course_id)
+        serializer = CollegeCourseInputSerializer(
+            current,
+            data=request.data,
+            partial=True,
+            context={"university_id": university_id},
+        )
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        expected_version = data.pop("expected_version")
+        course = update_college_course(
+            university_id=university_id,
+            course_id=course_id,
+            expected_version=expected_version,
+            data=data,
+        )
+        record_configuration_event(event="college_course_updated", outcome="success", request=request, user=request.user)
+        return Response(CollegeCourseSerializer(course).data)
+
+    def put(self, request, university_id, course_id) -> Response:
+        current = self.get_object(request, university_id, course_id)
+        serializer = CollegeCourseInputSerializer(
+            current,
+            data=request.data,
+            context={"university_id": university_id},
+        )
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        expected_version = data.pop("expected_version")
+        course = update_college_course(
+            university_id=university_id,
+            course_id=course_id,
+            expected_version=expected_version,
+            data=data,
+        )
+        record_configuration_event(event="college_course_updated", outcome="success", request=request, user=request.user)
+        return Response(CollegeCourseSerializer(course).data)
+
+    def delete(self, request, university_id, course_id) -> Response:
+        self.get_object(request, university_id, course_id)
+        version_serializer = RegistryVersionSerializer(data=request.query_params)
+        version_serializer.is_valid(raise_exception=True)
+        delete_college_course(
+            university_id=university_id,
+            course_id=course_id,
+            expected_version=version_serializer.validated_data["version"],
+        )
+        record_configuration_event(event="college_course_deleted", outcome="success", request=request, user=request.user)
         return Response(status=status.HTTP_204_NO_CONTENT)

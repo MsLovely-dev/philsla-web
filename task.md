@@ -10,29 +10,29 @@
 | Decision date | 2026-08-05 |
 | Target iteration | **TBD — requires explicit sprint reprioritization** |
 | Plan status | **Approved — Phases 0–2 only** |
-| Implementation status | **Documentation phases executed; application code not authorized** |
+| Implementation status | **Ticket 001 remains documentation-only; separate Exam Sets integration implemented** |
 
 ### Problem
 
-The sprint cannot responsibly implement the Exam Blueprint maintenance table while the related Exam Sets capability has no backend entity or API contract. Splitting the owner's bandwidth would also conflict with the sprint goal in `build_plan.md`: deliver a clear, honest Exam Sets prototype narrative rather than imply production readiness.
+The sprint cannot responsibly implement the Exam Blueprint maintenance table while its catalog ownership, lifecycle, and authorization requirements remain unapproved. That deferral is unchanged. A separate reviewed and approved plan has since integrated the Exam Sets administration screen with the backend; that work does not authorize or implement Ticket 001.
 
 ### Evidence reviewed
 
-- `build_plan.md` marks **Maintenance Table – Exam Blueprint** as deferred and assigns the owner's full bandwidth to the Exam Sets narrative.
-- `backend/apps/exams/urls.py` exposes blueprint and question endpoints, but no `/exam-sets/` endpoint.
-- `backend/apps/exams/models.py` contains blueprint and question-bank models, but no Exam Set model/entity.
-- `frontend/src/pages/admin/hub/ExamSets.tsx` uses mock data and browser `localStorage`; it does not use a backend Exam Sets service.
+- `build_plan.md` continues to mark **Maintenance Table – Exam Blueprint** as deferred and now records the separately implemented Exam Sets integration.
+- `backend/apps/exams/urls.py` exposes versioned Exam Set list, detail, clone, and transition routes.
+- `backend/apps/exams/models.py` defines `ExamSet` and its assembly, validation, and workflow records.
+- `frontend/src/pages/admin/hub/ExamSets.tsx` consumes a typed backend service and no longer uses mock/browser-local state as its authoritative data source.
 - `frontend/src/pages/admin/maintenance/ExamBlueprintMaintenance.tsx` is a UI-only table whose records remain in component state and are not persisted through an authoritative backend API.
 
 ### Decision / solution
 
-Defer Ticket 001 for this sprint. Do not add or change the maintenance UI, frontend service, backend model, API endpoint, migration, permission, or test under this ticket. Reallocate the available effort to an Exam Sets narrative that clearly separates:
+Defer Ticket 001 for this sprint. Do not add or change the maintenance UI, frontend service, backend model, API endpoint, migration, permission, or test under this ticket. The separately approved Exam Sets implementation now establishes:
 
-1. **What exists now:** a frontend prototype backed by mock/browser-local data.
-2. **What is missing:** an approved Exam Set domain model, lifecycle, backend API, authorization rules, persistence, and audit behavior.
-3. **What must be decided next:** the boundary and relationship between an Exam Blueprint and an Exam Set before either the Exam Sets backend or its dependent maintenance behavior is designed.
+1. **What exists now:** an API-backed Exam Sets workflow with typed frontend transport, backend lifecycle enforcement, approved endpoint roles, and focused backend/frontend/browser tests.
+2. **What remains before production use:** resolution or acceptance of the recorded frontend baseline failures, PostgreSQL-compatible migration rehearsal, and release review of the documented security and operational caveats.
+3. **What must be decided next:** the separate ownership and lifecycle of Exam Blueprint maintenance catalogs before Ticket 001 may resume.
 
-This ticket records a scope decision only. Any prototype-label change or other Exam Sets code change belongs to a separate reviewed ticket and is not authorized by this plan.
+This ticket records a scope decision only. The Exam Sets code changes were authorized by the separately reviewed plan at `docs/superpowers/i.sandoval/plans/2026-08-05-exam-sets-api-integration.md`; they do not change this ticket's deferred status.
 
 ### Review-only action plan
 
@@ -47,10 +47,10 @@ This ticket records a scope decision only. Any prototype-label change or other E
 ### Security requirements
 
 - Do not put real exam questions, answer keys, assessment packages, candidate/student data, credentials, tokens, or other sensitive information in the narrative, repository, fixtures, logs, screenshots, or demo artifacts.
-- Label browser-local/mock Exam Sets behavior as a prototype; do not describe the current mock hash/signature behavior as production cryptography or a security control.
-- Treat frontend routes and validation as usability controls only. A future backend must enforce authentication, approved role/permission rules, object-level authorization, input validation, lifecycle transitions, and audit logging.
-- Do not persist sensitive assessment content in browser `localStorage`. A future storage design requires a reviewed threat model and approved data-handling controls.
-- Do not create an API, model, migration, or integration until its contract, authorization rules, validation rules, audit events, and failure behavior have been reviewed.
+- Do not reintroduce browser-local/mock Exam Sets state as authoritative storage or describe removed mock hash/signature behavior as production cryptography or a security control.
+- Treat frontend routes and validation as usability controls only. The Exam Sets backend enforces authentication, approved endpoint roles, input validation, and lifecycle transitions; narrower object-level assignment remains `TBD` because no ownership model exists.
+- Do not persist sensitive assessment content in browser `localStorage`; the integrated Exam Sets workflow uses the backend as authoritative storage.
+- Do not create an Exam Blueprint maintenance API, model, migration, or integration until its contract, authorization rules, validation rules, audit events, and failure behavior have been reviewed.
 - Keep errors and logs free of sensitive assessment and identity data.
 
 ### Resumption gates
@@ -69,10 +69,10 @@ Ticket 001 may move out of `Deferred` only when all of the following are true:
 - The ticket is visibly recorded as **Deferred**, not `In progress` or `Done`.
 - The deferral rationale and repository evidence are documented.
 - No application code, configuration, schema, endpoint, migration, or test is changed for this ticket.
-- The owner's current deliverable is the Exam Sets narrative, not the Exam Blueprint maintenance table.
-- The narrative distinguishes prototype behavior from production capability and uses no sensitive or real exam content.
+- The owner's implemented deliverable is the separately reviewed Exam Sets integration, not the Exam Blueprint maintenance table.
+- The implementation log distinguishes verified behavior from remaining release caveats and uses no sensitive or real exam content.
 - Resuming the ticket requires a separately reviewed, security-aware implementation plan.
 
 ### Review gate
 
-No implementation may begin from this entry. The user must review and approve this plan first. Approval confirms only the deferral and narrative scope; it does not authorize application code changes.
+No Exam Blueprint maintenance implementation may begin from this entry. Approval confirms only the Ticket 001 deferral and does not authorize maintenance-table application changes. Exam Sets implementation authorization is recorded in its separate reviewed plan and implementation log.

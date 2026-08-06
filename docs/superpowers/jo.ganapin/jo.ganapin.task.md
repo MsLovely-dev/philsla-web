@@ -12,6 +12,7 @@ Per-developer working reference for Joshua Ganapin (short code `jo.ganapin`), pe
 | Decision date | 2026-08-05 |
 | Worktree | `worktrees/jo.ganapin/` |
 | Branch | `jo.ganapin/qr-scanning` |
+| BRD | [`brd/2026-08-05-qr-scanning-brd.md`](brd/2026-08-05-qr-scanning-brd.md) |
 | Spec | [`specs/2026-08-05-qr-scanning-design.md`](specs/2026-08-05-qr-scanning-design.md) |
 | Plan | [`plans/2026-08-05-qr-scanning-plan.md`](plans/2026-08-05-qr-scanning-plan.md) |
 | Implementation log | [`implement/jo.ganapin.implement.md`](implement/jo.ganapin.implement.md) |

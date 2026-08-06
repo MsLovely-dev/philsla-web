@@ -326,7 +326,7 @@ class ExamSetSerializer(serializers.Serializer):
     exam_type = serializers.CharField(required=False, allow_blank=True, default="admission")
     instructions = serializers.CharField(required=False, allow_blank=True, default="")
     duration_minutes = serializers.IntegerField(min_value=1)
-    status = serializers.CharField(required=False, allow_blank=True, default="draft")
+    status = serializers.CharField(read_only=True)
     blueprint_version_id = serializers.IntegerField(required=False, allow_null=True)
     academic_year_id = serializers.IntegerField(required=False, allow_null=True)
     academic_year = serializers.CharField(required=False, allow_blank=True, default="")

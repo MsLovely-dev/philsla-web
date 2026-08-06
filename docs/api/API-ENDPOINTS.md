@@ -2,7 +2,7 @@
 
 ## Current state
 
-The baseline health and authentication boundaries plus the first student-application slice are implemented. The frontend currently uses mock/local services. Unimplemented business paths below remain a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
+The baseline health and authentication boundaries, the first student-application slice, and university registry maintenance are implemented. Most frontend modules still use mock/local services; the universities maintenance page uses the backend university registry adapter. Unimplemented business paths below remain a capability inventory rather than an approved contract. OpenAPI 3 through DRF Spectacular is the accepted machine-readable contract approach after [ADR-014](../decisions/ADR-014-API-SCHEMA-TOOLING-AND-PUBLICATION.md), but schema tooling is not installed yet.
 
 ## Implemented baseline endpoints
 
@@ -45,6 +45,16 @@ The baseline health and authentication boundaries plus the first student-applica
 | `POST` | `/api/v1/applications/registration/identity/manual-selfie-face/` | Public; device/network throttled | `AllowAny` | Validate a manual-registration captured selfie server-side without storing media | Implemented |
 | `GET`, `POST` | `/api/v1/configuration/admin/fields/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List or create configurable field maintenance rows; supports `?module=...`, `?type=...`, `?search=...`, `?status=true\|false`, `?priority=...`, `?inputType=...`, and opt-in pagination with `?page=...&pageSize=...` | Implemented |
 | `PUT`, `PATCH`, `DELETE` | `/api/v1/configuration/admin/fields/{fieldId}/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | Update or delete a configurable field maintenance row | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/` | Required bearer access token | Module 38 `READ` for an allowed registry role; university scope enforced for `UNIVERSITY_ADMIN` | Return a paginated, filterable university registry with course counts and authorized global summary totals | Implemented |
+| `POST` | `/api/v1/configuration/admin/universities/` | Required bearer access token | Module 38 `WRITE`; assigned `UNIVERSITY_ADMIN` accounts cannot create institutions | Create a university registry record | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/{universityId}/` | Required bearer access token | Module 38 `READ` for an allowed registry role; university scope enforced for `UNIVERSITY_ADMIN` | Read one university registry record | Implemented |
+| `PUT`, `PATCH` | `/api/v1/configuration/admin/universities/{universityId}/` | Required bearer access token | Module 38 `EDIT`; university scope enforced for `UNIVERSITY_ADMIN` | Update a university using optimistic concurrency | Implemented |
+| `DELETE` | `/api/v1/configuration/admin/universities/{universityId}/` | Required bearer access token | Module 38 `DELETE`; university scope enforced for `UNIVERSITY_ADMIN` | Delete a university and cascade-delete its college courses | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/{universityId}/courses/` | Required bearer access token | Module 38 `READ` for an allowed registry role; university scope enforced for `UNIVERSITY_ADMIN` | Return the university's paginated, filterable college courses | Implemented |
+| `POST` | `/api/v1/configuration/admin/universities/{universityId}/courses/` | Required bearer access token | Module 38 `WRITE`; university scope enforced for `UNIVERSITY_ADMIN` | Create a college course under the path university | Implemented |
+| `GET` | `/api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/` | Required bearer access token | Module 38 `READ` for an allowed registry role; university scope enforced for `UNIVERSITY_ADMIN` | Read one college course under the path university | Implemented |
+| `PUT`, `PATCH` | `/api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/` | Required bearer access token | Module 38 `EDIT`; university scope enforced for `UNIVERSITY_ADMIN` | Update a college course using optimistic concurrency | Implemented |
+| `DELETE` | `/api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/` | Required bearer access token | Module 38 `DELETE`; university scope enforced for `UNIVERSITY_ADMIN` | Delete one college course | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
 | `GET` | `/api/v1/results/exam-reviews/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | List persisted Exam Review queue summaries | Implemented |
@@ -170,6 +180,42 @@ Test coverage:
 - Seed command tests: `backend/apps/results/tests/test_score_management_seed_command.py`.
 | `GET` | `/api/v1/analytics/national/overview/` | Required bearer access token | `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, or `SYSTEM_ADMIN` | Return aggregated national registration metrics computed from real `StudentApplication` data | Implemented |
 | `GET` | `/api/v1/applications/{applicationId}/attachments/{attachmentId}/` | Bearer token | Application owner for editable own records, or `SYSTEM_ADMIN`/`ADMISSIONS_REVIEWER` for non-draft review records | Stream a private dynamic registration attachment | Implemented |
+
+### `GET /api/v1/configuration/admin/universities/`
+
+Returns the standard DRF page-number shape. It accepts `page`, `pageSize` (maximum 10), optional `search` across code/name/city, exact `classification`, `region`, and `status` filters, and `ordering` values `code`, `name`, `region`, `city`, `createdAt`, or `-createdAt`. Default ordering is stable by `name`, then opaque `id`. Each response also includes `summary: {totalUniversities, publicUniversities, privateUniversities, totalDegreeCourses}` for the full authorized university scope, independent of the requested page and list filters.
+
+Each result contains `{id, code, name, classification, region, city, presidentRector, email, phone, establishedYear, status, courseCount, version, createdAt, updatedAt}`. Identifiers are opaque UUID strings. This endpoint returns institutional directory data only; it does not return student, applicant, account, or assessment data.
+
+### `POST /api/v1/configuration/admin/universities/`
+
+Creates a university from `{code, name, classification, region, city, presidentRector, email, phone, establishedYear, status}`. The backend trims text, uppercases `code`, validates email and choice values, rejects future establishment years, and enforces a unique code. The successful response is the persisted university with `201 Created` and `version: 1`.
+
+### `GET /api/v1/configuration/admin/universities/{universityId}/`
+
+Returns one university in the same shape as a collection result, including the current `courseCount` and `version`. An unknown opaque identifier returns `404 NOT_FOUND`.
+
+`PUT` sends the complete create fields plus `expectedVersion`; `PATCH` sends changed fields plus `expectedVersion`. A stale version returns `409 CONFLICT` without overwriting newer data, and a successful update increments `version`. `DELETE` supplies the last observed version as `?version={version}` and returns `204 No Content`; deletion cascades to the university's college courses inside the same database transaction.
+
+### `GET /api/v1/configuration/admin/universities/{universityId}/courses/`
+
+Returns the standard paginated shape for the path university. It accepts `page`, `pageSize` (maximum 10), optional `search` across program code/name/college, exact `collegeName` and `status` filters, and `ordering` values `programCode`, `programName`, `collegeName`, `createdAt`, or `-createdAt`. Default ordering is stable by `programCode`, then opaque `id`.
+
+Each result contains `{id, universityId, universityCode, collegeName, programCode, programName, degreeType, majorSpecialization, durationYears, totalUnits, cutoffPercentile, status, version, createdAt, updatedAt}`.
+
+### `POST /api/v1/configuration/admin/universities/{universityId}/courses/`
+
+Creates a course from `{collegeName, programCode, programName, degreeType, majorSpecialization, durationYears, totalUnits, cutoffPercentile, status}`. The path supplies the authoritative university; a client cannot move a course by submitting another university identifier. Program code is uppercased and must be unique within the university. Duration is 1–6 years, total units is 1–500, and cutoff percentile is 0–100. The successful response has `201 Created` and `version: 1`.
+
+### `GET /api/v1/configuration/admin/universities/{universityId}/courses/{courseId}/`
+
+Returns one course only when it belongs to the path university. `PUT` and `PATCH` require `expectedVersion` and increment the version on success. `DELETE` requires `?version={version}` and returns `204 No Content`. A stale version returns `409 CONFLICT`.
+
+All university registry endpoints require an authenticated `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` account and the corresponding structured `MOD_38_{ACTION}` permission. `UNIVERSITY_ADMIN` reads and writes are limited to UUIDs in the server-owned `scopes.universityIds` list and cannot create a university. The default role catalog grants `DELETE` only to `SYSTEM_ADMIN`; account-specific permission differences remain authoritative. Mutation events are written to the safe configuration audit logger without request/response bodies or institutional contact values. Create operations do not accept an idempotency key; unique university and per-university program codes prevent duplicate logical records. Updates and deletes use the version controls described above, and duplicate-code update races return `409 CONFLICT`. No endpoint-specific throttle is configured beyond authenticated API and deployment controls; a production maintenance-write rate remains `TBD`.
+
+The data migration is `backend/apps/configuration/migrations/0007_university_collegecourse_and_more.py`. Forward migration creates both empty registry tables and their indexes/constraints. Rolling back to `configuration.0006` drops both tables and all registry data, so export or database backup is required before rollback in an environment containing records.
+
+Test coverage: `backend/apps/configuration/tests/test_university_registry_endpoints.py`. Frontend adapter and page behavior coverage: `frontend/src/services/backendUniversityService.test.ts` and `frontend/src/pages/admin/maintenance/UniversitiesListMaintenance.test.tsx`.
 
 ### Student application draft and submission
 
@@ -965,6 +1011,69 @@ Test coverage:
 
 - Behavior tests: `backend/apps/analytics/tests/test_national_overview.py`.
 - Contract guard: `backend/apps/core/tests/test_api_contract.py`.
+
+## Exam management
+
+### `/api/v1/exams/blueprints/`
+
+Authenticated Blueprint list responses and successful create or update responses include
+`current_version_id`. The value is the current Blueprint Version identifier required as
+`blueprint_version_id` when creating or updating an Exam Set. It is `null` only when a
+Blueprint has no current version.
+
+This is an additive response field. Existing authentication and role requirements for
+Blueprint operations are unchanged.
+
+### `/api/v1/exams/exam-sets/`
+
+Exam Set administration is implemented through these authenticated endpoints:
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| `GET`, `POST` | `/api/v1/exams/exam-sets/` | List Exam Sets or create a new draft |
+| `GET`, `PUT`, `PATCH`, `DELETE` | `/api/v1/exams/exam-sets/{exam_set_id}/` | Read, edit, or delete one Exam Set |
+| `POST` | `/api/v1/exams/exam-sets/{exam_set_id}/clone/` | Clone an Exam Set into a new draft |
+| `POST` | `/api/v1/exams/exam-sets/{exam_set_id}/transition/` | Apply an allowed lifecycle transition |
+
+Only authenticated `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN` accounts may use these
+endpoints. The current data model does not assign Exam Sets to a region, institution,
+or other administrative scope, so these roles operate against the nationwide Exam Set
+collection. Any future narrower object-level assignment rule requires a reviewed model
+and contract change and remains `TBD`.
+
+Creation always produces `DRAFT`, regardless of any client-submitted `status`. Metadata
+and item edits are allowed only while an Exam Set is `DRAFT` or
+`REVISION_REQUIRED`. Deletion is allowed only for `DRAFT`, `REVISION_REQUIRED`, or
+`ARCHIVED` records. The lifecycle graph is authoritative on the backend:
+
+```text
+DRAFT -> ACADEMIC_REVIEW
+ACADEMIC_REVIEW -> REVISION_REQUIRED | APPROVED
+REVISION_REQUIRED -> ACADEMIC_REVIEW
+APPROVED -> PUBLISHED
+PUBLISHED -> ARCHIVED
+ARCHIVED -> no further transition
+```
+
+Transitions into `ACADEMIC_REVIEW`, `APPROVED`, or `PUBLISHED` rerun Exam Set
+validation. Failed validations block all three transitions; warnings also block approval
+and publication. Invalid transitions return HTTP `409` with code
+`EXAM_SET_LIFECYCLE_CONFLICT`; validation-gate failures return HTTP `409` with code
+`EXAM_SET_VALIDATION_CONFLICT`. Missing authentication returns `401`, and an
+authenticated account outside the permitted roles receives `403`.
+
+Create and update payloads reference the authoritative Blueprint Version through
+`blueprint_version_id` and Question Bank records through each item's `question_id`.
+Unknown Blueprint Version, academic-year, question, or Blueprint Section references
+return `400 VALIDATION_FAILED`. Duplicate questions and sections that belong to a
+different Blueprint Version are also rejected. Reference validation completes before
+existing items are replaced, so a rejected update preserves the authoritative record.
+An academic year may be supplied by ID or exact name; when both are present they must
+identify the same record, and an explicitly invalid ID never falls back to the name.
+Update and transition workflows lock the Exam Set row for the duration of the database
+transaction so a stale request cannot overwrite or bypass a concurrent lifecycle change.
+The browser must not treat route guards, submitted status values, or local storage as
+authorization or authoritative Exam Set state.
 
 ## Candidate endpoint groups
 

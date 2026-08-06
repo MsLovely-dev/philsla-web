@@ -97,6 +97,7 @@ const STUDENT: readonly UserRole[] = ['STUDENT'];
 const REVIEWER = withSystemAdmin('ADMISSIONS_REVIEWER');
 const UNIVERSITY = withSystemAdmin('UNIVERSITY_ADMIN');
 const HUB = withSystemAdmin('ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN');
+const EXAM_SET_MANAGEMENT = withSystemAdmin('EXAM_ADMINISTRATOR');
 const PROCTOR = withSystemAdmin('PROCTOR', 'PROCTOR_ADMIN');
 const OVERSIGHT = withSystemAdmin('EXECUTIVE', 'GOVERNMENT', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR');
 
@@ -134,7 +135,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/hub/review', element: <ExamReviewList />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN') },
   { path: '/admin/hub/review/:id', element: <ExamReviewDetail />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN') },
   { path: '/admin/hub/results-release', element: <ResultsRelease />, access: 'protected', allowedRoles: withSystemAdmin('EXAM_ADMINISTRATOR') },
-  { path: '/admin/hub/exam-sets/content', element: <HubExamSets />, access: 'protected', allowedRoles: HUB },
+  { path: '/admin/hub/exam-sets/content', element: <HubExamSets />, access: 'protected', allowedRoles: EXAM_SET_MANAGEMENT },
 
   { path: '/admin/results/scores', element: <ScoreManagement />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
   { path: '/admin/results/scores/:batchId/:candidateId', element: <ScoreCandidateDetail />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
