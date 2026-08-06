@@ -406,3 +406,54 @@ class MaintenanceWriteThrottleTests(APITestCase):
             self.assertEqual(self.client.get(url).status_code, 200)
             self.assertEqual(self.client.get(url).status_code, 200)
             self.assertEqual(self.client.get(url).status_code, 200)
+
+
+class UniversityListQueryTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="system_admin", email="system.admin@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(self.user)
+        for index in range(25):
+            University.objects.create(
+                classification="Public" if index % 2 == 0 else "Private",
+                name=f"University {index:02d}",
+                region="NCR" if index < 20 else "Region VII",
+                city="Quezon City",
+                status="Active" if index % 3 else "Inactive",
+            )
+        self.url = reverse("universities:university_list")
+
+    def test_paginates_with_default_page_size_20(self) -> None:
+        first = self.client.get(self.url, {"page": 1})
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data["count"], 25)
+        self.assertEqual(len(first.data["results"]), 20)
+        self.assertIsNotNone(first.data["next"])
+        second = self.client.get(self.url, {"page": 2})
+        self.assertEqual(len(second.data["results"]), 5)
+
+    def test_returns_plain_array_without_pagination_params(self) -> None:
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 25)
+
+    def test_search_matches_name_code_city(self) -> None:
+        response = self.client.get(self.url, {"page": 1, "search": "University 01"})
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["name"], "University 01")
+
+    def test_classification_region_status_filters(self) -> None:
+        public = self.client.get(self.url, {"page": 1, "pageSize": 100, "classification": "Public"})
+        self.assertTrue(all(item["classification"] == "Public" for item in public.data["results"]))
+        region = self.client.get(self.url, {"page": 1, "pageSize": 100, "region": "Region VII"})
+        self.assertEqual(region.data["count"], 5)
+        inactive = self.client.get(self.url, {"page": 1, "pageSize": 100, "status": "Inactive"})
+        self.assertTrue(all(item["status"] == "Inactive" for item in inactive.data["results"]))
+
+    def test_ordering_descending_by_name(self) -> None:
+        response = self.client.get(self.url, {"page": 1, "pageSize": 100, "ordering": "-name"})
+        names = [item["name"] for item in response.data["results"]]
+        self.assertEqual(names, sorted(names, reverse=True))

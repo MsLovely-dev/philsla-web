@@ -1,11 +1,12 @@
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
+from apps.core.pagination import RegistryPageNumberPagination
 from apps.core.throttling import MaintenanceWriteRateThrottle
 
 from .audit import record_college_course_event, record_university_event
@@ -19,6 +20,15 @@ UNIVERSITY_MANAGEMENT_ROLES = require_roles(
     "ADMISSIONS_REVIEWER",
 )
 
+UNIVERSITY_ORDERING = {
+    "name": "name",
+    "-name": "-name",
+    "code": "code",
+    "-code": "-code",
+    "createdAt": "created_at",
+    "-createdAt": "-created_at",
+}
+
 
 class UniversityListCreateView(APIView):
     permission_classes = [RoleRequiredPermission]
@@ -28,8 +38,33 @@ class UniversityListCreateView(APIView):
 
     def get(self, request) -> Response:
         universities = University.objects.annotate(course_count=Count("courses"))
-        serializer = UniversitySerializer(universities, many=True)
-        return Response(serializer.data)
+
+        search = request.query_params.get("search")
+        if search:
+            universities = universities.filter(
+                Q(code__icontains=search)
+                | Q(name__icontains=search)
+                | Q(city__icontains=search)
+            )
+        classification = request.query_params.get("classification")
+        if classification:
+            universities = universities.filter(classification=classification)
+        region = request.query_params.get("region")
+        if region:
+            universities = universities.filter(region=region)
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            universities = universities.filter(status=status_filter)
+
+        ordering = UNIVERSITY_ORDERING.get(request.query_params.get("ordering", "name"), "name")
+        universities = universities.order_by(ordering, "id")
+
+        # Paginate only when asked, so existing plain-array callers keep working.
+        if "page" in request.query_params or "pageSize" in request.query_params:
+            paginator = RegistryPageNumberPagination()
+            page = paginator.paginate_queryset(universities, request, view=self)
+            return paginator.get_paginated_response(UniversitySerializer(page, many=True).data)
+        return Response(UniversitySerializer(universities, many=True).data)
 
     def post(self, request) -> Response:
         serializer = UniversitySerializer(data=request.data)
