@@ -986,6 +986,9 @@ def resend_login_otp(*, otp_pending_auth_token: str, request: object | None = No
     if remaining_absolute_seconds < settings.AUTH_OTP_MIN_RESEND_REMAINING_SECONDS:
         raise LoginFlowRejected("Verification code expired. Please start login again to request a new code.")
 
+    if int(pending.get("resends", 0)) >= settings.AUTH_OTP_MAX_RESENDS:
+        raise LoginOtpRateLimited("You have reached the maximum number of code resends for this login attempt.")
+
     last_sent_at = _parse_cached_datetime(pending.get("last_sent_at"))
     if last_sent_at is not None:
         seconds_since_last_send = int((timezone.now() - last_sent_at).total_seconds())

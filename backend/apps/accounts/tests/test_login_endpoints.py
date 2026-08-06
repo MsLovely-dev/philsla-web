@@ -562,3 +562,84 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(payload["error"]["code"], "OTP_COOLDOWN")
         self.assertIn("Please wait", payload["error"]["message"])
         self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0, AUTH_OTP_ACCOUNT_WINDOW_LIMIT=100)
+    def test_otp_resend_allows_exactly_the_configured_maximum(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+
+        for _resend in range(settings.AUTH_OTP_MAX_RESENDS):
+            response = self.client.post(
+                "/api/v1/auth/login/otp/resend/",
+                data={"otpPendingAuthToken": otp_pending_token},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 202)
+
+        self.assertEqual(len(mail.outbox), 1 + settings.AUTH_OTP_MAX_RESENDS)
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0, AUTH_OTP_ACCOUNT_WINDOW_LIMIT=100)
+    def test_otp_resend_beyond_maximum_is_rejected_without_sending_or_rotating_or_extending(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+        pending_key = f"{PENDING_OTP_PREFIX}{otp_pending_token}"
+
+        for _resend in range(settings.AUTH_OTP_MAX_RESENDS):
+            response = self.client.post(
+                "/api/v1/auth/login/otp/resend/",
+                data={"otpPendingAuthToken": otp_pending_token},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 202)
+
+        state_before_rejection = cache.get(pending_key)
+        outbox_count_before_rejection = len(mail.outbox)
+
+        response = self.client.post(
+            "/api/v1/auth/login/otp/resend/",
+            data={"otpPendingAuthToken": otp_pending_token},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 429)
+        payload = response.json()
+        self.assertEqual(payload["error"]["code"], "OTP_RATE_LIMITED")
+        self.assertEqual(len(mail.outbox), outbox_count_before_rejection)
+
+        state_after_rejection = cache.get(pending_key)
+        self.assertEqual(state_after_rejection["otp_hash"], state_before_rejection["otp_hash"])
+        self.assertEqual(
+            state_after_rejection["absolute_expires_at"],
+            state_before_rejection["absolute_expires_at"],
+        )
+
+    @override_settings(AUTH_OTP_RESEND_COOLDOWN_SECONDS=0, AUTH_OTP_ACCOUNT_WINDOW_LIMIT=100)
+    def test_latest_otp_remains_usable_after_resend_exhaustion(self) -> None:
+        password_payload = self.start_student_otp_login()
+        otp_pending_token = password_payload["otpPendingAuthToken"]
+
+        for _resend in range(settings.AUTH_OTP_MAX_RESENDS):
+            response = self.client.post(
+                "/api/v1/auth/login/otp/resend/",
+                data={"otpPendingAuthToken": otp_pending_token},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 202)
+
+        latest_code = self.otp_code_from_outbox()
+
+        rejected_response = self.client.post(
+            "/api/v1/auth/login/otp/resend/",
+            data={"otpPendingAuthToken": otp_pending_token},
+            content_type="application/json",
+        )
+        self.assertEqual(rejected_response.status_code, 429)
+
+        otp_response = self.client.post(
+            "/api/v1/auth/login/otp/",
+            data={"otpPendingAuthToken": otp_pending_token, "code": latest_code},
+            content_type="application/json",
+        )
+
+        self.assertEqual(otp_response.status_code, 202)
+        self.assertEqual(otp_response.json()["nextStep"], "selfie")
