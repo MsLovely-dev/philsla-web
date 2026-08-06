@@ -31,7 +31,7 @@ describe('APP_ROUTES', () => {
     const expectedRoles = new Map([
       ['/admin/maintenance/schools', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
       ['/admin/maintenance/universities', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
-      ['/admin/maintenance/exam-blueprint', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],
+      ['/admin/maintenance/exam-blueprint', ['SYSTEM_ADMIN', 'ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR']],
     ]);
 
     for (const [path, roles] of expectedRoles) {
