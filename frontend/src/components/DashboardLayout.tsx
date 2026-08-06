@@ -172,17 +172,17 @@ const SIDEBAR_GROUPS: SidebarGroup[] = [
   },
   {
     label: 'Maintenance & Protocols',
-    roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN'],
+    roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN', 'ITEM_WRITER', 'ACADEMIC_REVIEWER'],
     items: [
-      { 
-        icon: Settings, 
-        label: 'Maintenance Center', 
+      {
+        icon: Settings,
+        label: 'Maintenance Center',
         href: '/admin/maintenance',
         subItems: [
           { label: 'Student Registration', href: '/admin/maintenance/registration', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
           { label: 'List of Schools', href: '/admin/maintenance/schools', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
           { label: 'List of Universities', href: '/admin/maintenance/universities', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
-          { label: 'Exam Blueprint', href: '/admin/maintenance/exam-blueprint', roles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER'] },
+          { label: 'Exam Blueprint', href: '/admin/maintenance/exam-blueprint', roles: ['SYSTEM_ADMIN', 'ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR'] },
         ]
       },
     ]

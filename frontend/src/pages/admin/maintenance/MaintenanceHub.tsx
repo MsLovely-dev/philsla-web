@@ -49,11 +49,11 @@ const MAINTENANCE_MODULES = [
   {
     id: 'exam-blueprint',
     title: 'Exam Blueprint',
-    description: 'Lookup tables for subject areas, difficulty levels, question types, and topics.',
+    description: 'Lookup tables for subject areas, question types, and topics.',
     icon: FileText,
     href: '/admin/maintenance/exam-blueprint',
-    stats: '4 Lookup Tables',
-    allowedRoles: ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']
+    stats: '3 Lookup Tables',
+    allowedRoles: ['SYSTEM_ADMIN', 'ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR']
   }
 ];
 
