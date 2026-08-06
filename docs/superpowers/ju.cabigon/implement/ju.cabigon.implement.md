@@ -80,3 +80,25 @@ PASS: 8 tests
 npm run build
 PASS
 ```
+
+## Thursday Verification
+
+The Thursday verification pass is partially complete.
+
+Passed checks:
+
+```text
+docker compose -f local/docker-compose.yml exec backend python manage.py test apps.exams.tests
+OK
+15 tests passed
+
+docker compose -f local/docker-compose.yml exec frontend npm test -- src/pages/admin/hub/QuestionBank.test.tsx
+PASS: 8 tests
+```
+
+Remaining check:
+- Manual browser smoke test for the Question Bank and Exam Sets routes
+
+Notes:
+- The backend test suite confirms the Exam Blueprint transition coverage is working.
+- The frontend test suite confirms the Question Bank wiring still passes after the service-boundary changes.

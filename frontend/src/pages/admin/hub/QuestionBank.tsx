@@ -28,17 +28,13 @@ import {
   Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { usePhilSA } from '../../../PhilSAContext';
 import { cn } from '../../../lib/utils';
 import StimulusManagement from './StimulusManagement';
 import BulkUpload from './BulkUpload';
-import { MOCK_CENTRAL_ITEM_BANK } from './blueprintMockData';
 import { questionBankService, type QuestionBankItem, type QuestionBankPayload, type QuestionStatus as BackendQuestionStatus } from '../../../services/backendQuestionBankService';
 import { QUESTION_BANK_FALLBACK } from './questionBankFallbackData';
 
 type QuestionStatus = 'PENDING REVIEW' | 'APPROVED' | 'FOR CORRECTION' | 'PUBLISHED' | 'REJECTED';
-type PersonaKey = 'EXAM_ADMIN' | 'SYSTEM_ADMIN' | 'REVIEWER';
-
 interface Question {
   id: string;
   subject: string;
@@ -96,118 +92,6 @@ function toBackendStatus(status: QuestionStatus): BackendQuestionStatus {
   return status;
 }
 
-const MOCK_QUESTIONS: Question[] = [
-  { 
-    id: 'Q-4421', 
-    subject: 'Math', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'APPROVED', 
-    author: 'R. Macaraeg', 
-    content: 'What is the derivative of sin(x)?',
-    options: ['cos(x)', '-cos(x)', 'tan(x)', 'sec(x)'],
-    idealAnswer: 'cos(x)',
-    topic: 'Calculus',
-    difficulty: 'MED',
-    competency: 'Evaluate asymptotic bounds and limit proofs',
-    mediaUrl: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&auto=format&fit=crop',
-    history: [
-      { status: 'PENDING REVIEW', date: '2026-05-10', user: 'System' },
-      { status: 'APPROVED', date: '2026-05-11', user: 'Admin' }
-    ]
-  },
-  { 
-    id: 'Q-4422', 
-    subject: 'Science', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'A. Dimayuga', 
-    content: 'Which planet is known as the Red Planet?',
-    options: ['Mars', 'Jupiter', 'Saturn', 'Venus'],
-    idealAnswer: 'Mars',
-    topic: 'Space Science',
-    difficulty: 'LOW',
-    competency: 'Recall national administrative structures',
-    mediaUrl: 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=600&auto=format&fit=crop'
-  },
-  { 
-    id: 'Q-4426', 
-    subject: 'Science', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'G. Balingit', 
-    content: 'What is the approximate speed of light in a vacuum?',
-    options: ['300,000 km/s', '150,000 km/s', '1,000,000 km/s', '3,000 km/s'],
-    idealAnswer: '300,000 km/s',
-    topic: 'Space Science',
-    difficulty: 'LOW',
-    competency: 'Recall national administrative structures'
-  },
-  { 
-    id: 'Q-4427', 
-    subject: 'Math', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'F. de Guia', 
-    content: 'What is the sum of angles in a flat triangle?',
-    options: ['180 degrees', '90 degrees', '360 degrees', '270 degrees'],
-    idealAnswer: '180 degrees',
-    topic: 'Geometry',
-    difficulty: 'LOW',
-    competency: 'General Competency'
-  },
-  { 
-    id: 'Q-4428', 
-    subject: 'Reading Comp (English, Filipino)', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'D. Alcantara', 
-    content: 'Who was the first president of the Commonwealth of the Philippines?',
-    options: ['Manuel L. Quezon', 'Emilio Aguinaldo', 'Jose P. Laurel', 'Sergio Osmeña'],
-    idealAnswer: 'Manuel L. Quezon',
-    topic: 'History',
-    difficulty: 'LOW',
-    competency: 'General Competency'
-  },
-  { 
-    id: 'Q-4429', 
-    subject: 'Lang Proficiency (English, Filipino)', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'V. Catacutan', 
-    content: 'What figure of speech is used in "The wind whispered through the trees"?',
-    options: ['Personification', 'Metaphor', 'Simile', 'Hyperbole'],
-    idealAnswer: 'Personification',
-    topic: 'Figures of Speech',
-    difficulty: 'LOW',
-    competency: 'General Competency'
-  },
-  { 
-    id: 'Q-4423', 
-    subject: 'Reading Comp (English, Filipino)', 
-    type: 'Reading Comprehension', 
-    points: 10, 
-    status: 'FOR CORRECTION', 
-    author: 'E. Dimatulac', 
-    content: 'Identify the main theme of the provided text.',
-    options: ['Survival', 'Love', 'War', 'Peace'],
-    idealAnswer: 'Survival',
-    topic: 'Comprehension',
-    difficulty: 'MED',
-    competency: 'General Competency',
-    history: [
-      { status: 'FOR CORRECTION', date: '2026-05-12', user: 'Reviewer', remark: 'Check the grammar in option C' }
-    ]
-  },
-  { id: 'Q-4424', subject: 'Math', type: 'Identification', points: 5, status: 'PUBLISHED', author: 'J. Panganiban', content: 'Solve for x: 2x + 4 = 10', idealAnswer: '3', topic: 'Algebra', difficulty: 'LOW', competency: 'General Competency' },
-  { id: 'Q-4425', subject: 'Lang Proficiency (English, Filipino)', type: 'Essay', points: 20, status: 'REJECTED', author: 'B. Mangahas', content: 'Discuss the impact of the 1896 Revolution.', idealAnswer: 'The 1896 Revolution marked the beginning of organized resistance against Spanish colonial rule, leading to the birth of the first Philippine Republic...', topic: 'History', difficulty: 'HIGH', competency: 'General Competency' },
-];
-
 const STATUS_COLORS: Record<QuestionStatus, { bg: string; text: string; border: string; icon: any }> = {
   'PENDING REVIEW': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', icon: Clock },
   'APPROVED': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-100', icon: CheckCircle },
@@ -216,27 +100,9 @@ const STATUS_COLORS: Record<QuestionStatus, { bg: string; text: string; border: 
   'REJECTED': { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', icon: XCircle },
 };
 
-const PERSONA_OPTIONS: Array<{ key: PersonaKey; label: string }> = [
-  { key: 'EXAM_ADMIN', label: 'Exam Admin' },
-  { key: 'SYSTEM_ADMIN', label: 'System Admin' },
-  { key: 'REVIEWER', label: 'Reviewer' },
-];
-
-function personaFromRole(role?: string | null): PersonaKey {
-  if (role === 'SYSTEM_ADMIN') return 'SYSTEM_ADMIN';
-  if (role === 'ACADEMIC_REVIEWER' || role === 'ADMISSIONS_REVIEWER') return 'REVIEWER';
-  return 'EXAM_ADMIN';
-}
-
 export default function QuestionBank() {
-  const { user } = usePhilSA();
   const [activeBankTab, setActiveBankTab] = useState<'QUESTIONS' | 'STIMULI' | 'UPLOAD'>('QUESTIONS');
   const [searchTerm, setSearchTerm] = useState('');
-  const [activePersona, setActivePersona] = useState<PersonaKey>(() => personaFromRole(user?.role));
-
-  useEffect(() => {
-    setActivePersona(personaFromRole(user?.role));
-  }, [user?.role]);
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isQuestionBankLoading, setIsQuestionBankLoading] = useState(true);
@@ -550,23 +416,6 @@ export default function QuestionBank() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 justify-end">
-            <div className="flex items-center gap-2 bg-philsa-bg p-1.5 rounded-2xl border border-philsa-border/40">
-              <span className="text-[10px] font-black uppercase tracking-wider text-philsa-gray px-3">Active Persona:</span>
-              {PERSONA_OPTIONS.map((persona) => (
-                <button
-                  key={persona.key}
-                  onClick={() => setActivePersona(persona.key)}
-                  className={`px-3 py-2 text-[10px] font-bold rounded-xl transition-all cursor-pointer ${
-                    activePersona === persona.key
-                      ? 'bg-philsa-navy text-white shadow-sm font-black'
-                      : 'text-philsa-gray hover:text-philsa-navy hover:bg-philsa-border/20'
-                  }`}
-                >
-                  {persona.label}
-                </button>
-              ))}
-            </div>
-
             {activeBankTab === 'QUESTIONS' && (
               <>
                 {questions.some(q => q.status === 'PENDING REVIEW') && (
@@ -1458,3 +1307,4 @@ export default function QuestionBank() {
     </div>
   );
 }
+

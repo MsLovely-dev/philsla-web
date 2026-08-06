@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -43,6 +44,15 @@ def _actor_profile(request):
     profile = getattr(request.user, "account_profile", None)
     if profile is not None:
         return profile
+
+    user_id = getattr(request.user, "id", None)
+    if user_id is not None:
+        user = get_user_model().objects.select_related("account_profile").filter(pk=user_id).first()
+        if user is not None:
+            profile = getattr(user, "account_profile", None)
+            if profile is not None:
+                return profile
+
     raise PermissionDenied("Authenticated account profile is required.")
 
 

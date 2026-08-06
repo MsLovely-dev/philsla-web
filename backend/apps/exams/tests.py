@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
@@ -270,6 +272,23 @@ class QuestionBankApiTests(APITestCase):
         )
         self.assertEqual(transition_response.status_code, 200)
         self.assertEqual(transition_response.data["status"], "PENDING_REVIEW")
+
+    def test_create_question_with_bearer_style_authenticated_user_resolves_profile(self) -> None:
+        bearer_user = SimpleNamespace(
+            id=str(self.user.id),
+            email=self.user.email,
+            role=PortalRole.SYSTEM_ADMIN.value,
+            permissions=[],
+            scopes={},
+            is_authenticated=True,
+            is_active=True,
+        )
+        self.client.force_authenticate(user=bearer_user)
+
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["question_code"], "Q-SCI-001")
 
 
 class ExamSetApiTests(APITestCase):
