@@ -1069,6 +1069,12 @@ class ApplicationEndpointTests(TestCase):
                 lrn="123456789012",
             ).exists()
         )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["approved.student@example.test"])
+        self.assertEqual(mail.outbox[0].subject, "Your PhilSLA student account is active")
+        self.assertIn("Your student account is now active.", mail.outbox[0].body)
+        self.assertIn("using your existing password", mail.outbox[0].body)
+        self.assertNotIn("Temporary password:", mail.outbox[0].body)
         audit_log = ApplicationAuditLog.objects.get(action="REGISTRATION_STUDENT_ACCOUNT_ACTIVATED")
         self.assertEqual(audit_log.event, "student_account_activated")
         self.assertEqual(audit_log.outcome, "success")

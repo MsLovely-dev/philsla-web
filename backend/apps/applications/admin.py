@@ -2,6 +2,8 @@ from django.contrib import admin
 
 from .models import (
     ApplicationAuditLog,
+    ApplicationBulkUploadBatch,
+    ApplicationBulkUploadRowResult,
     ApplicationIdentityMedia,
     RegistrationSelfieMedia,
     Step2Verification,
@@ -135,6 +137,41 @@ class StudentApplicationAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return True
+
+
+@admin.register(ApplicationBulkUploadBatch)
+class ApplicationBulkUploadBatchAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "template_version",
+        "exam_cycle_id",
+        "status",
+        "uploaded_by_user",
+        "performed_by_role_snapshot",
+        "expires_at",
+        "created_at",
+    )
+    list_filter = ("status", "exam_cycle_id", "created_at", "expires_at")
+    list_select_related = ("uploaded_by_user",)
+    ordering = ("-created_at",)
+    readonly_fields = tuple(field.name for field in ApplicationBulkUploadBatch._meta.fields)
+    search_fields = ("=id", "template_version", "exam_cycle_id", "uploaded_by_user__username")
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(ApplicationBulkUploadRowResult)
+class ApplicationBulkUploadRowResultAdmin(admin.ModelAdmin):
+    list_display = ("id", "batch", "row_number", "status", "application", "created_at")
+    list_filter = ("status", "created_at")
+    list_select_related = ("batch", "application")
+    ordering = ("batch", "row_number", "id")
+    readonly_fields = tuple(field.name for field in ApplicationBulkUploadRowResult._meta.fields)
+    search_fields = ("=id", "batch__id", "application__candidate_id")
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(ApplicationAuditLog)

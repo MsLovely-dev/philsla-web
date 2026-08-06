@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowDown,
   ArrowUp,
@@ -46,6 +46,7 @@ const DEFAULT_SORT_DIRECTION: SortDirection = 'desc';
 
 export default function ScoreManagement() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [batches, setBatches] = useState<ScoreManagementBatch[]>([]);
   const [selectedBatchId, setSelectedBatchId] = useState('');
   const [rows, setRows] = useState<ScoreManagementResult[]>([]);
@@ -104,12 +105,15 @@ export default function ScoreManagement() {
         const loadedBatches = await getScoreManagementBatches();
         if (cancelled) return;
         setBatches(loadedBatches);
-        const firstBatchId = loadedBatches[0]?.id ?? '';
-        setSelectedBatchId(firstBatchId);
-        if (firstBatchId) {
+        const requestedBatchId = searchParams.get('batch') ?? '';
+        const initialBatchId = loadedBatches.some((batch) => batch.id === requestedBatchId)
+          ? requestedBatchId
+          : loadedBatches[0]?.id ?? '';
+        setSelectedBatchId(initialBatchId);
+        if (initialBatchId) {
           const requestId = resultRequestId.current + 1;
           resultRequestId.current = requestId;
-          const page = await getScoreManagementBatchResultPage(firstBatchId, {
+          const page = await getScoreManagementBatchResultPage(initialBatchId, {
             page: 1,
             pageSize: PAGE_SIZE,
             sortKey,
@@ -187,6 +191,7 @@ export default function ScoreManagement() {
     setIsLoading(true);
     setErrorMessage(null);
     try {
+      setSearchParams({ batch: batchId }, { replace: true });
       const [loadedBatches, loadedPage] = await Promise.all([
         getScoreManagementBatches(),
         getScoreManagementBatchResultPage(batchId, {
@@ -377,6 +382,7 @@ export default function ScoreManagement() {
             </label>
             <div className="relative">
               <select
+                aria-label="Select examination batch"
                 value={selectedBatchId}
                 onChange={(event) => void handleBatchChange(event.target.value)}
                 className="w-full appearance-none rounded-xl border-2 border-slate-200 bg-philsa-bg px-4 py-3 pr-10 text-sm font-bold text-philsa-navy shadow-xs transition-all focus:border-philsa-red focus:outline-none focus:ring-2 focus:ring-philsa-red/10"

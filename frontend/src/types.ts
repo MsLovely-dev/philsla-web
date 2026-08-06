@@ -79,6 +79,7 @@ export interface Application {
   candidateId?: string;
   userId: string;
   status: ApplicationStatus;
+  completionStatus?: 'COMPLETE' | 'PENDING_STUDENT_COMPLETION';
   submittedAt?: string;
   
   // Personal Info

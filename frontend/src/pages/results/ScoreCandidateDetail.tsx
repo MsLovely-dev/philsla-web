@@ -112,7 +112,8 @@ export default function ScoreCandidateDetail() {
       <div className="flex items-center gap-4">
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          aria-label="Back to Score Management"
+          onClick={() => navigate(`/admin/results/scores?batch=${encodeURIComponent(batchId ?? '')}`)}
           className="rounded-lg border border-philsa-border p-2 text-philsa-red shadow-sm transition-colors hover:bg-philsa-bg"
         >
           <ChevronLeft className="h-5 w-5" />

@@ -120,3 +120,249 @@ Files changed:
 - `docs/superpowers/a.depositar/specs/2026-08-05-score-candidate-account-seed-design.md`
 - `docs/superpowers/a.depositar/plans/2026-08-05-score-candidate-account-seed.md`
 - `docs/superpowers/a.depositar/implement/a.depositar.implement.md`
+
+## 2026-08-06 - Score Management Three Demo Batches
+
+Plan reference:
+
+- `docs/superpowers/a.depositar/plans/2026-08-06-score-management-three-demo-batches.md`
+
+Work completed:
+
+- Updated the deterministic Score Management seed to create three demo batches:
+  - `SESSION-2027-REGULAR`
+  - `SESSION-2027-STEM`
+  - `SESSION-2027-SPECIAL`
+- Kept `SESSION-2027-REGULAR` available for existing demo links and API tests.
+- Made `--count` mean candidates per batch. For example, `--count 500` now creates 1,500 score rows across three batches.
+- Added unique candidate IDs, score IDs, LRNs, ranking population IDs, and exam set IDs for each batch.
+- Updated seed command output to report total records across all batches.
+- Updated linked student profile seed expectations so candidate applications/accounts can be created for all three demo batches.
+
+Test-first evidence:
+
+- Added failing test in `backend/apps/results/tests/test_score_management_seed_command.py`.
+- Red run: `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_seed_command --settings=config.settings.test`
+- Red result: failed because only `SESSION-2027-REGULAR` existed.
+
+Verification:
+
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_processing apps.results.tests.test_score_management_seed_command apps.results.tests.test_score_management_api apps.results.tests.test_score_management_models --settings=config.settings.test`
+  - Passed, 35 tests.
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+
+Files changed:
+
+- `backend/apps/results/services.py`
+- `backend/apps/results/management/commands/seed_score_management.py`
+- `backend/apps/results/tests/test_score_processing.py`
+- `backend/apps/results/tests/test_score_management_api.py`
+- `backend/apps/results/tests/test_score_management_seed_command.py`
+- `docs/superpowers/a.depositar/plans/2026-08-06-score-management-three-demo-batches.md`
+- `docs/superpowers/a.depositar/implement/a.depositar.implement.md`
+
+## 2026-08-06 - Score Release Email Notification
+
+Plan reference:
+
+- `docs/superpowers/a.depositar/plans/2026-08-06-score-release-email-notification.md`
+
+Work completed:
+
+- Added student email availability notification after successful Score Management release.
+- Added a branded HTML email alternative aligned with the current PhilSLA email/UI style.
+- Email links to the Student Portal results page.
+- Email does not include score, rank, percentile, LRN, answer content, or qualification details.
+- Missing or ambiguous application matches are skipped without rolling back the release.
+- Seeded synthetic emails ending in `@philsa.example.test` are skipped so local/demo releases do not spend time sending hundreds of placeholder notifications.
+- Release API now returns sent, skipped, and failed notification counts.
+
+Test-first evidence:
+
+- Added failing release email test in `backend/apps/results/tests/test_score_management_api.py`.
+- Red run: `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api.ScoreManagementApiTests.test_release_sends_result_available_email_without_scores --settings=config.settings.test`
+- Red result: failed with missing `notificationSentCount` in release response.
+- Green run: same focused release email test.
+- Green result: passed.
+- Added failing branded-email assertion for the HTML alternative.
+- Red result: failed because the release email had no HTML alternative.
+- Green result: passed after switching release notifications to `EmailMultiAlternatives`.
+- Added failing synthetic seed email skip test.
+- Red result: release sent to `@philsa.example.test`.
+- Green result: release skipped seeded synthetic email while preserving real email notification behavior.
+
+Verification:
+
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api.ScoreManagementApiTests.test_release_sends_result_available_email_without_scores --settings=config.settings.test`
+  - Passed, 1 test.
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api.ScoreManagementApiTests.test_release_skips_email_when_application_match_is_ambiguous --settings=config.settings.test`
+  - Passed, 1 test.
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api --settings=config.settings.test`
+  - Passed, 26 tests.
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_processing apps.results.tests.test_score_management_seed_command apps.results.tests.test_score_management_api apps.results.tests.test_score_management_models --settings=config.settings.test`
+  - Passed, 38 tests.
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+
+Files changed:
+
+- `backend/apps/results/services.py`
+- `backend/apps/results/views.py`
+- `backend/apps/results/tests/test_score_management_api.py`
+- `docs/api/API-ENDPOINTS.md`
+- `docs/superpowers/a.depositar/specs/2026-08-06-us-sr-014-score-management.md`
+- `docs/superpowers/a.depositar/plans/2026-08-06-score-release-email-notification.md`
+- `docs/superpowers/a.depositar/implement/a.depositar.implement.md`
+
+## 2026-08-06 - Score Release Notification Outbox
+
+Plan reference:
+
+- `docs/superpowers/a.depositar/plans/2026-08-06-score-release-notification-outbox.md`
+
+Work completed:
+
+- Replaced synchronous release email sending with a durable Score Management notification outbox.
+- Added `ScoreReleaseNotification` with pending/sent/failed status, attempts, failure reason, queued timestamp, sent timestamp, uniqueness, and dispatch indexes.
+- Updated release to bulk-queue eligible student notifications and return `notificationQueuedCount`.
+- Added `dispatch_score_release_notifications --limit N` to send queued result-available emails out-of-band.
+- Preserved the branded HTML email and no-score/no-rank/no-LRN safety rule.
+- Kept ambiguous application matches and seeded synthetic `@philsa.example.test` emails skipped.
+- Added read-only Django admin visibility for queued release notifications.
+
+Test-first evidence:
+
+- Red run: `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api --settings=config.settings.test`
+- Red result: failed because `ScoreReleaseNotification` did not exist.
+- After adding the model/service/command, the focused API suite exposed an invalid `.values("personal")` query against a property-backed application field.
+- Fixed the queue builder to select related `personal_info` application objects instead.
+
+Verification:
+
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api --settings=config.settings.test`
+  - Passed, 27 tests.
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_processing apps.results.tests.test_score_management_seed_command apps.results.tests.test_score_management_api apps.results.tests.test_score_management_models --settings=config.settings.test`
+  - Passed, 39 tests.
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+- `..\venv\Scripts\python.exe manage.py makemigrations --check --dry-run --settings=config.settings.local`
+  - Passed, `No changes detected.`
+
+Files changed:
+
+- `backend/apps/results/admin.py`
+- `backend/apps/results/models.py`
+- `backend/apps/results/migrations/0007_scorereleasenotification.py`
+- `backend/apps/results/services.py`
+- `backend/apps/results/views.py`
+- `backend/apps/results/management/commands/dispatch_score_release_notifications.py`
+- `backend/apps/results/tests/test_score_management_api.py`
+- `docs/api/API-ENDPOINTS.md`
+- `docs/superpowers/a.depositar/plans/2026-08-06-score-release-notification-outbox.md`
+- `docs/superpowers/a.depositar/implement/a.depositar.implement.md`
+
+## 2026-08-06 - Score Release Email Background Worker
+
+Plan reference:
+
+- User-approved plan: add lightweight Django RQ + Redis background dispatch for Score Management release emails.
+
+Work completed:
+
+- Added `django-rq` to backend dependencies and configured the default RQ queue through `REDIS_URL`.
+- Added `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE` and `SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE` settings.
+- Added `apps.results.jobs.dispatch_score_release_notification_batch()` to reuse the existing outbox dispatch service.
+- Updated `release_score_session()` to enqueue the dispatch job with `transaction.on_commit()` after notification rows are queued.
+- Kept tests isolated from Redis by disabling auto-enqueue in test settings and mocking the enqueue path in the focused test.
+- Required `REDIS_URL` in production settings so production does not silently run without the worker backend.
+- Documented local worker startup and manual fallback dispatch.
+
+Test-first evidence:
+
+- Added failing test in `backend/apps/results/tests/test_score_management_api.py` for release auto-enqueue.
+- Red result: enqueue mock was not called because `TestCase` defers `transaction.on_commit()` callbacks.
+- Updated the test to use `captureOnCommitCallbacks(execute=True)`.
+- Green result: focused Score Management API tests passed.
+
+Verification:
+
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api --settings=config.settings.test`
+  - Passed, 28 tests.
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_processing apps.results.tests.test_score_management_seed_command apps.results.tests.test_score_management_api apps.results.tests.test_score_management_models --settings=config.settings.test`
+  - Passed, 40 tests.
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+- `..\venv\Scripts\python.exe manage.py makemigrations --check --dry-run --settings=config.settings.local`
+  - Passed, `No changes detected.`
+- Production settings check with fake non-secret env values:
+  - `..\venv\Scripts\python.exe manage.py check --settings=config.settings.production`
+  - Passed, `System check identified no issues (0 silenced).`
+
+Dependency note:
+
+- `..\venv\Scripts\pip-compile.exe --output-file=requirements\base.txt --strip-extras requirements\base.in` was used to regenerate the lock.
+- The local launcher did not have Python 3.13 available (`py -3.13 --version` failed), so the lock was generated by the current venv runtime.
+
+Files changed:
+
+- `backend/.env.example`
+- `backend/README.md`
+- `backend/config/settings/base.py`
+- `backend/config/settings/production.py`
+- `backend/config/settings/test.py`
+- `backend/requirements/base.in`
+- `backend/requirements/base.txt`
+- `backend/apps/results/jobs.py`
+- `backend/apps/results/services.py`
+- `backend/apps/results/tests/test_score_management_api.py`
+- `docs/api/API-ENDPOINTS.md`
+- `docs/superpowers/a.depositar/implement/a.depositar.implement.md`
+
+## 2026-08-06 - Score Release Email Production Hardening
+
+Plan reference:
+
+- User-approved follow-up from latest-push code review: make the email outbox/RQ path production-ready.
+
+Work completed:
+
+- Made Redis/RQ enqueue failure non-blocking after release commit. Release remains successful and notifications stay `PENDING`.
+- Added logging for failed background enqueue attempts.
+- Changed the RQ dispatch job to drain pending notifications across multiple batches.
+- Added failed-notification retry support below a configured max attempt count.
+- Added manual command flags: `--retry-failed` and `--max-attempts`.
+- Changed release notification queue creation to process candidate scores in chunks.
+- Added settings for dispatch max batches, max attempts, and queue chunk size.
+- Updated environment examples and docs for worker tuning and retry operations.
+
+Test-first evidence:
+
+- Red run: `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api --settings=config.settings.test`
+- Red result: failed because Redis enqueue errors propagated, one dispatch job only sent one batch, and retry parameters did not exist.
+- Green run: same focused API suite after implementation.
+- Green result: passed, 31 tests.
+
+Verification:
+
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_processing apps.results.tests.test_score_management_seed_command apps.results.tests.test_score_management_api apps.results.tests.test_score_management_models --settings=config.settings.test`
+  - Passed, 44 tests.
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+- `..\venv\Scripts\python.exe manage.py makemigrations --check --dry-run --settings=config.settings.local`
+  - Passed, `No changes detected.`
+- Production settings check with fake non-secret env values:
+  - `..\venv\Scripts\python.exe manage.py check --settings=config.settings.production`
+  - Passed, `System check identified no issues (0 silenced).`
+
+Files changed:
+
+- `backend/.env.example`
+- `backend/README.md`
+- `backend/apps/results/jobs.py`
+- `backend/apps/results/management/commands/dispatch_score_release_notifications.py`
+- `backend/apps/results/services.py`
+- `backend/apps/results/tests/test_score_management_api.py`
+- `backend/config/settings/base.py`
+- `docs/api/API-ENDPOINTS.md`
+- `docs/superpowers/a.depositar/implement/a.depositar.implement.md`

@@ -318,6 +318,69 @@ describe('BackendApplicationService', () => {
     );
   });
 
+  it('downloads the application bulk upload template from the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('templateVersion,firstName\n', { status: 200 }));
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.downloadBulkUploadTemplate();
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/bulk-upload/template/',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('validates a bulk upload CSV through the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        { batchId: 'batch-id', status: 'VALIDATED', totalRows: 1, validRows: 1, failedRows: 0, conflictRows: 0, fieldErrorRows: 0, canConfirm: true },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+    const file = new File(['templateVersion,firstName'], 'students.csv', { type: 'text/csv' });
+
+    const result = await service.validateBulkUploadCsv(file);
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/bulk-upload/validate/',
+      expect.objectContaining({ method: 'POST', body: expect.any(FormData) }),
+    );
+  });
+
+  it('downloads a bulk upload error CSV from the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response('rowNumber,field,code,reason\n', { status: 200 }));
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.downloadBulkUploadErrors('batch-id');
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/bulk-upload/batch-id/errors.csv',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
+  it('confirms a bulk upload batch through the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      jsonResponse(
+        { batchId: 'batch-id', status: 'COMPLETED', totalRows: 1, validRows: 1, failedRows: 0, conflictRows: 0, fieldErrorRows: 0, importedRows: 1, rejectedRows: 0, canConfirm: false },
+        { status: 200 },
+      ),
+    );
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.confirmBulkUpload('batch-id');
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/bulk-upload/batch-id/confirm/',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
   it('submits an admissions reviewer decision for an application', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(
@@ -416,6 +479,7 @@ describe('BackendApplicationService', () => {
     const application = mapBackendApplicationToFrontend({
       id: 'application-id',
       status: 'SUBMITTED',
+      completionStatus: 'PENDING_STUDENT_COMPLETION',
       personal: {
         firstName: 'Lovely',
         middleName: 'Mae',
@@ -488,6 +552,7 @@ describe('BackendApplicationService', () => {
         pwdAccommodation: 'Large-print questionnaire',
         strand: 'STEM',
       },
+      completionStatus: 'PENDING_STUDENT_COMPLETION',
     });
   });
 
