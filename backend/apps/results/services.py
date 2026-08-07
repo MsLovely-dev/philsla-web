@@ -5,6 +5,7 @@ import logging
 import random
 from collections import defaultdict
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal, Sequence
 from uuid import UUID, uuid4
@@ -12,7 +13,7 @@ from uuid import UUID, uuid4
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
-from django.db import connection, transaction
+from django.db import connection, models, transaction
 from django.utils import timezone
 
 from .models import (
@@ -700,53 +701,101 @@ def dispatch_score_release_notifications(
 
     sent_count = 0
     failed_count = 0
-    now = timezone.now()
+    notifications = _claim_score_release_notifications(
+        limit=limit,
+        statuses=statuses,
+        max_attempts=max_attempts,
+    )
 
-    with transaction.atomic():
-        notifications = list(_dispatch_notification_queryset(statuses=statuses, max_attempts=max_attempts)[:limit])
-
-        for notification in notifications:
-            notification.attempts += 1
-            try:
-                email_message = EmailMultiAlternatives(
-                    subject="Your PhilSLA Examination Results Are Now Available",
-                    body=_score_release_email_body(
-                        recipient_name=notification.recipient_name,
-                        portal_url=notification.portal_url,
-                    ),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[notification.recipient_email],
-                )
-                email_message.attach_alternative(
-                    _score_release_email_html_body(
-                        recipient_name=notification.recipient_name,
-                        portal_url=notification.portal_url,
-                    ),
-                    "text/html",
-                )
-                email_message.send(fail_silently=False)
-            except Exception as exc:
-                notification.status = ScoreReleaseNotificationStatus.FAILED
-                notification.failure_reason = str(exc)[:240]
-                notification.save(update_fields=["attempts", "status", "failure_reason", "updated_at"])
-                failed_count += 1
-            else:
-                notification.status = ScoreReleaseNotificationStatus.SENT
-                notification.failure_reason = ""
-                notification.sent_at = now
-                notification.save(update_fields=["attempts", "status", "failure_reason", "sent_at", "updated_at"])
-                sent_count += 1
+    for notification in notifications:
+        try:
+            email_message = EmailMultiAlternatives(
+                subject="Your PhilSLA Examination Results Are Now Available",
+                body=_score_release_email_body(
+                    recipient_name=notification.recipient_name,
+                    portal_url=notification.portal_url,
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[notification.recipient_email],
+            )
+            email_message.attach_alternative(
+                _score_release_email_html_body(
+                    recipient_name=notification.recipient_name,
+                    portal_url=notification.portal_url,
+                ),
+                "text/html",
+            )
+            email_message.send(fail_silently=False)
+        except Exception as exc:
+            _mark_score_release_notification_failed(notification=notification, failure_reason=str(exc))
+            failed_count += 1
+        else:
+            _mark_score_release_notification_sent(notification=notification)
+            sent_count += 1
 
     return ScoreReleaseDispatchResult(sent_count=sent_count, failed_count=failed_count)
 
 
 def _dispatch_notification_queryset(*, statuses: list[str], max_attempts: int):
-    queryset = ScoreReleaseNotification.objects.filter(status__in=statuses, attempts__lt=max_attempts).order_by("queued_at", "id")
+    processing_cutoff = timezone.now() - timedelta(seconds=settings.SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS)
+    queryset = ScoreReleaseNotification.objects.filter(attempts__lt=max_attempts).filter(
+        models.Q(status__in=statuses)
+        | models.Q(
+            status=ScoreReleaseNotificationStatus.PROCESSING,
+            updated_at__lt=processing_cutoff,
+        ),
+    ).order_by("queued_at", "id")
     if connection.features.has_select_for_update_skip_locked:
         return queryset.select_for_update(skip_locked=True)
     if connection.features.has_select_for_update:
         return queryset.select_for_update()
     return queryset
+
+
+def _claim_score_release_notifications(
+    *,
+    limit: int,
+    statuses: list[str],
+    max_attempts: int,
+) -> list[ScoreReleaseNotification]:
+    now = timezone.now()
+    with transaction.atomic():
+        notifications = list(_dispatch_notification_queryset(statuses=statuses, max_attempts=max_attempts)[:limit])
+        for notification in notifications:
+            notification.status = ScoreReleaseNotificationStatus.PROCESSING
+            notification.attempts += 1
+            notification.failure_reason = ""
+            notification.updated_at = now
+        ScoreReleaseNotification.objects.bulk_update(
+            notifications,
+            ["status", "attempts", "failure_reason", "updated_at"],
+            batch_size=limit,
+        )
+    return notifications
+
+
+def _mark_score_release_notification_failed(*, notification: ScoreReleaseNotification, failure_reason: str) -> None:
+    ScoreReleaseNotification.objects.filter(
+        pk=notification.pk,
+        status=ScoreReleaseNotificationStatus.PROCESSING,
+    ).update(
+        status=ScoreReleaseNotificationStatus.FAILED,
+        failure_reason=failure_reason[:240],
+        updated_at=timezone.now(),
+    )
+
+
+def _mark_score_release_notification_sent(*, notification: ScoreReleaseNotification) -> None:
+    now = timezone.now()
+    ScoreReleaseNotification.objects.filter(
+        pk=notification.pk,
+        status=ScoreReleaseNotificationStatus.PROCESSING,
+    ).update(
+        status=ScoreReleaseNotificationStatus.SENT,
+        failure_reason="",
+        sent_at=now,
+        updated_at=now,
+    )
 
 
 def _enqueue_score_release_notification_dispatch_safely(*, limit: int) -> None:

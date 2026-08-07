@@ -26,6 +26,7 @@ class ScoreReleaseStatus(models.TextChoices):
 
 class ScoreReleaseNotificationStatus(models.TextChoices):
     PENDING = "PENDING", "Pending"
+    PROCESSING = "PROCESSING", "Processing"
     SENT = "SENT", "Sent"
     FAILED = "FAILED", "Failed"
 
