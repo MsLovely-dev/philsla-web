@@ -18,6 +18,7 @@ class BlueprintStatus(models.TextChoices):
     ACADEMIC_REVIEW = "academic_review", "Academic review"
     REVISION_REQUIRED = "revision_required", "Revision required"
     APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
     PUBLISHED = "published", "Published"
     RETIRED = "retired", "Retired"
     ARCHIVED = "archived", "Archived"

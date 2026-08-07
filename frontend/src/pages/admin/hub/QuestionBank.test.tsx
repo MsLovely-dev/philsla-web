@@ -142,6 +142,7 @@ describe('QuestionBank page bootstrap', () => {
     const updatedQuestion = { ...backendQuestion, subject: 'Updated Subject', questionText: 'Updated prompt' };
     listQuestions.mockResolvedValue({ ok: true, data: [backendQuestion] });
     updateQuestion.mockResolvedValue({ ok: true, data: updatedQuestion });
+    currentUser = { ...systemAdminUser, id: 'creator-user' };
 
     render(<QuestionBank />);
 
@@ -197,6 +198,34 @@ describe('QuestionBank page bootstrap', () => {
     }));
   });
 
+  it('updates a for-correction question to pending review after a successful creator edit', async () => {
+    const user = userEvent.setup();
+    const forCorrectionQuestion = { ...backendQuestion, status: 'FOR_CORRECTION' as const, questionText: 'Original prompt' };
+    const updatedQuestion = { ...forCorrectionQuestion, status: 'PENDING_REVIEW' as const, questionText: 'Updated prompt' };
+    listQuestions.mockResolvedValue({ ok: true, data: [forCorrectionQuestion] });
+    updateQuestion.mockResolvedValue({ ok: true, data: updatedQuestion });
+    currentUser = { ...systemAdminUser, id: 'creator-user' };
+
+    render(<QuestionBank />);
+
+    await user.selectOptions(screen.getByDisplayValue('Pending Review'), 'ALL');
+    const row = (await screen.findByText('Backend Subject')).closest('tr');
+    expect(row).not.toBeNull();
+    await user.click(within(row as HTMLElement).getByTitle('Edit Question'));
+    const prompt = screen.getByPlaceholderText('Type the question prompt...');
+    await user.clear(prompt);
+    await user.type(prompt, 'Updated prompt');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(() => expect(updateQuestion).toHaveBeenCalledWith('backend-question-1', expect.objectContaining({
+      status: 'PENDING_REVIEW',
+      questionText: 'Updated prompt',
+    })));
+    expect(await screen.findByText('Updated prompt')).toBeInTheDocument();
+    expect(screen.getByText('PENDING REVIEW')).toBeInTheDocument();
+    expect(screen.queryByText('FOR CORRECTION')).not.toBeInTheDocument();
+  });
+
   it('hides review actions for self-authored questions', async () => {
     currentUser = { ...systemAdminUser, id: 'creator-user' };
     listQuestions.mockResolvedValue({ ok: true, data: [backendQuestion] });
@@ -206,6 +235,17 @@ describe('QuestionBank page bootstrap', () => {
     const row = (await screen.findByText('Backend Subject')).closest('tr');
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).queryByRole('combobox', { name: /review question/i })).not.toBeInTheDocument();
+  });
+
+  it('hides edit actions for questions not created by the current user', async () => {
+    currentUser = { ...systemAdminUser, id: 'system-admin-user' };
+    listQuestions.mockResolvedValue({ ok: true, data: [backendQuestion] });
+
+    render(<QuestionBank />);
+
+    const row = (await screen.findByText('Backend Subject')).closest('tr');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).queryByTitle('Edit Question')).not.toBeInTheDocument();
   });
 
   it('hides review actions for non-system-admin users', async () => {

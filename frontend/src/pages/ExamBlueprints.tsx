@@ -34,6 +34,12 @@ type BlueprintSortOption = 'NEWEST_CREATED' | 'OLDEST_CREATED' | 'NAME_ASC' | 'N
 type BlueprintEditorMode = 'create' | 'edit';
 type ContributorAgency = 'UP' | 'CHED' | 'TESDA' | 'DepEd';
 type SectionCollapseState = Record<string, boolean>;
+type BlueprintReviewAction = 'APPROVED' | 'REVISION_REQUIRED' | 'REJECTED';
+type BlueprintReviewButton = {
+  action: BlueprintReviewAction;
+  label: string;
+  className: string;
+};
 
 const CONTRIBUTOR_AGENCIES: ContributorAgency[] = ['UP', 'CHED', 'TESDA', 'DepEd'];
 const SCIENCE_TOPIC_OPTIONS = [
@@ -50,6 +56,8 @@ const PERSONA_OPTIONS: Array<{ key: PersonaKey; label: string }> = [
   { key: 'REVIEWER', label: 'Reviewer' },
 ];
 
+const REVIEW_APPROVER_ROLES = new Set(['SYSTEM_ADMIN']);
+
 const STATUS_OPTIONS: Array<BlueprintStatusFilter> = [
   'ALL',
   'DRAFT',
@@ -57,6 +65,7 @@ const STATUS_OPTIONS: Array<BlueprintStatusFilter> = [
   'ACADEMIC_REVIEW',
   'REVISION_REQUIRED',
   'APPROVED',
+  'REJECTED',
   'PUBLISHED',
   'RETIRED',
   'ARCHIVED',
@@ -83,6 +92,8 @@ function statusLabel(status: Blueprint['status']) {
       return 'Requires Calibration';
     case 'APPROVED':
       return 'Approved';
+    case 'REJECTED':
+      return 'Rejected';
     case 'PUBLISHED':
       return 'Published';
     case 'RETIRED':
@@ -106,6 +117,8 @@ function statusTone(status: Blueprint['status']) {
       return 'bg-rose-50 text-rose-700 border-rose-200';
     case 'APPROVED':
       return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'REJECTED':
+      return 'bg-red-50 text-red-700 border-red-200';
     case 'PUBLISHED':
       return 'bg-green-50 text-green-700 border-green-200';
     case 'RETIRED':
@@ -172,17 +185,17 @@ function normalizeBlueprintRules(rules: Blueprint['rules']): Blueprint['rules'] 
   return {
     ...rules,
     sharedStimulusRequirement: {
-      required: false,
-      minCount: 0,
-      questionsPerStimulus: 0,
       ...rules.sharedStimulusRequirement,
+      minCount: coercePositiveNumber(rules.sharedStimulusRequirement.minCount),
+      questionsPerStimulus: coercePositiveNumber(rules.sharedStimulusRequirement.questionsPerStimulus),
     },
     randomizationRules: {
-      shuffleQuestions: false,
-      shuffleChoices: false,
-      fixedSequence: false,
       ...rules.randomizationRules,
     },
+    totalItems: coercePositiveNumber(rules.totalItems),
+    totalMarks: coercePositiveNumber(rules.totalMarks),
+    totalTimeLimit: coercePositiveNumber(rules.totalTimeLimit),
+    maxReuseLimit: coercePositiveNumber(rules.maxReuseLimit),
     accessibilityAccommodations: {
       ...buildDefaultAccessibilityAccommodations(),
       ...rules.accessibilityAccommodations,
@@ -190,9 +203,48 @@ function normalizeBlueprintRules(rules: Blueprint['rules']): Blueprint['rules'] 
   };
 }
 
+function coercePositiveNumber(value: unknown) {
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) {
+    return 0;
+  }
+  return numericValue;
+}
+
+function normalizeBlueprintSection(section: BlueprintSection): BlueprintSection {
+  return {
+    ...section,
+    itemCount: coercePositiveNumber(section.itemCount),
+    marksPerItem: coercePositiveNumber(section.marksPerItem),
+    totalMarks: coercePositiveNumber(section.totalMarks),
+    passingScore: coercePositiveNumber(section.passingScore),
+    timeAllocation: coercePositiveNumber(section.timeAllocation),
+    cognitiveLevels: {
+      remembering: coercePositiveNumber(section.cognitiveLevels.remembering),
+      understanding: coercePositiveNumber(section.cognitiveLevels.understanding),
+      applying: coercePositiveNumber(section.cognitiveLevels.applying),
+      analyzing: coercePositiveNumber(section.cognitiveLevels.analyzing),
+      evaluating: coercePositiveNumber(section.cognitiveLevels.evaluating),
+      creating: coercePositiveNumber(section.cognitiveLevels.creating),
+    },
+    difficultyDistribution: {
+      easy: coercePositiveNumber(section.difficultyDistribution.easy),
+      moderate: coercePositiveNumber(section.difficultyDistribution.moderate),
+      difficult: coercePositiveNumber(section.difficultyDistribution.difficult),
+    },
+    itemTypeDistribution: {
+      mcq: coercePositiveNumber(section.itemTypeDistribution.mcq),
+      tf: coercePositiveNumber(section.itemTypeDistribution.tf),
+      essay: coercePositiveNumber(section.itemTypeDistribution.essay),
+      fib: coercePositiveNumber(section.itemTypeDistribution.fib),
+    },
+  };
+}
+
 function normalizeBlueprint(blueprint: Blueprint): Blueprint {
   return {
     ...blueprint,
+    sections: blueprint.sections.map((section) => normalizeBlueprintSection(section)),
     rules: normalizeBlueprintRules(blueprint.rules),
   };
 }
@@ -200,9 +252,9 @@ function normalizeBlueprint(blueprint: Blueprint): Blueprint {
 function summarizeBlueprintSections(sections: BlueprintSection[]) {
   return sections.reduce(
     (totals, section) => ({
-      totalItems: totals.totalItems + section.itemCount,
-      totalMarks: totals.totalMarks + section.totalMarks,
-      totalTimeLimit: totals.totalTimeLimit + section.timeAllocation,
+      totalItems: totals.totalItems + coercePositiveNumber(section.itemCount),
+      totalMarks: totals.totalMarks + coercePositiveNumber(section.totalMarks),
+      totalTimeLimit: totals.totalTimeLimit + coercePositiveNumber(section.timeAllocation),
     }),
     {
       totalItems: 0,
@@ -225,13 +277,14 @@ function syncBlueprintTotalsFromSections(blueprint: Blueprint): Blueprint {
   };
 }
 
-function buildDefaultBlueprint(ownerName: string): Blueprint {
+function buildDefaultBlueprint(ownerName: string, ownerId?: string): Blueprint {
   const now = new Date();
   const nextYear = new Date(now);
   nextYear.setFullYear(now.getFullYear() + 1);
 
   return {
     id: `BP-${Date.now()}`,
+    createdByUserId: ownerId,
     code: `BP-${now.getFullYear()}-NEW`,
     name: 'Untitled Blueprint',
     description: 'Curriculum examination specifications and blueprinting.',
@@ -313,6 +366,9 @@ export default function ExamBlueprints() {
   const [designerMode, setDesignerMode] = useState<BlueprintEditorMode>('create');
   const [designerDraft, setDesignerDraft] = useState<Blueprint | null>(null);
   const [expandedSections, setExpandedSections] = useState<SectionCollapseState>({});
+  const [activeReviewAction, setActiveReviewAction] = useState<BlueprintReviewAction | null>(null);
+  const [reviewRemarks, setReviewRemarks] = useState('');
+  const [isReviewTransitionPending, setIsReviewTransitionPending] = useState(false);
 
   useEffect(() => {
     setActivePersona(personaFromRole(user?.role));
@@ -403,10 +459,15 @@ export default function ExamBlueprints() {
 
   const designerMetrics = useMemo(() => {
     if (!designerDraft) {
-      return { totalItems: 0, totalMarks: 0, totalTimeLimit: 0 };
+      return { totalItems: 0, totalPoints: 0, totalTimeLimit: 0 };
     }
 
-    return summarizeBlueprintSections(designerDraft.sections);
+    const totals = summarizeBlueprintSections(designerDraft.sections);
+    return {
+      totalItems: totals.totalItems,
+      totalPoints: totals.totalMarks,
+      totalTimeLimit: totals.totalTimeLimit,
+    };
   }, [designerDraft]);
 
   const handleHubTabChange = (tab: ExamHubTabKey) => {
@@ -434,7 +495,9 @@ export default function ExamBlueprints() {
   const openDesigner = (mode: BlueprintEditorMode, blueprint?: Blueprint) => {
     setDesignerMode(mode);
     setDesignerDraft(
-      blueprint ? JSON.parse(JSON.stringify(blueprint)) as Blueprint : buildDefaultBlueprint(`${user?.firstName ?? 'Exam'} ${user?.lastName ?? 'Admin'}`),
+      blueprint
+        ? JSON.parse(JSON.stringify(blueprint)) as Blueprint
+        : buildDefaultBlueprint(`${user?.firstName ?? 'Exam'} ${user?.lastName ?? 'Admin'}`, user?.id),
     );
     setIsDesignerOpen(true);
     const sections = blueprint?.sections ?? [buildDefaultSection()];
@@ -484,6 +547,87 @@ export default function ExamBlueprints() {
     setExpandedSections({});
   };
 
+  const submitBlueprintForReview = async (blueprint: Blueprint) => {
+    if (blueprint.status !== 'DRAFT') return;
+
+    const result = await examBlueprintService.transitionBlueprint(blueprint.id, {
+      status: 'SUBMITTED',
+      remarks: 'Submitted for review.',
+    });
+
+    if (!result.ok) {
+      return;
+    }
+
+    const next = blueprints.map((item) => (item.id === result.data.id ? result.data : item));
+    saveBlueprints(next);
+    setSelectedBlueprint(result.data);
+    setIsDetailsOpen(true);
+  };
+
+  const canUseBlueprintReviewActions = (blueprint: Blueprint) => {
+    if (!user || !REVIEW_APPROVER_ROLES.has(user.role)) return false;
+    if (!blueprint.createdByUserId) return false;
+    if (blueprint.createdByUserId === user.id) return false;
+    return blueprint.status === 'SUBMITTED' || blueprint.status === 'ACADEMIC_REVIEW';
+  };
+
+  const getBlueprintReviewButtons = (blueprint: Blueprint): BlueprintReviewButton[] => {
+    if (!canUseBlueprintReviewActions(blueprint)) return [];
+
+    return [
+      {
+        action: 'APPROVED',
+        label: 'Approve',
+        className: 'border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100',
+      },
+      {
+        action: 'REVISION_REQUIRED',
+        label: 'Request Correction',
+        className: 'border-amber-200 bg-amber-50 text-amber-700 transition hover:bg-amber-100',
+      },
+      {
+        action: 'REJECTED',
+        label: 'Reject',
+        className: 'border-red-200 bg-red-50 text-red-700 transition hover:bg-red-100',
+      },
+    ];
+  };
+
+  const closeReviewDialog = () => {
+    setActiveReviewAction(null);
+    setReviewRemarks('');
+    setIsReviewTransitionPending(false);
+  };
+
+  const openReviewDialog = (action: BlueprintReviewAction) => {
+    setActiveReviewAction(action);
+    setReviewRemarks('');
+  };
+
+  const submitBlueprintReviewAction = async () => {
+    if (!selectedBlueprint || !activeReviewAction) return;
+    if (activeReviewAction === 'REJECTED' && !reviewRemarks.trim()) return;
+
+    setIsReviewTransitionPending(true);
+
+    const result = await examBlueprintService.transitionBlueprint(selectedBlueprint.id, {
+      status: activeReviewAction,
+      remarks: reviewRemarks.trim(),
+    });
+
+    if (!result.ok) {
+      setIsReviewTransitionPending(false);
+      return;
+    }
+
+    const next = blueprints.map((item) => (item.id === result.data.id ? result.data : item));
+    saveBlueprints(next);
+    setSelectedBlueprint(result.data);
+    setIsDetailsOpen(true);
+    closeReviewDialog();
+  };
+
   const cloneBlueprint = async (blueprint: Blueprint) => {
     const result = await examBlueprintService.cloneBlueprint(blueprint.id);
     if (result.ok) {
@@ -495,6 +639,7 @@ export default function ExamBlueprints() {
     const cloned: Blueprint = {
       ...JSON.parse(JSON.stringify(blueprint)) as Blueprint,
       id: `BP-${Date.now()}`,
+      createdByUserId: user?.id,
       code: `${blueprint.code}-COPY`,
       status: 'DRAFT',
       version: blueprint.version,
@@ -583,7 +728,7 @@ export default function ExamBlueprints() {
                   </h1>
                 </div>
                 <p className="mt-1 text-xs font-bold text-slate-500">
-                  Academic Year {designerDraft?.academicYear ?? ''} â€¢ PhilSA Framework
+                  Academic Year {designerDraft?.academicYear ?? ''} • PhilSA Framework
                 </p>
               </div>
             </div>
@@ -836,7 +981,10 @@ export default function ExamBlueprints() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsDetailsOpen(false)}
+                  onClick={() => {
+                    closeReviewDialog();
+                    setIsDetailsOpen(false);
+                  }}
                   className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white p-2.5 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
                   aria-label="Close blueprint details"
                 >
@@ -847,10 +995,27 @@ export default function ExamBlueprints() {
           </div>
 
           <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
-            <div className="flex items-center justify-end">
-              {selectedBlueprint.status === 'DRAFT' ? (
+              <div className="flex items-center justify-end">
+              {getBlueprintReviewButtons(selectedBlueprint).length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {getBlueprintReviewButtons(selectedBlueprint).map((button) => (
+                    <button
+                      key={button.action}
+                      type="button"
+                      onClick={() => openReviewDialog(button.action)}
+                      className={cn(
+                        'inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-[13px] font-extrabold uppercase tracking-[0.12em]',
+                        button.className,
+                      )}
+                    >
+                      {button.label}
+                    </button>
+                  ))}
+                </div>
+              ) : selectedBlueprint.status === 'DRAFT' ? (
                 <button
                   type="button"
+                  onClick={() => void submitBlueprintForReview(selectedBlueprint)}
                   className="inline-flex items-center gap-2 rounded-xl bg-philsa-red px-4 py-2 text-[13px] font-extrabold uppercase tracking-[0.12em] text-white shadow-sm transition hover:bg-philsa-red/90"
                 >
                   Submit for Review
@@ -861,6 +1026,75 @@ export default function ExamBlueprints() {
               )}
             </div>
           </div>
+
+          {activeReviewAction && (
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-xl bg-slate-100 p-2 text-slate-600">
+                    {activeReviewAction === 'REJECTED' ? <AlertTriangle className="h-4 w-4" /> : <Shield className="h-4 w-4" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-[15px] font-extrabold text-slate-900">
+                      {activeReviewAction === 'APPROVED'
+                        ? 'Confirm approval'
+                        : activeReviewAction === 'REVISION_REQUIRED'
+                          ? 'Request correction'
+                          : 'Reject blueprint'}
+                    </h3>
+                    <p className="mt-1 text-[13px] text-slate-500">
+                      {activeReviewAction === 'APPROVED'
+                        ? 'This will move the blueprint to the approved terminal review state.'
+                        : activeReviewAction === 'REVISION_REQUIRED'
+                          ? 'Add remarks if the creator needs revision guidance before resubmission.'
+                          : 'Remarks are required before a rejection can be submitted.'}
+                    </p>
+                  </div>
+                </div>
+
+                <label className="mt-4 block space-y-2">
+                  <span className="block text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                    Remarks {activeReviewAction === 'REJECTED' ? '(Required)' : '(Optional)'}
+                  </span>
+                  <textarea
+                    value={reviewRemarks}
+                    onChange={(event) => setReviewRemarks(event.target.value)}
+                    rows={4}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px] text-slate-700 outline-none transition focus:border-slate-300 focus:bg-white focus:ring-2 focus:ring-slate-100"
+                  />
+                </label>
+
+                <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeReviewDialog}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-[13px] font-bold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void submitBlueprintReviewAction()}
+                    disabled={isReviewTransitionPending || (activeReviewAction === 'REJECTED' && !reviewRemarks.trim())}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-xl px-4 py-2 text-[13px] font-extrabold uppercase tracking-[0.12em] text-white shadow-sm transition',
+                      activeReviewAction === 'REJECTED'
+                        ? 'bg-red-600 hover:bg-red-700 disabled:bg-red-300'
+                        : activeReviewAction === 'REVISION_REQUIRED'
+                          ? 'bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300'
+                          : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300',
+                    )}
+                  >
+                    {activeReviewAction === 'APPROVED'
+                      ? 'Confirm Approve'
+                      : activeReviewAction === 'REVISION_REQUIRED'
+                        ? 'Confirm Request Correction'
+                        : 'Confirm Reject'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="px-4 py-4 sm:px-5">
             <div className="mb-3">
@@ -875,8 +1109,7 @@ export default function ExamBlueprints() {
                     <th className="px-4 py-3">Section Name</th>
                     <th className="px-4 py-3">Subject</th>
                     <th className="px-4 py-3 text-center">Items</th>
-                    <th className="px-4 py-3 text-center">Marks/Q</th>
-                    <th className="px-4 py-3 text-center">Total Pts</th>
+                    <th className="px-4 py-3 text-center">Points</th>
                     <th className="px-4 py-3 text-center">Time</th>
                     <th className="px-4 py-3">Difficulty (E/M/D)</th>
                     <th className="px-4 py-3">Topics Covered</th>
@@ -893,7 +1126,6 @@ export default function ExamBlueprints() {
                       </td>
                       <td className="px-4 py-3 text-slate-700">{section.subject}</td>
                       <td className="px-4 py-3 text-center font-semibold text-slate-800">{section.itemCount}</td>
-                      <td className="px-4 py-3 text-center text-slate-600">{section.marksPerItem}</td>
                       <td className="px-4 py-3 text-center font-semibold text-slate-800">{section.totalMarks} pts</td>
                       <td className="px-4 py-3 text-center text-slate-600">{section.timeAllocation} min</td>
                       <td className="px-4 py-3 text-slate-600">
@@ -1001,7 +1233,7 @@ export default function ExamBlueprints() {
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <DetailCard label="Total Questions" value={`${designerMetrics.totalItems} questions`} />
-                    <DetailCard label="Total Marks / Points" value={`${designerMetrics.totalMarks} points`} />
+                    <DetailCard label="Points" value={`${designerMetrics.totalPoints} points`} />
                     <DetailCard label="Time Constraint" value={`${designerMetrics.totalTimeLimit} minutes`} />
                   </div>
                 </div>
@@ -1343,15 +1575,32 @@ export default function ExamBlueprints() {
                             <p className="text-[10px] text-slate-400">Click topics above from the Exam Blueprint Maintenance table or type topics separated by commas.</p>
                           </div>
 
-                          <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+                          <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-3">
                             <label className="space-y-1.5">
                               <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Item Count (Questions)</span>
                               <input
                                 type="number"
+                                min={0}
                                 value={section.itemCount}
                                 onChange={(event) => {
                                   const nextSections = designerDraft.sections.map((item) =>
-                                    item.id === section.id ? { ...item, itemCount: Number(event.target.value) } : item,
+                                    item.id === section.id ? { ...item, itemCount: coercePositiveNumber(event.target.value) } : item,
+                                  );
+                                  setDesignerDraft({ ...designerDraft, sections: nextSections });
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-philsa-red/20"
+                              />
+                            </label>
+
+                            <label className="space-y-1.5">
+                              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Points</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={section.totalMarks}
+                                onChange={(event) => {
+                                  const nextSections = designerDraft.sections.map((item) =>
+                                    item.id === section.id ? { ...item, totalMarks: coercePositiveNumber(event.target.value) } : item,
                                   );
                                   setDesignerDraft({ ...designerDraft, sections: nextSections });
                                 }}
@@ -1363,10 +1612,11 @@ export default function ExamBlueprints() {
                               <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">Time (Minutes)</span>
                               <input
                                 type="number"
+                                min={0}
                                 value={section.timeAllocation}
                                 onChange={(event) => {
                                   const nextSections = designerDraft.sections.map((item) =>
-                                    item.id === section.id ? { ...item, timeAllocation: Number(event.target.value) } : item,
+                                    item.id === section.id ? { ...item, timeAllocation: coercePositiveNumber(event.target.value) } : item,
                                   );
                                   setDesignerDraft({ ...designerDraft, sections: nextSections });
                                 }}

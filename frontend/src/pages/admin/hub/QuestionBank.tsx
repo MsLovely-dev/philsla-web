@@ -237,6 +237,11 @@ export default function QuestionBank() {
     return getReviewActionOptions(question.status).length > 0;
   };
 
+  const canEditQuestion = (question: Question) => {
+    if (!user || !question.createdByUserId) return false;
+    return question.createdByUserId === user.id;
+  };
+
   const handleOpenAddModal = () => {
     setEditingId(null);
     setNewType('Multiple Choice');
@@ -762,11 +767,15 @@ export default function QuestionBank() {
                              className="p-2 bg-white hover:bg-philsa-bg rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-navy" title="View Details">
                              <Eye className="w-3.5 h-3.5" />
                           </button>
-                          <button 
-                             onClick={() => handleEditClick(q)}
-                             className="p-2 bg-white hover:bg-philsa-navy hover:text-white rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-navy" title="Edit Question">
-                             <Edit className="w-3.5 h-3.5" />
-                          </button>
+                          {canEditQuestion(q) && (
+                            <button
+                              onClick={() => handleEditClick(q)}
+                              className="p-2 bg-white hover:bg-philsa-navy hover:text-white rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-navy"
+                              title="Edit Question"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button 
                              onClick={() => handleDeleteQuestion(q.id)}
                              className="p-2 bg-white hover:bg-philsa-red hover:text-white rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-red" title="Delete Question">

@@ -155,6 +155,52 @@ class ExamBlueprintApiTests(APITestCase):
         self.assertEqual(published_response.data["status"], "PUBLISHED")
         self.assertGreaterEqual(len(published_response.data["history"]), 5)
 
+    def test_blueprint_submitted_can_transition_directly_to_approved(self) -> None:
+        creator, _ = self.create_profile("blueprint_direct_creator", PortalRole.ITEM_WRITER.value)
+        reviewer, _ = self.create_profile("blueprint_direct_reviewer", PortalRole.ACADEMIC_REVIEWER.value)
+
+        self.authenticate_as(creator)
+        blueprint_id = self.create_blueprint()
+        submitted_response = self.transition_blueprint(blueprint_id, "submitted", "Ready for direct approval")
+        self.assertEqual(submitted_response.status_code, 200)
+        self.assertEqual(submitted_response.data["status"], "SUBMITTED")
+
+        self.authenticate_as(reviewer)
+        approved_response = self.transition_blueprint(blueprint_id, "approved", "Approved from submitted")
+        self.assertEqual(approved_response.status_code, 200)
+        self.assertEqual(approved_response.data["status"], "APPROVED")
+        self.assertEqual(approved_response.data["history"][-1]["comments"], "Approved from submitted")
+
+    def test_blueprint_reject_creates_rejected_history_and_is_terminal(self) -> None:
+        creator, _ = self.create_profile("blueprint_rejected_creator", PortalRole.ITEM_WRITER.value)
+        reviewer, _ = self.create_profile("blueprint_rejected_reviewer", PortalRole.ACADEMIC_REVIEWER.value)
+
+        self.authenticate_as(creator)
+        blueprint_id = self.create_blueprint()
+        self.transition_blueprint(blueprint_id, "submitted", "Ready for review")
+
+        self.authenticate_as(reviewer)
+        academic_review_response = self.transition_blueprint(blueprint_id, "academic_review", "Queued for review")
+        self.assertEqual(academic_review_response.status_code, 200)
+
+        rejected_response = self.transition_blueprint(
+            blueprint_id,
+            "rejected",
+            "Not aligned with the exam blueprint standard",
+        )
+        self.assertEqual(rejected_response.status_code, 200)
+        self.assertEqual(rejected_response.data["status"], "REJECTED")
+        self.assertEqual(
+            rejected_response.data["history"][-1]["comments"],
+            "Not aligned with the exam blueprint standard",
+        )
+
+        terminal_response = self.transition_blueprint(blueprint_id, "published", "Should stay rejected")
+        self.assertEqual(terminal_response.status_code, 409)
+        self.assertEqual(terminal_response.data["error"]["code"], "INVALID_STATUS_TRANSITION")
+        self.assertEqual(terminal_response.data["error"]["fields"]["current_status"], "rejected")
+        self.assertEqual(terminal_response.data["error"]["fields"]["requested_status"], "published")
+
     def test_blueprint_transition_rejects_malformed_status(self) -> None:
         blueprint_id = self.create_blueprint()
 
@@ -188,6 +234,55 @@ class ExamBlueprintApiTests(APITestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["error"]["code"], "PERMISSION_DENIED")
 
+    def test_blueprint_creator_cannot_self_review(self) -> None:
+        creator, _ = self.create_profile("blueprint_creator_self_review", PortalRole.ITEM_WRITER.value)
+
+        self.authenticate_as(creator)
+        blueprint_id = self.create_blueprint()
+        self.transition_blueprint(blueprint_id, "submitted", "Submitted by creator")
+
+        response = self.transition_blueprint(blueprint_id, "approved", "Creator tried to approve")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"]["code"], "PERMISSION_DENIED")
+
+    def test_blueprint_creator_cannot_self_request_revision(self) -> None:
+        creator, _ = self.create_profile("blueprint_creator_self_revision", PortalRole.ITEM_WRITER.value)
+
+        self.authenticate_as(creator)
+        blueprint_id = self.create_blueprint()
+        self.transition_blueprint(blueprint_id, "submitted", "Submitted by creator")
+
+        response = self.transition_blueprint(blueprint_id, "revision_required", "Creator tried to request revision")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"]["code"], "PERMISSION_DENIED")
+
+    def test_blueprint_creator_cannot_self_reject(self) -> None:
+        creator, _ = self.create_profile("blueprint_creator_self_reject", PortalRole.ITEM_WRITER.value)
+
+        self.authenticate_as(creator)
+        blueprint_id = self.create_blueprint()
+        self.transition_blueprint(blueprint_id, "submitted", "Submitted by creator")
+
+        response = self.transition_blueprint(blueprint_id, "rejected", "Creator tried to reject")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["error"]["code"], "PERMISSION_DENIED")
+
+    def test_blueprint_reject_requires_remarks(self) -> None:
+        creator, _ = self.create_profile("blueprint_reject_remarks_creator", PortalRole.ITEM_WRITER.value)
+        reviewer, _ = self.create_profile("blueprint_reject_remarks_reviewer", PortalRole.ACADEMIC_REVIEWER.value)
+
+        self.authenticate_as(creator)
+        blueprint_id = self.create_blueprint()
+        self.transition_blueprint(blueprint_id, "submitted", "Ready for review")
+
+        self.authenticate_as(reviewer)
+        self.transition_blueprint(blueprint_id, "academic_review", "Queued for review")
+
+        response = self.transition_blueprint(blueprint_id, "rejected", "")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "VALIDATION_FAILED")
+        self.assertIn("remarks", response.data["error"]["fields"])
+
     def test_blueprint_transition_rejects_published_to_draft_and_preserves_state(self) -> None:
         creator, _ = self.create_profile("published_creator", PortalRole.ITEM_WRITER.value)
         reviewer, _ = self.create_profile("published_reviewer", PortalRole.ACADEMIC_REVIEWER.value)
@@ -212,6 +307,12 @@ class ExamBlueprintApiTests(APITestCase):
 
         latest = ExamBlueprint.objects.get(pk=blueprint_id)
         self.assertEqual(latest.versions.order_by("-version_number", "-created_at").first().status, "published")
+
+    def test_blueprint_response_includes_creator_user_id(self) -> None:
+        response = self.client.post(reverse("exams:blueprint_list"), self.payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["created_by_user_id"], str(self.user.id))
 
 
 class QuestionBankApiTests(APITestCase):
@@ -353,12 +454,72 @@ class QuestionBankApiTests(APITestCase):
 
         update_response = self.client.put(
             reverse("exams:question_detail", kwargs={"question_id": question.pk}),
-            {**self.payload, "question_code": question.question_code, "status": "draft"},
+            {
+                **self.payload,
+                "question_code": question.question_code,
+                "question_text": "Updated question prompt after correction.",
+                "status": "draft",
+            },
             format="json",
         )
 
         self.assertEqual(update_response.status_code, 200)
         self.assertEqual(update_response.data["status"], "PENDING_REVIEW")
+
+    def test_for_correction_no_op_save_preserves_status(self) -> None:
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+        question = Question.objects.get(pk=response.data["id"])
+        question.status = "FOR_CORRECTION"
+        question.save(update_fields=["status"])
+
+        update_response = self.client.put(
+            reverse("exams:question_detail", kwargs={"question_id": question.pk}),
+            {**self.payload, "question_code": question.question_code, "status": "draft"},
+            format="json",
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.data["status"], "FOR_CORRECTION")
+
+    def test_validation_failure_does_not_change_for_correction_status(self) -> None:
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+        question = Question.objects.get(pk=response.data["id"])
+        question.status = "FOR_CORRECTION"
+        question.save(update_fields=["status"])
+
+        invalid_payload = {**self.payload, "question_code": question.question_code, "points": "invalid"}
+        update_response = self.client.put(
+            reverse("exams:question_detail", kwargs={"question_id": question.pk}),
+            invalid_payload,
+            format="json",
+        )
+
+        self.assertEqual(update_response.status_code, 400)
+        question.refresh_from_db()
+        self.assertEqual(question.status, "FOR_CORRECTION")
+
+    def test_non_creator_cannot_auto_resubmit_for_correction_question(self) -> None:
+        response = self.client.post(reverse("exams:question_list"), self.payload, format="json")
+        question = Question.objects.get(pk=response.data["id"])
+        question.status = "FOR_CORRECTION"
+        question.save(update_fields=["status"])
+
+        other_user, _ = self.create_profile("item_writer_resubmitter", PortalRole.ITEM_WRITER.value)
+        self.authenticate_as(other_user)
+
+        update_response = self.client.put(
+            reverse("exams:question_detail", kwargs={"question_id": question.pk}),
+            {
+                **self.payload,
+                "question_code": question.question_code,
+                "question_text": "Attempted edit by non-creator.",
+                "status": "draft",
+            },
+            format="json",
+        )
+
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.data["status"], "FOR_CORRECTION")
 
     def test_create_question_with_bearer_style_authenticated_user_resolves_profile(self) -> None:
         bearer_user = SimpleNamespace(
