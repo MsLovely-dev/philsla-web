@@ -237,4 +237,30 @@ describe('MockUniversityService', () => {
     const searched = await service.listUniversitiesPage({ page: 1, pageSize: 100, search: 'University 07' });
     expect(searched.ok && searched.data.count).toBe(1);
   });
+
+  it('exports a CSV that neutralizes formula injection in free-text fields', async () => {
+    const service = new MockUniversityService();
+    await service.createUniversity({ ...samplePayload, name: '=cmd|/c calc' });
+
+    const result = await service.exportUniversities({ columns: ['name'] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const text = await result.data.text();
+    // A leading "=" is escaped with a single quote so spreadsheets treat it as text.
+    expect(text).toContain("'=cmd|/c calc");
+    expect(text).not.toMatch(/\r\n=cmd/);
+  });
+
+  it('exports only the requested columns', async () => {
+    const service = new MockUniversityService();
+    await service.createUniversity(samplePayload);
+
+    const result = await service.exportUniversities({ columns: ['name'] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [header] = (await result.data.text()).split('\r\n');
+    expect(header).toBe('University Name');
+  });
 });

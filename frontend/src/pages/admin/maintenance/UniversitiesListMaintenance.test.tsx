@@ -165,8 +165,12 @@ describe('UniversitiesListMaintenance', () => {
     );
   });
 
-  it('exports a CSV via the config modal with formula-injection neutralized', async () => {
-    data = [{ ...university, name: '=cmd|/c calc' }];
+  it('downloads the server-built CSV blob when Download is confirmed', async () => {
+    data = [university];
+    const csvBlob = new Blob(["University Name\r\n'=cmd|/c calc"], { type: 'text/csv' });
+    const exportSpy = vi
+      .spyOn(universityService, 'exportUniversities')
+      .mockResolvedValue(serviceSuccess(csvBlob));
     const captured: Blob[] = [];
     const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
       captured.push(blob as Blob);
@@ -176,14 +180,15 @@ describe('UniversitiesListMaintenance', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     const user = userEvent.setup();
     renderPage();
-    await screen.findByText('=cmd|/c calc');
+    await screen.findByText(university.name);
 
     await user.click(screen.getByRole('button', { name: /export csv/i }));
     await user.click(await screen.findByRole('button', { name: 'Download CSV' }));
 
+    await waitFor(() => expect(exportSpy).toHaveBeenCalled());
+    expect(exportSpy.mock.calls[0][0].columns.length).toBeGreaterThan(0);
     await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
-    const text = await captured[0].text();
-    expect(text).toContain("'=cmd|/c calc");
+    expect(captured[0]).toBe(csvBlob);
   });
 
   it('serves a re-opened university\'s courses from cache without refetching', async () => {

@@ -30,7 +30,7 @@ import {
   type ExportColumnOption,
   type ExportSelection,
 } from '../../../components/maintenance/ExportConfigModal';
-import { downloadCsv, toCsv } from '../../../services/csvExportService';
+import { downloadBlob } from '../../../services/csvExportService';
 
 function isSchoolClassification(value: string): value is SchoolClassification {
   return value === 'Public' || value === 'Private';
@@ -79,6 +79,7 @@ export default function SchoolsListMaintenance() {
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingSchool, setViewingSchool] = useState<SchoolRecord | null>(null);
   const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
@@ -160,27 +161,26 @@ export default function SchoolsListMaintenance() {
   };
 
   const handleExport = async ({ columns, scope }: ExportSelection) => {
-    setIsExportModalOpen(false);
-    const base =
-      scope === 'all'
+    // The backend streams the whole filtered set in one request.
+    setIsExporting(true);
+    const result = await schoolService.exportSchools({
+      columns,
+      ...(scope === 'all'
         ? {}
         : {
             search: schoolQuery.search,
             classification: schoolQuery.classification,
             region: schoolQuery.region,
             status: schoolQuery.status,
-          };
-    // Page through the server so the export covers every matching row, not just the visible page.
-    const rows: SchoolRecord[] = [];
-    for (let page = 1; ; page += 1) {
-      const result = await schoolService.listSchoolsPage({ ...base, page, pageSize: 100 });
-      if (!result.ok) break;
-      rows.push(...result.data.results);
-      if (!result.data.next) break;
+          }),
+    });
+    setIsExporting(false);
+    setIsExportModalOpen(false);
+    if (result.ok) {
+      downloadBlob(`philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`, result.data);
+    } else {
+      setError((result as ServiceFailure).error.message);
     }
-    const cols = SCHOOL_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
-    const csv = toCsv(cols.map((c) => c.label), rows.map((row) => cols.map((c) => c.get(row))));
-    downloadCsv(`philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`, csv);
   };
 
   // First load shows a distinct loading/error state; when cached it is already loaded.
@@ -271,8 +271,8 @@ export default function SchoolsListMaintenance() {
             <div className="text-2xl font-black text-purple-900 mt-1">{schoolSummary.private.toLocaleString()}</div>
           </div>
           <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
-            <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Active Schools</div>
-            <div className="text-2xl font-black text-emerald-900 mt-1">{schoolSummary.active.toLocaleString()}</div>
+            <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Examinee Capacity</div>
+            <div className="text-2xl font-black text-emerald-900 mt-1">{schoolSummary.totalCapacity.toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -755,6 +755,8 @@ export default function SchoolsListMaintenance() {
         title="Export schools"
         columns={SCHOOL_EXPORT_COLUMNS}
         scopeOptions={EXPORT_SCOPE_OPTIONS}
+        scopeCounts={{ filtered: schoolCount, all: schoolSummary.total }}
+        isExporting={isExporting}
         onCancel={() => setIsExportModalOpen(false)}
         onExport={handleExport}
       />

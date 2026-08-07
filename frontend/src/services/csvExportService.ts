@@ -38,9 +38,7 @@ export function toCsv(headers: readonly string[], rows: ReadonlyArray<ReadonlyAr
   return lines.join('\r\n');
 }
 
-export function downloadCsv(filename: string, csv: string): void {
-  // Prepend a UTF-8 BOM so Excel detects the encoding correctly.
-  const blob = new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' });
+export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -49,4 +47,9 @@ export function downloadCsv(filename: string, csv: string): void {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+export function downloadCsv(filename: string, csv: string): void {
+  // Prepend a UTF-8 BOM so Excel detects the encoding correctly.
+  downloadBlob(filename, new Blob(['﻿', csv], { type: 'text/csv;charset=utf-8;' }));
 }

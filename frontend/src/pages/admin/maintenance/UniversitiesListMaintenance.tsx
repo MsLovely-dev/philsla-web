@@ -42,7 +42,7 @@ import {
   type ExportColumnOption,
   type ExportSelection,
 } from '../../../components/maintenance/ExportConfigModal';
-import { downloadCsv, toCsv } from '../../../services/csvExportService';
+import { downloadBlob, downloadCsv, toCsv } from '../../../services/csvExportService';
 
 function isUniversityClassification(value: string): value is UniversityClassification {
   return value === 'Public' || value === 'Private';
@@ -147,6 +147,7 @@ export default function UniversitiesListMaintenance() {
 
   // Modals
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isUniModalOpen, setIsUniModalOpen] = useState(false);
   const [editingUniversity, setEditingUniversity] = useState<UniversityRecord | null>(null);
   const [uniFormData, setUniFormData] = useState<UniversityPayload>(EMPTY_UNI_FORM);
@@ -368,36 +369,35 @@ export default function UniversitiesListMaintenance() {
   };
 
   const handleExport = async ({ columns, scope }: ExportSelection) => {
-    setIsExportModalOpen(false);
     if (selectedUniversity) {
       // Courses are held client-side; export straight from the cache.
+      setIsExportModalOpen(false);
       const cols = COURSE_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
       const source = scope === 'all' ? universityCourses : filteredCourses;
       const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
       downloadCsv(`${selectedUniversity.code}_College_Courses.csv`, csv);
       return;
     }
-    // Universities are paginated: page through the server so the export covers
-    // every matching row, not just the visible page.
-    const base =
-      scope === 'all'
+    // Universities are paginated: the backend streams the whole filtered set in one request.
+    setIsExporting(true);
+    const result = await universityService.exportUniversities({
+      columns,
+      ...(scope === 'all'
         ? {}
         : {
             search: universityQuery.search,
             classification: universityQuery.classification,
             region: universityQuery.region,
             status: universityQuery.status,
-          };
-    const rows: UniversityRecord[] = [];
-    for (let page = 1; ; page += 1) {
-      const result = await universityService.listUniversitiesPage({ ...base, page, pageSize: 100 });
-      if (!result.ok) break;
-      rows.push(...result.data.results);
-      if (!result.data.next) break;
+          }),
+    });
+    setIsExporting(false);
+    setIsExportModalOpen(false);
+    if (result.ok) {
+      downloadBlob('philSA_List_of_Universities.csv', result.data);
+    } else {
+      setError((result as ServiceFailure).error.message);
     }
-    const cols = UNIVERSITY_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
-    const csv = toCsv(cols.map((c) => c.label), rows.map((row) => cols.map((c) => c.get(row))));
-    downloadCsv('philSA_List_of_Universities.csv', csv);
   };
 
   // First load shows a distinct loading/error state; when cached it is already loaded.
@@ -518,8 +518,8 @@ export default function UniversitiesListMaintenance() {
                 <div className="text-2xl font-black text-purple-900 mt-1">{universitySummary.private.toLocaleString()}</div>
               </div>
               <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
-                <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Active Universities</div>
-                <div className="text-2xl font-black text-emerald-900 mt-1">{universitySummary.active.toLocaleString()}</div>
+                <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Degree Courses</div>
+                <div className="text-2xl font-black text-emerald-900 mt-1">{universitySummary.totalCourses.toLocaleString()}</div>
               </div>
             </div>
           </div>
@@ -1308,6 +1308,12 @@ export default function UniversitiesListMaintenance() {
         title={selectedUniversity ? 'Export college courses' : 'Export universities'}
         columns={selectedUniversity ? COURSE_EXPORT_COLUMNS : UNIVERSITY_EXPORT_COLUMNS}
         scopeOptions={EXPORT_SCOPE_OPTIONS}
+        scopeCounts={
+          selectedUniversity
+            ? { filtered: filteredCourses.length, all: universityCourses.length }
+            : { filtered: universityCount, all: universitySummary.total }
+        }
+        isExporting={isExporting}
         onCancel={() => setIsExportModalOpen(false)}
         onExport={handleExport}
       />

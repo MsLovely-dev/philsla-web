@@ -13,12 +13,14 @@ import {
   type CollegeCourseRecord,
   type UniversityClassification,
   type UniversityRecord,
+  type UniversitySummary,
 } from './backendUniversityService';
 import {
   schoolService,
   type SchoolClassification,
   type SchoolRecord,
   type SchoolStatus,
+  type SchoolSummary,
 } from './backendSchoolService';
 import type { ServiceFailure } from './serviceResult';
 
@@ -41,14 +43,6 @@ export interface SchoolQuery {
   status: SchoolStatus | '';
 }
 
-/** Global (unfiltered) totals for the summary stat cards. */
-export interface RegistrySummary {
-  total: number;
-  public: number;
-  private: number;
-  active: number;
-}
-
 const DEFAULT_UNIVERSITY_QUERY: UniversityQuery = {
   page: 1,
   search: '',
@@ -63,7 +57,8 @@ const DEFAULT_SCHOOL_QUERY: SchoolQuery = {
   region: '',
   status: '',
 };
-const EMPTY_SUMMARY: RegistrySummary = { total: 0, public: 0, private: 0, active: 0 };
+const EMPTY_UNIVERSITY_SUMMARY: UniversitySummary = { total: 0, public: 0, private: 0, active: 0, totalCourses: 0 };
+const EMPTY_SCHOOL_SUMMARY: SchoolSummary = { total: 0, public: 0, private: 0, active: 0, totalCapacity: 0 };
 
 /**
  * App-level state for the Maintenance Center registries. Mounted above the
@@ -83,7 +78,7 @@ interface MaintenanceDataContextValue {
   universitiesLoading: boolean;
   universitiesLoaded: boolean;
   universitiesError: string | null;
-  universitySummary: RegistrySummary;
+  universitySummary: UniversitySummary;
   ensureUniversities: () => void;
   setUniversityQuery: (partial: Partial<UniversityQuery>) => void;
   reloadUniversities: () => void;
@@ -102,7 +97,7 @@ interface MaintenanceDataContextValue {
   schoolsLoading: boolean;
   schoolsLoaded: boolean;
   schoolsError: string | null;
-  schoolSummary: RegistrySummary;
+  schoolSummary: SchoolSummary;
   ensureSchools: () => void;
   setSchoolQuery: (partial: Partial<SchoolQuery>) => void;
   reloadSchools: () => void;
@@ -124,25 +119,9 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
   const [universitiesLoading, setUniversitiesLoading] = useState(false);
   const [universitiesLoaded, setUniversitiesLoaded] = useState(false);
   const [universitiesError, setUniversitiesError] = useState<string | null>(null);
-  const [universitySummary, setUniversitySummary] = useState<RegistrySummary>(EMPTY_SUMMARY);
+  const [universitySummary, setUniversitySummary] = useState<UniversitySummary>(EMPTY_UNIVERSITY_SUMMARY);
   const universitiesLoadedRef = useRef(false);
   const universityRequestId = useRef(0);
-
-  const loadUniversitySummary = useCallback(() => {
-    Promise.all([
-      universityService.listUniversitiesPage({ page: 1, pageSize: 1 }),
-      universityService.listUniversitiesPage({ page: 1, pageSize: 1, classification: 'Public' }),
-      universityService.listUniversitiesPage({ page: 1, pageSize: 1, classification: 'Private' }),
-      universityService.listUniversitiesPage({ page: 1, pageSize: 1, status: 'Active' }),
-    ]).then(([total, pub, priv, active]) => {
-      setUniversitySummary({
-        total: total.ok ? total.data.count : 0,
-        public: pub.ok ? pub.data.count : 0,
-        private: priv.ok ? priv.data.count : 0,
-        active: active.ok ? active.data.count : 0,
-      });
-    });
-  }, []);
 
   const loadUniversities = useCallback((query: UniversityQuery) => {
     universityQueryRef.current = query;
@@ -155,6 +134,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       if (result.ok) {
         setUniversities(result.data.results);
         setUniversityCount(result.data.count);
+        setUniversitySummary(result.data.summary); // registry-wide totals ride along with the list
         universitiesLoadedRef.current = true;
         setUniversitiesLoaded(true);
       } else {
@@ -166,8 +146,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
   const ensureUniversities = useCallback(() => {
     if (universitiesLoadedRef.current) return;
     loadUniversities(universityQueryRef.current);
-    loadUniversitySummary();
-  }, [loadUniversities, loadUniversitySummary]);
+  }, [loadUniversities]);
 
   const setUniversityQuery = useCallback((partial: Partial<UniversityQuery>) => {
     const next: UniversityQuery = {
@@ -182,8 +161,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
 
   const reloadUniversities = useCallback(() => {
     loadUniversities(universityQueryRef.current);
-    loadUniversitySummary();
-  }, [loadUniversities, loadUniversitySummary]);
+  }, [loadUniversities]);
 
   const adjustCourseCount = useCallback((universityId: string, delta: number) => {
     setUniversities((prev) =>
@@ -244,25 +222,9 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
   const [schoolsLoading, setSchoolsLoading] = useState(false);
   const [schoolsLoaded, setSchoolsLoaded] = useState(false);
   const [schoolsError, setSchoolsError] = useState<string | null>(null);
-  const [schoolSummary, setSchoolSummary] = useState<RegistrySummary>(EMPTY_SUMMARY);
+  const [schoolSummary, setSchoolSummary] = useState<SchoolSummary>(EMPTY_SCHOOL_SUMMARY);
   const schoolsLoadedRef = useRef(false);
   const schoolRequestId = useRef(0);
-
-  const loadSchoolSummary = useCallback(() => {
-    Promise.all([
-      schoolService.listSchoolsPage({ page: 1, pageSize: 1 }),
-      schoolService.listSchoolsPage({ page: 1, pageSize: 1, classification: 'Public' }),
-      schoolService.listSchoolsPage({ page: 1, pageSize: 1, classification: 'Private' }),
-      schoolService.listSchoolsPage({ page: 1, pageSize: 1, status: 'Active' }),
-    ]).then(([total, pub, priv, active]) => {
-      setSchoolSummary({
-        total: total.ok ? total.data.count : 0,
-        public: pub.ok ? pub.data.count : 0,
-        private: priv.ok ? priv.data.count : 0,
-        active: active.ok ? active.data.count : 0,
-      });
-    });
-  }, []);
 
   const loadSchools = useCallback((query: SchoolQuery) => {
     schoolQueryRef.current = query;
@@ -275,6 +237,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       if (result.ok) {
         setSchools(result.data.results);
         setSchoolCount(result.data.count);
+        setSchoolSummary(result.data.summary);
         schoolsLoadedRef.current = true;
         setSchoolsLoaded(true);
       } else {
@@ -286,8 +249,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
   const ensureSchools = useCallback(() => {
     if (schoolsLoadedRef.current) return;
     loadSchools(schoolQueryRef.current);
-    loadSchoolSummary();
-  }, [loadSchools, loadSchoolSummary]);
+  }, [loadSchools]);
 
   const setSchoolQuery = useCallback((partial: Partial<SchoolQuery>) => {
     const next: SchoolQuery = {
@@ -302,8 +264,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
 
   const reloadSchools = useCallback(() => {
     loadSchools(schoolQueryRef.current);
-    loadSchoolSummary();
-  }, [loadSchools, loadSchoolSummary]);
+  }, [loadSchools]);
 
   const value = useMemo<MaintenanceDataContextValue>(
     () => ({

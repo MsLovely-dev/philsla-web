@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, X } from 'lucide-react';
+import { Download, Loader2, X } from 'lucide-react';
 import { ModalShell } from '../ui/ModalShell';
 
 export interface ExportColumnOption {
@@ -24,20 +24,26 @@ interface ExportConfigModalProps {
   title?: string;
   columns: ExportColumnOption[];
   scopeOptions?: ExportScopeOption[];
+  /** Row count per scope value, shown in the preview and scope labels. */
+  scopeCounts?: Record<string, number>;
+  /** True while the export request is in flight. */
+  isExporting?: boolean;
   onCancel: () => void;
-  onExport: (selection: ExportSelection) => void;
+  onExport: (selection: ExportSelection) => void | Promise<void>;
 }
 
 /**
- * Lets the user choose which columns (and which rows) to export before a CSV is
- * generated, instead of silently dumping whatever happens to be filtered on
- * screen. PII columns are excluded by default and must be opted into.
+ * Configures a CSV export before it runs: which columns (PII excluded by
+ * default), which rows (scope), with a live "N rows × M columns" preview. The
+ * export itself is performed by the caller's `onExport`.
  */
 export function ExportConfigModal({
   isOpen,
   title = 'Configure export',
   columns,
   scopeOptions,
+  scopeCounts,
+  isExporting = false,
   onCancel,
   onExport,
 }: ExportConfigModalProps) {
@@ -54,6 +60,14 @@ export function ExportConfigModal({
   }, [isOpen, columns, scopeOptions]);
 
   const chosen = columns.filter((c) => selected[c.key]).map((c) => c.key);
+  const allSelected = chosen.length === columns.length;
+  const rowCount = scopeCounts ? scopeCounts[scope] ?? 0 : undefined;
+
+  const toggleAll = () => {
+    const next: Record<string, boolean> = {};
+    for (const col of columns) next[col.key] = !allSelected;
+    setSelected(next);
+  };
 
   return (
     <ModalShell isOpen={isOpen} onClose={onCancel} className="max-w-md p-6 space-y-5">
@@ -83,6 +97,9 @@ export function ExportConfigModal({
                     onChange={() => setScope(opt.value)}
                   />
                   {opt.label}
+                  {scopeCounts?.[opt.value] !== undefined && (
+                    <span className="text-slate-400">({scopeCounts[opt.value].toLocaleString()})</span>
+                  )}
                 </label>
               ))}
             </div>
@@ -90,7 +107,16 @@ export function ExportConfigModal({
         )}
 
         <div className="space-y-2">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Columns</div>
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Columns</div>
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="text-[10px] font-bold uppercase tracking-wider text-philsa-navy hover:underline cursor-pointer"
+            >
+              {allSelected ? 'Clear all' : 'Select all'}
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto">
             {columns.map((col) => (
               <label key={col.key} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
@@ -108,20 +134,28 @@ export function ExportConfigModal({
           </div>
         </div>
 
-        <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer text-xs"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => onExport({ columns: chosen, scope })}
-            disabled={chosen.length === 0}
-            className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            <Download className="w-4 h-4" /> Download CSV
-          </button>
+        <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+          <p className="text-[11px] font-semibold text-philsa-gray">
+            {rowCount === undefined
+              ? `${chosen.length} column${chosen.length === 1 ? '' : 's'} selected`
+              : `Exports ${rowCount.toLocaleString()} row${rowCount === 1 ? '' : 's'} × ${chosen.length} column${chosen.length === 1 ? '' : 's'}`}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onExport({ columns: chosen, scope })}
+              disabled={chosen.length === 0 || isExporting}
+              className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5 text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {isExporting ? 'Preparing…' : 'Download CSV'}
+            </button>
+          </div>
         </div>
     </ModalShell>
   );
