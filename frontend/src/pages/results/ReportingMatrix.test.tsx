@@ -1,6 +1,10 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DashboardLayout } from '../../components/DashboardLayout';
+import { usePhilSA } from '../../PhilSAContext';
+import { APP_ROUTES } from '../../routing/routes';
 import { networkError, serviceSuccess, type ServiceResult } from '../../services/serviceResult';
 import { resultsAnalyticsService, type ResultsAnalyticsOverview } from '../../services/resultsAnalyticsService';
 import ReportingMatrix from './ReportingMatrix';
@@ -9,9 +13,10 @@ vi.mock('../../services/resultsAnalyticsService', () => ({
   resultsAnalyticsService: { getOverview: vi.fn() },
 }));
 
-vi.mock('../../PhilSAContext', () => ({
-  usePhilSA: () => ({ user: null }),
-}));
+vi.mock('../../PhilSAContext', async () => {
+  const actual = await vi.importActual<typeof import('../../PhilSAContext')>('../../PhilSAContext');
+  return { ...actual, usePhilSA: vi.fn(() => ({ user: null })) };
+});
 
 const overview: ResultsAnalyticsOverview = {
   releasedCandidates: 3,
@@ -34,6 +39,7 @@ const overview: ResultsAnalyticsOverview = {
 };
 
 const getOverviewMock = vi.mocked(resultsAnalyticsService.getOverview);
+const usePhilSAMock = vi.mocked(usePhilSA);
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -118,5 +124,23 @@ describe('ReportingMatrix', () => {
       await Promise.resolve();
     });
     expect(screen.queryByText('Stale released session')).not.toBeInTheDocument();
+  });
+
+  it('keeps a single main landmark when rendered through the protected reporting route layout', () => {
+    const reportingRoute = APP_ROUTES.find((route) => route.path === '/admin/results/matrix');
+    usePhilSAMock.mockReturnValue({
+      user: { id: 'admin-1', email: 'admin@example.test', firstName: 'Admin', lastName: 'User', role: 'SYSTEM_ADMIN' },
+      logout: vi.fn(),
+      maintenanceModules: [],
+    } as ReturnType<typeof usePhilSA>);
+
+    expect(reportingRoute).toBeDefined();
+    render(
+      <MemoryRouter initialEntries={['/admin/results/matrix']}>
+        <DashboardLayout>{reportingRoute?.element}</DashboardLayout>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getAllByRole('main')).toHaveLength(1);
   });
 });

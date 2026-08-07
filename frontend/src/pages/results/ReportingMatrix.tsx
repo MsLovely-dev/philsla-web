@@ -69,7 +69,7 @@ export default function ReportingMatrix() {
   const maximumBandCount = Math.max(...(overview?.scoreBands.map((band) => band.count) ?? [0]), 1);
 
   return (
-    <main className="space-y-8 text-left" aria-labelledby="released-results-overview-heading">
+    <section className="space-y-8 text-left" aria-labelledby="released-results-overview-heading">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 id="released-results-overview-heading" className="text-3xl font-extrabold tracking-tight text-philsa-navy">Released Results Overview</h1>
@@ -160,6 +160,6 @@ export default function ReportingMatrix() {
           </section>
         </>
       ))}
-    </main>
+    </section>
   );
 }

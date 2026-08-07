@@ -369,3 +369,18 @@ Diff check: git diff --check
 ```
 
 The first sandboxed frontend test attempt failed before collection because esbuild could not spawn (`EPERM`). The required escalated rerun passed. Backend tests emitted the existing warning that `backend/staticfiles/` is absent; it did not affect results.
+
+## 2026-08-07 — Reporting Matrix main-landmark correction
+
+The Reporting Matrix now uses a labelled page section rather than its own `main` landmark because `DashboardLayout` owns the routed content `main`. A layout-integrated regression renders the registered protected Reporting Matrix route inside `DashboardLayout` and asserts exactly one `main` landmark.
+
+```text
+RED: npm test -- src/pages/results/ReportingMatrix.test.tsx --run
+     7 tests ran; the new layout regression found 2 main landmarks (expected 1).
+GREEN: npm test -- src/services/resultsAnalyticsService.test.ts src/pages/results/ReportingMatrix.test.tsx --run
+       2 files passed, 10 tests passed.
+Build: npm run build
+       passed; 3,119 modules transformed. Existing chunk-size advisory remained.
+Diff check: git diff --check
+            passed.
+```
