@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import defaultdict
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -1308,7 +1309,23 @@ def serialize_exam_set(exam_set: ExamSet) -> dict[str, Any]:
     }
 
 
-def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], actor_profile: AccountProfile) -> None:
+@dataclass
+class ExamSetItemsDiff:
+    added_question_codes: list[str] = field(default_factory=list)
+    removed_question_codes: list[str] = field(default_factory=list)
+    order_changed: bool = False
+
+    @property
+    def is_replacement(self) -> bool:
+        return len(self.added_question_codes) == 1 and len(self.removed_question_codes) == 1
+
+    @property
+    def changed(self) -> bool:
+        return bool(self.added_question_codes or self.removed_question_codes or self.order_changed)
+
+
+def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], actor_profile: AccountProfile) -> ExamSetItemsDiff:
+    existing_by_question_id = {item.question_id: item.display_order for item in exam_set.items.all()}
     resolved_items: list[tuple[Question, BlueprintSection | None, int, Decimal, str]] = []
     seen_question_ids: set[int] = set()
     for index, item_payload in enumerate(items, start=1):
@@ -1346,6 +1363,21 @@ def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], acto
             _normalize_selection_method(_payload_value(item_payload, "selection_method", "selectionMethod", SelectionMethod.MANUAL)),
         ))
 
+    new_by_question_id = {question.pk: display_order for question, _section, display_order, _points, _method in resolved_items}
+    old_ids = set(existing_by_question_id)
+    new_ids = set(new_by_question_id)
+    added_ids = new_ids - old_ids
+    removed_ids = old_ids - new_ids
+    shared_ids = old_ids & new_ids
+    order_changed = any(existing_by_question_id[qid] != new_by_question_id[qid] for qid in shared_ids)
+
+    question_codes = dict(Question.objects.filter(pk__in=added_ids | removed_ids).values_list("pk", "question_code"))
+    diff = ExamSetItemsDiff(
+        added_question_codes=[question_codes[qid] for qid in added_ids],
+        removed_question_codes=[question_codes[qid] for qid in removed_ids],
+        order_changed=order_changed and not (added_ids or removed_ids),
+    )
+
     exam_set.items.all().delete()
     for question, blueprint_section, display_order, points, selection_method in resolved_items:
         ExamSetQuestion.objects.create(
@@ -1357,6 +1389,7 @@ def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], acto
             selection_method=selection_method,
             selected_by=actor_profile,
         )
+    return diff
 
 
 def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
@@ -1541,9 +1574,10 @@ def create_or_update_exam_set(
         exam_set.save()
         action = "Updated exam set"
 
+    items_diff: ExamSetItemsDiff | None = None
     if "items" in payload or "questions" in payload:
         items_payload = list(_payload_value(payload, "items", default=_payload_value(payload, "questions", default=[])) or [])
-        _replace_exam_set_items(exam_set, items_payload, actor_profile)
+        items_diff = _replace_exam_set_items(exam_set, items_payload, actor_profile)
 
     _record_exam_set_validation_results(exam_set)
     ExamSetWorkflowHistory.objects.create(
@@ -1554,6 +1588,31 @@ def create_or_update_exam_set(
         remarks=str(_payload_value(payload, "remarks", default="") or ""),
         initiated_by=actor_profile,
     )
+    if items_diff and items_diff.changed:
+        if items_diff.is_replacement:
+            ExamSetWorkflowHistory.objects.create(
+                exam_set=exam_set,
+                previous_status=exam_set.status,
+                new_status=exam_set.status,
+                action=f"Replaced question {items_diff.removed_question_codes[0]} with {items_diff.added_question_codes[0]}",
+                initiated_by=actor_profile,
+            )
+        else:
+            for code in items_diff.added_question_codes:
+                ExamSetWorkflowHistory.objects.create(
+                    exam_set=exam_set, previous_status=exam_set.status, new_status=exam_set.status,
+                    action=f"Added question {code}", initiated_by=actor_profile,
+                )
+            for code in items_diff.removed_question_codes:
+                ExamSetWorkflowHistory.objects.create(
+                    exam_set=exam_set, previous_status=exam_set.status, new_status=exam_set.status,
+                    action=f"Removed question {code}", initiated_by=actor_profile,
+                )
+            if items_diff.order_changed:
+                ExamSetWorkflowHistory.objects.create(
+                    exam_set=exam_set, previous_status=exam_set.status, new_status=exam_set.status,
+                    action="Reordered items", initiated_by=actor_profile,
+                )
     return exam_set
 
 

@@ -716,6 +716,48 @@ class ExamSetApiTests(APITestCase):
         self.assertEqual(codes[f"section_question_type_{section.id}_{self.question_type.id}"]["result"], "passed")
         self.assertEqual(codes["marks_compliance"]["result"], "warning")
 
+    def test_updating_items_records_add_remove_and_replace_audit_entries(self) -> None:
+        second_question = Question.objects.create(
+            question_code="Q-SCI-002", question_type=self.question_type, subject=self.subject, topic=self.topic,
+            competency=self.competency, difficulty="moderate", question_text="Second question.", points="5.00",
+            status=QuestionStatus.APPROVED, created_by=self.profile, approved_by=self.profile,
+        )
+        third_question = Question.objects.create(
+            question_code="Q-SCI-003", question_type=self.question_type, subject=self.subject, topic=self.topic,
+            competency=self.competency, difficulty="difficult", question_text="Third question.", points="5.00",
+            status=QuestionStatus.APPROVED, created_by=self.profile, approved_by=self.profile,
+        )
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        exam_set_id = created.data["id"]
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": exam_set_id})
+
+        added = self.client.put(detail_url, {
+            **self.payload,
+            "items": [
+                {"question_id": self.question.id, "display_order": 1, "points": 5},
+                {"question_id": second_question.id, "display_order": 2, "points": 5},
+            ],
+        }, format="json")
+        self.assertEqual(added.status_code, 200)
+        self.assertIn("Added question Q-SCI-002", [entry["action"] for entry in added.data["workflow_history"]])
+
+        replaced = self.client.put(detail_url, {
+            **self.payload,
+            "items": [
+                {"question_id": self.question.id, "display_order": 1, "points": 5},
+                {"question_id": third_question.id, "display_order": 2, "points": 5},
+            ],
+        }, format="json")
+        self.assertEqual(replaced.status_code, 200)
+        self.assertIn("Replaced question Q-SCI-002 with Q-SCI-003", [entry["action"] for entry in replaced.data["workflow_history"]])
+
+        removed = self.client.put(detail_url, {
+            **self.payload,
+            "items": [{"question_id": self.question.id, "display_order": 1, "points": 5}],
+        }, format="json")
+        self.assertEqual(removed.status_code, 200)
+        self.assertIn("Removed question Q-SCI-003", [entry["action"] for entry in removed.data["workflow_history"]])
+
 
 class SubjectAdminApiTests(APITestCase):
     def setUp(self) -> None:
