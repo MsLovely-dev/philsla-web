@@ -134,7 +134,7 @@ class PublicConfigurableFieldView(APIView):
 
 class ConfigurableFieldAdminView(APIView):
     permission_classes = [RoleRequiredPermission]
-    required_roles = require_roles(PortalRole.SYSTEM_ADMIN, PortalRole.DEPED_ADMIN)
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
 
     def get(self, request) -> Response:
         fields = ConfigurableField.objects.all()
@@ -186,7 +186,7 @@ class ConfigurableFieldAdminView(APIView):
 
 class ConfigurableFieldAdminDetailView(APIView):
     permission_classes = [RoleRequiredPermission]
-    required_roles = require_roles(PortalRole.SYSTEM_ADMIN, PortalRole.DEPED_ADMIN)
+    required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
 
     def get_object(self, field_id) -> ConfigurableField:
         return get_object_or_404(ConfigurableField, id=field_id)

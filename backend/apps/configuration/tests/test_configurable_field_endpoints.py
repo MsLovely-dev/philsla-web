@@ -348,3 +348,32 @@ class ConfigurableFieldEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["updatedBy"], str(other_admin.id))
+
+    def test_deped_admin_is_denied_on_the_admin_list_endpoint(self):
+        deped_admin = get_user_model().objects.create_user(username="deped-admin-denied")
+        client = APIClient()
+        client.force_authenticate(user=principal(deped_admin, "DEPED_ADMIN"))
+
+        response = client.get(reverse("configuration:fields-admin"), {"module": "student_registration"})
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_deped_admin_is_denied_on_the_admin_detail_endpoint(self):
+        field = ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Some Field",
+            input_type="text",
+        )
+        deped_admin = get_user_model().objects.create_user(username="deped-admin-denied-detail")
+        client = APIClient()
+        client.force_authenticate(user=principal(deped_admin, "DEPED_ADMIN"))
+
+        response = client.patch(
+            reverse("configuration:fields-admin-detail", args=[field.id]),
+            {"remarks": "attempted edit"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
