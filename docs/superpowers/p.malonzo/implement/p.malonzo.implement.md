@@ -332,3 +332,20 @@ Diff check: git diff --check
 ```
 
 The tests emitted the existing warning that `backend/staticfiles/` is absent. One check invocation from the repository root failed because `manage.py` is under `backend/`; rerunning the exact check from `backend/` passed.
+
+## 2026-08-07 — Released results analytics reporting matrix
+
+Replaced the Reporting Matrix's national, university, demographic, qualification, regional, subject, and batch mock authority with the typed `resultsAnalyticsService.getOverview()` contract. The page now renders only released-candidate totals, released-session totals, mean final score, server-provided score bands (with both visual bars and a semantic table), and a released-session aggregate table. It has accessible loading, empty, safe error/retry, keyboard-focus, responsive overflow, null-field fallback, and latest-request/unmount guards.
+
+Test-first evidence:
+
+```text
+RED: npm test -- src/pages/results/ReportingMatrix.test.tsx --run
+     6 expected assertions failed against the old prototype Reporting Matrix.
+GREEN: npm test -- src/services/resultsAnalyticsService.test.ts src/pages/results/ReportingMatrix.test.tsx --run
+       2 files passed, 9 tests passed.
+Build: npm run build
+       passed; 3,119 modules transformed. Existing chunk-size advisory remained.
+Diff check: git diff --check
+            passed.
+```
