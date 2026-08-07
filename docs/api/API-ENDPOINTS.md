@@ -87,6 +87,7 @@ The baseline health and authentication boundaries, the first student-application
 `POST /api/v1/results/exam-reviews/{reviewId}/items/{itemId}/score/` accepts `{ "points": 8 }` for a subjective item. The backend rejects objective-item overrides, scores above the item's maximum, item/review mismatches, and changes to `FINALIZED` records. A successful save recalculates the aggregate total and remaining pending-subjective count from persisted item scores.
 | `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` | List examination sessions with score-processing status and candidate counts | Implemented |
 | `GET` | `/api/v1/results/release-summary/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | List paginated session-level processing and release readiness totals without candidate details | Implemented |
+| `GET` | `/api/v1/results/analytics/overview/` | Bearer token | `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, or `SYSTEM_ADMIN` | Return released-results aggregate totals, fixed score-band distribution, and session summaries | Implemented |
 | `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` | Return paginated approved candidate score records, with rank and percentile populated after processing | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` | Bearer token | `SYSTEM_ADMIN` | Return a score-anchored read-only candidate profile for a candidate in the selected score batch | Implemented |
@@ -96,6 +97,36 @@ The baseline health and authentication boundaries, the first student-application
 ### Score Management
 
 Score Management is backend-owned. `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN` may trigger processing and release, but the batch list, candidate results, candidate profiles, and CSV export remain restricted to `SYSTEM_ADMIN`. The frontend may not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
+
+### `GET /api/v1/results/analytics/overview/`
+
+Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, and `SYSTEM_ADMIN`. It accepts no filters or identity inputs. The backend includes only score rows that are `APPROVED`, `RELEASED`, and belong to a session with `RESULTS_RELEASED` scoring status.
+
+```json
+{
+  "releasedCandidates": 188394,
+  "releasedSessions": 1,
+  "meanFinalScore": 82.5,
+  "scoreBands": [
+    { "label": "0-59.99", "minimum": 0, "maximum": 59.99, "count": 1000 },
+    { "label": "60-69.99", "minimum": 60, "maximum": 69.99, "count": 2000 },
+    { "label": "70-79.99", "minimum": 70, "maximum": 79.99, "count": 3000 },
+    { "label": "80-89.99", "minimum": 80, "maximum": 89.99, "count": 4000 },
+    { "label": "90-100", "minimum": 90, "maximum": 100, "count": 178394 }
+  ],
+  "sessions": [
+    {
+      "sessionId": "SESSION-2027-REGULAR",
+      "sessionName": "PhilSA Regular Examination 2027",
+      "releasedCandidates": 188394,
+      "meanFinalScore": 82.5,
+      "releasedAt": "2026-08-03T08:00:00+00:00"
+    }
+  ]
+}
+```
+
+`meanFinalScore` and each session `meanFinalScore` are `null` when no qualifying rows exist. The fixed bands are `0-59.99`, `60-69.99`, `70-79.99`, `80-89.99`, and `90-100`. Session `releasedAt` is the latest release-audit timestamp, or `null` if no audit exists. Responses never include candidate rows, names, IDs, LRNs, contact details, answer content, rankings, institutions, demographics, regions, agency data, qualifications, or admission decisions.
 
 ### `GET /api/v1/results/release-summary/`
 

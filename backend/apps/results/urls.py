@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .analytics_views import ResultsAnalyticsOverviewView
 from .release_views import ResultsReleaseSummaryView
 from .views import (
     ScoreManagementBatchListView,
@@ -11,6 +12,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("analytics/overview/", ResultsAnalyticsOverviewView.as_view(), name="results-analytics-overview"),
     path("release-summary/", ResultsReleaseSummaryView.as_view(), name="release-summary"),
     path("score-management/batches/", ScoreManagementBatchListView.as_view(), name="score-management-batches"),
     path(
