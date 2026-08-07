@@ -116,6 +116,7 @@ export default function UniversitiesListMaintenance() {
     ensureUniversities,
     setUniversityQuery,
     reloadUniversities,
+    reloadUniversitiesAfterDelete,
     adjustCourseCount,
     courses: coursesByUniversity,
     coursesError,
@@ -286,7 +287,7 @@ export default function UniversitiesListMaintenance() {
     }
 
     const removedId = pendingDelete.id;
-    reloadUniversities();
+    reloadUniversitiesAfterDelete();
     if (selectedUniversity?.id === removedId) {
       setSelectedUniversity(null);
     }

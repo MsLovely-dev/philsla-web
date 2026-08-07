@@ -70,6 +70,7 @@ export default function SchoolsListMaintenance() {
     ensureSchools,
     setSchoolQuery,
     reloadSchools,
+    reloadSchoolsAfterDelete,
   } = useMaintenanceData();
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -155,7 +156,7 @@ export default function SchoolsListMaintenance() {
       setPendingDelete(null);
       return;
     }
-    reloadSchools();
+    reloadSchoolsAfterDelete();
     setPendingDelete(null);
     setViewingSchool(null); // the record is gone, so close the details modal too
   };

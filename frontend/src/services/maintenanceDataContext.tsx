@@ -82,6 +82,7 @@ interface MaintenanceDataContextValue {
   ensureUniversities: () => void;
   setUniversityQuery: (partial: Partial<UniversityQuery>) => void;
   reloadUniversities: () => void;
+  reloadUniversitiesAfterDelete: () => void;
   adjustCourseCount: (universityId: string, delta: number) => void;
 
   courses: Record<string, CollegeCourseRecord[]>;
@@ -101,6 +102,19 @@ interface MaintenanceDataContextValue {
   ensureSchools: () => void;
   setSchoolQuery: (partial: Partial<SchoolQuery>) => void;
   reloadSchools: () => void;
+  reloadSchoolsAfterDelete: () => void;
+}
+
+/**
+ * The page to load after removing `removedCount` rows from `query.page`. When a
+ * delete empties the current page (the last row on the last page), the requested
+ * page would be out of range and the backend 404s; clamp back to the last page
+ * that still has rows so the reload lands on real data instead of erroring.
+ */
+function pageAfterDeletion(query: { page: number }, currentCount: number, removedCount = 1): number {
+  const remaining = Math.max(0, currentCount - removedCount);
+  const lastPage = Math.max(1, Math.ceil(remaining / MAINTENANCE_PAGE_SIZE));
+  return Math.min(query.page, lastPage);
 }
 
 const MaintenanceDataContext = createContext<MaintenanceDataContextValue | null>(null);
@@ -122,6 +136,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
   const [universitySummary, setUniversitySummary] = useState<UniversitySummary>(EMPTY_UNIVERSITY_SUMMARY);
   const universitiesLoadedRef = useRef(false);
   const universityRequestId = useRef(0);
+  const universityCountRef = useRef(0);
 
   const loadUniversities = useCallback((query: UniversityQuery) => {
     universityQueryRef.current = query;
@@ -134,6 +149,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       if (result.ok) {
         setUniversities(result.data.results);
         setUniversityCount(result.data.count);
+        universityCountRef.current = result.data.count;
         setUniversitySummary(result.data.summary); // registry-wide totals ride along with the list
         universitiesLoadedRef.current = true;
         setUniversitiesLoaded(true);
@@ -161,6 +177,17 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
 
   const reloadUniversities = useCallback(() => {
     loadUniversities(universityQueryRef.current);
+  }, [loadUniversities]);
+
+  const reloadUniversitiesAfterDelete = useCallback(() => {
+    const current = universityQueryRef.current;
+    const targetPage = pageAfterDeletion(current, universityCountRef.current);
+    const next = targetPage === current.page ? current : { ...current, page: targetPage };
+    if (next !== current) {
+      universityQueryRef.current = next;
+      setUniversityQueryState(next);
+    }
+    loadUniversities(next);
   }, [loadUniversities]);
 
   const adjustCourseCount = useCallback((universityId: string, delta: number) => {
@@ -225,6 +252,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
   const [schoolSummary, setSchoolSummary] = useState<SchoolSummary>(EMPTY_SCHOOL_SUMMARY);
   const schoolsLoadedRef = useRef(false);
   const schoolRequestId = useRef(0);
+  const schoolCountRef = useRef(0);
 
   const loadSchools = useCallback((query: SchoolQuery) => {
     schoolQueryRef.current = query;
@@ -237,6 +265,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       if (result.ok) {
         setSchools(result.data.results);
         setSchoolCount(result.data.count);
+        schoolCountRef.current = result.data.count;
         setSchoolSummary(result.data.summary);
         schoolsLoadedRef.current = true;
         setSchoolsLoaded(true);
@@ -266,6 +295,17 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
     loadSchools(schoolQueryRef.current);
   }, [loadSchools]);
 
+  const reloadSchoolsAfterDelete = useCallback(() => {
+    const current = schoolQueryRef.current;
+    const targetPage = pageAfterDeletion(current, schoolCountRef.current);
+    const next = targetPage === current.page ? current : { ...current, page: targetPage };
+    if (next !== current) {
+      schoolQueryRef.current = next;
+      setSchoolQueryState(next);
+    }
+    loadSchools(next);
+  }, [loadSchools]);
+
   const value = useMemo<MaintenanceDataContextValue>(
     () => ({
       universities,
@@ -278,6 +318,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       ensureUniversities,
       setUniversityQuery,
       reloadUniversities,
+      reloadUniversitiesAfterDelete,
       adjustCourseCount,
       courses,
       coursesError,
@@ -295,6 +336,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       ensureSchools,
       setSchoolQuery,
       reloadSchools,
+      reloadSchoolsAfterDelete,
     }),
     [
       universities,
@@ -307,6 +349,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       ensureUniversities,
       setUniversityQuery,
       reloadUniversities,
+      reloadUniversitiesAfterDelete,
       adjustCourseCount,
       courses,
       coursesError,
@@ -324,6 +367,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       ensureSchools,
       setSchoolQuery,
       reloadSchools,
+      reloadSchoolsAfterDelete,
     ],
   );
 
