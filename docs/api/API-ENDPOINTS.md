@@ -55,6 +55,13 @@ The baseline health and authentication boundaries, the first student-application
 | `GET`, `PUT`, `PATCH`, `DELETE` | `/api/v1/universities/{universityId}/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Read, update, or delete one university; delete cascade-removes its college courses | Implemented |
 | `GET`, `POST` | `/api/v1/universities/{universityId}/courses/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | List or create college courses under the path university | Implemented |
 | `GET`, `PUT`, `PATCH`, `DELETE` | `/api/v1/universities/{universityId}/courses/{courseId}/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Read, update, or delete one college course under the path university | Implemented |
+| `GET` | `/api/v1/universities/export/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Stream the filtered university registry as CSV | Implemented |
+| `POST` | `/api/v1/universities/import/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Atomic bulk-create universities from parsed CSV rows | Implemented |
+| `POST` | `/api/v1/universities/{universityId}/courses/import/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Atomic bulk-create college courses under the path university | Implemented |
+| `GET`, `POST` | `/api/v1/schools/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | List the DepEd school registry, or create a school (server-assigned `SCH-#####` code) | Implemented |
+| `GET`, `PUT`, `PATCH`, `DELETE` | `/api/v1/schools/{schoolId}/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Read, update, or delete one school | Implemented |
+| `GET` | `/api/v1/schools/export/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Stream the filtered school registry as CSV | Implemented |
+| `POST` | `/api/v1/schools/import/` | Required bearer access token | `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` | Atomic bulk-create schools from parsed CSV rows | Implemented |
 | `GET`, `POST` | `/api/v1/applications/configuration/step-2/` | Bearer token | `SYSTEM_ADMIN` or `DEPED_ADMIN` | List configuration versions or create a new effective version | Implemented |
 | `POST` | `/api/v1/applications/registration/step-2/{verificationId}/manual-decision/` | Bearer token | `SYSTEM_ADMIN`, `DEPED_ADMIN`, or `ADMISSIONS_REVIEWER` | Decide a pending manual identity review | Implemented |
 | `GET` | `/api/v1/results/exam-reviews/` | Required bearer access token | `ADMISSIONS_REVIEWER`, `EXAM_ADMINISTRATOR`, `UNIVERSITY_ADMIN`, or `SYSTEM_ADMIN` | List persisted Exam Review queue summaries | Implemented |
@@ -229,6 +236,12 @@ Test coverage:
 ### `GET, PUT, PATCH, DELETE /api/v1/universities/{universityId}/courses/{courseId}/`
 
 Operates on one course only when it belongs to the path university; otherwise `404 NOT_FOUND`. `PUT`/`PATCH` re-check per-university program-code uniqueness. `DELETE` returns `204 No Content`. There is no version control.
+
+### CSV export and bulk import (universities, courses, schools)
+
+`GET .../export/` streams the filtered registry as `text/csv` (`?columns=` selects/orders columns; the list filters `search`/`classification`/`region`/`status` also apply). Cells that could be read as spreadsheet formulas are neutralized before streaming.
+
+`POST .../import/` bulk-creates rows from a JSON body `{ "rows": [ {<camelCase field>: value, ...}, ... ] }` (the frontend parses the CSV and sends the mapped rows). Each row is validated through the same serializer as single-create, so all create rules apply (auto `code` generation, required fields, per-region name / per-university program-code uniqueness). `region` accepts either the stored code or its display label. The import is **atomic**: if any row is invalid — including duplicates *within the file* — nothing is persisted and the response is `400` with code `IMPORT_VALIDATION` and a per-row report under `error.meta.rows` (`[{ "row": <0-based index>, "fields": {<field>: [<message>]} }]`). On success the response is `201 {"created": <n>}`. A malformed payload (not a list, empty, or over `MAINTENANCE_IMPORT_MAX_ROWS`, default 1000) returns `400 VALIDATION_FAILED`. One audit event (`*_bulk_imported`) records the actor and outcome — never the row contents.
 
 All university registry endpoints require an authenticated `SYSTEM_ADMIN`, `UNIVERSITY_ADMIN`, or `ADMISSIONS_REVIEWER` account (`RoleRequiredPermission`). Mutations are written to the safe audit logger via `record_university_event` / `record_college_course_event` without request/response bodies or institutional contact values. Unique per-region university names and per-university program codes prevent duplicate logical records. No endpoint-specific throttle is configured beyond authenticated API and deployment controls; a production maintenance-write rate remains `TBD`.
 

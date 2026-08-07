@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient, APITestCase
 
@@ -233,6 +233,77 @@ class SchoolListQueryTests(APITestCase):
 
         response = self.client.get(reverse("schools:school_list"))
         self.assertEqual(response.status_code, 403)
+
+
+class SchoolImportApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="system_admin", email="system.admin@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(self.user)
+        self.url = reverse("schools:school_import")
+
+    def _row(self, **overrides) -> dict:
+        row = {"classification": "Public", "name": "School A", "examineeCapacity": 500, "region": "NCR"}
+        row.update(overrides)
+        return row
+
+    def test_imports_all_rows_atomically(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"rows": [self._row(name="School A"), self._row(name="School B", classification="Private")]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(School.objects.count(), 2)
+        self.assertEqual(sorted(School.objects.values_list("code", flat=True)), ["SCH-00001", "SCH-00002"])
+
+    def test_one_invalid_row_rolls_back_the_whole_batch(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"rows": [self._row(name="Good School"), self._row(name="Bad School", examineeCapacity=0)]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(School.objects.count(), 0)
+        rows = response.data["error"]["meta"]["rows"]
+        self.assertEqual([r["row"] for r in rows], [1])
+        self.assertIn("examineeCapacity", rows[0]["fields"])
+
+    def test_accepts_region_display_label(self) -> None:
+        response = self.client.post(
+            self.url, {"rows": [self._row(region="National Capital Region (NCR)")]}, format="json"
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(School.objects.get().region, "NCR")
+
+    def test_rejects_duplicate_name_region_within_file(self) -> None:
+        response = self.client.post(
+            self.url, {"rows": [self._row(name="Dup School"), self._row(name="Dup School")]}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(School.objects.count(), 0)
+
+    @override_settings(MAINTENANCE_IMPORT_MAX_ROWS=2)
+    def test_rejects_batch_over_row_cap(self) -> None:
+        response = self.client.post(
+            self.url, {"rows": [self._row(name=f"School {i}") for i in range(3)]}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(School.objects.count(), 0)
+
+    def test_unprivileged_role_cannot_import(self) -> None:
+        User = get_user_model()
+        student = User.objects.create_user(
+            username="student_user", email="student@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(student)
+        response = self.client.post(self.url, {"rows": [self._row()]}, format="json")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(School.objects.count(), 0)
 
 
 class SeedSchoolsCommandTests(TestCase):

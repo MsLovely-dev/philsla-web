@@ -8,11 +8,12 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.core.csv_export import dated_filename, stream_csv
+from apps.core.imports import normalize_region_factory, run_bulk_import
 from apps.core.pagination import RegistryPageNumberPagination
 from apps.core.throttling import MaintenanceWriteRateThrottle
 
 from .audit import record_school_event
-from .models import School
+from .models import PhilippineRegion, School
 from .serializers import SchoolSerializer
 
 
@@ -118,6 +119,29 @@ class SchoolExportView(APIView):
                 yield [getter(school) for getter in getters]
 
         return stream_csv(header, rows(), dated_filename("philSA_List_of_Schools"))
+
+
+class SchoolImportView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = SCHOOL_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
+
+    def post(self, request) -> Response:
+        created = run_bulk_import(
+            SchoolSerializer,
+            request.data.get("rows"),
+            save_kwargs={"created_by_id": getattr(request.user, "user_id", request.user.id)},
+            normalize=normalize_region_factory(PhilippineRegion),
+            duplicate_key=lambda vd: (vd["name"].strip().lower(), vd["region"]),
+            duplicate_message={
+                "name": ["This school name is duplicated within the file for its region."]
+            },
+        )
+        record_school_event(
+            event="school_bulk_imported", outcome="success", request=request, user=request.user
+        )
+        return Response({"created": created}, status=status.HTTP_201_CREATED)
 
 
 class SchoolDetailView(APIView):

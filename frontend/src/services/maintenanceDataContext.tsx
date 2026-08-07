@@ -88,6 +88,7 @@ interface MaintenanceDataContextValue {
   courses: Record<string, CollegeCourseRecord[]>;
   coursesError: string | null;
   ensureCourses: (universityId: string) => void;
+  reloadCourses: (universityId: string) => void;
   isCoursesLoaded: (universityId: string) => boolean;
   setCourseRecord: (universityId: string, course: CollegeCourseRecord) => void;
   removeCourseRecord: (universityId: string, courseId: string) => void;
@@ -221,6 +222,16 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Drop the cached page for a university and refetch it — used after a bulk
+  // course import so the drill-down table reflects the newly created rows.
+  const reloadCourses = useCallback(
+    (universityId: string) => {
+      coursesLoadedRef.current.delete(universityId);
+      ensureCourses(universityId);
+    },
+    [ensureCourses],
+  );
+
   const isCoursesLoaded = useCallback((universityId: string) => coursesLoadedRef.current.has(universityId), []);
 
   const setCourseRecord = useCallback((universityId: string, course: CollegeCourseRecord) => {
@@ -323,6 +334,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       courses,
       coursesError,
       ensureCourses,
+      reloadCourses,
       isCoursesLoaded,
       setCourseRecord,
       removeCourseRecord,
@@ -354,6 +366,7 @@ export function MaintenanceDataProvider({ children }: { children: ReactNode }) {
       courses,
       coursesError,
       ensureCourses,
+      reloadCourses,
       isCoursesLoaded,
       setCourseRecord,
       removeCourseRecord,

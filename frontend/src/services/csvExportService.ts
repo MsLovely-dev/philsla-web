@@ -38,6 +38,60 @@ export function toCsv(headers: readonly string[], rows: ReadonlyArray<ReadonlyAr
   return lines.join('\r\n');
 }
 
+/**
+ * Parse CSV text into a header row and data rows (RFC 4180: quoted fields,
+ * embedded commas/quotes/newlines, `""` escaping, CRLF or LF line endings).
+ * A leading UTF-8 BOM and fully-blank lines are ignored. Headers are trimmed.
+ * The inverse of {@link toCsv}; used to preview a file before bulk import.
+ */
+export function parseCsv(text: string): { headers: string[]; rows: string[][] } {
+  const input = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const records: string[][] = [];
+  let field = '';
+  let record: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (input[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+    } else if (char === ',') {
+      record.push(field);
+      field = '';
+    } else if (char === '\n') {
+      record.push(field);
+      records.push(record);
+      field = '';
+      record = [];
+    } else if (char !== '\r') {
+      field += char;
+    }
+  }
+  if (field !== '' || record.length > 0) {
+    record.push(field);
+    records.push(record);
+  }
+
+  const nonEmpty = records.filter((r) => !(r.length === 1 && r[0].trim() === ''));
+  const [headers = [], ...rows] = nonEmpty;
+  return { headers: headers.map((h) => h.trim()), rows };
+}
+
 export function downloadBlob(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

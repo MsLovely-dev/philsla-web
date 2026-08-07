@@ -19,6 +19,7 @@ import {
   Layers,
   Sparkles,
   ExternalLink,
+  Upload,
   School as SchoolIcon,
   Table as TableIcon,
   LayoutGrid
@@ -42,6 +43,13 @@ import {
   type ExportColumnOption,
   type ExportSelection,
 } from '../../../components/maintenance/ExportConfigModal';
+import {
+  ImportConfigModal,
+  type ImportColumnOption,
+  type ImportOutcome,
+  type ImportRow,
+} from '../../../components/maintenance/ImportConfigModal';
+import { importErrorsFromResult } from '../../../services/importTypes';
 import { downloadBlob, downloadCsv, toCsv } from '../../../services/csvExportService';
 
 function isUniversityClassification(value: string): value is UniversityClassification {
@@ -105,6 +113,32 @@ const EXPORT_SCOPE_OPTIONS = [
   { value: 'all', label: 'All rows' },
 ];
 
+// Import columns mirror the export labels so an exported file round-trips. Codes
+// are auto-generated and course counts are computed, so neither is importable.
+const UNIVERSITY_IMPORT_COLUMNS: ImportColumnOption[] = [
+  { key: 'name', label: 'University Name', required: true },
+  { key: 'classification', label: 'Classification', required: true },
+  { key: 'region', label: 'Region', required: true },
+  { key: 'city', label: 'City', required: true },
+  { key: 'presidentRector', label: 'President/Rector' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'establishedYear', label: 'Established' },
+  { key: 'status', label: 'Status' },
+];
+
+const COURSE_IMPORT_COLUMNS: ImportColumnOption[] = [
+  { key: 'programCode', label: 'Program Code', required: true },
+  { key: 'programName', label: 'Program Name', required: true },
+  { key: 'collegeName', label: 'College', required: true },
+  { key: 'degreeType', label: 'Degree Type' },
+  { key: 'majorSpecialization', label: 'Specialization' },
+  { key: 'durationYears', label: 'Duration (Yrs)' },
+  { key: 'totalUnits', label: 'Total Units' },
+  { key: 'cutoffPercentile', label: 'Cutoff %' },
+  { key: 'status', label: 'Status' },
+];
+
 export default function UniversitiesListMaintenance() {
   const {
     universities,
@@ -121,6 +155,7 @@ export default function UniversitiesListMaintenance() {
     courses: coursesByUniversity,
     coursesError,
     ensureCourses,
+    reloadCourses,
     setCourseRecord,
     removeCourseRecord,
   } = useMaintenanceData();
@@ -149,6 +184,8 @@ export default function UniversitiesListMaintenance() {
   // Modals
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isUniModalOpen, setIsUniModalOpen] = useState(false);
   const [editingUniversity, setEditingUniversity] = useState<UniversityRecord | null>(null);
   const [uniFormData, setUniFormData] = useState<UniversityPayload>(EMPTY_UNI_FORM);
@@ -404,6 +441,30 @@ export default function UniversitiesListMaintenance() {
     }
   };
 
+  const handleImport = async (rows: ImportRow[]): Promise<ImportOutcome> => {
+    setIsImporting(true);
+    const result = selectedUniversity
+      ? await universityService.importCourses(selectedUniversity.id, rows)
+      : await universityService.importUniversities(rows);
+    setIsImporting(false);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        message: (result as ServiceFailure).error.message,
+        errors: importErrorsFromResult(result),
+      };
+    }
+
+    if (selectedUniversity) {
+      reloadCourses(selectedUniversity.id);
+      adjustCourseCount(selectedUniversity.id, result.data.created);
+    } else {
+      reloadUniversities();
+    }
+    return { ok: true, created: result.data.created };
+  };
+
   // First load shows a distinct loading/error state; when cached it is already loaded.
   if (!universitiesLoaded && universitiesError) {
     return (
@@ -492,6 +553,12 @@ export default function UniversitiesListMaintenance() {
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
+                >
+                  <Upload className="w-4 h-4 shrink-0" /> Import CSV
+                </button>
                 <button
                   onClick={() => setIsExportModalOpen(true)}
                   className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
@@ -859,6 +926,12 @@ export default function UniversitiesListMaintenance() {
               </div>
 
               <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Upload className="w-4 h-4 text-slate-500" /> Import Courses
+                </button>
                 <button
                   onClick={() => setIsExportModalOpen(true)}
                   className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
@@ -1415,6 +1488,18 @@ export default function UniversitiesListMaintenance() {
         isExporting={isExporting}
         onCancel={() => setIsExportModalOpen(false)}
         onExport={handleExport}
+      />
+
+      <ImportConfigModal
+        isOpen={isImportModalOpen}
+        title={selectedUniversity ? 'Import college courses' : 'Import universities'}
+        columns={selectedUniversity ? COURSE_IMPORT_COLUMNS : UNIVERSITY_IMPORT_COLUMNS}
+        templateFilename={
+          selectedUniversity ? `${selectedUniversity.code}_College_Courses_template.csv` : 'Universities_template.csv'
+        }
+        isImporting={isImporting}
+        onCancel={() => setIsImportModalOpen(false)}
+        onImport={handleImport}
       />
 
       <ConfirmationDialog

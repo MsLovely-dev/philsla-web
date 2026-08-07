@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { csvEscape, toCsv } from './csvExportService';
+import { csvEscape, parseCsv, toCsv } from './csvExportService';
 
 describe('csvEscape', () => {
   it('neutralizes formula-injection leading characters', () => {
@@ -30,5 +30,35 @@ describe('toCsv', () => {
       ['UNI-2', '=x'],
     ]);
     expect(csv).toBe('Code,Name\r\nUNI-1,"A, B"\r\nUNI-2,\'=x');
+  });
+});
+
+describe('parseCsv', () => {
+  it('parses a simple CRLF file into trimmed headers and rows', () => {
+    const { headers, rows } = parseCsv('Name,Region\r\nUP Diliman,NCR\r\nAteneo,NCR\r\n');
+    expect(headers).toEqual(['Name', 'Region']);
+    expect(rows).toEqual([
+      ['UP Diliman', 'NCR'],
+      ['Ateneo', 'NCR'],
+    ]);
+  });
+
+  it('handles quoted fields with embedded commas, quotes, and newlines', () => {
+    const { rows } = parseCsv('Name,Note\n"A, B","say ""hi"""\n"line1\nline2",ok');
+    expect(rows[0]).toEqual(['A, B', 'say "hi"']);
+    expect(rows[1]).toEqual(['line1\nline2', 'ok']);
+  });
+
+  it('strips a UTF-8 BOM and ignores blank lines', () => {
+    const { headers, rows } = parseCsv('﻿Name,Region\nUP,NCR\n\n');
+    expect(headers).toEqual(['Name', 'Region']);
+    expect(rows).toEqual([['UP', 'NCR']]);
+  });
+
+  it('round-trips values written by toCsv', () => {
+    const csv = toCsv(['Name', 'City'], [['A, B', 'Quezon City']]);
+    const { headers, rows } = parseCsv(csv);
+    expect(headers).toEqual(['Name', 'City']);
+    expect(rows).toEqual([['A, B', 'Quezon City']]);
   });
 });

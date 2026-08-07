@@ -1,5 +1,6 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
 import { serviceSuccess, type PaginatedResult, type ServiceResult } from './serviceResult';
+import type { ImportRow, ImportSummary } from './importTypes';
 import { toCsv } from './csvExportService';
 
 export type UniversityClassification = 'Public' | 'Private';
@@ -159,11 +160,13 @@ export interface UniversityService {
   listUniversities(): Promise<ServiceResult<UniversityRecord[]>>;
   listUniversitiesPage(params: UniversityListParams): Promise<ServiceResult<UniversityPage>>;
   exportUniversities(params: UniversityExportParams): Promise<ServiceResult<Blob>>;
+  importUniversities(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>>;
   createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>>;
   updateUniversity(id: string, payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>>;
   deleteUniversity(id: string): Promise<ServiceResult<null>>;
   listCourses(universityId: string): Promise<ServiceResult<CollegeCourseRecord[]>>;
   createCourse(universityId: string, payload: CollegeCoursePayload): Promise<ServiceResult<CollegeCourseRecord>>;
+  importCourses(universityId: string, rows: ImportRow[]): Promise<ServiceResult<ImportSummary>>;
   updateCourse(
     universityId: string,
     courseId: string,
@@ -216,6 +219,13 @@ export class BackendUniversityService implements UniversityService {
     return this.apiClient.requestBlob(`${UNIVERSITIES_ENDPOINT}export/?${query.toString()}`);
   }
 
+  importUniversities(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    return this.apiClient.request<ImportSummary>(`${UNIVERSITIES_ENDPOINT}import/`, {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
+  }
+
   async createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>> {
     return this.mapItem(
       await this.apiClient.request<ApiUniversity>(UNIVERSITIES_ENDPOINT, {
@@ -254,6 +264,13 @@ export class BackendUniversityService implements UniversityService {
         body: JSON.stringify(this.toApiCoursePayload(payload)),
       }),
     );
+  }
+
+  importCourses(universityId: string, rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    return this.apiClient.request<ImportSummary>(`${coursesEndpoint(universityId)}import/`, {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
   }
 
   async updateCourse(
@@ -421,6 +438,23 @@ export class MockUniversityService implements UniversityService {
     return serviceSuccess(new Blob([toCsv(header, rows)], { type: 'text/csv' }));
   }
 
+  async importUniversities(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    for (const row of rows) {
+      await this.createUniversity({
+        classification: (row.classification as UniversityClassification) || 'Public',
+        name: row.name ?? '',
+        region: row.region ?? '',
+        city: row.city ?? '',
+        presidentRector: row.presidentRector ?? '',
+        email: row.email ?? '',
+        phone: row.phone ?? '',
+        establishedYear: row.establishedYear ? Number(row.establishedYear) : null,
+        status: (row.status as ActivationStatus) || 'Active',
+      });
+    }
+    return serviceSuccess({ created: rows.length });
+  }
+
   async createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>> {
     this.sequence += 1;
     const now = new Date().toISOString();
@@ -476,6 +510,23 @@ export class MockUniversityService implements UniversityService {
     this.courses = [...this.courses, course];
     this.syncCourseCount(universityId);
     return serviceSuccess({ ...course });
+  }
+
+  async importCourses(universityId: string, rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    for (const row of rows) {
+      await this.createCourse(universityId, {
+        collegeName: row.collegeName ?? '',
+        programCode: row.programCode ?? '',
+        programName: row.programName ?? '',
+        degreeType: row.degreeType ?? '',
+        majorSpecialization: row.majorSpecialization ?? '',
+        durationYears: row.durationYears ? Number(row.durationYears) : 4,
+        totalUnits: row.totalUnits ? Number(row.totalUnits) : 0,
+        cutoffPercentile: row.cutoffPercentile ? Number(row.cutoffPercentile) : 0,
+        status: (row.status as ActivationStatus) || 'Active',
+      });
+    }
+    return serviceSuccess({ created: rows.length });
   }
 
   async updateCourse(

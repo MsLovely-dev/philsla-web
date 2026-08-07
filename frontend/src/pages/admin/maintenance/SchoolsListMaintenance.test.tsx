@@ -144,6 +144,33 @@ describe('SchoolsListMaintenance', () => {
     expect(await screen.findByRole('button', { name: school.name })).toBeInTheDocument();
   });
 
+  it('imports schools from a CSV file and reloads the list', async () => {
+    data = [school];
+    const importSchools = vi
+      .spyOn(schoolService, 'importSchools')
+      .mockResolvedValue(serviceSuccess({ created: 1 }));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('button', { name: school.name });
+
+    await user.click(screen.getByRole('button', { name: /import csv/i }));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(
+      input,
+      new File(
+        ['Name,Classification,Examinee Capacity,Region/Municipality/City\nManila HS,Public,900,NCR\n'],
+        'schools.csv',
+        { type: 'text/csv' },
+      ),
+    );
+    await user.click(await screen.findByRole('button', { name: /Import 1 row/i }));
+
+    expect(importSchools).toHaveBeenCalledWith([
+      { name: 'Manila HS', classification: 'Public', examineeCapacity: '900', region: 'NCR' },
+    ]);
+    expect(await screen.findByText(/Imported 1 row successfully/i)).toBeInTheDocument();
+  });
+
   it('opens a details modal from the school name and can jump to editing', async () => {
     data = [school];
     const user = userEvent.setup();

@@ -6,6 +6,7 @@ import {
   Edit3,
   Trash2,
   Download,
+  Upload,
   X,
   Check,
   ChevronRight,
@@ -30,6 +31,13 @@ import {
   type ExportColumnOption,
   type ExportSelection,
 } from '../../../components/maintenance/ExportConfigModal';
+import {
+  ImportConfigModal,
+  type ImportColumnOption,
+  type ImportOutcome,
+  type ImportRow,
+} from '../../../components/maintenance/ImportConfigModal';
+import { importErrorsFromResult } from '../../../services/importTypes';
 import { downloadBlob } from '../../../services/csvExportService';
 
 function isSchoolClassification(value: string): value is SchoolClassification {
@@ -59,6 +67,16 @@ const EXPORT_SCOPE_OPTIONS = [
   { value: 'all', label: 'All rows' },
 ];
 
+// Import columns mirror the export labels so an exported file round-trips. The
+// code is auto-generated, so it is not importable.
+const SCHOOL_IMPORT_COLUMNS: ImportColumnOption[] = [
+  { key: 'name', label: 'Name', required: true },
+  { key: 'classification', label: 'Classification', required: true },
+  { key: 'examineeCapacity', label: 'Examinee Capacity', required: true },
+  { key: 'region', label: 'Region/Municipality/City', required: true },
+  { key: 'status', label: 'Status' },
+];
+
 export default function SchoolsListMaintenance() {
   const {
     schools,
@@ -81,6 +99,8 @@ export default function SchoolsListMaintenance() {
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingSchool, setViewingSchool] = useState<SchoolRecord | null>(null);
   const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
@@ -184,6 +204,22 @@ export default function SchoolsListMaintenance() {
     }
   };
 
+  const handleImport = async (rows: ImportRow[]): Promise<ImportOutcome> => {
+    setIsImporting(true);
+    const result = await schoolService.importSchools(rows);
+    setIsImporting(false);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        message: (result as ServiceFailure).error.message,
+        errors: importErrorsFromResult(result),
+      };
+    }
+    reloadSchools();
+    return { ok: true, created: result.data.created };
+  };
+
   // First load shows a distinct loading/error state; when cached it is already loaded.
   if (!schoolsLoaded && schoolsError) {
     return (
@@ -242,6 +278,12 @@ export default function SchoolsListMaintenance() {
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
+            >
+              <Upload className="w-4 h-4 shrink-0" /> Import CSV
+            </button>
             <button
               onClick={() => setIsExportModalOpen(true)}
               className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
@@ -760,6 +802,16 @@ export default function SchoolsListMaintenance() {
         isExporting={isExporting}
         onCancel={() => setIsExportModalOpen(false)}
         onExport={handleExport}
+      />
+
+      <ImportConfigModal
+        isOpen={isImportModalOpen}
+        title="Import schools"
+        columns={SCHOOL_IMPORT_COLUMNS}
+        templateFilename="Schools_template.csv"
+        isImporting={isImporting}
+        onCancel={() => setIsImportModalOpen(false)}
+        onImport={handleImport}
       />
 
       <ConfirmationDialog

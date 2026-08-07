@@ -8,11 +8,12 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.core.csv_export import dated_filename, stream_csv
+from apps.core.imports import normalize_region_factory, run_bulk_import
 from apps.core.pagination import RegistryPageNumberPagination
 from apps.core.throttling import MaintenanceWriteRateThrottle
 
 from .audit import record_college_course_event, record_university_event
-from .models import CollegeCourse, University
+from .models import CollegeCourse, PhilippineRegion, University
 from .serializers import CollegeCourseSerializer, UniversitySerializer
 
 
@@ -132,6 +133,29 @@ class UniversityExportView(APIView):
         return stream_csv(header, rows(), dated_filename("philSA_List_of_Universities"))
 
 
+class UniversityImportView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = UNIVERSITY_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
+
+    def post(self, request) -> Response:
+        created = run_bulk_import(
+            UniversitySerializer,
+            request.data.get("rows"),
+            save_kwargs={"created_by_id": getattr(request.user, "user_id", request.user.id)},
+            normalize=normalize_region_factory(PhilippineRegion),
+            duplicate_key=lambda vd: (vd["name"].strip().lower(), vd["region"]),
+            duplicate_message={
+                "name": ["This university name is duplicated within the file for its region."]
+            },
+        )
+        record_university_event(
+            event="university_bulk_imported", outcome="success", request=request, user=request.user
+        )
+        return Response({"created": created}, status=status.HTTP_201_CREATED)
+
+
 class UniversityDetailView(APIView):
     permission_classes = [RoleRequiredPermission]
     required_roles = UNIVERSITY_MANAGEMENT_ROLES
@@ -192,6 +216,33 @@ class CollegeCourseListCreateView(APIView):
             event="college_course_created", outcome="success", request=request, user=request.user
         )
         return Response(CollegeCourseSerializer(course).data, status=status.HTTP_201_CREATED)
+
+
+class CollegeCourseImportView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = UNIVERSITY_MANAGEMENT_ROLES
+    throttle_classes = [MaintenanceWriteRateThrottle]
+    throttle_scope = "maintenance_write"
+
+    def post(self, request, university_id) -> Response:
+        university = get_object_or_404(University, id=university_id)
+        created = run_bulk_import(
+            CollegeCourseSerializer,
+            request.data.get("rows"),
+            save_kwargs={"university": university},
+            serializer_context={"university": university},
+            duplicate_key=lambda vd: vd["program_code"].strip().lower(),
+            duplicate_message={
+                "programCode": ["This program code is duplicated within the file for this university."]
+            },
+        )
+        record_college_course_event(
+            event="college_course_bulk_imported",
+            outcome="success",
+            request=request,
+            user=request.user,
+        )
+        return Response({"created": created}, status=status.HTTP_201_CREATED)
 
 
 class CollegeCourseDetailView(APIView):

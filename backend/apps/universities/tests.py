@@ -3,7 +3,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
@@ -493,3 +493,128 @@ class UniversityListQueryTests(APITestCase):
         response = self.client.get(reverse("universities:university_export"), {"columns": "name"})
         content = b"".join(response.streaming_content).decode()
         self.assertIn("'=cmd Attack University", content)
+
+
+class UniversityImportApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="system_admin", email="system.admin@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(self.user)
+        self.url = reverse("universities:university_import")
+
+    def _row(self, **overrides) -> dict:
+        row = {"classification": "Public", "name": "Uni A", "region": "NCR", "city": "Quezon City"}
+        row.update(overrides)
+        return row
+
+    def test_imports_all_rows_atomically(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"rows": [self._row(name="Uni A"), self._row(name="Uni B", classification="Private")]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(University.objects.count(), 2)
+        self.assertEqual(
+            sorted(University.objects.values_list("code", flat=True)), ["UNI-00001", "UNI-00002"]
+        )
+
+    def test_one_invalid_row_rolls_back_the_whole_batch(self) -> None:
+        response = self.client.post(
+            self.url, {"rows": [self._row(name="Good Uni"), self._row(name="")]}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(University.objects.count(), 0)
+        rows = response.data["error"]["meta"]["rows"]
+        self.assertEqual([r["row"] for r in rows], [1])
+        self.assertIn("name", rows[0]["fields"])
+
+    def test_accepts_region_display_label(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"rows": [self._row(region="National Capital Region (NCR)")]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(University.objects.get().region, "NCR")
+
+    def test_rejects_duplicate_name_region_within_file(self) -> None:
+        response = self.client.post(
+            self.url, {"rows": [self._row(name="Dup Uni"), self._row(name="Dup Uni")]}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(University.objects.count(), 0)
+        self.assertEqual(response.data["error"]["meta"]["rows"][0]["row"], 1)
+
+    @override_settings(MAINTENANCE_IMPORT_MAX_ROWS=2)
+    def test_rejects_batch_over_row_cap(self) -> None:
+        response = self.client.post(
+            self.url, {"rows": [self._row(name=f"Uni {i}") for i in range(3)]}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(University.objects.count(), 0)
+
+    def test_unprivileged_role_cannot_import(self) -> None:
+        User = get_user_model()
+        student = User.objects.create_user(
+            username="student_user", email="student@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(student)
+        response = self.client.post(self.url, {"rows": [self._row()]}, format="json")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(University.objects.count(), 0)
+
+
+class CollegeCourseImportApiTests(APITestCase):
+    def setUp(self) -> None:
+        self.client = APIClient()
+        User = get_user_model()
+        self.user = User.objects.create_superuser(
+            username="system_admin", email="system.admin@example.test", password="Password1!"
+        )
+        self.client.force_authenticate(self.user)
+        self.university = University.objects.create(
+            classification="Public", name="UP Diliman", region="NCR", city="Quezon City"
+        )
+        self.other = University.objects.create(
+            classification="Private", name="Ateneo de Manila", region="NCR", city="Quezon City"
+        )
+        self.url = reverse("universities:course_import", kwargs={"university_id": self.university.id})
+
+    def _row(self, **overrides) -> dict:
+        row = {
+            "collegeName": "College of Engineering",
+            "programCode": "BSCE",
+            "programName": "BS Civil Engineering",
+        }
+        row.update(overrides)
+        return row
+
+    def test_imports_courses_scoped_to_parent(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"rows": [self._row(programCode="BSCE"), self._row(programCode="BSCS", programName="BS CS")]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["created"], 2)
+        self.assertEqual(self.university.courses.count(), 2)
+        self.assertEqual(self.other.courses.count(), 0)
+
+    def test_missing_parent_returns_404(self) -> None:
+        url = reverse("universities:course_import", kwargs={"university_id": 999999})
+        response = self.client.post(url, {"rows": [self._row()]}, format="json")
+        self.assertEqual(response.status_code, 404)
+
+    def test_rejects_duplicate_program_code_within_file(self) -> None:
+        response = self.client.post(
+            self.url,
+            {"rows": [self._row(programCode="BSCE"), self._row(programCode="bsce")]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.university.courses.count(), 0)

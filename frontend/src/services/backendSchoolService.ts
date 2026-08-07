@@ -1,5 +1,6 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
 import { serviceSuccess, type PaginatedResult, type ServiceResult } from './serviceResult';
+import type { ImportRow, ImportSummary } from './importTypes';
 import { toCsv } from './csvExportService';
 
 export type SchoolClassification = 'Public' | 'Private';
@@ -84,6 +85,7 @@ export interface SchoolService {
   listSchools(): Promise<ServiceResult<SchoolRecord[]>>;
   listSchoolsPage(params: SchoolListParams): Promise<ServiceResult<SchoolPage>>;
   exportSchools(params: SchoolExportParams): Promise<ServiceResult<Blob>>;
+  importSchools(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>>;
   createSchool(payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>>;
   updateSchool(id: string, payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>>;
   deleteSchool(id: string): Promise<ServiceResult<null>>;
@@ -127,6 +129,13 @@ export class BackendSchoolService implements SchoolService {
     if (params.region) query.set('region', params.region);
     if (params.status) query.set('status', params.status);
     return this.apiClient.requestBlob(`${SCHOOLS_ENDPOINT}export/?${query.toString()}`);
+  }
+
+  importSchools(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    return this.apiClient.request<ImportSummary>(`${SCHOOLS_ENDPOINT}import/`, {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
   }
 
   async createSchool(payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>> {
@@ -238,6 +247,20 @@ export class MockSchoolService implements SchoolService {
     const header = keys.map((k) => MOCK_SCHOOL_COLUMNS[k].header);
     const rows = items.map((s) => keys.map((k) => MOCK_SCHOOL_COLUMNS[k].get(s)));
     return serviceSuccess(new Blob([toCsv(header, rows)], { type: 'text/csv' }));
+  }
+
+  async importSchools(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    // Prototype mode has no backend authority; create each row best-effort.
+    for (const row of rows) {
+      await this.createSchool({
+        classification: (row.classification as SchoolClassification) || 'Public',
+        name: row.name ?? '',
+        examineeCapacity: Number(row.examineeCapacity ?? 0),
+        region: row.region ?? '',
+        status: (row.status as SchoolStatus) || 'Active',
+      });
+    }
+    return serviceSuccess({ created: rows.length });
   }
 
   async createSchool(payload: SchoolPayload): Promise<ServiceResult<SchoolRecord>> {
