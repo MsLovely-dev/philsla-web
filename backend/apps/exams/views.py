@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -38,11 +39,24 @@ EXAM_SET_MANAGEMENT_ROLES = require_roles(
     "SYSTEM_ADMIN",
 )
 
+QUESTION_REVIEW_ROLES = require_roles(
+    "SYSTEM_ADMIN",
+)
+
 
 def _actor_profile(request):
     profile = getattr(request.user, "account_profile", None)
     if profile is not None:
         return profile
+
+    user_id = getattr(request.user, "id", None)
+    if user_id is not None:
+        user = get_user_model().objects.select_related("account_profile").filter(pk=user_id).first()
+        if user is not None:
+            profile = getattr(user, "account_profile", None)
+            if profile is not None:
+                return profile
+
     raise PermissionDenied("Authenticated account profile is required.")
 
 
@@ -174,7 +188,7 @@ class QuestionDetailView(APIView):
 
 class QuestionTransitionView(APIView):
     permission_classes = [RoleRequiredPermission]
-    required_roles = QUESTION_MANAGEMENT_ROLES
+    required_roles = QUESTION_REVIEW_ROLES
 
     def post(self, request, question_id: int) -> Response:
         question = get_object_or_404(question_queryset(), pk=question_id)

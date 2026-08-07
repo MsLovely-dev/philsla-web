@@ -14,7 +14,7 @@ export interface BlueprintSection {
   };
   itemCount: number; // Number of items in this section
   marksPerItem: number; // Marks per item
-  totalMarks: number; // Calculated: itemCount * marksPerItem
+  totalMarks: number; // Total points for the section
   passingScore: number; // Passing score for this section
   timeAllocation: number; // Time allocation in minutes
   instructions: string; // Instructions for this section
@@ -69,6 +69,7 @@ export interface BlueprintHistoryEntry {
 export interface Blueprint {
   id: string;
   currentVersionId?: string;
+  createdByUserId?: string;
   code: string; // e.g. BP-2026-SPACE-01
   name: string;
   description: string;
@@ -76,7 +77,7 @@ export interface Blueprint {
   academicYear: string; // "2026-2027"
   institution: string; // "Philippine Space Agency (PhilSA)"
   examCategory: string; // "Space Science and Engineering"
-  status: 'DRAFT' | 'SUBMITTED' | 'ACADEMIC_REVIEW' | 'REVISION_REQUIRED' | 'APPROVED' | 'PUBLISHED' | 'RETIRED' | 'ARCHIVED';
+  status: 'DRAFT' | 'SUBMITTED' | 'ACADEMIC_REVIEW' | 'REVISION_REQUIRED' | 'APPROVED' | 'REJECTED' | 'PUBLISHED' | 'RETIRED' | 'ARCHIVED';
   version: string; // e.g. "1.0" (Major/Minor)
   owner: string; // Owner name
   createdAt: string;

@@ -87,6 +87,7 @@ class ExamBlueprintSerializer(serializers.Serializer):
     status = serializers.CharField(read_only=True)
     version = serializers.CharField(required=False, default="1.0")
     owner = serializers.CharField(read_only=True)
+    created_by_user_id = serializers.CharField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     effective_date = serializers.DateField(required=False, allow_null=True)
     expiration_date = serializers.DateField(required=False, allow_null=True)
@@ -133,6 +134,11 @@ class BlueprintTransitionSerializer(serializers.Serializer):
         if normalized not in BlueprintStatus.values:
             raise serializers.ValidationError("Select a valid blueprint status.")
         return normalized
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if attrs.get("status") == BlueprintStatus.REJECTED and not attrs.get("remarks", "").strip():
+            raise serializers.ValidationError({"remarks": "Remarks are required when rejecting a blueprint."})
+        return attrs
 
     def save(self, **kwargs):  # type: ignore[override]
         actor_profile = self.context.get("actor_profile")
@@ -210,6 +216,7 @@ class QuestionSerializer(serializers.Serializer):
     points = serializers.FloatField(required=False)
     status = serializers.CharField(required=False, allow_blank=True)
     created_by = serializers.CharField(read_only=True)
+    created_by_user_id = serializers.CharField(read_only=True)
     reviewed_by = serializers.CharField(read_only=True, allow_null=True)
     approved_by = serializers.CharField(read_only=True, allow_null=True)
     reviewed_at = serializers.DateTimeField(read_only=True, allow_null=True)

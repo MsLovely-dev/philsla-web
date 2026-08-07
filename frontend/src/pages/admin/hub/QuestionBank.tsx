@@ -28,17 +28,14 @@ import {
   Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { usePhilSA } from '../../../PhilSAContext';
 import { cn } from '../../../lib/utils';
+import { usePhilSA } from '../../../PhilSAContext';
 import StimulusManagement from './StimulusManagement';
 import BulkUpload from './BulkUpload';
-import { MOCK_CENTRAL_ITEM_BANK } from './blueprintMockData';
 import { questionBankService, type QuestionBankItem, type QuestionBankPayload, type QuestionStatus as BackendQuestionStatus } from '../../../services/backendQuestionBankService';
 import { QUESTION_BANK_FALLBACK } from './questionBankFallbackData';
 
 type QuestionStatus = 'PENDING REVIEW' | 'APPROVED' | 'FOR CORRECTION' | 'PUBLISHED' | 'REJECTED';
-type PersonaKey = 'EXAM_ADMIN' | 'SYSTEM_ADMIN' | 'REVIEWER';
-
 interface Question {
   id: string;
   subject: string;
@@ -56,6 +53,7 @@ interface Question {
   score?: number;
   history?: { status: QuestionStatus; date: string; user: string; remark?: string }[];
   mediaUrl?: string;
+  createdByUserId?: string;
 }
 
 function mapBackendQuestion(question: QuestionBankItem): Question {
@@ -72,8 +70,16 @@ function mapBackendQuestion(question: QuestionBankItem): Question {
     typeCode: question.questionTypeCode,
     points: question.points,
     score: question.points,
-    status: question.status === 'APPROVED' ? 'APPROVED' : question.status === 'REJECTED' ? 'REJECTED' : 'PENDING REVIEW',
+    status:
+      question.status === 'APPROVED'
+        ? 'APPROVED'
+        : question.status === 'FOR_CORRECTION'
+          ? 'FOR CORRECTION'
+          : question.status === 'REJECTED'
+            ? 'REJECTED'
+            : 'PENDING REVIEW',
     author: question.createdBy || 'PhilSA Author',
+    createdByUserId: question.createdByUserId,
     content: question.questionText,
     options,
     idealAnswer: question.choices.find((choice) => choice.isCorrect)?.optionText ?? question.answers[0]?.answerText ?? '',
@@ -81,7 +87,14 @@ function mapBackendQuestion(question: QuestionBankItem): Question {
     difficulty: question.difficulty === 'EASY' ? 'LOW' : question.difficulty === 'DIFFICULT' ? 'HIGH' : 'MED',
     competency: question.competency,
     history: question.workflowHistory.map((entry) => ({
-      status: entry.newStatus === 'APPROVED' ? 'APPROVED' : entry.newStatus === 'REJECTED' ? 'REJECTED' : 'PENDING REVIEW',
+      status:
+        entry.newStatus === 'APPROVED'
+          ? 'APPROVED'
+          : entry.newStatus === 'FOR_CORRECTION'
+            ? 'FOR CORRECTION'
+            : entry.newStatus === 'REJECTED'
+              ? 'REJECTED'
+              : 'PENDING REVIEW',
       date: entry.createdAt.slice(0, 10),
       user: entry.initiatedBy,
       remark: entry.remarks || undefined,
@@ -91,122 +104,44 @@ function mapBackendQuestion(question: QuestionBankItem): Question {
 }
 
 function toBackendStatus(status: QuestionStatus): BackendQuestionStatus {
-  if (status === 'PENDING REVIEW' || status === 'FOR CORRECTION') return 'PENDING_REVIEW';
+  if (status === 'PENDING REVIEW') return 'PENDING_REVIEW';
+  if (status === 'FOR CORRECTION') return 'FOR_CORRECTION';
   if (status === 'PUBLISHED') return 'APPROVED';
   return status;
 }
 
-const MOCK_QUESTIONS: Question[] = [
-  { 
-    id: 'Q-4421', 
-    subject: 'Math', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'APPROVED', 
-    author: 'R. Macaraeg', 
-    content: 'What is the derivative of sin(x)?',
-    options: ['cos(x)', '-cos(x)', 'tan(x)', 'sec(x)'],
-    idealAnswer: 'cos(x)',
-    topic: 'Calculus',
-    difficulty: 'MED',
-    competency: 'Evaluate asymptotic bounds and limit proofs',
-    mediaUrl: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&auto=format&fit=crop',
-    history: [
-      { status: 'PENDING REVIEW', date: '2026-05-10', user: 'System' },
-      { status: 'APPROVED', date: '2026-05-11', user: 'Admin' }
-    ]
-  },
-  { 
-    id: 'Q-4422', 
-    subject: 'Science', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'A. Dimayuga', 
-    content: 'Which planet is known as the Red Planet?',
-    options: ['Mars', 'Jupiter', 'Saturn', 'Venus'],
-    idealAnswer: 'Mars',
-    topic: 'Space Science',
-    difficulty: 'LOW',
-    competency: 'Recall national administrative structures',
-    mediaUrl: 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=600&auto=format&fit=crop'
-  },
-  { 
-    id: 'Q-4426', 
-    subject: 'Science', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'G. Balingit', 
-    content: 'What is the approximate speed of light in a vacuum?',
-    options: ['300,000 km/s', '150,000 km/s', '1,000,000 km/s', '3,000 km/s'],
-    idealAnswer: '300,000 km/s',
-    topic: 'Space Science',
-    difficulty: 'LOW',
-    competency: 'Recall national administrative structures'
-  },
-  { 
-    id: 'Q-4427', 
-    subject: 'Math', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'F. de Guia', 
-    content: 'What is the sum of angles in a flat triangle?',
-    options: ['180 degrees', '90 degrees', '360 degrees', '270 degrees'],
-    idealAnswer: '180 degrees',
-    topic: 'Geometry',
-    difficulty: 'LOW',
-    competency: 'General Competency'
-  },
-  { 
-    id: 'Q-4428', 
-    subject: 'Reading Comp (English, Filipino)', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'D. Alcantara', 
-    content: 'Who was the first president of the Commonwealth of the Philippines?',
-    options: ['Manuel L. Quezon', 'Emilio Aguinaldo', 'Jose P. Laurel', 'Sergio Osmeña'],
-    idealAnswer: 'Manuel L. Quezon',
-    topic: 'History',
-    difficulty: 'LOW',
-    competency: 'General Competency'
-  },
-  { 
-    id: 'Q-4429', 
-    subject: 'Lang Proficiency (English, Filipino)', 
-    type: 'Multiple Choice', 
-    points: 5, 
-    status: 'PENDING REVIEW', 
-    author: 'V. Catacutan', 
-    content: 'What figure of speech is used in "The wind whispered through the trees"?',
-    options: ['Personification', 'Metaphor', 'Simile', 'Hyperbole'],
-    idealAnswer: 'Personification',
-    topic: 'Figures of Speech',
-    difficulty: 'LOW',
-    competency: 'General Competency'
-  },
-  { 
-    id: 'Q-4423', 
-    subject: 'Reading Comp (English, Filipino)', 
-    type: 'Reading Comprehension', 
-    points: 10, 
-    status: 'FOR CORRECTION', 
-    author: 'E. Dimatulac', 
-    content: 'Identify the main theme of the provided text.',
-    options: ['Survival', 'Love', 'War', 'Peace'],
-    idealAnswer: 'Survival',
-    topic: 'Comprehension',
-    difficulty: 'MED',
-    competency: 'General Competency',
-    history: [
-      { status: 'FOR CORRECTION', date: '2026-05-12', user: 'Reviewer', remark: 'Check the grammar in option C' }
-    ]
-  },
-  { id: 'Q-4424', subject: 'Math', type: 'Identification', points: 5, status: 'PUBLISHED', author: 'J. Panganiban', content: 'Solve for x: 2x + 4 = 10', idealAnswer: '3', topic: 'Algebra', difficulty: 'LOW', competency: 'General Competency' },
-  { id: 'Q-4425', subject: 'Lang Proficiency (English, Filipino)', type: 'Essay', points: 20, status: 'REJECTED', author: 'B. Mangahas', content: 'Discuss the impact of the 1896 Revolution.', idealAnswer: 'The 1896 Revolution marked the beginning of organized resistance against Spanish colonial rule, leading to the birth of the first Philippine Republic...', topic: 'History', difficulty: 'HIGH', competency: 'General Competency' },
-];
+const REVIEW_APPROVER_ROLES = new Set(['SYSTEM_ADMIN']);
+
+const REVIEW_ACTION_OPTIONS: Record<QuestionStatus, Array<{ value: QuestionStatus; label: string }>> = {
+  'PENDING REVIEW': [
+    { value: 'APPROVED', label: 'Approve' },
+    { value: 'FOR CORRECTION', label: 'Request Correction' },
+    { value: 'REJECTED', label: 'Reject' },
+  ],
+  'APPROVED': [
+    { value: 'FOR CORRECTION', label: 'Request Correction' },
+  ],
+  'FOR CORRECTION': [],
+  'PUBLISHED': [],
+  'REJECTED': [],
+};
+
+const REVIEW_ACTION_LABELS: Record<QuestionStatus, string> = {
+  'PENDING REVIEW': 'Pending Review',
+  'APPROVED': 'Approve',
+  'FOR CORRECTION': 'Request Correction',
+  'PUBLISHED': 'Published',
+  'REJECTED': 'Reject',
+};
+
+function getReviewActionOptions(status: QuestionStatus) {
+  return REVIEW_ACTION_OPTIONS[status] ?? [];
+}
+
+function getReviewActionLabel(status: QuestionStatus | '') {
+  if (!status) return '';
+  return REVIEW_ACTION_LABELS[status] ?? status;
+}
 
 const STATUS_COLORS: Record<QuestionStatus, { bg: string; text: string; border: string; icon: any }> = {
   'PENDING REVIEW': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-100', icon: Clock },
@@ -216,27 +151,10 @@ const STATUS_COLORS: Record<QuestionStatus, { bg: string; text: string; border: 
   'REJECTED': { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200', icon: XCircle },
 };
 
-const PERSONA_OPTIONS: Array<{ key: PersonaKey; label: string }> = [
-  { key: 'EXAM_ADMIN', label: 'Exam Admin' },
-  { key: 'SYSTEM_ADMIN', label: 'System Admin' },
-  { key: 'REVIEWER', label: 'Reviewer' },
-];
-
-function personaFromRole(role?: string | null): PersonaKey {
-  if (role === 'SYSTEM_ADMIN') return 'SYSTEM_ADMIN';
-  if (role === 'ACADEMIC_REVIEWER' || role === 'ADMISSIONS_REVIEWER') return 'REVIEWER';
-  return 'EXAM_ADMIN';
-}
-
 export default function QuestionBank() {
   const { user } = usePhilSA();
   const [activeBankTab, setActiveBankTab] = useState<'QUESTIONS' | 'STIMULI' | 'UPLOAD'>('QUESTIONS');
   const [searchTerm, setSearchTerm] = useState('');
-  const [activePersona, setActivePersona] = useState<PersonaKey>(() => personaFromRole(user?.role));
-
-  useEffect(() => {
-    setActivePersona(personaFromRole(user?.role));
-  }, [user?.role]);
   
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isQuestionBankLoading, setIsQuestionBankLoading] = useState(true);
@@ -312,8 +230,17 @@ export default function QuestionBank() {
   const [newMediaUrl, setNewMediaUrl] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
-  // Helper to check if current user can approve/change status
-  const canApprove = true;
+  const canUseReviewActions = (question: Question) => {
+    if (!user || !REVIEW_APPROVER_ROLES.has(user.role)) return false;
+    if (!question.createdByUserId) return false;
+    if (question.createdByUserId === user.id) return false;
+    return getReviewActionOptions(question.status).length > 0;
+  };
+
+  const canEditQuestion = (question: Question) => {
+    if (!user || !question.createdByUserId) return false;
+    return question.createdByUserId === user.id;
+  };
 
   const handleOpenAddModal = () => {
     setEditingId(null);
@@ -425,7 +352,7 @@ export default function QuestionBank() {
       difficulty: newDifficulty === 'LOW' ? 'EASY' : newDifficulty === 'HIGH' ? 'DIFFICULT' : 'MODERATE',
       questionText: newContent,
       points: Number(newPoints) || 5,
-      status: 'APPROVED',
+      status: 'PENDING_REVIEW',
       choices: options.map((optionText, index) => ({ optionText, isCorrect: idealAnswer === optionText, displayOrder: index + 1 })),
       answers: idealAnswer && newType !== 'Multiple Choice' ? [{ answerText: idealAnswer, isPrimaryAnswer: true }] : [],
     };
@@ -499,7 +426,7 @@ export default function QuestionBank() {
 
       const updatedQuestion = mapBackendQuestion(result.data);
       setQuestions(prev => prev.map(q => q.id === updatedQuestion.id ? updatedQuestion : q));
-      setToastMessage(`Question ${updatedQuestion.id} status updated to ${newStatus}`);
+      setToastMessage(`Question ${updatedQuestion.id} review action ${getReviewActionLabel(newStatus)} applied`);
       setTimeout(() => setToastMessage(''), 4000);
       setChangingStatusItem(null);
       setNewStatus('');
@@ -550,23 +477,6 @@ export default function QuestionBank() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 justify-end">
-            <div className="flex items-center gap-2 bg-philsa-bg p-1.5 rounded-2xl border border-philsa-border/40">
-              <span className="text-[10px] font-black uppercase tracking-wider text-philsa-gray px-3">Active Persona:</span>
-              {PERSONA_OPTIONS.map((persona) => (
-                <button
-                  key={persona.key}
-                  onClick={() => setActivePersona(persona.key)}
-                  className={`px-3 py-2 text-[10px] font-bold rounded-xl transition-all cursor-pointer ${
-                    activePersona === persona.key
-                      ? 'bg-philsa-navy text-white shadow-sm font-black'
-                      : 'text-philsa-gray hover:text-philsa-navy hover:bg-philsa-border/20'
-                  }`}
-                >
-                  {persona.label}
-                </button>
-              ))}
-            </div>
-
             {activeBankTab === 'QUESTIONS' && (
               <>
                 {questions.some(q => q.status === 'PENDING REVIEW') && (
@@ -826,29 +736,46 @@ export default function QuestionBank() {
                     </td>
                     <td className="px-8 py-6 text-right">
                        <div className="flex justify-end items-center gap-2">
-                          {canApprove && (
-                            <select 
-                              value={q.status}
-                              onChange={(e) => handleQuickStatusUpdate(q, e.target.value as QuestionStatus)}
-                              className="bg-philsa-bg border border-philsa-border rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-tighter text-philsa-navy focus:ring-1 focus:ring-philsa-red outline-none cursor-pointer"
-                            >
-                              <option value="PENDING REVIEW">Pending</option>
-                              <option value="APPROVED">Approve</option>
-                              <option value="FOR CORRECTION">Correction</option>
-                              <option value="PUBLISHED">Publish</option>
-                              <option value="REJECTED">Reject</option>
-                            </select>
+                          {canUseReviewActions(q) && (
+                            <div className="relative">
+                              <label className="sr-only" htmlFor={`review-action-${q.id}`}>Review actions</label>
+                              <select
+                                id={`review-action-${q.id}`}
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const selectedStatus = e.target.value as QuestionStatus;
+                                  if (!selectedStatus) return;
+                                  handleQuickStatusUpdate(q, selectedStatus);
+                                  e.currentTarget.value = '';
+                                }}
+                                className="bg-philsa-bg border border-philsa-border rounded-lg px-2 py-1 text-[9px] font-black uppercase tracking-tighter text-philsa-navy focus:ring-1 focus:ring-philsa-red outline-none cursor-pointer"
+                                aria-label="Review question"
+                              >
+                                <option value="" disabled>
+                                  Review
+                                </option>
+                                {getReviewActionOptions(q.status).map((action) => (
+                                  <option key={action.value} value={action.value}>
+                                    {action.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           )}
                           <button 
                              onClick={() => setViewingDetails(q)}
                              className="p-2 bg-white hover:bg-philsa-bg rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-navy" title="View Details">
                              <Eye className="w-3.5 h-3.5" />
                           </button>
-                          <button 
-                             onClick={() => handleEditClick(q)}
-                             className="p-2 bg-white hover:bg-philsa-navy hover:text-white rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-navy" title="Edit Question">
-                             <Edit className="w-3.5 h-3.5" />
-                          </button>
+                          {canEditQuestion(q) && (
+                            <button
+                              onClick={() => handleEditClick(q)}
+                              className="p-2 bg-white hover:bg-philsa-navy hover:text-white rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-navy"
+                              title="Edit Question"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button 
                              onClick={() => handleDeleteQuestion(q.id)}
                              className="p-2 bg-white hover:bg-philsa-red hover:text-white rounded-lg transition-all border border-philsa-border shadow-sm text-philsa-red" title="Delete Question">
@@ -881,14 +808,14 @@ export default function QuestionBank() {
                      <AlertCircle className="w-4 h-4 text-philsa-red" />
                   </div>
                   <div>
-                     <h3 className="text-sm font-bold text-philsa-navy">Confirm Question</h3>
+                     <h3 className="text-sm font-bold text-philsa-navy">Confirm Review Action</h3>
                      <p className="text-[10px] text-slate-400 font-semibold font-mono">{changingStatusItem.id}</p>
                   </div>
                </div>
                
                <div className="p-6 space-y-4">
                   <p className="text-xs text-slate-600 leading-relaxed font-semibold">
-                     Are you sure you want to change the status of this question to <span className="text-philsa-red font-black">"{newStatus}"</span>?
+                     Are you sure you want to <span className="text-philsa-red font-black">{newStatus ? getReviewActionLabel(newStatus) : 'continue'}</span> for this question?
                   </p>
 
                   {newStatus === 'FOR CORRECTION' && (
@@ -1458,3 +1385,4 @@ export default function QuestionBank() {
     </div>
   );
 }
+

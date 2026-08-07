@@ -1,7 +1,7 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
 import type { ServiceResult } from './serviceResult';
 
-export type QuestionStatus = 'DRAFT' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED' | 'RETIRED' | 'ARCHIVED';
+export type QuestionStatus = 'DRAFT' | 'PENDING_REVIEW' | 'FOR_CORRECTION' | 'APPROVED' | 'REJECTED' | 'RETIRED' | 'ARCHIVED';
 
 export interface QuestionChoice {
   id: string;
@@ -64,6 +64,7 @@ export interface QuestionBankItem {
   points: number;
   status: QuestionStatus;
   createdBy: string;
+  createdByUserId: string;
   reviewedBy: string;
   approvedBy: string;
   reviewedAt: string | null;
@@ -146,6 +147,7 @@ interface ApiQuestion {
   points: number;
   status: string;
   created_by: string;
+  created_by_user_id: string;
   reviewed_by: string;
   approved_by: string;
   reviewed_at: string | null;
@@ -257,6 +259,7 @@ export class BackendQuestionBankService {
       points: question.points,
       status: this.normalizeStatus(question.status),
       createdBy: question.created_by,
+      createdByUserId: question.created_by_user_id,
       reviewedBy: question.reviewed_by,
       approvedBy: question.approved_by,
       reviewedAt: question.reviewed_at,
@@ -311,6 +314,7 @@ export class BackendQuestionBankService {
   private normalizeStatus(status: string | null): QuestionStatus {
     const normalized = (status ?? 'DRAFT').toUpperCase().replace(/\s+/g, '_');
     if (normalized === 'PENDING_REVIEW') return 'PENDING_REVIEW';
+    if (normalized === 'FOR_CORRECTION') return 'FOR_CORRECTION';
     if (normalized === 'APPROVED') return 'APPROVED';
     if (normalized === 'REJECTED') return 'REJECTED';
     if (normalized === 'RETIRED') return 'RETIRED';

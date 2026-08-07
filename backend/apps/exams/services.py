@@ -12,6 +12,7 @@ from django.utils.text import slugify
 from rest_framework.exceptions import APIException, PermissionDenied, ValidationError
 
 from apps.accounts.models import AccountProfile
+from apps.accounts.roles import PortalRole, get_user_role
 
 from .models import (
     AcademicYear,
@@ -290,10 +291,16 @@ def _normalize_blueprint_status(value: Any) -> str:
 
 BLUEPRINT_TRANSITION_MAP = {
     BlueprintStatus.DRAFT: {BlueprintStatus.SUBMITTED},
-    BlueprintStatus.SUBMITTED: {BlueprintStatus.ACADEMIC_REVIEW, BlueprintStatus.REVISION_REQUIRED},
-    BlueprintStatus.ACADEMIC_REVIEW: {BlueprintStatus.APPROVED, BlueprintStatus.REVISION_REQUIRED},
+    BlueprintStatus.SUBMITTED: {
+        BlueprintStatus.ACADEMIC_REVIEW,
+        BlueprintStatus.APPROVED,
+        BlueprintStatus.REVISION_REQUIRED,
+        BlueprintStatus.REJECTED,
+    },
+    BlueprintStatus.ACADEMIC_REVIEW: {BlueprintStatus.APPROVED, BlueprintStatus.REVISION_REQUIRED, BlueprintStatus.REJECTED},
     BlueprintStatus.REVISION_REQUIRED: {BlueprintStatus.DRAFT},
     BlueprintStatus.APPROVED: {BlueprintStatus.PUBLISHED},
+    BlueprintStatus.REJECTED: set(),
     BlueprintStatus.PUBLISHED: {BlueprintStatus.RETIRED},
     BlueprintStatus.RETIRED: {BlueprintStatus.ARCHIVED},
     BlueprintStatus.ARCHIVED: set(),
@@ -307,6 +314,9 @@ def _validate_blueprint_transition(
     actor_profile: AccountProfile,
     version: BlueprintVersion,
 ) -> None:
+    if requested_status in {BlueprintStatus.APPROVED, BlueprintStatus.REVISION_REQUIRED, BlueprintStatus.REJECTED} and version.created_by_id == actor_profile.id:
+        raise PermissionDenied("Blueprint creators cannot review their own blueprints.")
+
     if current_status == requested_status:
         raise BlueprintTransitionConflict(
             current_status=current_status,
@@ -330,10 +340,6 @@ def _validate_blueprint_transition(
                 f"{requested_status.replace('_', ' ')}."
             ),
         )
-
-    if requested_status == BlueprintStatus.APPROVED and version.created_by_id == actor_profile.id:
-        raise PermissionDenied("Blueprint creators cannot approve their own blueprints.")
-
 
 def _normalize_question_type_key(value: str) -> str:
     return str(value).strip().lower().replace(" ", "_")
@@ -499,6 +505,7 @@ def serialize_blueprint(blueprint: ExamBlueprint) -> dict[str, Any]:
             "status": BlueprintStatus.DRAFT.upper(),
             "version": str(blueprint.current_version_number),
             "owner": _profile_display_name(blueprint.created_by),
+            "created_by_user_id": str(blueprint.created_by.user_id) if blueprint.created_by_id else "",
             "created_at": blueprint.created_at.isoformat(),
             "effective_date": None,
             "expiration_date": None,
@@ -529,6 +536,7 @@ def serialize_blueprint(blueprint: ExamBlueprint) -> dict[str, Any]:
         "status": version.status.upper(),
         "version": str(version.version_number),
         "owner": _profile_display_name(blueprint.created_by),
+        "created_by_user_id": str(blueprint.created_by.user_id) if blueprint.created_by_id else "",
         "created_at": blueprint.created_at.isoformat(),
         "effective_date": version.effective_date.isoformat() if version.effective_date else "",
         "expiration_date": version.expiration_date.isoformat() if version.expiration_date else "",
@@ -794,6 +802,8 @@ QUESTION_STATUS_MAP = {
     "PENDING_REVIEW": QuestionStatus.PENDING_REVIEW,
     "PENDING REVIEW": QuestionStatus.PENDING_REVIEW,
     "APPROVED": QuestionStatus.APPROVED,
+    "FOR_CORRECTION": QuestionStatus.FOR_CORRECTION,
+    "FOR CORRECTION": QuestionStatus.FOR_CORRECTION,
     "REJECTED": QuestionStatus.REJECTED,
     "RETIRED": QuestionStatus.RETIRED,
     "ARCHIVED": QuestionStatus.ARCHIVED,
@@ -940,6 +950,7 @@ def serialize_question(question: Question) -> dict[str, Any]:
         "points": float(question.points),
         "status": question.status.upper(),
         "created_by": _question_display_name(question.created_by),
+        "created_by_user_id": str(question.created_by.user_id) if question.created_by_id else "",
         "reviewed_by": _question_display_name(question.reviewed_by),
         "approved_by": _question_display_name(question.approved_by),
         "reviewed_at": question.reviewed_at.isoformat() if question.reviewed_at else None,
@@ -1001,6 +1012,141 @@ def _replace_question_tags(question: Question, tags: list[str]) -> None:
         question.tags.add(get_or_create_tag(tag_name))
 
 
+def _normalize_question_type_code(value: Any) -> str:
+    raw_value = str(value or "MCQ").strip().upper().replace(" ", "_").replace("-", "_")
+    return QUESTION_TYPE_NORMALIZED_CODE_MAP.get(raw_value, raw_value)
+
+
+def _question_choice_signature(choices: list[dict[str, Any]]) -> tuple[tuple[str, str, bool, int], ...]:
+    return tuple(
+        (
+            str(_payload_value(choice, "option_label", default="") or ""),
+            str(_payload_value(choice, "option_text", default="") or ""),
+            bool(_payload_value(choice, "is_correct", default=False)),
+            int(_payload_value(choice, "display_order", default=index) or index),
+        )
+        for index, choice in enumerate(choices, start=1)
+    )
+
+
+def _question_answer_signature(answers: list[dict[str, Any]]) -> tuple[tuple[str, bool, bool], ...]:
+    return tuple(
+        (
+            str(_payload_value(answer, "answer_text", default="") or ""),
+            bool(_payload_value(answer, "is_case_sensitive", default=False)),
+            bool(_payload_value(answer, "is_primary_answer", default=True)),
+        )
+        for answer in answers
+    )
+
+
+def _question_rubric_signature(rubrics: list[dict[str, Any]]) -> tuple[tuple[str, str, Decimal, int], ...]:
+    return tuple(
+        (
+            str(_payload_value(rubric, "criterion", default="") or ""),
+            str(_payload_value(rubric, "description", default="") or ""),
+            _parse_decimal(_payload_value(rubric, "maximum_points", default="0"), "0"),
+            int(_payload_value(rubric, "display_order", default=index) or index),
+        )
+        for index, rubric in enumerate(rubrics, start=1)
+    )
+
+
+def _question_tag_signature(tags: list[str]) -> tuple[str, ...]:
+    return tuple(sorted(str(tag).strip() for tag in tags if str(tag).strip()))
+
+
+def _question_payload_has_meaningful_changes(question: Question, payload: dict[str, Any]) -> bool:
+    current_choices = tuple(
+        (
+            choice.option_label,
+            choice.option_text,
+            choice.is_correct,
+            choice.display_order,
+        )
+        for choice in question.choices.all().order_by("display_order", "created_at")
+    )
+    current_answers = tuple(
+        (
+            answer.answer_text,
+            answer.is_case_sensitive,
+            answer.is_primary_answer,
+        )
+        for answer in question.answers.all().order_by("-is_primary_answer", "created_at")
+    )
+    current_rubrics = tuple(
+        (
+            rubric.criterion,
+            rubric.description,
+            rubric.maximum_points,
+            rubric.display_order,
+        )
+        for rubric in question.rubrics.all().order_by("display_order", "created_at")
+    )
+    current_tags = tuple(question.tags.all().order_by("name").values_list("name", flat=True))
+
+    proposed_choices = _question_choice_signature(
+        list(_payload_value(payload, "choices", default=[{
+            "option_label": choice.option_label,
+            "option_text": choice.option_text,
+            "is_correct": choice.is_correct,
+            "display_order": choice.display_order,
+        } for choice in question.choices.all().order_by("display_order", "created_at")]) or []),
+    )
+    proposed_answers = _question_answer_signature(
+        list(_payload_value(payload, "answers", default=[{
+            "answer_text": answer.answer_text,
+            "is_case_sensitive": answer.is_case_sensitive,
+            "is_primary_answer": answer.is_primary_answer,
+        } for answer in question.answers.all().order_by("-is_primary_answer", "created_at")]) or []),
+    )
+    proposed_rubrics = _question_rubric_signature(
+        list(_payload_value(payload, "rubrics", default=[{
+            "criterion": rubric.criterion,
+            "description": rubric.description,
+            "maximum_points": rubric.maximum_points,
+            "display_order": rubric.display_order,
+        } for rubric in question.rubrics.all().order_by("display_order", "created_at")]) or []),
+    )
+    proposed_tags = _question_tag_signature(
+        list(_payload_value(payload, "tags", default=[tag for tag in current_tags]) or []),
+    )
+
+    proposed_state = (
+        str(_payload_value(payload, "question_code", default=question.question_code) or "").strip(),
+        _normalize_question_type_code(_payload_value(payload, "question_type", default=question.question_type.code)),
+        str(_payload_value(payload, "subject", default=question.subject.name) or "").strip(),
+        str(_payload_value(payload, "topic", default=question.topic.name if question.topic else "") or "").strip(),
+        str(_payload_value(payload, "competency", default=question.competency.name if question.competency else "") or "").strip(),
+        _normalize_question_difficulty(_payload_value(payload, "difficulty", default=question.difficulty)),
+        str(_payload_value(payload, "question_text", "content", default=question.question_text) or ""),
+        str(_payload_value(payload, "explanation", "ideal_answer", default=question.explanation) or ""),
+        _parse_decimal(_payload_value(payload, "points", "score", default=str(question.points)), "1"),
+        proposed_choices,
+        proposed_answers,
+        proposed_rubrics,
+        proposed_tags,
+    )
+
+    current_state = (
+        question.question_code,
+        question.question_type.code,
+        question.subject.name,
+        question.topic.name if question.topic else "",
+        question.competency.name if question.competency else "",
+        question.difficulty,
+        question.question_text,
+        question.explanation,
+        question.points,
+        current_choices,
+        current_answers,
+        current_rubrics,
+        current_tags,
+    )
+
+    return proposed_state != current_state
+
+
 @transaction.atomic
 def create_or_update_question(
     *,
@@ -1027,6 +1173,13 @@ def create_or_update_question(
     if not question_code:
         question_code = _generate_question_code(subject.name, question_type.code)
 
+    should_resubmit_for_correction = (
+        question is not None
+        and _normalize_question_status(question.status) == QuestionStatus.FOR_CORRECTION
+        and question.created_by_id == actor_profile.id
+        and _question_payload_has_meaningful_changes(question, payload)
+    )
+
     question_defaults = {
         "question_type": question_type,
         "subject": subject,
@@ -1036,11 +1189,11 @@ def create_or_update_question(
         "question_text": str(_payload_value(payload, "question_text", "content", default=question.question_text if question else "") or ""),
         "explanation": str(_payload_value(payload, "explanation", "ideal_answer", default=question.explanation if question else "") or ""),
         "points": _parse_decimal(_payload_value(payload, "points", "score", default=str(question.points) if question else "1"), "1"),
-        "status": _normalize_question_status(_payload_value(payload, "status", default=question.status if question else "draft")),
+        "status": QuestionStatus.PENDING_REVIEW if question is None or should_resubmit_for_correction else question.status,
         "created_by": question.created_by if question else actor_profile,
-        "reviewed_by": question.reviewed_by if question else None,
+        "reviewed_by": actor_profile if should_resubmit_for_correction else (question.reviewed_by if question else None),
         "approved_by": question.approved_by if question else None,
-        "reviewed_at": question.reviewed_at if question else None,
+        "reviewed_at": timezone.now() if should_resubmit_for_correction else (question.reviewed_at if question else None),
         "approved_at": question.approved_at if question else None,
         "retired_at": question.retired_at if question else None,
         "archived_at": question.archived_at if question else None,
@@ -1056,7 +1209,7 @@ def create_or_update_question(
             setattr(question, field_name, field_value)
         question.question_code = question_code
         question.save()
-        action = "Updated question"
+        action = "Resubmitted question" if should_resubmit_for_correction else "Updated question"
 
     if "choices" in payload:
         _replace_question_choices(question, list(_payload_value(payload, "choices", default=[]) or []))
@@ -1087,10 +1240,24 @@ def transition_question(
     remarks: str = "",
 ) -> Question:
     normalized_status = _normalize_question_status(target_status)
+    actor_role = get_user_role(actor_profile)
     previous_status = question.status
+
+    if normalized_status == QuestionStatus.APPROVED:
+        if actor_role != PortalRole.SYSTEM_ADMIN.value:
+            raise PermissionDenied("Only a System Admin can approve questions.")
+        if question.created_by_id == actor_profile.id:
+            raise PermissionDenied("You cannot approve your own question.")
+    elif normalized_status == QuestionStatus.FOR_CORRECTION:
+        if actor_role != PortalRole.SYSTEM_ADMIN.value:
+            raise PermissionDenied("Only a System Admin can request corrections.")
+
     question.status = normalized_status
     now = timezone.now()
     if normalized_status == QuestionStatus.PENDING_REVIEW:
+        question.reviewed_at = now
+        question.reviewed_by = actor_profile
+    elif normalized_status == QuestionStatus.FOR_CORRECTION:
         question.reviewed_at = now
         question.reviewed_by = actor_profile
     elif normalized_status == QuestionStatus.APPROVED:

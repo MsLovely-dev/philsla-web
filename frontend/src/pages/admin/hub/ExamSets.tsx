@@ -171,7 +171,7 @@ export default function ExamSets() {
 
   const handleHubTabChange = (tab: ExamHubTabKey) => {
     if (tab === 'blueprints') {
-      navigate('/admin/blueprints');
+      navigate('/admin/hub/exam-sets');
       return;
     }
     if (tab === 'published') {

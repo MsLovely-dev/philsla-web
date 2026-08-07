@@ -52,6 +52,7 @@ interface ApiBlueprintHistoryEntry {
 interface ApiBlueprint {
   id: string;
   current_version_id: string | null;
+  created_by_user_id: string | null;
   code: string;
   name: string;
   description: string;
@@ -180,6 +181,7 @@ export class BackendExamBlueprintService {
     return {
       id: blueprint.id,
       currentVersionId: blueprint.current_version_id ?? undefined,
+      createdByUserId: blueprint.created_by_user_id ?? undefined,
       code: blueprint.code,
       name: blueprint.name,
       description: blueprint.description,
