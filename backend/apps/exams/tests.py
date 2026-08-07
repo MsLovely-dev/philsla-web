@@ -758,6 +758,79 @@ class ExamSetApiTests(APITestCase):
         self.assertEqual(removed.status_code, 200)
         self.assertIn("Removed question Q-SCI-003", [entry["action"] for entry in removed.data["workflow_history"]])
 
+    def test_auto_assemble_selects_items_per_section_and_records_assembly_run(self) -> None:
+        section = BlueprintSection.objects.create(
+            blueprint_version=self.blueprint_version, section_number=1, section_name="Science",
+            subject=self.subject, item_count=2, total_marks="10.00", passing_score="5.00",
+            time_limit_minutes=30, display_order=1,
+        )
+        BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="easy", required_item_count=1)
+        BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="moderate", required_item_count=1)
+
+        second_question = Question.objects.create(
+            question_code="Q-SCI-002", question_type=self.question_type, subject=self.subject, topic=self.topic,
+            competency=self.competency, difficulty="moderate", question_text="Second question.", points="5.00",
+            status=QuestionStatus.APPROVED, created_by=self.profile, approved_by=self.profile,
+        )
+
+        created = self.client.post(reverse("exams:exam_set_list"), {**self.payload, "items": []}, format="json")
+        exam_set_id = created.data["id"]
+
+        response = self.client.post(reverse("exams:exam_set_auto_assemble", kwargs={"exam_set_id": exam_set_id}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["items"]), 2)
+        self.assertEqual(
+            {item["question"]["id"] for item in response.data["items"]},
+            {str(self.question.id), str(second_question.id)},
+        )
+        self.assertEqual(len(response.data["assembly_runs"]), 1)
+        self.assertEqual(response.data["assembly_runs"][0]["selected_item_count"], 2)
+        self.assertEqual(response.data["assembly_runs"][0]["status"], "completed")
+        self.assertIn("Auto-assembled 2 items", [entry["action"] for entry in response.data["workflow_history"]])
+
+    def test_auto_assemble_records_shortfall_when_pool_is_insufficient(self) -> None:
+        section = BlueprintSection.objects.create(
+            blueprint_version=self.blueprint_version, section_number=1, section_name="Science",
+            subject=self.subject, item_count=5, total_marks="25.00", passing_score="10.00",
+            time_limit_minutes=30, display_order=1,
+        )
+        BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="easy", required_item_count=1)
+
+        created = self.client.post(reverse("exams:exam_set_list"), {**self.payload, "items": []}, format="json")
+        exam_set_id = created.data["id"]
+
+        response = self.client.post(reverse("exams:exam_set_auto_assemble", kwargs={"exam_set_id": exam_set_id}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["items"]), 1)
+        self.assertEqual(response.data["assembly_runs"][0]["status"], "completed_with_shortfall")
+        self.assertEqual(response.data["assembly_runs"][0]["rejected_item_count"], 4)
+
+    def test_auto_assemble_rejects_non_editable_exam_sets(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        exam_set_id = created.data["id"]
+        transition_url = reverse("exams:exam_set_transition", kwargs={"exam_set_id": exam_set_id})
+        self.client.post(transition_url, {"status": "ACADEMIC_REVIEW"}, format="json")
+
+        response = self.client.post(reverse("exams:exam_set_auto_assemble", kwargs={"exam_set_id": exam_set_id}))
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["error"]["code"], "EXAM_SET_LIFECYCLE_CONFLICT")
+
+    def test_auto_assemble_denies_unauthenticated_and_unapproved_roles(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        exam_set_id = created.data["id"]
+        auto_assemble_url = reverse("exams:exam_set_auto_assemble", kwargs={"exam_set_id": exam_set_id})
+
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.post(auto_assemble_url).status_code, 401)
+
+        User = get_user_model()
+        university_user = User.objects.create_user(
+            username="auto_assemble_denied_user", email="auto.assemble.denied@example.test", password="Password1!",
+        )
+        AccountProfile.objects.create(user=university_user, role=PortalRole.UNIVERSITY_ADMIN.value)
+        self.client.force_authenticate(university_user)
+        self.assertEqual(self.client.post(auto_assemble_url).status_code, 403)
+
 
 class SubjectAdminApiTests(APITestCase):
     def setUp(self) -> None:

@@ -7,6 +7,7 @@ from apps.accounts.models import AccountProfile
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 
 from .audit import record_exam_blueprint_maintenance_event
+from .assembly import auto_assemble_exam_set
 from .models import BlueprintStatus, ExamBlueprint, ExamSet, ExamSetStatus, QuestionStatus, QuestionType, Subject, Topic
 from .serializers import (
     BlueprintCloneSerializer,
@@ -274,6 +275,16 @@ class ExamSetTransitionView(APIView):
         serializer = ExamSetTransitionSerializer(data=request.data, context={"actor_profile": _actor_profile(request), "exam_set": exam_set})
         serializer.is_valid(raise_exception=True)
         serializer.save()
+        return Response(ExamSetSerializer(exam_set_queryset().get(pk=exam_set.pk)).data)
+
+
+class ExamSetAutoAssembleView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = EXAM_SET_MANAGEMENT_ROLES
+
+    def post(self, request, exam_set_id: int) -> Response:
+        exam_set = get_object_or_404(exam_set_queryset(), pk=exam_set_id)
+        auto_assemble_exam_set(exam_set=exam_set, actor_profile=_actor_profile(request))
         return Response(ExamSetSerializer(exam_set_queryset().get(pk=exam_set.pk)).data)
 
 
