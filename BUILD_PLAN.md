@@ -120,7 +120,7 @@ docs/superpowers/
 | **Lovely Mae Chavez (L.Chavez)** | User Account Creation (RBAC) | BRD-01 Maintenance | In progress | 🟢 | `worktrees/l.chavez/` | `l.chavez/rbac` | `docs/superpowers/l.chavez/l.chavez.task.md` |
 | **Lovely Mae Chavez (L.Chavez)** | Review Student Application | BRD-01 Admissions | In progress | 🟢 | `worktrees/l.chavez/` | `l.chavez/review-application` | `docs/superpowers/l.chavez/l.chavez.task.md` |
 | **Maricon Landicho (M.Landicho)** | User Authentication (Login) | BRD-01 Login | In progress | 🟢 | `worktrees/m.landicho/` | `m.landicho/login` | `docs/superpowers/m.landicho/m.landicho.task.md` |
-| **Maricon Landicho (M.Landicho)** | Maintenance Table – Student Registration | Maintenance & Config | Not started | 🟡 deferred | `worktrees/m.landicho/` | *(parked — no branch yet)* | `docs/superpowers/m.landicho/m.landicho.task.md` |
+| **Maricon Landicho (M.Landicho)** | Maintenance Table – Student Registration | Maintenance & Config | Plan drafted, awaiting approval | 🟢 reactivated 2026-08-06 with sprint-owner clearance (supersedes original deferred scope below) | `worktrees/m.landicho/` | `m.landicho/maintenance-student-registration` | `docs/superpowers/m.landicho/m.landicho.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Exam Blueprint | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/exam-blueprint` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
 | **Jude Cabigon (Ju.Cabigon)** | Question Bank Management | BRD-02 Item Bank | In progress | 🟢 | `worktrees/ju.cabigon/` | `ju.cabigon/question-bank` | `docs/superpowers/ju.cabigon/ju.cabigon.task.md` |
 | **Ian Chris Sandoval (I.Sandoval)** | Exam Sets | BRD-02 Item Bank | Implemented; release verification open | 🟠 API-integrated; baseline failures and migration rehearsal remain | `worktrees/i.sandoval/` | `i.sandoval/exam-sets` | `docs/superpowers/i.sandoval/i.sandoval.task.md` |
@@ -211,6 +211,7 @@ Every dev opens **Claude Code with Superpowers in their own worktree** today and
 - **AM:** On `m.landicho/login` — execute the gap-closing plan from yesterday's audit.
 - **Midday:** Run `test_login_endpoints.py` in full. New edge cases get new tests, not silent fixes.
 - **PM:** Manual smoke test of the full four-step login flow end to end.
+- **Update (2026-08-06):** Login (Ticket 001) merged as PR #69. Ticket 002 (Maintenance Table – Student Registration), previously marked deferred/parked above, was reactivated with sprint-owner clearance; see `docs/superpowers/m.landicho/m.landicho.task.md` for scope and `m.landicho/maintenance-student-registration` for the branch and plan status.
 
 ### Jude Cabigon (Ju.Cabigon) 🟢
 - **AM:** On `ju.cabigon/exam-blueprint` — execute transition-test plan, all 8 statuses covered.
