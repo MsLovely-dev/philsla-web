@@ -47,8 +47,8 @@ class ResultsReleaseSummaryApiTests(TestCase):
             processed_record_count=2,
             completed_at=timezone.now(),
         )
-        cls._create_score(cls.processed_session, "PROCESSED-ONE", review_status=ScoreReviewStatus.APPROVED, processing_batch=processed_batch)
-        cls._create_score(cls.processed_session, "PROCESSED-TWO", review_status=ScoreReviewStatus.APPROVED, processing_batch=processed_batch)
+        cls._create_score(cls.processed_session, "PROCESSED-ONE", review_status=ScoreReviewStatus.APPROVED, processing_batch=processed_batch, overall_rank=1)
+        cls._create_score(cls.processed_session, "PROCESSED-TWO", review_status=ScoreReviewStatus.APPROVED, processing_batch=processed_batch, overall_rank=2)
 
         released_batch = ScoreProcessingBatch.objects.create(
             id="BATCH-RELEASED",
@@ -62,6 +62,7 @@ class ResultsReleaseSummaryApiTests(TestCase):
             "RELEASED-ONE",
             review_status=ScoreReviewStatus.APPROVED,
             processing_batch=released_batch,
+            overall_rank=1,
             release_status=ScoreReleaseStatus.RELEASED,
             released_at=timezone.now(),
         )
@@ -82,7 +83,17 @@ class ResultsReleaseSummaryApiTests(TestCase):
         )
 
     @classmethod
-    def _create_score(cls, session, score_id, *, review_status, processing_batch=None, release_status=ScoreReleaseStatus.NOT_RELEASED, released_at=None):
+    def _create_score(
+        cls,
+        session,
+        score_id,
+        *,
+        review_status,
+        processing_batch=None,
+        overall_rank=None,
+        release_status=ScoreReleaseStatus.NOT_RELEASED,
+        released_at=None,
+    ):
         population = RankingPopulation.objects.create(id=f"POP-{score_id}", session=session, name=f"Population {score_id}")
         exam_set = ExamSet.objects.create(id=f"SET-{score_id}", session=session, ranking_population=population, code=f"SET-{score_id}")
         return CandidateScore.objects.create(
@@ -97,6 +108,7 @@ class ResultsReleaseSummaryApiTests(TestCase):
             max_score=100,
             final_score=Decimal("80.00"),
             review_status=review_status,
+            overall_rank=overall_rank,
             processing_batch=processing_batch,
             processed_at=processing_batch.completed_at if processing_batch else None,
             release_status=release_status,
@@ -169,6 +181,67 @@ class ResultsReleaseSummaryApiTests(TestCase):
         self.assertIn("pageSize", fields)
         self.assertIn("status", fields)
 
+    def test_summary_rejects_overlong_search_with_validation_envelope(self):
+        self.authenticate_as(PortalRole.SYSTEM_ADMIN.value)
+
+        response = self.client.get(reverse("results:release-summary"), {"search": "x" * 161})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("search", response.data["error"]["fields"])
+
+    def test_processing_readiness_rejects_invalid_score_relationships(self):
+        self.authenticate_as(PortalRole.SYSTEM_ADMIN.value)
+        session = self._create_session("SESSION-INVALID-RELATIONSHIP", "Invalid relationship", ScoreBatchStatus.READY_FOR_PROCESSING)
+        score = self._create_score(session, "INVALID-RELATIONSHIP", review_status=ScoreReviewStatus.APPROVED)
+        foreign_population = RankingPopulation.objects.filter(session=self.processed_session).first()
+        score.ranking_population = foreign_population
+        score.save(update_fields=["ranking_population"])
+
+        response = self.client.get(reverse("results:release-summary"), {"search": session.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertFalse(response.data["results"][0]["processingReady"])
+
+    def test_release_readiness_requires_a_processing_batch(self):
+        self.authenticate_as(PortalRole.SYSTEM_ADMIN.value)
+        session = self._create_session("SESSION-NO-BATCH", "Processed without batch", ScoreBatchStatus.SCORING_PROCESSED)
+        self._create_score(
+            session,
+            "NO-BATCH",
+            review_status=ScoreReviewStatus.APPROVED,
+            overall_rank=1,
+        )
+
+        response = self.client.get(reverse("results:release-summary"), {"search": session.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"][0]["processedScores"], 1)
+        self.assertFalse(response.data["results"][0]["releaseReady"])
+
+    def test_release_readiness_counts_only_ranked_approved_scores(self):
+        self.authenticate_as(PortalRole.SYSTEM_ADMIN.value)
+        session = self._create_session("SESSION-UNRANKED", "Processed but unranked", ScoreBatchStatus.SCORING_PROCESSED)
+        batch = ScoreProcessingBatch.objects.create(
+            id="BATCH-UNRANKED",
+            session=session,
+            status=ScoreBatchStatus.SCORING_PROCESSED,
+            processed_record_count=1,
+            completed_at=timezone.now(),
+        )
+        self._create_score(
+            session,
+            "UNRANKED",
+            review_status=ScoreReviewStatus.APPROVED,
+            processing_batch=batch,
+        )
+
+        response = self.client.get(reverse("results:release-summary"), {"search": session.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["results"][0]["processedScores"], 0)
+        self.assertFalse(response.data["results"][0]["releaseReady"])
+
     def test_student_and_anonymous_callers_cannot_read_release_summary(self):
         self.authenticate_as(PortalRole.STUDENT.value)
         self.assertEqual(self.client.get(reverse("results:release-summary")).status_code, 403)
@@ -220,10 +293,18 @@ class ResultsReleaseSummaryApiTests(TestCase):
         self.authenticate_as(PortalRole.SYSTEM_ADMIN.value)
         for index in range(10):
             session = self._create_session(f"SESSION-EXTRA-{index}", f"Extra examination {index}", ScoreBatchStatus.READY_FOR_PROCESSING)
-            self._create_score(session, f"EXTRA-{index}", review_status=ScoreReviewStatus.APPROVED)
+            for score_index in range(5):
+                self._create_score(session, f"EXTRA-{index}-{score_index}", review_status=ScoreReviewStatus.APPROVED)
 
         with CaptureQueriesContext(connection) as queries:
-            response = self.client.get(reverse("results:release-summary"), {"pageSize": 100})
+            response = self.client.get(reverse("results:release-summary"), {"pageSize": 2})
 
         self.assertEqual(response.status_code, 200)
-        self.assertLessEqual(len(queries), 2)
+        self.assertLessEqual(len(queries), 3)
+        aggregate_queries = [query["sql"] for query in queries if "results_candidatescore" in query["sql"]]
+        self.assertEqual(len(aggregate_queries), 1)
+        aggregate_sql = aggregate_queries[0]
+        self.assertIn(" IN ", aggregate_sql)
+        for row in response.data["results"]:
+            self.assertIn(row["id"], aggregate_sql)
+        self.assertNotIn("SESSION-EXTRA-0", aggregate_sql)

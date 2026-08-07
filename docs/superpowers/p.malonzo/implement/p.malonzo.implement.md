@@ -311,3 +311,24 @@ The handoff intentionally stops before ranking, percentile processing, student-f
 ## 2026-08-07 — Results Release stale-request hardening
 
 Removed the misplaced standalone Task 4 report. The Results Release screen now accepts only the latest list response and a successful process/release action refreshes with the latest selected filters. Focused Results Release service/page tests passed (2 files, 16 tests), the production build passed, and `git diff --check` passed.
+
+## 2026-08-07 — Release-summary review hardening
+
+The release summary now selects filtered, ordered session IDs before running score aggregation, keeping aggregation bounded to the requested page. Readiness is conservative with the existing mutation services: processing rejects inconsistent score/session, ranking-population, and exam-set relationships; release requires an actual processing batch and counts only approved scores with a non-null rank. Search input is capped at the session-name model length of 160 characters.
+
+Test-first evidence:
+
+```text
+RED: py -3.13 manage.py test apps.results.tests.test_results_release_api --settings=config.settings.test
+     13 tests run; 5 expected failures covered page-bounded SQL, invalid relationships,
+     missing processing batch, unranked processed scores, and overlong search.
+GREEN: the same focused command passed 13 tests.
+Regression: py -3.13 manage.py test apps.results.tests.test_results_release_api apps.results.tests.test_score_management_api --settings=config.settings.test
+            passed 45 tests.
+Django check: py -3.13 manage.py check --settings=config.settings.local
+              passed with no issues.
+Diff check: git diff --check
+            passed.
+```
+
+The tests emitted the existing warning that `backend/staticfiles/` is absent. One check invocation from the repository root failed because `manage.py` is under `backend/`; rerunning the exact check from `backend/` passed.

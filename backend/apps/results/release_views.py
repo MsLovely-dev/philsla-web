@@ -1,4 +1,4 @@
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, F, OuterRef, Q, Subquery
 from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -6,14 +6,14 @@ from rest_framework.views import APIView
 from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.accounts.roles import PortalRole
 
-from .models import ExaminationSession, ScoreBatchStatus, ScoreProcessingBatch, ScoreReleaseAuditLog, ScoreReleaseStatus, ScoreReviewStatus
+from .models import CandidateScore, ExaminationSession, ScoreBatchStatus, ScoreProcessingBatch, ScoreReleaseAuditLog, ScoreReleaseStatus, ScoreReviewStatus
 
 
 class ReleaseSummaryQuerySerializer(serializers.Serializer):
     page = serializers.IntegerField(default=1, min_value=1, required=False)
     pageSize = serializers.IntegerField(default=25, min_value=1, max_value=100, required=False)
     status = serializers.ChoiceField(choices=ScoreBatchStatus.choices, required=False)
-    search = serializers.CharField(default="", allow_blank=True, trim_whitespace=True, required=False)
+    search = serializers.CharField(default="", allow_blank=True, max_length=160, trim_whitespace=True, required=False)
 
 
 class ResultsReleaseSummaryView(APIView):
@@ -25,16 +25,7 @@ class ResultsReleaseSummaryView(APIView):
         serializer.is_valid(raise_exception=True)
         query = serializer.validated_data
 
-        latest_processing_batch = ScoreProcessingBatch.objects.filter(session_id=OuterRef("pk")).order_by("-started_at")
-        latest_release_audit = ScoreReleaseAuditLog.objects.filter(session_id=OuterRef("pk")).order_by("-created_at")
-        sessions = ExaminationSession.objects.annotate(
-            total_candidates=Count("candidate_scores"),
-            approved_scores=Count("candidate_scores", filter=Q(candidate_scores__review_status=ScoreReviewStatus.APPROVED)),
-            processed_scores=Count("candidate_scores", filter=Q(candidate_scores__review_status=ScoreReviewStatus.APPROVED, candidate_scores__processed_at__isnull=False)),
-            released_scores=Count("candidate_scores", filter=Q(candidate_scores__review_status=ScoreReviewStatus.APPROVED, candidate_scores__release_status=ScoreReleaseStatus.RELEASED)),
-            latest_processed_at=Subquery(latest_processing_batch.values("completed_at")[:1]),
-            latest_released_at=Subquery(latest_release_audit.values("created_at")[:1]),
-        )
+        sessions = ExaminationSession.objects.all()
         if query.get("status"):
             sessions = sessions.filter(scoring_status=query["status"])
         if query["search"]:
@@ -44,7 +35,25 @@ class ResultsReleaseSummaryView(APIView):
         count = sessions.count()
         page = query["page"]
         page_size = query["pageSize"]
-        page_sessions = sessions[(page - 1) * page_size:page * page_size]
+        page_ids = list(sessions.values_list("id", flat=True)[(page - 1) * page_size:page * page_size])
+
+        latest_processing_batch = ScoreProcessingBatch.objects.filter(session_id=OuterRef("pk")).order_by("-started_at")
+        latest_release_audit = ScoreReleaseAuditLog.objects.filter(session_id=OuterRef("pk")).order_by("-created_at")
+        invalid_score_relationships = CandidateScore.objects.filter(session_id=OuterRef("pk")).filter(
+            ~Q(exam_set__session_id=F("session_id"))
+            | ~Q(ranking_population__session_id=F("session_id"))
+            | ~Q(exam_set__ranking_population_id=F("ranking_population_id")),
+        )
+        page_sessions = ExaminationSession.objects.filter(pk__in=page_ids).annotate(
+            total_candidates=Count("candidate_scores"),
+            approved_scores=Count("candidate_scores", filter=Q(candidate_scores__review_status=ScoreReviewStatus.APPROVED)),
+            processed_scores=Count("candidate_scores", filter=Q(candidate_scores__review_status=ScoreReviewStatus.APPROVED, candidate_scores__overall_rank__isnull=False)),
+            released_scores=Count("candidate_scores", filter=Q(candidate_scores__review_status=ScoreReviewStatus.APPROVED, candidate_scores__release_status=ScoreReleaseStatus.RELEASED)),
+            latest_processing_batch_id=Subquery(latest_processing_batch.values("id")[:1]),
+            latest_processed_at=Subquery(latest_processing_batch.values("completed_at")[:1]),
+            latest_released_at=Subquery(latest_release_audit.values("created_at")[:1]),
+            has_invalid_score_relationships=Exists(invalid_score_relationships),
+        ).order_by("-created_at", "id")
         return Response({"count": count, "page": page, "pageSize": page_size, "results": [self._serialize_session(session) for session in page_sessions]})
 
     @staticmethod
@@ -64,6 +73,16 @@ class ResultsReleaseSummaryView(APIView):
             "releasedScores": released_scores,
             "processedAt": session.latest_processed_at.isoformat() if session.latest_processed_at else None,
             "releasedAt": session.latest_released_at.isoformat() if session.latest_released_at else None,
-            "processingReady": session.is_closed and approved_scores > 0 and session.scoring_status == ScoreBatchStatus.READY_FOR_PROCESSING,
-            "releaseReady": processed_scores > 0 and released_scores == 0 and session.scoring_status == ScoreBatchStatus.SCORING_PROCESSED,
+            "processingReady": (
+                session.is_closed
+                and approved_scores > 0
+                and not session.has_invalid_score_relationships
+                and session.scoring_status == ScoreBatchStatus.READY_FOR_PROCESSING
+            ),
+            "releaseReady": (
+                bool(session.latest_processing_batch_id)
+                and processed_scores > 0
+                and released_scores == 0
+                and session.scoring_status == ScoreBatchStatus.SCORING_PROCESSED
+            ),
         }
