@@ -41,6 +41,14 @@ This is subsystem **A** of a three-part alignment effort scoped with the request
 - A local "role persona" switcher. The prototype's is fake (local state, disconnected from the logged-in user). This app's route-level RBAC (`EXAM_ADMINISTRATOR`/`SYSTEM_ADMIN`) plus the existing `nextTransitions(status)` helper (shows only the buttons valid for the record's current status) is the real mechanism and needs no UI role-switcher at all.
 - IP address / device columns in the audit trail. The prototype fabricates these per entry; this app does not capture that per-request today, and inventing values would be dishonest data. Left out.
 
+**Scope gaps identified after implementation** (ratified as deferred to a future spec, per the final whole-branch review of `i.sandoval/exam-set-hub-parity`, 2026-08-07 — these were named in this spec's "In scope" list above but not carried through by the implementation plan, and no per-task review caught it since each task was only checked against its own brief, not this spec):
+- The workspace's question list is a flat list sorted by `displayOrder`, not grouped by subject (this spec's own §"In scope" bullet named "subject-grouped question builder UX" explicitly).
+- Only the row's "Edit" button opens the workspace; clicking the row itself does not.
+- The "Create Exam Set" flow returns to the list on save instead of handing off into the workspace.
+- The Packages view's cards don't show total marks and have no "View Details" link into the workspace (read-only).
+- The Audit view's exam-set cell is plain text, not a link into the workspace.
+- The publish-time hash payload doesn't include `total_marks` (low-risk: item points already capture the same information).
+
 ## Data model changes
 
 One additive migration, no new models beyond activating the three that already exist unused:
