@@ -9,7 +9,7 @@ from rest_framework.test import APIClient, APITestCase
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 
-from .models import AcademicYear, Agency, BlueprintCategory, BlueprintDifficultyDistribution, BlueprintSection, BlueprintVersion, ExamBlueprint, ExamSet, ExamSetStatus, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
+from .models import AcademicYear, Agency, BlueprintCategory, BlueprintDifficultyDistribution, BlueprintQuestionTypeDistribution, BlueprintSection, BlueprintVersion, ExamBlueprint, ExamSet, ExamSetStatus, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
 from .services import ExamSetLifecycleConflict, create_or_update_exam_set, transition_exam_set
 
 
@@ -702,6 +702,7 @@ class ExamSetApiTests(APITestCase):
         )
         BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="easy", required_item_count=1)
         BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="moderate", required_item_count=1)
+        BlueprintQuestionTypeDistribution.objects.create(blueprint_section=section, question_type=self.question_type, required_item_count=1)
 
         created = self.client.post(reverse("exams:exam_set_list"), {
             **self.payload,
@@ -712,6 +713,7 @@ class ExamSetApiTests(APITestCase):
         self.assertEqual(codes[f"section_item_count_{section.id}"]["result"], "warning")
         self.assertEqual(codes[f"section_difficulty_{section.id}_easy"]["result"], "passed")
         self.assertEqual(codes[f"section_difficulty_{section.id}_moderate"]["result"], "warning")
+        self.assertEqual(codes[f"section_question_type_{section.id}_{self.question_type.id}"]["result"], "passed")
         self.assertEqual(codes["marks_compliance"]["result"], "warning")
 
 
