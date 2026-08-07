@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { User } from '../types';
-import { canAccessMaintenanceHub, canAccessStudentRegistrationMaintenance } from './roleAccess';
+import { canAccessStudentRegistrationMaintenance } from './roleAccess';
 
 function user(overrides: Partial<User>): User {
   return {
@@ -40,34 +40,5 @@ describe('canAccessStudentRegistrationMaintenance', () => {
 
   it('denies the GOVERNMENT display role when no exact backend role was retained', () => {
     expect(canAccessStudentRegistrationMaintenance(user({ role: 'GOVERNMENT' }))).toBe(false);
-  });
-});
-
-describe('canAccessMaintenanceHub', () => {
-  it('allows every existing Maintenance Hub role', () => {
-    for (const role of ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN'] as const) {
-      expect(canAccessMaintenanceHub(user({ role }))).toBe(true);
-    }
-  });
-
-  it('allows DepEd Admin via the exact backend role', () => {
-    expect(canAccessMaintenanceHub(user({ role: 'GOVERNMENT', backendRole: 'DEPED_ADMIN' }))).toBe(true);
-  });
-
-  it('denies CHED Admin despite sharing the GOVERNMENT display role', () => {
-    expect(canAccessMaintenanceHub(user({ role: 'GOVERNMENT', backendRole: 'CHED_ADMIN' }))).toBe(false);
-  });
-
-  it('denies TESDA Admin despite sharing the GOVERNMENT display role', () => {
-    expect(canAccessMaintenanceHub(user({ role: 'GOVERNMENT', backendRole: 'TESDA_ADMIN' }))).toBe(false);
-  });
-
-  it('denies the GOVERNMENT display role when no exact backend role was retained', () => {
-    expect(canAccessMaintenanceHub(user({ role: 'GOVERNMENT' }))).toBe(false);
-  });
-
-  it('denies unrelated roles', () => {
-    expect(canAccessMaintenanceHub(user({ role: 'STUDENT' }))).toBe(false);
-    expect(canAccessMaintenanceHub(user({ role: 'ITEM_WRITER' }))).toBe(false);
   });
 });

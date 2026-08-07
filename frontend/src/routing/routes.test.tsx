@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { APP_ROUTES } from './routes';
-import { canAccessMaintenanceHub, canAccessStudentRegistrationMaintenance } from './roleAccess';
+import { canAccessStudentRegistrationMaintenance } from './roleAccess';
 
 describe('APP_ROUTES', () => {
   it('defines unique concrete route paths', () => {
@@ -58,16 +58,6 @@ describe('APP_ROUTES', () => {
       (route) => route.path.startsWith('/admin/maintenance/') && route.path !== '/admin/maintenance/registration',
     );
     for (const route of otherMaintenanceRoutes) {
-      expect(route.strictAccess).toBeUndefined();
-    }
-  });
-
-  it('grants the Maintenance Hub route to DepEd Admin without widening any other route', () => {
-    const hub = APP_ROUTES.find((route) => route.path === '/admin/maintenance');
-    expect(hub?.strictAccess).toBe(canAccessMaintenanceHub);
-
-    const untouchedRoutes = APP_ROUTES.filter((route) => route.path !== '/admin/maintenance' && route.path !== '/admin/maintenance/registration');
-    for (const route of untouchedRoutes) {
       expect(route.strictAccess).toBeUndefined();
     }
   });

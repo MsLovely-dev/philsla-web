@@ -75,7 +75,7 @@ import ProctorReadiness from '../pages/proctor/ProctorReadiness';
 import ProctorSchedule from '../pages/proctor/ProctorSchedule';
 import StudentDeviceRegistration from '../pages/proctor/StudentDeviceRegistration';
 import { User, UserRole } from '../types';
-import { canAccessMaintenanceHub, canAccessStudentRegistrationMaintenance } from './roleAccess';
+import { canAccessStudentRegistrationMaintenance } from './roleAccess';
 
 export const ALL_USER_ROLES = [
   'STUDENT', 'ADMISSIONS_REVIEWER', 'UNIVERSITY_ADMIN', 'ITEM_WRITER',
@@ -164,7 +164,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/integrations', element: <SystemIntegration />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'] },
   { path: '/admin/center-control', element: <CenterManagement />, access: 'protected', allowedRoles: withSystemAdmin('TESTING_CENTER_ADMIN') },
 
-  { path: '/admin/maintenance', element: <MaintenanceHub />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN'), strictAccess: canAccessMaintenanceHub },
+  { path: '/admin/maintenance', element: <MaintenanceHub />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN') },
   { path: '/admin/maintenance/registration', element: <StudentRegistrationMaintenance />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'], strictAccess: canAccessStudentRegistrationMaintenance },
   { path: '/admin/maintenance/schools', element: <SchoolsListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/universities', element: <UniversitiesListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
