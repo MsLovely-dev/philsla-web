@@ -34,4 +34,16 @@ describe('ReadinessChecklist', () => {
     render(<ReadinessChecklist results={[]} />);
     expect(screen.getByText(/no validation results/i)).toBeInTheDocument();
   });
+
+  it('handles lowercase result values from the backend', () => {
+    render(<ReadinessChecklist results={[
+      result({ id: '1', result: 'passed' as any }),
+      result({ id: '2', result: 'warning' as any, validationName: 'Marks compliance', message: 'Total marks are 5; blueprint target is 10.' }),
+      result({ id: '3', result: 'failed' as any, validationName: 'Item count', message: 'Exam set has no items.' }),
+    ]} />);
+
+    expect(screen.getByText('1 of 3 checks passed')).toBeInTheDocument();
+    expect(screen.getByText('Total marks are 5; blueprint target is 10.')).toBeInTheDocument();
+    expect(screen.getByText('Exam set has no items.')).toBeInTheDocument();
+  });
 });
