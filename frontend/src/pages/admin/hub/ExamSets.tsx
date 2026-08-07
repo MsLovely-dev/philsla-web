@@ -27,7 +27,6 @@ import { ACTION_BUTTON, FIELD_INPUT, FIELD_LABEL, nextTransitions, recordToDraft
 import { ExamSetAssemblyWorkspace } from './examSets/ExamSetAssemblyWorkspace';
 
 interface EditorState {
-  recordId: string | null;
   title: string;
   blueprintId: string;
   blueprintVersionId: string;
@@ -37,16 +36,10 @@ interface EditorState {
   instructions: string;
   durationMinutes: number;
   questionIds: string[];
-  itemMetadata: Record<string, {
-    points: number;
-    blueprintSectionId?: string | null;
-    selectionMethod?: string;
-  }>;
 }
 
 function emptyEditor(blueprint?: Blueprint): EditorState {
   return {
-    recordId: null,
     title: '',
     blueprintId: blueprint?.id ?? '',
     blueprintVersionId: blueprint?.currentVersionId ?? '',
@@ -56,7 +49,6 @@ function emptyEditor(blueprint?: Blueprint): EditorState {
     instructions: '',
     durationMinutes: blueprint?.rules?.totalTimeLimit || 60,
     questionIds: [],
-    itemMetadata: {},
   };
 }
 
@@ -178,25 +170,18 @@ export default function ExamSets() {
       examinationPeriod: editor.examinationPeriod.trim(),
       examType: editor.examType.trim(),
       instructions: editor.instructions.trim(),
-      items: editor.questionIds.map((questionId, index) => {
-        const metadata = editor.itemMetadata[questionId];
-        return {
-          questionId,
-          displayOrder: index + 1,
-          points: metadata?.points ?? questionById.get(questionId)?.points ?? 1,
-          ...(metadata?.blueprintSectionId ? { blueprintSectionId: metadata.blueprintSectionId } : {}),
-          ...(metadata?.selectionMethod ? { selectionMethod: metadata.selectionMethod } : {}),
-        };
-      }),
+      items: editor.questionIds.map((questionId, index) => ({
+        questionId,
+        displayOrder: index + 1,
+        points: questionById.get(questionId)?.points ?? 1,
+      })),
     };
-    const result = editor.recordId
-      ? await update(editor.recordId, draft)
-      : await create(draft);
+    const result = await create(draft);
     if (result.ok === false) {
       setNotice({ type: 'error', message: result.error.message });
       return;
     }
-    setNotice({ type: 'success', message: editor.recordId ? 'Exam Set updated.' : 'Exam Set created.' });
+    setNotice({ type: 'success', message: 'Exam Set created.' });
     setEditor(null);
   };
 
@@ -424,7 +409,7 @@ function ExamSetEditor({ editor, setEditor, blueprints, questions, pending, choo
       <button type="button" aria-label="Close editor" className="absolute inset-0 bg-slate-950/65 backdrop-blur-sm" onClick={() => setEditor(null)} />
       <div className="relative max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
-          <div><h2 id="exam-set-editor-title" className="text-xl font-black text-slate-950">{editor.recordId ? 'Edit Exam Set' : 'Create Exam Set'}</h2><p className="mt-1 text-sm text-slate-500">The backend validates all fields, selected items, and lifecycle rules.</p></div>
+          <div><h2 id="exam-set-editor-title" className="text-xl font-black text-slate-950">Create Exam Set</h2><p className="mt-1 text-sm text-slate-500">The backend validates all fields, selected items, and lifecycle rules.</p></div>
           <button type="button" aria-label="Close dialog" onClick={() => setEditor(null)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button>
         </div>
         <form onSubmit={onSubmit} className="space-y-6 p-5 sm:p-7">

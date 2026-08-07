@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, Plus, RefreshCw, Send, Trash2 } from 'lucide-react';
 import type { ExamSetDraftItem, ExamSetRecord, ExamSetStatus } from '../../../../services/backendExamSetService';
 import type { QuestionBankItem } from '../../../../services/backendQuestionBankService';
-import { ACTION_BUTTON, nextTransitions, statusClasses, statusLabel } from './examSetUi';
+import { ACTION_BUTTON, nextTransitions, recordToDraft, statusClasses, statusLabel } from './examSetUi';
 import { QuestionPickerDrawer } from './QuestionPickerDrawer';
 import { ReadinessChecklist } from './ReadinessChecklist';
 
@@ -19,19 +19,6 @@ interface ExamSetAssemblyWorkspaceProps {
   onBack: () => void;
 }
 
-function toDraftItems(record: ExamSetRecord): ExamSetDraftItem[] {
-  return record.items
-    .slice()
-    .sort((left, right) => left.displayOrder - right.displayOrder)
-    .map((item, index) => ({
-      questionId: item.question.id,
-      displayOrder: index + 1,
-      points: item.points,
-      ...(item.blueprintSectionId ? { blueprintSectionId: item.blueprintSectionId } : {}),
-      ...(item.selectionMethod ? { selectionMethod: item.selectionMethod } : {}),
-    }));
-}
-
 function renumber(items: ExamSetDraftItem[]): ExamSetDraftItem[] {
   return items.map((item, index) => ({ ...item, displayOrder: index + 1 }));
 }
@@ -46,12 +33,12 @@ export function ExamSetAssemblyWorkspace({ record, questions, pending, onUpdateI
   const excludeIds = record.items.map((item) => item.question.id);
 
   const handleRemove = (index: number) => {
-    const items = toDraftItems(record).filter((_item, itemIndex) => itemIndex !== index);
+    const items = recordToDraft(record).items.filter((_item, itemIndex) => itemIndex !== index);
     onUpdateItems(renumber(items));
   };
 
   const handleMove = (index: number, direction: -1 | 1) => {
-    const items = toDraftItems(record);
+    const items = recordToDraft(record).items;
     const destination = index + direction;
     if (destination < 0 || destination >= items.length) return;
     [items[index], items[destination]] = [items[destination], items[index]];
@@ -59,7 +46,7 @@ export function ExamSetAssemblyWorkspace({ record, questions, pending, onUpdateI
   };
 
   const handlePick = (question: QuestionBankItem) => {
-    const items = toDraftItems(record);
+    const items = recordToDraft(record).items;
     if (pickerTarget?.mode === 'replace' && pickerTarget.index !== null) {
       items[pickerTarget.index] = { ...items[pickerTarget.index], questionId: question.id, points: question.points };
     } else {
