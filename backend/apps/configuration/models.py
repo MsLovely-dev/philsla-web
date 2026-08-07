@@ -57,6 +57,32 @@ class ConfigurableField(models.Model):
         return f"{self.module} - {self.section} - {self.field_name}"
 
 
+class ConfigurationAuditLog(models.Model):
+    field = models.ForeignKey(
+        ConfigurableField,
+        on_delete=models.SET_NULL,
+        related_name="audit_logs",
+        null=True,
+        blank=True,
+    )
+    field_id_snapshot = models.PositiveIntegerField(db_index=True)
+    action = models.CharField(max_length=20, db_index=True)
+    actor_user_id = models.CharField(max_length=80, blank=True, default="")
+    before_json = models.JSONField(default=dict, blank=True)
+    after_json = models.JSONField(default=dict, blank=True)
+    correlation_id = models.CharField(max_length=80, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["field_id_snapshot", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.action} on field {self.field_id_snapshot} at {self.created_at}"
+
+
 class UniversityClassification(models.TextChoices):
     PUBLIC = "Public", "Public"
     PRIVATE = "Private", "Private"
