@@ -1487,7 +1487,6 @@ def create_or_update_exam_set(
     return exam_set
 
 
-@transaction.atomic
 def _compute_exam_set_hash(exam_set: ExamSet) -> str:
     payload = {
         "exam_code": exam_set.exam_code,
@@ -1502,6 +1501,7 @@ def _compute_exam_set_hash(exam_set: ExamSet) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+@transaction.atomic
 def transition_exam_set(
     *,
     exam_set: ExamSet,

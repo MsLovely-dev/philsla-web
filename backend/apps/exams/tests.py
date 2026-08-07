@@ -649,6 +649,45 @@ class ExamSetApiTests(APITestCase):
         refetched = self.client.get(reverse("exams:exam_set_detail", kwargs={"exam_set_id": exam_set_id}))
         self.assertEqual(refetched.data["published_hash"], published.data["published_hash"])
 
+        archived = self.client.post(transition_url, {"status": "ARCHIVED"}, format="json")
+        self.assertEqual(archived.data["published_hash"], published.data["published_hash"])
+
+        other_question = Question.objects.create(
+            question_code="Q-SCI-002",
+            question_type=self.question_type,
+            subject=self.subject,
+            topic=self.topic,
+            competency=self.competency,
+            difficulty="moderate",
+            question_text="Which propulsion system offers continuous low thrust over long durations?",
+            explanation="Ion propulsion sustains low thrust for extended missions.",
+            points="5.00",
+            status=QuestionStatus.APPROVED,
+            created_by=self.profile,
+            approved_by=self.profile,
+        )
+        other_payload = {
+            **self.payload,
+            "items": [
+                {
+                    "question_id": other_question.id,
+                    "display_order": 1,
+                    "points": 5,
+                    "selection_method": "manual",
+                }
+            ],
+        }
+        other_created = self.client.post(reverse("exams:exam_set_list"), other_payload, format="json")
+        other_transition_url = reverse(
+            "exams:exam_set_transition", kwargs={"exam_set_id": other_created.data["id"]}
+        )
+        self.client.post(other_transition_url, {"status": "ACADEMIC_REVIEW"}, format="json")
+        self.client.post(other_transition_url, {"status": "APPROVED"}, format="json")
+        other_published = self.client.post(other_transition_url, {"status": "PUBLISHED"}, format="json")
+
+        self.assertIsNotNone(other_published.data["published_hash"])
+        self.assertNotEqual(other_published.data["published_hash"], published.data["published_hash"])
+
 
 class SubjectAdminApiTests(APITestCase):
     def setUp(self) -> None:
