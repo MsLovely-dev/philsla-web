@@ -128,6 +128,8 @@ Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMI
 
 `meanFinalScore` and each session `meanFinalScore` are `null` when no qualifying rows exist. The fixed bands are `0-59.99`, `60-69.99`, `70-79.99`, `80-89.99`, and `90-100`. Session `releasedAt` is the latest release-audit timestamp, or `null` if no audit exists. Responses never include candidate rows, names, IDs, LRNs, contact details, answer content, rankings, institutions, demographics, regions, agency data, qualifications, or admission decisions.
 
+Small-cell suppression and external-disclosure thresholds are `TBD`. The current authorized API returns exact aggregate counts and does not suppress low-count score bands or session rows. This implemented behavior is not approval for public or external disclosure; a reviewed privacy policy and contract change are required before broader dissemination.
+
 Authentication and authorization failures use the standard safe API error envelope:
 
 ```json

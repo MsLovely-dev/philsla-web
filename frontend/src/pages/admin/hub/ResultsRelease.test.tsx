@@ -271,6 +271,7 @@ describe('ResultsRelease', () => {
 
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2));
     expect(releaseMock).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('The request outcome was uncertain. The session list was refreshed; verify its current status before retrying.')).toHaveAttribute('role', 'status');
     expect((await screen.findAllByText('Results released')).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });

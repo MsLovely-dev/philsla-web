@@ -18,6 +18,8 @@ const STATUS_LABELS: Record<ResultsReleaseStatus, string> = {
   RESULTS_RELEASED: 'Results released',
 };
 
+const UNCERTAIN_OUTCOME_MESSAGE = 'The request outcome was uncertain. The session list was refreshed; verify its current status before retrying.';
+
 function formatDate(value: string | null) {
   if (!value) return 'Not yet recorded';
   return new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
@@ -79,6 +81,7 @@ export default function ResultsRelease() {
       if ('error' in result) {
         if (result.error.kind === 'NETWORK') {
           setPendingAction(null);
+          setSuccessMessage(UNCERTAIN_OUTCOME_MESSAGE);
           await load();
           return;
         }
@@ -93,6 +96,7 @@ export default function ResultsRelease() {
       if ('error' in result) {
         if (result.error.kind === 'NETWORK') {
           setPendingAction(null);
+          setSuccessMessage(UNCERTAIN_OUTCOME_MESSAGE);
           await load();
           return;
         }

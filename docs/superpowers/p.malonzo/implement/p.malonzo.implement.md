@@ -462,7 +462,7 @@ Build result: exit 0; Vite transformed 3,119 modules and emitted the existing la
 - Roll out the backend summary and permission contracts before or with the connected frontend. Existing `/api/v1/results/score-management/batches/{sessionId}/process/` and `/release/` paths remain the mutation boundary.
 - Roll back by reverting the frontend screen/service and backend summary/permission commits as a coordinated application release. There is no database rollback because this minimal plan added no model or migration.
 - PostgreSQL-compatible storage was not exercised for Tasks 1–4; focused backend tests used in-memory SQLite. A PostgreSQL rehearsal remains outstanding before treating database-specific behavior as verified.
-- Playwright was not run for this minimal Results Release screen. Browser-journey verification remains outstanding.
+- Playwright was not run during the initial Tasks 1–4 slice. It was subsequently run in the recorded Results Release and analytics browser verification below; PostgreSQL rehearsal remains outstanding.
 - Repository-wide `npm run lint` is a known red baseline with unrelated TypeScript diagnostics in other modules. The last observed run exited `1`; no diagnostic referenced `ResultsRelease.tsx`, `ResultsRelease.test.tsx`, or `resultsReleaseService.ts`. It was not rerun as part of this focused final cleanup, and is not claimed as passing.
 
 ## 2026-08-07 — Analytics final sign-off
@@ -527,3 +527,10 @@ PostgreSQL rehearsal: skipped because PHILSA_POSTGRES_TEST_DATABASE_URL was abse
 Root status: clean.
 Diff check: git diff --check passed.
 ```
+
+## 2026-08-07 - Final branch findings closure
+
+- Updated the current task brief to identify the root `p.malonzo/results-release` checkout, the implemented release/analytics APIs and screens, the separately preserved Student Results scope, and the outstanding PostgreSQL gate while retaining Exam Review history.
+- Corrected the Reporting Matrix module description to the implemented identity-free national/session aggregate view.
+- Recorded small-cell suppression and disclosure policy as `TBD`. The current analytics endpoint returns exact authorized aggregates; no threshold or suppression rule was invented.
+- An ambiguous process/release network outcome now closes the confirmation, performs one authoritative refetch without replaying the POST, and announces that the outcome is uncertain so the operator verifies the refreshed state before retrying.
