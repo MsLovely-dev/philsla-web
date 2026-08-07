@@ -3,7 +3,7 @@
 **Date:** 2026-08-06
 **Owner:** Joshua Ganapin (Jo.Ganapin)
 **Spec:** [`../specs/2026-08-06-qr-scanning-design.md`](../specs/2026-08-06-qr-scanning-design.md)
-**Status:** Awaiting user approval — no phase may start until this plan is approved
+**Status:** Approved (2026-08-07) — grace period confirmed at 30 minutes; execution starting
 
 ## Recommendation
 
@@ -34,7 +34,7 @@ Fix the three camera-lifecycle defects (Phase 1) and the cross-page hydration de
 ## Phase 3 — Grace-period Present/Late logic in `qrAttendanceService.ts` (test-first)
 
 - [ ] Extend `qrAttendanceService.test.ts` with cases for `resolveScheduledStart` (parses mock `date`+`time` correctly) and `computeScanStatus` (before grace boundary → Present; exactly at boundary → Present; after boundary → Late).
-- [ ] Implement `resolveScheduledStart(schedule)`, `computeScanStatus(scheduledStart, scannedAt, graceMinutes)`, and export `DEFAULT_LATE_GRACE_MINUTES = 15` in `qrAttendanceService.ts`.
+- [ ] Implement `resolveScheduledStart(schedule)`, `computeScanStatus(scheduledStart, scannedAt, graceMinutes)`, and export `DEFAULT_LATE_GRACE_MINUTES = 30` in `qrAttendanceService.ts`.
 - [ ] Run `npm test -- qrAttendanceService` and confirm all cases pass.
 
 ## Phase 4 — Wire "Scan QR" into `ProctorAttendance.tsx` (test-first)
