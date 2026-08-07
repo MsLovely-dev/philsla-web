@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePhilSA } from '../../PhilSAContext';
 import { useMockData } from '../../services/mockService';
@@ -27,10 +27,341 @@ import {
   LifeBuoy,
   Send,
   HelpCircle,
-  ShieldAlert
+  ShieldAlert,
+  QrCode,
+  History,
+  BadgeCheck,
+  Eye,
+  ArrowLeft
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import {
+  backfillQrCode,
+  computeScanStatus,
+  DEFAULT_LATE_GRACE_MINUTES,
+  formatLateDuration,
+  matchScannedCodeToStudent,
+  resolveScheduledStart,
+} from '../../services/qrAttendanceService';
+import { QrScanModal } from './QrScanModal';
+
+/** How long the just-scanned candidate's detail card stays visible before privacy-hiding itself. */
+const SCAN_DETAIL_VISIBILITY_MS = 5000;
+
+interface ScanResultEntry {
+  id: string;
+  scannedAt: number;
+  rawValue: string;
+  outcome: 'PRESENT' | 'LATE' | 'ALREADY_MARKED' | 'NOT_RECOGNIZED';
+  studentName?: string;
+  studentId?: string;
+  studentSeat?: string;
+  /** The candidate's actual current attendance status — set for PRESENT, LATE, and ALREADY_MARKED
+   * alike, since "already marked" doesn't by itself say which status they're already in. */
+  attendanceStatus?: 'Present' | 'Late';
+  lateDurationLabel?: string;
+}
+
+function scanOutcomeBadge(outcome: ScanResultEntry['outcome']) {
+  if (outcome === 'PRESENT') return { label: 'Present', className: 'bg-emerald-50 text-emerald-700 border-emerald-100' };
+  if (outcome === 'LATE') return { label: 'Late', className: 'bg-amber-50 text-amber-700 border-amber-100' };
+  if (outcome === 'ALREADY_MARKED') return { label: 'Already Marked', className: 'bg-slate-100 text-slate-500 border-slate-200' };
+  return { label: 'Invalid', className: 'bg-red-50 text-red-600 border-red-100' };
+}
+
+/** Compact profile row used inside the History modal's scrollable list. */
+function ScanResultCard({ entry, onView }: { entry: ScanResultEntry; onView: () => void }) {
+  const badge = scanOutcomeBadge(entry.outcome);
+  const initials = entry.studentName ? entry.studentName.split(' ').map(n => n[0]).join('').slice(0, 2) : '?';
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div
+            className={cn(
+              'flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-black',
+              entry.studentName ? 'border-philsa-border bg-philsa-bg text-philsa-navy' : 'border-red-100 bg-red-50 text-red-400',
+            )}
+          >
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold text-philsa-navy">{entry.studentName ?? 'Unrecognized Code'}</p>
+            <p className="truncate text-[10px] font-semibold text-slate-400">{entry.studentId ?? entry.rawValue}</p>
+          </div>
+        </div>
+        <span className={cn('shrink-0 rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide', badge.className)}>
+          {badge.label}
+        </span>
+      </div>
+      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-[10px] text-slate-400">
+        <span>{new Date(entry.scannedAt).toLocaleTimeString()}</span>
+        <div className="flex items-center gap-3">
+          {entry.lateDurationLabel && <span className="font-bold text-amber-600">{entry.lateDurationLabel}</span>}
+          <button
+            type="button"
+            onClick={onView}
+            className="flex items-center gap-1 font-bold uppercase tracking-wide text-slate-400 hover:text-philsa-navy cursor-pointer"
+          >
+            <Eye className="h-3 w-3" aria-hidden="true" /> View
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ScheduleSummary {
+  date: string;
+  time: string;
+  endTime?: string;
+  testCenter: string;
+  room: string;
+}
+
+/**
+ * The permit-style detail for a single scan entry (no QR — this is a scan *result*, not the
+ * permit itself). Shared between the live "Scanned Candidate" panel (showing the latest scan)
+ * and the History modal's "View" drill-down (showing any past entry).
+ */
+function ScanPermitCard({
+  entry,
+  schedule,
+  proctorName,
+}: {
+  entry: ScanResultEntry;
+  schedule?: ScheduleSummary;
+  proctorName: string;
+}) {
+  if (entry.outcome === 'NOT_RECOGNIZED') {
+    return (
+      <div className="rounded-2xl border border-red-100 bg-red-50/50 p-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-red-200 bg-white text-red-400">
+            <AlertCircle className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-red-700">Invalid QR Code</p>
+            <p className="text-[10px] font-semibold text-red-400">No match in this room's roster</p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl border border-red-100 bg-white px-3 py-2">
+          <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Scanned Value</p>
+          <p className="font-mono text-xs text-philsa-navy">{entry.rawValue}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const badge = scanOutcomeBadge(entry.outcome);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-philsa-border bg-white">
+      <div className="flex items-center justify-between border-b border-philsa-border bg-philsa-bg/40 px-5 py-3">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-widest text-philsa-red">PhilSA Scholarship Academy</p>
+          <p className="text-sm font-black text-philsa-navy">National Assessment Permit</p>
+        </div>
+        <span className={cn('shrink-0 rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide', badge.className)}>
+          {badge.label}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-4 px-5 py-4">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-philsa-border bg-philsa-bg text-base font-black text-philsa-navy">
+          {entry.studentName!.split(' ').map(n => n[0]).join('').slice(0, 2)}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-base font-black text-philsa-navy">{entry.studentName}</p>
+          <p className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+            <BadgeCheck className="h-3 w-3" aria-hidden="true" /> Verified in roster
+          </p>
+          <p className="font-mono text-[10px] text-slate-400">{entry.studentId}</p>
+        </div>
+      </div>
+
+      <div className="border-t border-philsa-border px-5 py-4">
+        <p className="mb-3 text-[9px] font-black uppercase tracking-widest text-philsa-red">Exam Schedule &amp; Location</p>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Date</p>
+            <p className="font-bold text-philsa-navy">{schedule?.date ?? '—'}</p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Time Slot</p>
+            <p className="font-bold text-philsa-navy">
+              {schedule ? `${schedule.time}${schedule.endTime ? ` – ${schedule.endTime}` : ''}` : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Testing Station</p>
+            <p className="font-bold text-philsa-navy">{schedule?.testCenter ?? '—'}</p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Room &amp; Seat</p>
+            <p className="font-bold text-philsa-navy">
+              {schedule?.room ?? '—'}{entry.studentSeat ? ` • Seat ${entry.studentSeat}` : ''}
+            </p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Assigned Proctor</p>
+            <p className="font-bold text-philsa-navy">{proctorName}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-philsa-border px-5 py-3">
+        <div className="flex items-center justify-between gap-3 text-[10px]">
+          <span data-testid="scan-time" className="font-semibold text-black">
+            Scanned {new Date(entry.scannedAt).toLocaleTimeString()}
+          </span>
+          {entry.attendanceStatus && (
+            <span
+              data-testid="scan-status-line"
+              className={cn(
+                'font-black uppercase tracking-wide',
+                entry.attendanceStatus === 'Present' ? 'text-emerald-600' : 'text-amber-600',
+              )}
+            >
+              Status: {entry.attendanceStatus}
+              {entry.lateDurationLabel ? ` — ${entry.lateDurationLabel}` : ''}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Right-hand panel of the scan modal: a permit-style detail card for the most recently
+ * scanned candidate, plus a button to open the full scan History modal.
+ */
+function ScannedCandidateDetail({
+  latest,
+  historyCount,
+  onOpenHistory,
+  schedule,
+  proctorName,
+}: {
+  latest: ScanResultEntry | null;
+  historyCount: number;
+  onOpenHistory: () => void;
+  schedule?: ScheduleSummary;
+  proctorName: string;
+}) {
+  return (
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Scanned Candidate</p>
+        <button
+          type="button"
+          onClick={onOpenHistory}
+          className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 hover:text-philsa-navy cursor-pointer"
+        >
+          <History className="h-3 w-3" aria-hidden="true" /> History{historyCount > 0 ? ` (${historyCount})` : ''}
+        </button>
+      </div>
+
+      {!latest ? (
+        <div className="flex flex-1 min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs font-semibold text-slate-400">
+          Scan a candidate's permit QR to see their details here.
+        </div>
+      ) : (
+        <ScanPermitCard entry={latest} schedule={schedule} proctorName={proctorName} />
+      )}
+    </div>
+  );
+}
+
+function ScanHistoryModal({
+  isOpen,
+  onClose,
+  entries,
+  onClear,
+  schedule,
+  proctorName,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  entries: ScanResultEntry[];
+  onClear: () => void;
+  schedule?: ScheduleSummary;
+  proctorName: string;
+}) {
+  const [viewingEntry, setViewingEntry] = useState<ScanResultEntry | null>(null);
+
+  // Reset the drill-down whenever the modal closes, so reopening always starts at the list.
+  useEffect(() => {
+    if (!isOpen) setViewingEntry(null);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-philsa-navy/60 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-label="Scan History"
+        className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-philsa-border bg-white shadow-2xl"
+      >
+        <div className="flex items-center justify-between border-b border-philsa-border px-6 py-4">
+          <h2 className="flex items-center gap-2 text-base font-black text-philsa-navy">
+            <History className="h-4 w-4" aria-hidden="true" /> Scan History
+          </h2>
+          <div className="flex items-center gap-4">
+            {entries.length > 0 && !viewingEntry && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-[10px] font-bold uppercase tracking-wide text-slate-400 hover:text-philsa-red cursor-pointer"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-lg p-2 text-philsa-gray hover:bg-slate-100"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-[480px] overflow-y-auto px-6 py-5">
+          {viewingEntry ? (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setViewingEntry(null)}
+                className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide text-slate-400 hover:text-philsa-navy cursor-pointer"
+              >
+                <ArrowLeft className="h-3 w-3" aria-hidden="true" /> Back to History
+              </button>
+              <ScanPermitCard entry={viewingEntry} schedule={schedule} proctorName={proctorName} />
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="flex min-h-[200px] items-center justify-center text-center text-xs font-semibold text-slate-400">
+              No scans yet this session.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {entries.map((entry) => (
+                <ScanResultCard key={entry.id} entry={entry} onView={() => setViewingEntry(entry)} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
 
 interface StudentPC {
   id: string;
@@ -70,7 +401,7 @@ const getInitialStudentPCs = (schId: string): StudentPC[] => {
 };
 
 export default function ProctorAttendance() {
-  const { addAuditLog, addTicket, tickets } = usePhilSA();
+  const { user, addAuditLog, addTicket, tickets } = usePhilSA();
   const { schedules, examSets } = useMockData();
   const navigate = useNavigate();
 
@@ -116,6 +447,27 @@ export default function ProctorAttendance() {
 
   // Ticket detail viewing modal state
   const [viewingTicket, setViewingTicket] = useState<any | null>(null);
+
+  // Desktop-app-preview QR scan state
+  const [showQrScanModal, setShowQrScanModal] = useState(false);
+  const [showScanHistory, setShowScanHistory] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [scanResults, setScanResults] = useState<ScanResultEntry[]>([]);
+  const [showLatestScanDetail, setShowLatestScanDetail] = useState(false);
+  const lastHandledScanRef = useRef<{ value: string; time: number } | null>(null);
+
+  // Privacy: the detail card shows a candidate's name and status on screen, so it shouldn't
+  // linger indefinitely after the proctor's attention has moved on. It hides itself
+  // SCAN_DETAIL_VISIBILITY_MS after the most recent scan, resetting on every new scan. The
+  // full history (opened via the "History" button) is unaffected — it's an intentional log,
+  // not a live, walk-by-visible display.
+  const latestScanId = scanResults[0]?.id;
+  useEffect(() => {
+    if (!latestScanId) return;
+    setShowLatestScanDetail(true);
+    const timer = setTimeout(() => setShowLatestScanDetail(false), SCAN_DETAIL_VISIBILITY_MS);
+    return () => clearTimeout(timer);
+  }, [latestScanId]);
 
   // Incident state initialized from localStorage with fallbacks
   const [incidents, setIncidents] = useState<any[]>(() => {
@@ -240,7 +592,12 @@ export default function ProctorAttendance() {
 
   const getDistState = (schId: string) => {
     if (distStates[schId]) {
-      return distStates[schId];
+      // The persisted roster under this key may have been last written by
+      // ProctorSchedule.tsx's unsynchronized StudentPC type, which has no qrCode field.
+      return {
+        ...distStates[schId],
+        students: backfillQrCode(distStates[schId].students),
+      };
     }
     return {
       attendanceComplete: false,
@@ -383,6 +740,83 @@ export default function ProctorAttendance() {
     setShowReportModal(id);
   };
 
+  // Desktop-app-preview QR scan handler. Debounced via a ref (not state) tracking the last
+  // handled value/time: `html5-qrcode` redecodes ~10x/sec while a code stays in frame, and
+  // `students` here is a snapshot from the last render — several decodes arriving before a
+  // state update commits would otherwise each see the same stale "not yet marked" student.
+  // History keeps only the first attempt per scanned code — a candidate re-scanned later (by
+  // mistake, or to double-check) shouldn't produce a duplicate entry or change what's displayed.
+  const recordScanResult = (entry: Omit<ScanResultEntry, 'id'>) => {
+    setScanResults(prev => {
+      if (prev.some(existing => existing.rawValue === entry.rawValue)) return prev;
+      return [{ ...entry, id: `${entry.scannedAt}-${prev.length}` }, ...prev];
+    });
+  };
+
+  const handleQrScan = (value: string) => {
+    const now = Date.now();
+    const last = lastHandledScanRef.current;
+    // Sliding window: only skip if this exact code was *seen* (not just "acted on") within the
+    // debounce window. `html5-qrcode` redecodes ~10x/sec while a code stays in frame, so this
+    // ref must be updated on every decode, not only when we actually record a new entry —
+    // otherwise a code held continuously in view would still cross the 3s threshold every 3
+    // seconds and get processed again as a fresh "Already Marked" duplicate.
+    const isStillTheSameHeldCode = last && last.value === value && now - last.time < 3000;
+    lastHandledScanRef.current = { value, time: now };
+    if (isStillTheSameHeldCode) {
+      return;
+    }
+
+    const matched = matchScannedCodeToStudent(value, students);
+    if (!matched) {
+      setScanMessage('QR not recognized for this room.');
+      recordScanResult({ scannedAt: now, rawValue: value, outcome: 'NOT_RECOGNIZED' });
+      return;
+    }
+
+    const currentSchedule = schedules.find(s => s.id === selectedScheduleId);
+    const scheduledStart = currentSchedule ? resolveScheduledStart(currentSchedule) : new Date(now);
+    const graceDeadline = new Date(scheduledStart.getTime() + DEFAULT_LATE_GRACE_MINUTES * 60_000);
+
+    if (matched.attendance !== 'Pending') {
+      const attendanceStatus = matched.attendance === 'Present' || matched.attendance === 'Late' ? matched.attendance : undefined;
+      // Computed fresh against *now*, not copied from the original scan — an already-marked
+      // Late candidate scanned again later is more late now than they were at first contact.
+      const lateDurationLabel = attendanceStatus === 'Late' ? formatLateDuration(graceDeadline, new Date(now)) : undefined;
+
+      setScanMessage(`Already marked ${matched.attendance} for ${matched.name}.`);
+      recordScanResult({
+        scannedAt: now,
+        rawValue: value,
+        outcome: 'ALREADY_MARKED',
+        studentName: matched.name,
+        studentId: matched.id,
+        studentSeat: matched.seat,
+        attendanceStatus,
+        lateDurationLabel,
+      });
+      return;
+    }
+
+    const status = computeScanStatus(scheduledStart, new Date(now), DEFAULT_LATE_GRACE_MINUTES);
+    const statusLabel = status === 'PRESENT' ? 'Present' : 'Late';
+    const lateDurationLabel = status === 'LATE' ? formatLateDuration(graceDeadline, new Date(now)) : undefined;
+
+    updateStatus(matched.id, status);
+    addAuditLog('ATTENDANCE_LOCK', `Scanned QR for ${matched.name} (Seat ${matched.seat}) — marked ${statusLabel} via desktop-app-preview scan.`);
+    setScanMessage(`${matched.name} marked ${statusLabel}.`);
+    recordScanResult({
+      scannedAt: now,
+      rawValue: value,
+      outcome: status,
+      studentName: matched.name,
+      studentId: matched.id,
+      studentSeat: matched.seat,
+      attendanceStatus: statusLabel,
+      lateDurationLabel,
+    });
+  };
+
   const submitReport = () => {
     if (showReportModal) {
       const studentObj = students.find(s => s.id === showReportModal);
@@ -505,6 +939,12 @@ export default function ProctorAttendance() {
           {!attendanceComplete && !isExamDistributed && (
             <>
               <button
+                onClick={() => setShowQrScanModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2.5 bg-philsa-navy text-white hover:bg-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5 text-emerald-400" /> Scan Permit QR
+              </button>
+              <button
                 onClick={() => {
                   const updated = students.map(s => ({
                     ...s,
@@ -560,6 +1000,15 @@ export default function ProctorAttendance() {
           )}
         </div>
       </div>
+
+      {scanMessage && (
+        <div className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5"><QrCode className="w-3.5 h-3.5 shrink-0" /> {scanMessage}</span>
+          <button onClick={() => setScanMessage(null)} className="text-indigo-400 hover:text-indigo-600 cursor-pointer shrink-0" aria-label="Dismiss">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {(attendanceComplete || isExamDistributed) && (
         <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex items-center gap-3">
@@ -1483,6 +1932,30 @@ export default function ProctorAttendance() {
           </div>
         )}
       </AnimatePresence>
+
+      <QrScanModal
+        isOpen={showQrScanModal}
+        onClose={() => setShowQrScanModal(false)}
+        onScan={handleQrScan}
+        results={
+          <ScannedCandidateDetail
+            latest={showLatestScanDetail ? scanResults[0] ?? null : null}
+            historyCount={scanResults.length}
+            onOpenHistory={() => setShowScanHistory(true)}
+            schedule={schedules.find(s => s.id === selectedScheduleId)}
+            proctorName={user ? `${user.firstName} ${user.lastName}` : 'Proctor'}
+          />
+        }
+      />
+
+      <ScanHistoryModal
+        isOpen={showScanHistory}
+        onClose={() => setShowScanHistory(false)}
+        entries={scanResults}
+        onClear={() => setScanResults([])}
+        schedule={schedules.find(s => s.id === selectedScheduleId)}
+        proctorName={user ? `${user.firstName} ${user.lastName}` : 'Proctor'}
+      />
     </div>
   );
 }
