@@ -453,7 +453,7 @@ export default function StudentApplication() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isIdVerified, setIsIdVerified] = useState(() => restoredSessionDraft?.isIdVerified ?? false);
-  const [lrnVerificationCategory, setLrnVerificationCategory] = useState<LrnVerificationCategory>(() => restoredSessionDraft?.lrnVerificationCategory ?? 'email');
+  const [lrnVerificationCategory, setLrnVerificationCategory] = useState<LrnVerificationCategory>(() => restoredSessionDraft?.lrnVerificationCategory ?? 'birthday');
   const [lrnRegisteredValue, setLrnRegisteredValue] = useState(() => restoredSessionDraft?.lrnRegisteredValue ?? '');
   const [lrnVerificationReview, setLrnVerificationReview] = useState<LrnVerificationReview | null>(() => restoredSessionDraft?.lrnVerificationReview ?? null);
   const [biometricSelfieFileName, setBiometricSelfieFileName] = useState(() => restoredSessionDraft?.biometricSelfieFileName ?? '');
@@ -731,7 +731,7 @@ export default function StudentApplication() {
     });
     setIsIdVerified(false);
     setRegistryLockedFields([]);
-    setLrnVerificationCategory('email');
+    setLrnVerificationCategory('birthday');
     setLrnRegisteredValue('');
     setLrnVerificationReview(null);
     setBiometricSelfieFileName('');
@@ -1351,6 +1351,12 @@ export default function StudentApplication() {
 
   const selectedLrnVerificationCategory = LRN_VERIFICATION_CATEGORIES.find(category => category.value === lrnVerificationCategory) ?? LRN_VERIFICATION_CATEGORIES[0];
   const dossierVerificationLabel = (lrnVerificationReview?.inputLabel || selectedLrnVerificationCategory.inputLabel).replace(/^Registered /, 'Verified ');
+  const isCurrentLrnVerificationConfirmed = verificationPath === 'lrn'
+    && isIdVerified
+    && Boolean(lrnVerificationToken)
+    && lrnVerificationReview?.lrn === formData.lrn
+    && lrnVerificationReview.inputLabel === selectedLrnVerificationCategory.inputLabel
+    && lrnVerificationReview.value === lrnRegisteredValue.trim();
 
   function clearSelfieTimers() {
     if (selfieDetectionIntervalRef.current) {
@@ -2034,6 +2040,10 @@ export default function StudentApplication() {
       return;
     }
 
+    if (isCurrentLrnVerificationConfirmed) {
+      return;
+    }
+
     setIsSubmitting(true);
     const result = await backendApplicationService.verifyLrn(currentLrn, {
       category: currentCategory,
@@ -2106,7 +2116,7 @@ export default function StudentApplication() {
       lastName: profile.lastName,
       suffix: profile.extensionName || '',
       dob: profile.dateOfBirth,
-      email: profile.lrn === '123456789012' ? 'lovely@yopmail.com' : (prev.email || 'aurelio.delacruz@philsys.gov.ph'),
+      email: prev.email,
       schoolName: profile.schoolName,
       schoolId: profile.schoolId,
       schoolAddress: prev.schoolAddress || 'Verified from LRN registry',
@@ -2239,7 +2249,7 @@ export default function StudentApplication() {
     setFormData(getEmptyRegistrationFormData());
     setIsIdVerified(false);
     setRegistryLockedFields([]);
-    setLrnVerificationCategory('email');
+    setLrnVerificationCategory('birthday');
     setLrnRegisteredValue('');
     setLrnVerificationReview(null);
     setBiometricSelfieFileName('');
@@ -3240,10 +3250,11 @@ export default function StudentApplication() {
                             <button
                               type="button"
                               onClick={() => handleVerifyLrnPath()}
-                              disabled={isSubmitting}
+                              disabled={isSubmitting || isCurrentLrnVerificationConfirmed}
                               className="w-full lg:w-auto lg:mt-[27px] btn-primary py-3 px-8 font-black uppercase text-xs tracking-widest cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60"
                             >
-                              <School className="w-4 h-4" /> Verify Information
+                              {isCurrentLrnVerificationConfirmed ? <CheckCircle className="w-4 h-4" /> : <School className="w-4 h-4" />}
+                              {isCurrentLrnVerificationConfirmed ? 'Verified' : 'Verify Information'}
                             </button>
                           </div>
 

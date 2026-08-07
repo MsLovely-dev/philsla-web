@@ -311,8 +311,9 @@ def verify_lrn(*, lrn: str, verification_category: str = "", verification_value:
     if client_attempt_state["attempts"] >= settings.LRN_MAX_FAILED_ATTEMPTS:
         raise LrnCooldown(_lrn_cooldown_seconds_left(client_attempt_state))
 
+    registry_date_of_birth = verification_value if verification_category == "birthday" else ""
     try:
-        record = get_lrn_registry().find(lrn=lrn)
+        record = get_lrn_registry().find(lrn=lrn, date_of_birth=registry_date_of_birth)
     except RegistryUnavailable as exc:
         raise LrnRegistryUnavailable from exc
 

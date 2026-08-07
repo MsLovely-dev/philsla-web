@@ -59,3 +59,18 @@ class RegistrationIntegrationStatusEndpointTests(SimpleTestCase):
         self.assertFalse(methods["philsys"]["active"])
         self.assertNotIn("token", str(response.data).lower())
         self.assertNotIn("secret", str(response.data).lower())
+
+    @override_settings(
+        LRN_REGISTRY_PROVIDER="deped",
+        LRN_DEPED_VERIFY_URL="https://deped.example.test/api/v1/learners/verify",
+        LRN_DEPED_API_TOKEN="test-token",
+        PHILSYS_REGISTRY_PROVIDER="unavailable",
+    )
+    def test_status_reports_deped_lrn_available_when_configured_without_exposing_token(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        methods = {item["id"]: item for item in response.data["methods"]}
+        self.assertEqual(methods["lrn"]["status"], "available")
+        self.assertTrue(methods["lrn"]["active"])
+        self.assertNotIn("test-token", str(response.data))
+        self.assertNotIn("token", str(response.data).lower())

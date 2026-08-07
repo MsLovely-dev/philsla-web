@@ -112,7 +112,7 @@ Build these after P0 backend foundation is running and tested.
 ### 3. Identity and school verification
 
 - [ ] Define PhilSys verification contract and integration boundary (`TBD`).
-- [x] Define DepEd LRN verification contract and integration boundary; local/test use synthetic records while the production provider remains `TBD`.
+- [x] Implement DepEd LRN verification boundary; local/test can use synthetic records, while configured environments use `LRN_REGISTRY_PROVIDER=deped` with backend-only URL/token settings.
 - [ ] Store verification attempts and outcomes without logging sensitive payloads.
 - [ ] Support idle, verifying, verified, mismatch, unavailable, retry, and manual-review outcomes.
 - [ ] Add timeout, retry, unavailable, mismatch, and audit tests.

@@ -6,6 +6,12 @@ def _lrn_status() -> tuple[str, bool, str]:
     if provider == "mock":
         return ("mock", False, "LRN verification is using synthetic local or test data.")
     if provider == "deped":
+        if settings.LRN_DEPED_VERIFY_URL and settings.LRN_DEPED_API_TOKEN:
+            return (
+                "available",
+                True,
+                "LRN verification is connected to the configured DepEd test provider.",
+            )
         return (
             "placeholder",
             False,

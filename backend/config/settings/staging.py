@@ -49,6 +49,9 @@ if not STAGING_ALLOW_MOCK_INTEGRATIONS:
             "STEP1_SELFIE_FACE_PROVIDER must be configured or STAGING_ALLOW_MOCK_INTEGRATIONS=true."
         )
 
+if LRN_REGISTRY_PROVIDER == "deped" and (not LRN_DEPED_VERIFY_URL or not LRN_DEPED_API_TOKEN):  # noqa: F405
+    raise ImproperlyConfigured("LRN_DEPED_VERIFY_URL and LRN_DEPED_API_TOKEN are required when LRN_REGISTRY_PROVIDER=deped.")
+
 if ACTIVE_EXAM_CYCLE_ID == "TBD":  # noqa: F405
     raise ImproperlyConfigured("ACTIVE_EXAM_CYCLE_ID is required in staging.")
 

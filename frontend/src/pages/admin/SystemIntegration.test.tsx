@@ -55,4 +55,29 @@ describe('SystemIntegration', () => {
     expect(screen.queryByText(/ph_deped_lis_live/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/philsys_production_cert/i)).not.toBeInTheDocument();
   });
+
+  it('shows configured DepEd LRN provider details without exposing token values', async () => {
+    vi.mocked(backendApplicationService.getRegistrationIntegrationStatus).mockResolvedValueOnce({
+      ok: true,
+      data: {
+        backend: { status: 'connected' },
+        methods: [
+          { id: 'manual', label: 'Manual Registration', status: 'available', active: true, message: 'Manual Registration is available.' },
+          { id: 'lrn', label: 'LRN Verification', status: 'available', active: true, message: 'LRN verification is connected to the configured DepEd test provider.' },
+          { id: 'philsys', label: 'PhilSys National ID', status: 'locked', active: false, message: 'PhilSys National ID integration is locked until official API requirements are approved.' },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+
+    render(<SystemIntegration />);
+
+    await user.click(screen.getByRole('button', { name: /verify connection/i }));
+
+    expect(await screen.findByText(/DepEd LRN test provider/i)).toBeInTheDocument();
+    expect(screen.getByText(/POST \/api\/v1\/learners\/verify/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bearer token is stored backend-only/i)).toBeInTheDocument();
+    expect(screen.getByText(/Requires LRN and birthday/i)).toBeInTheDocument();
+    expect(screen.queryByText(/mlrn_test_/i)).not.toBeInTheDocument();
+  });
 });
