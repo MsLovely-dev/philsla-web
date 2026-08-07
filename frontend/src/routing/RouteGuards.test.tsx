@@ -273,9 +273,9 @@ describe('ExamRoute', () => {
     expect(screen.getByText('Location: /dashboard')).toBeInTheDocument();
   });
 
-  it('redirects a non-student role to unauthorized', () => {
+  it('redirects a role that is neither student nor system admin to unauthorized', () => {
     mockUsePhilSA.mockReturnValue({
-      user: admin,
+      user: { ...admin, role: 'PROCTOR' },
       isLoading: false,
       isAuthInitialized: true,
       initializeAuth: vi.fn(),
@@ -285,5 +285,20 @@ describe('ExamRoute', () => {
     renderAtTarget((children) => <ExamRoute>{children}</ExamRoute>);
 
     expect(screen.getByRole('heading', { name: 'Unauthorized page' })).toBeInTheDocument();
+  });
+
+  it('lets a SYSTEM_ADMIN preview straight through regardless of application eligibility', () => {
+    mockUsePhilSA.mockReturnValue({
+      user: admin,
+      isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
+      maintenanceModules: [],
+    } as unknown as ReturnType<typeof usePhilSA>);
+    mockUseMockData.mockReturnValue({ applications: [] } as ReturnType<typeof useMockData>);
+
+    renderAtTarget((children) => <ExamRoute>{children}</ExamRoute>);
+
+    expect(screen.getByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
   });
 });

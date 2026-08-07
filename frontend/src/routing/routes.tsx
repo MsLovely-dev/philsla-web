@@ -53,6 +53,7 @@ import ProctorConsole from '../pages/ProctorConsole';
 import RecordingsCommand from '../pages/RecordingsCommand';
 import ResultsManagement from '../pages/ResultsManagement';
 import ResultsPage from '../pages/ResultsPage';
+import StudentDashboard from '../pages/student/StudentDashboard';
 import ResetPasswordPage from '../pages/ResetPasswordPage';
 import ScoreManagement from '../pages/results/ScoreManagement';
 import ScoreCandidateDetail from '../pages/results/ScoreCandidateDetail';
@@ -103,7 +104,7 @@ export interface AppRouteDefinition {
 const withSystemAdmin = (...roles: UserRole[]): readonly UserRole[] =>
   roles.includes('SYSTEM_ADMIN') ? roles : [...roles, 'SYSTEM_ADMIN'];
 
-const STUDENT: readonly UserRole[] = ['STUDENT'];
+const STUDENT_PORTAL = withSystemAdmin('STUDENT');
 const REVIEWER = withSystemAdmin('ADMISSIONS_REVIEWER');
 const UNIVERSITY = withSystemAdmin('UNIVERSITY_ADMIN');
 const HUB = withSystemAdmin('ITEM_WRITER', 'ACADEMIC_REVIEWER', 'EXAM_ADMINISTRATOR', 'UNIVERSITY_ADMIN');
@@ -119,9 +120,10 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/unauthorized', element: <UnauthorizedPage />, access: 'protected', allowedRoles: ALL_USER_ROLES, layout: 'standalone' },
 
   { path: '/dashboard', element: <Dashboard />, access: 'protected', allowedRoles: ALL_USER_ROLES },
-  { path: '/student/application', element: <StudentApplication />, access: 'protected', allowedRoles: STUDENT },
-  { path: '/student/permit', element: <ExamPermitPage />, access: 'protected', allowedRoles: STUDENT },
-  { path: '/student/results', element: <ResultsPage />, access: 'protected', allowedRoles: STUDENT },
+  { path: '/student/dashboard', element: <StudentDashboard />, access: 'protected', allowedRoles: STUDENT_PORTAL },
+  { path: '/student/application', element: <StudentApplication />, access: 'protected', allowedRoles: STUDENT_PORTAL },
+  { path: '/student/permit', element: <ExamPermitPage />, access: 'protected', allowedRoles: STUDENT_PORTAL },
+  { path: '/student/results', element: <ResultsPage />, access: 'protected', allowedRoles: STUDENT_PORTAL },
   { path: '/student/take-exam', element: <ExamDelivery inlineMode />, access: 'exam' },
   { path: '/exam/live', element: <ExamDelivery />, access: 'exam' },
 

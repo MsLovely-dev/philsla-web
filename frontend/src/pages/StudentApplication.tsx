@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { FaceDetector as MediaPipeFaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
+import { Link } from 'react-router-dom';
 import { usePhilSA } from '../PhilSAContext';
 import { useMockData } from '../services/mockService';
 import {
@@ -9,6 +10,8 @@ import {
   mapBackendApplicationToFrontend,
   type StudentRegistrationFieldConfig,
 } from '../services/backendApplicationService';
+import { buildAdminPreviewApplication } from '../services/adminPreviewApplication';
+import type { Application } from '../types';
 import blurrySelfieImg from '../assets/images/blurry-selfie.png';
 import passSelfieImg from '../assets/images/pass-selfie.png';
 import poorLightingSelfieImg from '../assets/images/poorligthing-selfie.png';
@@ -710,8 +713,30 @@ export default function StudentApplication() {
     addAuditLog('SESSION_RESTARTED', 'Student registration session manually restarted.');
   };
 
-  // Find user's existing application (if any)
-  const myApp = applications.find(a => a.userId === user?.id);
+  // Find user's existing application (if any). In backend mode this must come
+  // from the real API, not the mock array -- otherwise a real returning
+  // student who already submitted would incorrectly fall through to the
+  // fresh-registration wizard below instead of their tracking status, since
+  // the mock `applications` array never contains their real record.
+  const [backendMyApp, setBackendMyApp] = useState<Application | null>(null);
+  useEffect(() => {
+    if (!usesBackendServiceMode || !user) return;
+    let isMounted = true;
+    (async () => {
+      const result = await backendApplicationService.getMyApplication();
+      if (!isMounted) return;
+      if (result.ok) {
+        setBackendMyApp(result.data ? mapBackendApplicationToFrontend(result.data, user.id) : null);
+      }
+    })();
+    return () => { isMounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usesBackendServiceMode, user?.id]);
+
+  const mockMyApp = applications.find(a => a.userId === user?.id);
+  const realApp = usesBackendServiceMode ? backendMyApp : mockMyApp;
+  const isAdminPreview = !realApp && user?.role === 'SYSTEM_ADMIN';
+  const myApp = realApp ?? (isAdminPreview ? buildAdminPreviewApplication(user!) : realApp);
   const restoredFormData = { ...(restoredSessionDraft?.formData ?? {}) };
   delete restoredFormData.password;
   delete restoredFormData.confirmPassword;
@@ -2261,6 +2286,14 @@ export default function StudentApplication() {
   if (myApp && !isEditingCorrection) {
      return (
         <div className="max-w-3xl mx-auto py-12">
+          {isAdminPreview && (
+            <div className="flex items-center gap-3 px-5 py-3 mb-6 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <p className="text-xs font-bold">
+                Preview mode — this Student Portal view is showing demo data, not a real application record.
+              </p>
+            </div>
+          )}
           <div className="card-philsa text-center py-16 relative overflow-hidden bg-white shadow-2xl">
             <div className="absolute top-0 left-0 w-full h-1 bg-philsa-navy opacity-20" />
             
@@ -2388,7 +2421,18 @@ export default function StudentApplication() {
                   )}
                </div>
             </div>
-            
+
+            {myApp.status !== 'FOR_CORRECTION' && (
+              <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto mb-2">
+                <Link to="/student/dashboard" className="btn-secondary flex-1 py-3 text-center">
+                  Go to Dashboard
+                </Link>
+                <Link to="/student/permit" className="btn-primary flex-1 py-3 text-center flex items-center justify-center gap-2">
+                  <Shield className="w-4 h-4" /> View Exam Permit
+                </Link>
+              </div>
+            )}
+
             <p className="text-[10px] text-philsa-gray font-bold uppercase tracking-widest mt-4">
               Academic Support: <span className="text-philsa-navy font-black">admissions@philsa.ph</span>
             </p>

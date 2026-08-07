@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { usePhilSA } from "../PhilSAContext";
 import { useMockData } from "../services/mockService";
 import {
@@ -7,18 +8,65 @@ import {
   MapPin,
   Calendar,
   Clock,
+  AlertTriangle,
   User as UserIcon,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { backendApplicationService, type BackendExamPermit } from "../services/backendApplicationService";
+import { ADMIN_PREVIEW_CANDIDATE_ID, findAdminPreviewSlot, getAdminPreviewSlotId } from "../services/adminPreviewApplication";
+import { createExamPermitPdf, downloadBlob, getExamPermitPdfFilename } from "../services/examPermitPdfExport";
+
+function formatSlotTime(time: string): string {
+  const [hourStr, minute] = time.split(":");
+  const hour = Number.parseInt(hourStr, 10);
+  const period = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+  return `${String(displayHour).padStart(2, "0")}:${minute} ${period}`;
+}
+
+function mapBackendPermit(backendPermit: BackendExamPermit, userId: string) {
+  return {
+    id: backendPermit.id,
+    userId,
+    candidateId: backendPermit.candidateId,
+    fullName: backendPermit.fullName,
+    scheduleId: "",
+    testCenter: backendPermit.testCenter,
+    room: backendPermit.room,
+    seat: backendPermit.seat,
+    qrCode: backendPermit.qrCode,
+    status: "APPROVED" as const,
+  };
+}
 
 export default function ExamPermit() {
   const { user } = usePhilSA();
   const { permits, schedules, proctors } = useMockData();
+  const usesBackendServiceMode = import.meta.env.VITE_AUTH_SERVICE_MODE === "backend";
 
-  let permit = permits.find((p) => p.userId === user?.id);
+  const [backendPermit, setBackendPermit] = useState<BackendExamPermit | null>(null);
+  const [backendLoaded, setBackendLoaded] = useState(false);
+  const permitDocumentRef = useRef<HTMLDivElement>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  useEffect(() => {
+    if (!usesBackendServiceMode || !user) return;
+    let isMounted = true;
+    (async () => {
+      const result = await backendApplicationService.getMyExamPermit();
+      if (!isMounted) return;
+      if (result.ok) setBackendPermit(result.data);
+      setBackendLoaded(true);
+    })();
+    return () => { isMounted = false; };
+  }, [usesBackendServiceMode, user]);
+
+  let permit = usesBackendServiceMode
+    ? (backendPermit && user ? mapBackendPermit(backendPermit, user.id) : undefined)
+    : permits.find((p) => p.userId === user?.id);
   const isMocked = !permit;
 
-  if (isMocked && user?.role === "STUDENT") {
+  if (!usesBackendServiceMode && isMocked && user?.role === "STUDENT") {
     permit = {
       id: "p_sample",
       userId: user.id,
@@ -33,9 +81,46 @@ export default function ExamPermit() {
     };
   }
 
+  // SYSTEM_ADMIN accounts previewing this page have no real permit record.
+  // Once the Dashboard preview's schedule picker has "confirmed" a slot
+  // (persisted client-side, see adminPreviewApplication.ts), show a permit
+  // for that same slot -- before that, fall through to "No Active Permit"
+  // below, accurately mirroring the real flow rather than faking a permit
+  // that doesn't correspond to anything the preview has done yet.
+  const previewSlot = isMocked && user?.role === "SYSTEM_ADMIN" ? findAdminPreviewSlot(getAdminPreviewSlotId()) : null;
+  const isAdminPreview = Boolean(previewSlot);
+
+  if (isMocked && previewSlot && user) {
+    permit = {
+      id: "p_preview",
+      userId: user.id,
+      candidateId: ADMIN_PREVIEW_CANDIDATE_ID,
+      fullName: `${user.firstName || "Preview"} Candidate`,
+      scheduleId: previewSlot.id,
+      testCenter: previewSlot.testCenter,
+      room: previewSlot.room,
+      seat: "1A",
+      qrCode: `SAMPLE_QR_PHILSA_${ADMIN_PREVIEW_CANDIDATE_ID}`,
+      status: "APPROVED",
+    };
+  }
+
+  const previewSchedule = previewSlot
+    ? { date: previewSlot.date, time: formatSlotTime(previewSlot.startTime), endTime: formatSlotTime(previewSlot.endTime) }
+    : backendPermit?.startTime && backendPermit?.endTime
+      ? { date: backendPermit.examDate ?? "", time: formatSlotTime(backendPermit.startTime), endTime: formatSlotTime(backendPermit.endTime) }
+      : null;
   const schedule = permit
-    ? schedules.find((s) => s.id === permit?.scheduleId)
+    ? (previewSchedule ?? schedules.find((s) => s.id === permit?.scheduleId))
     : null;
+
+  if (usesBackendServiceMode && !backendLoaded) {
+    return (
+      <div className="flex items-center justify-center h-[40vh]">
+        <p className="text-xs font-black text-philsa-gray uppercase tracking-widest">Loading your permit…</p>
+      </div>
+    );
+  }
 
   const proctor = proctors.find((p) => {
     const center = p.center?.toLowerCase() || "";
@@ -46,6 +131,17 @@ export default function ExamPermit() {
 
   const isOffline = user?.id === "student-offline" || permit?.id?.toLowerCase().includes("offline") || false;
   const examMethod = isOffline ? "Offline" : "Online";
+
+  const handleDownloadPdf = async () => {
+    if (!permitDocumentRef.current || !permit) return;
+    setIsExportingPdf(true);
+    try {
+      const blob = await createExamPermitPdf(permitDocumentRef.current);
+      downloadBlob(blob, getExamPermitPdfFilename(permit.candidateId));
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   if (!permit) {
     return (
@@ -60,12 +156,25 @@ export default function ExamPermit() {
           You haven't been assigned an exam schedule yet, or your application is
           still pending review.
         </p>
+        {user?.role === "SYSTEM_ADMIN" && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mt-6 inline-block">
+            Preview mode — go to Dashboard and confirm an exam schedule to preview a permit here.
+          </p>
+        )}
       </div>
     );
   }
 
   return (
     <div className="max-w-3xl mx-auto">
+      {isAdminPreview && (
+        <div className="flex items-center gap-3 px-5 py-3 mb-6 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <p className="text-xs font-bold">
+            Preview mode — this permit is showing demo data, not a real record.
+          </p>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -82,8 +191,12 @@ export default function ExamPermit() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="btn-secondary py-2.5 px-5 flex items-center gap-2 text-xs transition-all active:scale-95">
-            <Download className="w-4 h-4" /> PDF
+          <button
+            className="btn-secondary py-2.5 px-5 flex items-center gap-2 text-xs transition-all active:scale-95 disabled:opacity-50"
+            onClick={handleDownloadPdf}
+            disabled={isExportingPdf}
+          >
+            <Download className="w-4 h-4" /> {isExportingPdf ? "Generating…" : "PDF"}
           </button>
           <button
             className="btn-primary py-2.5 px-6 flex items-center gap-2 text-xs shadow-lg shadow-philsa-red/20 transition-all active:scale-95"
@@ -95,7 +208,7 @@ export default function ExamPermit() {
       </div>
 
       {/* Simplified, Professional Permit Document */}
-      <div className="bg-white rounded-3xl border border-philsa-border shadow-md overflow-hidden print:border-none print:shadow-none">
+      <div ref={permitDocumentRef} className="bg-white rounded-3xl border border-philsa-border shadow-md overflow-hidden print:border-none print:shadow-none">
         {/* Simple Light Header */}
         <div className="bg-slate-50 text-philsa-navy px-8 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-philsa-border">
           <div>

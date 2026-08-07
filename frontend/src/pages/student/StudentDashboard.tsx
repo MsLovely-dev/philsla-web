@@ -1,6 +1,15 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { usePhilSA } from "../../PhilSAContext";
 import { useMockData } from "../../services/mockService";
+import { backendApplicationService, mapBackendApplicationToFrontend, type BackendExamSlot } from "../../services/backendApplicationService";
+import {
+  buildAdminPreviewApplication,
+  buildAdminPreviewExamSlots,
+  findAdminPreviewSlot,
+  getAdminPreviewSlotId,
+  setAdminPreviewSlotId,
+} from "../../services/adminPreviewApplication";
+import type { Application } from "../../types";
 import {
   FileText,
   Shield,
@@ -32,214 +41,64 @@ import { Logo } from "../../components/Logo";
 
 // --- SUB-COMPONENTS ---
 
-function RequirementsUploader({ app }: { app: any }) {
-  const [activeTab, setActiveTab] = useState<"current" | "history">("current");
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+const REQUIRED_CORRECTION_LABELS: Record<string, string> = {
+  gradeRecordsUrl: "Form 137",
+  photoUrl: "ID Photo",
+};
 
-  const handleUpload = () => {
-    setIsUploading(true);
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 30;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setTimeout(() => setIsUploading(false), 500);
-      }
-      setUploadProgress(progress);
-    }, 400);
-  };
+// Real requiredCorrections/adminRemarks come from the application record
+// (backend-mode: the real API; mock-mode: the mock array) -- both already
+// correct. The actual fix flow is StudentApplication.tsx's existing,
+// already-backend-connected "Open Form for Correction" wizard; this card's
+// job is just to surface what's wrong and send the student there, rather
+// than duplicate a second, parallel upload implementation here.
+function RequirementsUploader({ app }: { app: any }) {
+  const corrections: string[] = app.requiredCorrections ?? [];
 
   return (
     <div className="card-philsa p-5 sm:p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h3 className="text-xl font-extrabold text-philsa-navy mb-1">
-            Admission Requirements
-          </h3>
-          <p className="text-xs font-bold text-philsa-gray uppercase tracking-widest">
-            Verify your eligibility
-          </p>
-        </div>
-        <div className="flex bg-philsa-bg p-1 rounded-xl border border-philsa-border">
-          <button
-            onClick={() => setActiveTab("current")}
-            className={cn(
-              "px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
-              activeTab === "current"
-                ? "bg-white text-philsa-navy shadow-sm"
-                : "text-philsa-gray",
-            )}
-          >
-            Current
-          </button>
-          <button
-            onClick={() => setActiveTab("history")}
-            className={cn(
-              "px-4 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
-              activeTab === "history"
-                ? "bg-white text-philsa-navy shadow-sm"
-                : "text-philsa-gray",
-            )}
-          >
-            History
-          </button>
-        </div>
+      <div className="mb-8">
+        <h3 className="text-xl font-extrabold text-philsa-navy mb-1">
+          Admission Requirements
+        </h3>
+        <p className="text-xs font-bold text-philsa-gray uppercase tracking-widest">
+          Verify your eligibility
+        </p>
       </div>
 
-      {activeTab === "current" ? (
-        <div className="space-y-6">
-          <div className="bg-red-50 border border-red-100 p-6 rounded-2xl">
-            <div className="flex gap-4 items-start">
-              <div className="w-10 h-10 rounded-xl bg-white border border-red-200 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-5 h-5 text-red-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-black text-red-800 uppercase tracking-tight mb-1">
-                  Requirements Rejected
-                </p>
-                <p className="text-xs font-bold text-red-700/80 mb-4">
-                  {app.adminRemarks}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {app.requiredCorrections?.map((id: string) => (
-                    <span
-                      key={id}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-red-100 rounded-lg text-[10px] font-bold text-red-600 uppercase tracking-widest"
-                    >
-                      <Clock className="w-3 h-3" />{" "}
-                      {id === "gradeRecordsUrl"
-                        ? "Form 137"
-                        : id === "photoUrl"
-                          ? "ID Photo"
-                          : id}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
+      <div className="bg-red-50 border border-red-100 p-6 rounded-2xl">
+        <div className="flex gap-4 items-start">
+          <div className="w-10 h-10 rounded-xl bg-white border border-red-200 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-5 h-5 text-red-600" />
           </div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="border-2 border-dashed border-philsa-border rounded-3xl p-8 flex flex-col items-center justify-center text-center group hover:border-philsa-red/40 transition-all bg-philsa-bg/30">
-              <div className="w-16 h-16 rounded-2xl bg-white shadow-sm border border-philsa-border flex items-center justify-center mb-6 text-philsa-gray group-hover:text-philsa-red transition-colors">
-                <Upload className="w-8 h-8" />
-              </div>
-              <h4 className="text-sm font-bold text-philsa-navy mb-2">
-                Drag & Drop Documents
-              </h4>
-              <p className="text-[10px] text-philsa-gray font-bold uppercase tracking-widest leading-relaxed px-4">
-                JPEG, PNG or PDF. <br />
-                Max file size 5MB.
-              </p>
-              <button
-                onClick={handleUpload}
-                className="mt-8 btn-secondary py-2 border-philsa-border"
-              >
-                Browse Files
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <p className="text-[10px] font-black text-philsa-gray uppercase tracking-widest mb-2 px-1">
-                Validation Progress
-              </p>
-              <div className="space-y-4">
-                {[
-                  {
-                    label: "Photo Identity",
-                    status: "VALIDATED",
-                    progress: 100,
-                  },
-                  {
-                    label: "Academic Transcript",
-                    status: "WAITING_UPLOAD",
-                    progress: 0,
-                  },
-                  {
-                    label: "Birth Certificate",
-                    status: "VALIDATED",
-                    progress: 100,
-                  },
-                ].map((doc) => (
-                  <div
-                    key={doc.label}
-                    className="p-4 bg-philsa-bg border border-philsa-border rounded-2xl"
+          <div className="flex-1">
+            <p className="text-sm font-black text-red-800 uppercase tracking-tight mb-1">
+              Requirements Rejected
+            </p>
+            <p className="text-xs font-bold text-red-700/80 mb-4">
+              {app.adminRemarks || "Some fields or documents require your immediate attention for processing to continue."}
+            </p>
+            {corrections.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-6">
+                {corrections.map((id) => (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-red-100 rounded-lg text-[10px] font-bold text-red-600 uppercase tracking-widest"
                   >
-                    <div className="flex justify-between items-center mb-3">
-                      <p className="text-xs font-bold text-philsa-navy">
-                        {doc.label}
-                      </p>
-                      <span
-                        className={cn(
-                          "text-[9px] font-black uppercase tracking-widest",
-                          doc.status === "VALIDATED"
-                            ? "text-philsa-success"
-                            : "text-philsa-gray",
-                        )}
-                      >
-                        {doc.status.replace("_", " ")}
-                      </span>
-                    </div>
-                    <div className="h-1.5 w-full bg-white rounded-full overflow-hidden border border-philsa-border">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{
-                          width: `${doc.label === "Academic Transcript" && isUploading ? uploadProgress : doc.progress}%`,
-                        }}
-                        className={cn(
-                          "h-full rounded-full",
-                          doc.progress === 100 || isUploading
-                            ? "bg-philsa-red"
-                            : "bg-philsa-gray",
-                        )}
-                      />
-                    </div>
-                  </div>
+                    <Clock className="w-3 h-3" /> {REQUIRED_CORRECTION_LABELS[id] || id}
+                  </span>
                 ))}
               </div>
-            </div>
+            )}
+            <Link
+              to="/student/application"
+              className="btn-primary inline-flex items-center gap-2 py-3 px-6 text-xs"
+            >
+              <Upload className="w-4 h-4" /> Fix & Resubmit
+            </Link>
           </div>
         </div>
-      ) : (
-        <div className="space-y-4 py-4">
-          {[
-            {
-              action: "Admin Rejected Form 137",
-              time: "2 days ago",
-              reason: "Unreadable copy",
-            },
-            {
-              action: "Student Uploaded Documents",
-              time: "3 days ago",
-              reason: "Initial submission",
-            },
-            {
-              action: "Application Initialized",
-              time: "5 days ago",
-              reason: "Registration",
-            },
-          ].map((item, i) => (
-            <div key={i} className="flex gap-4">
-              <div className="w-0.5 bg-philsa-border relative">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-philsa-border" />
-              </div>
-              <div className="pb-6">
-                <p className="text-xs font-extrabold text-philsa-navy">
-                  {item.action}
-                </p>
-                <p className="text-[10px] font-bold text-philsa-gray uppercase tracking-widest mt-1">
-                  {item.time}
-                </p>
-                <div className="mt-2 p-3 bg-philsa-bg rounded-xl border border-philsa-border italic text-[10px] text-philsa-gray font-medium">
-                  "{item.reason}"
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -840,23 +699,203 @@ function ExamResultCard({ app }: { app: any }) {
   );
 }
 
+function ScheduleSelectionCard({ onAssigned, isPreview = false }: { onAssigned: (previewSlotId?: string) => void; isPreview?: boolean }) {
+  const [slots, setSlots] = useState<BackendExamSlot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadSlots = async () => {
+    if (isPreview) {
+      setSlots(buildAdminPreviewExamSlots());
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    const result = await backendApplicationService.listExamSlots();
+    if (result.ok) setSlots(result.data);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      if (isPreview) {
+        if (isMounted) {
+          setSlots(buildAdminPreviewExamSlots());
+          setLoading(false);
+        }
+        return;
+      }
+      const result = await backendApplicationService.listExamSlots();
+      if (!isMounted) return;
+      if (result.ok) setSlots(result.data);
+      setLoading(false);
+    })();
+    return () => { isMounted = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPreview]);
+
+  const handleConfirm = async () => {
+    if (!selectedSlotId) return;
+    setConfirming(true);
+    setError(null);
+    if (isPreview) {
+      // No real StudentApplication to assign to in preview mode, so this
+      // doesn't call the real (STUDENT-only) endpoint -- it just advances
+      // the client-side preview state, persisted locally so the Permit page
+      // sees the same "scheduled" slot on navigation.
+      setConfirming(false);
+      onAssigned(selectedSlotId);
+      return;
+    }
+    const result = await backendApplicationService.assignExamSlot(selectedSlotId);
+    setConfirming(false);
+    if (result.ok) {
+      onAssigned();
+      return;
+    }
+    setError(result.error.message);
+    setSelectedSlotId(null);
+    void loadSlots();
+  };
+
+  return (
+    <div className="card-philsa p-6 sm:p-12 text-center flex flex-col items-center">
+      <div className="w-16 h-16 rounded-2xl bg-red-50 text-philsa-red flex items-center justify-center mb-6">
+        <Calendar className="w-8 h-8" />
+      </div>
+      <h2 className="text-2xl font-black text-philsa-navy mb-3 uppercase tracking-tighter">
+        Select Exam Schedule
+      </h2>
+      <p className="max-w-md text-philsa-gray font-medium mb-10">
+        Your application has been accepted! Please select your preferred exam session from the available slots below. Note that seat allocation is on a first-come, first-served basis.
+      </p>
+
+      {error && (
+        <div className="w-full max-w-2xl mb-6 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-xs font-bold text-red-700 text-left">
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-xs font-bold text-philsa-gray uppercase tracking-widest">Loading available slots…</p>
+      ) : (
+        <div className="w-full overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-[9px] font-black text-philsa-gray uppercase tracking-widest border-b border-philsa-border">
+                <th className="pb-3 pr-4">Batch Number</th>
+                <th className="pb-3 pr-4">Room Name</th>
+                <th className="pb-3 pr-4">Start/End Time</th>
+                <th className="pb-3 pr-4">Date</th>
+                <th className="pb-3 pr-4">Seat Capacity</th>
+                <th className="pb-3">Selection</th>
+              </tr>
+            </thead>
+            <tbody>
+              {slots.map((slot, index) => (
+                <tr key={slot.id} className="border-b border-philsa-border last:border-0">
+                  <td className="py-4 pr-4 text-xs font-black text-philsa-red">BATCH-{index + 1}</td>
+                  <td className="py-4 pr-4 text-sm font-bold text-philsa-navy">{slot.room}</td>
+                  <td className="py-4 pr-4 text-sm text-philsa-navy">
+                    {slot.startTime.slice(0, 5)} - {slot.endTime.slice(0, 5)}
+                  </td>
+                  <td className="py-4 pr-4 text-sm text-philsa-navy">{slot.date}</td>
+                  <td className="py-4 pr-4">
+                    <span className="px-2 py-1 rounded-md bg-philsa-bg border border-philsa-border text-[10px] font-bold text-philsa-navy">
+                      {slot.remainingSlots} Seats
+                    </span>
+                  </td>
+                  <td className="py-4">
+                    <input
+                      type="radio"
+                      name="exam-slot"
+                      aria-label={`Select ${slot.room} on ${slot.date}`}
+                      checked={selectedSlotId === slot.id}
+                      onChange={() => setSelectedSlotId(slot.id)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!loading && slots.length > 0 && (
+        <button
+          onClick={handleConfirm}
+          disabled={!selectedSlotId || confirming}
+          className="btn-primary mt-10 w-full max-w-sm flex items-center justify-center gap-3 py-4 disabled:opacity-50"
+        >
+          {confirming ? "Confirming…" : "Confirm Selected Slot"}
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // --- MAIN PAGE ---
 
 export default function StudentDashboard() {
   const { user } = usePhilSA();
   const { applications } = useMockData();
   const navigate = useNavigate();
+  const usesBackendServiceMode = import.meta.env.VITE_AUTH_SERVICE_MODE === 'backend';
 
-  const myApp = applications.find((a) => a.userId === user?.id);
+  const [backendApp, setBackendApp] = useState<Application | null>(null);
+  const [backendAppLoaded, setBackendAppLoaded] = useState(false);
+  const [previewSlotId, setPreviewSlotId] = useState<string | null>(() => getAdminPreviewSlotId());
+
+  const loadMyApplication = async () => {
+    if (!user) return;
+    const result = await backendApplicationService.getMyApplication();
+    if (result.ok) {
+      setBackendApp(result.data ? mapBackendApplicationToFrontend(result.data, user.id) : null);
+    }
+    setBackendAppLoaded(true);
+  };
+
+  useEffect(() => {
+    if (!usesBackendServiceMode) return;
+    void loadMyApplication();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usesBackendServiceMode, user?.id]);
+
+  const realApp = usesBackendServiceMode
+    ? backendApp
+    : applications.find((a) => a.userId === user?.id);
+  const isAdminPreview = !realApp && user?.role === 'SYSTEM_ADMIN';
+  const myApp = realApp ?? (isAdminPreview ? buildAdminPreviewApplication(user!, findAdminPreviewSlot(previewSlotId)) : realApp);
+
+  const handleScheduleAssigned = (confirmedPreviewSlotId?: string) => {
+    if (isAdminPreview) {
+      setAdminPreviewSlotId(confirmedPreviewSlotId ?? null);
+      setPreviewSlotId(confirmedPreviewSlotId ?? null);
+      return;
+    }
+    void loadMyApplication();
+  };
 
   // Debugging log for development/prototype troubleshooting
-  if (!myApp && user) {
+  if (!myApp && user && !usesBackendServiceMode) {
     console.warn(
       `No application found for user ID: ${user.id}. Total applications available: ${applications.length}`,
     );
     console.log(
       "Available user IDs in applications:",
       applications.map((a) => a.userId),
+    );
+  }
+
+  if (usesBackendServiceMode && !backendAppLoaded) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <p className="text-xs font-black text-philsa-gray uppercase tracking-widest">Loading your application…</p>
+      </div>
     );
   }
 
@@ -889,6 +928,14 @@ export default function StudentDashboard() {
 
   return (
     <div className="space-y-12">
+      {isAdminPreview && (
+        <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <p className="text-xs font-bold">
+            Preview mode — this Student Portal view is showing demo data, not a real application record.
+          </p>
+        </div>
+      )}
       {/* Header section with candidate info */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
@@ -1005,6 +1052,16 @@ export default function StudentDashboard() {
             <RequirementsUploader app={myApp} />
           )}
 
+          {/* STATE: ACCEPTED, NO EXAM SLOT ASSIGNED YET. Gated to backend mode
+              (the real flow) or an admin preview (which has no real
+              application to assign -- confirming will surface the backend's
+              "No application found" error, which is accurate, not broken).
+              The plain mock-data flow has no equivalent, so it stays
+              unaffected outside of these two cases. */}
+          {(usesBackendServiceMode || isAdminPreview) && myApp.status === "ACCEPTED" && !myApp.examStatus && (
+            <ScheduleSelectionCard onAssigned={handleScheduleAssigned} isPreview={isAdminPreview} />
+          )}
+
           {/* STATE 2 & 3: WAITING FOR PROCTOR / ACTIVE EXAM */}
           {(myApp.examStatus === "SCHEDULED" ||
             myApp.examStatus === "IN_PROGRESS") && (
@@ -1060,6 +1117,55 @@ export default function StudentDashboard() {
           {myApp.examStatus === "RESULTS_RELEASED" && (
             <ExamResultCard app={myApp} />
           )}
+        </div>
+
+        <div className="space-y-8">
+          <div className="card-philsa p-5 sm:p-8 bg-[#00563F] text-white border-none shadow-xl">
+            <div className="flex items-center gap-3 mb-6">
+              <Cpu className="w-5 h-5 text-[#FFB81C]" />
+              <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                Computer & Tech Check
+              </h4>
+            </div>
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Camera className="w-4 h-4 text-emerald-400" />
+                  <span className="text-[10px] font-bold text-white/70 uppercase">
+                    Camera
+                  </span>
+                </div>
+                <span className="text-[9px] font-black text-emerald-400">
+                  WORKING GOOD
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Mic className="w-4 h-4 text-emerald-400" />
+                  <span className="text-[10px] font-bold text-white/70 uppercase">
+                    Microphone
+                  </span>
+                </div>
+                <span className="text-[9px] font-black text-emerald-400">
+                  WORKING GOOD
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Wifi className="w-4 h-4 text-amber-400" />
+                  <span className="text-[10px] font-bold text-white/70 uppercase">
+                    Network
+                  </span>
+                </div>
+                <span className="text-[9px] font-black text-amber-400">
+                  GOOD CONNECTION
+                </span>
+              </div>
+            </div>
+            <button className="w-full mt-8 py-3 bg-white/10 rounded-lg font-bold text-[9px] uppercase tracking-widest hover:bg-white/20 transition-all border border-white/10 cursor-pointer">
+              Run Full Diagnostics
+            </button>
+          </div>
 
           {/* APPLICATION TIMELINE / PROGRESS WIDGET */}
           <div className="card-philsa p-6 sm:p-10">
@@ -1137,55 +1243,6 @@ export default function StudentDashboard() {
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="space-y-8">
-          <div className="card-philsa p-5 sm:p-8 bg-[#00563F] text-white border-none shadow-xl">
-            <div className="flex items-center gap-3 mb-6">
-              <Cpu className="w-5 h-5 text-[#FFB81C]" />
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-white/40">
-                Computer & Tech Check
-              </h4>
-            </div>
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Camera className="w-4 h-4 text-emerald-400" />
-                  <span className="text-[10px] font-bold text-white/70 uppercase">
-                    Camera
-                  </span>
-                </div>
-                <span className="text-[9px] font-black text-emerald-400">
-                  WORKING GOOD
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Mic className="w-4 h-4 text-emerald-400" />
-                  <span className="text-[10px] font-bold text-white/70 uppercase">
-                    Microphone
-                  </span>
-                </div>
-                <span className="text-[9px] font-black text-emerald-400">
-                  WORKING GOOD
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Wifi className="w-4 h-4 text-amber-400" />
-                  <span className="text-[10px] font-bold text-white/70 uppercase">
-                    Network
-                  </span>
-                </div>
-                <span className="text-[9px] font-black text-amber-400">
-                  GOOD CONNECTION
-                </span>
-              </div>
-            </div>
-            <button className="w-full mt-8 py-3 bg-white/10 rounded-lg font-bold text-[9px] uppercase tracking-widest hover:bg-white/20 transition-all border border-white/10 cursor-pointer">
-              Run Full Diagnostics
-            </button>
           </div>
         </div>
       </div>

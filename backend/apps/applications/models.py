@@ -35,6 +35,35 @@ class ApplicationSubmissionSource(models.TextChoices):
     ADMISSIONS_BULK_UPLOAD = "ADMISSIONS_BULK_UPLOAD", "Admissions bulk upload"
 
 
+class ApplicationExamStatus(models.TextChoices):
+    SCHEDULED = "SCHEDULED", "Scheduled"
+
+
+class ExamSlot(models.Model):
+    """A bookable exam session a student can self-assign to. Distinct from
+    apps.attendance.ExamPermit, which is staff-issued and QR-scan-oriented;
+    this is the candidate-facing "pick your own slot" concept, which had no
+    backend equivalent anywhere before this model.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    exam_cycle_id = models.CharField(max_length=64, blank=True, default="")
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    test_center = models.CharField(max_length=255)
+    room = models.CharField(max_length=255)
+    total_slots = models.PositiveIntegerField()
+    remaining_slots = models.PositiveIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["date", "start_time"]
+
+    def __str__(self) -> str:
+        return f"{self.room} - {self.date} {self.start_time}"
+
+
 class StudentApplication(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     candidate_id = models.CharField(max_length=17, unique=True, editable=False)
@@ -74,6 +103,14 @@ class StudentApplication(models.Model):
     )
     bulk_upload_row_number = models.PositiveIntegerField(null=True, blank=True)
     password_hash = models.CharField(max_length=128, blank=True, default="")
+    exam_status = models.CharField(max_length=20, choices=ApplicationExamStatus.choices, blank=True, default="")
+    assigned_slot = models.ForeignKey(
+        "ExamSlot",
+        on_delete=models.PROTECT,
+        related_name="assigned_applications",
+        null=True,
+        blank=True,
+    )
     version = models.PositiveIntegerField(default=1)
     submitted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

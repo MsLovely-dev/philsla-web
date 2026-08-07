@@ -6,9 +6,11 @@ from apps.accounts.authentication import (
     ApiSessionAuthentication,
     PendingAwareBearerAuthentication,
 )
+from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.accounts.roles import PortalRole, get_user_role
 
-from .serializers import ScanAttendanceSerializer
+from .models import ExamPermit
+from .serializers import ExamPermitSerializer, ScanAttendanceSerializer
 from .services import AttendanceError, mark_attendance
 
 # Matches the mobile app's login restriction: only these two roles may
@@ -47,3 +49,20 @@ class ScanAttendanceView(APIView):
             return Response({"code": exc.code, "detail": exc.detail}, status=status_code)
 
         return Response(result, status=200)
+
+
+class MyExamPermitView(APIView):
+    """The caller's own exam permit, scoped entirely by `request.user` --
+    mirrors apps.applications.MyApplicationView's shape: no permit id is
+    ever accepted from the client, so the queryset itself is the scope.
+    """
+
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def get(self, request) -> Response:
+        owner_id = getattr(request.user, "user_id", request.user.id)
+        permit = ExamPermit.objects.filter(application__owner_id=owner_id).order_by("-issued_at").first()
+        if permit is None:
+            return Response(None)
+        return Response(ExamPermitSerializer(permit).data)

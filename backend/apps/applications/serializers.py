@@ -6,11 +6,29 @@ from apps.accounts.serializers import validate_password_policy
 from .models import (
     ApplicationAuditLog,
     ApplicationBulkUploadBatch,
+    ExamSlot,
     IdentityMediaType,
     Step2VerificationConfiguration,
     StudentApplication,
     StudentApplicationAdditionalAttachment,
 )
+
+
+class ExamSlotSerializer(serializers.ModelSerializer):
+    startTime = serializers.TimeField(source="start_time", read_only=True)
+    endTime = serializers.TimeField(source="end_time", read_only=True)
+    testCenter = serializers.CharField(source="test_center", read_only=True)
+    totalSlots = serializers.IntegerField(source="total_slots", read_only=True)
+    remainingSlots = serializers.IntegerField(source="remaining_slots", read_only=True)
+
+    class Meta:
+        model = ExamSlot
+        fields = ("id", "date", "startTime", "endTime", "testCenter", "room", "totalSlots", "remainingSlots")
+        read_only_fields = fields
+
+
+class ExamSlotAssignSerializer(serializers.Serializer):
+    slotId = serializers.UUIDField()
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -32,6 +50,8 @@ class ApplicationSerializer(serializers.ModelSerializer):
     submittedByUserId = serializers.CharField(source="submitted_by_user_id", read_only=True, allow_null=True)
     bulkUploadBatchId = serializers.CharField(source="bulk_upload_batch_id", read_only=True, allow_null=True)
     bulkUploadRowNumber = serializers.IntegerField(source="bulk_upload_row_number", read_only=True, allow_null=True)
+    examStatus = serializers.CharField(source="exam_status", read_only=True)
+    assignedSlot = ExamSlotSerializer(source="assigned_slot", read_only=True)
 
     class Meta:
         model = StudentApplication
@@ -40,11 +60,13 @@ class ApplicationSerializer(serializers.ModelSerializer):
             "reviewStep", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId",
             "completionStatus", "submissionSource", "submittedByUserId", "bulkUploadBatchId",
             "bulkUploadRowNumber", "version", "submittedAt", "createdAt", "updatedAt",
+            "examStatus", "assignedSlot",
         )
         read_only_fields = (
             "id", "candidateId", "status", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId",
             "completionStatus", "submissionSource", "submittedByUserId", "bulkUploadBatchId",
             "bulkUploadRowNumber", "version", "submittedAt", "createdAt", "updatedAt",
+            "examStatus", "assignedSlot",
         )
 
     def get_lrnProfile(self, obj):

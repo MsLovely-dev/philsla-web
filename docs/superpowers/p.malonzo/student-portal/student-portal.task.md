@@ -12,7 +12,7 @@ Sub-initiative folder nested under `docs/superpowers/p.malonzo/`, per the user's
 
 | Field | Value |
 |---|---|
-| Status | **Design approved for Sub-project A only — implementation not yet authorized** |
+| Status | **Sub-project A extended and implemented** (exam schedule assignment, real backend) — see [`implement/student-portal.implement.md`](implement/student-portal.implement.md). Sub-projects B, C, D remain not started. |
 | Track | Student Portal (undefined in any BRD section — confirmed by direct search of `docs/BRD.md`/`docs/USER_STORY.md`; scoped here from what already exists in the frontend, not from a requirements doc) |
 | Decision date | 2026-08-06 |
 | Branch in use | `jo.ganapin/qr-scanning` (see ownership note above) |
@@ -55,23 +55,25 @@ Design and (pending approval) implement **Sub-project A only** this cycle: a new
 - No change to `apps/results`, `apps/attendance`, or any exam-delivery code under this ticket.
 - Synthetic data only in tests/fixtures, consistent with `AGENTS.md`.
 
-### Review-only action plan
+### Review-only action plan (superseded — see below)
 
 - [x] Read the root `AGENTS.md` and `build_plan.md`.
 - [x] Confirm "Student Portal" has no defined scope beyond its build-plan row; confirm current on-disk state of every page it could plausibly cover.
 - [x] Decompose into sub-projects A–D and identify cross-developer collisions (C, D).
 - [x] Brainstorm and confirm scope for Sub-project A: reuse `backend/apps/applications`, thin new read endpoint, no new authorization model.
 - [x] Write spec and phasing plan for Sub-project A.
-- [ ] Obtain user approval of the spec and plan.
-- [ ] Only after approval: begin Phase 1 of the plan.
 
-### Resumption / go-ahead gates
+### Exam schedule assignment (2026-08-06) — extends Sub-project A
 
-- [ ] Spec (`specs/2026-08-06-student-portal-application-status-design.md`) reviewed and approved.
-- [ ] Plan (`plans/2026-08-06-student-portal-application-status-plan.md`) reviewed and approved.
-- [ ] Only then does implementation begin, logged in `implement/student-portal.implement.md`.
-- Sub-project B (ExamPermitPage) requires its own separate spec/plan cycle before any work starts on it.
+The user reviewed a set of reference screenshots of the target Dashboard/Application/Permit/Results flow and, during brainstorming, explicitly directed building the whole flow against real data rather than mock, then explicitly instructed proceeding directly to implementation rather than pausing for a separate written-spec approval round. See [`specs/2026-08-06-student-portal-exam-schedule-assignment-design.md`](specs/2026-08-06-student-portal-exam-schedule-assignment-design.md) and [`plans/2026-08-06-student-portal-exam-schedule-assignment-plan.md`](plans/2026-08-06-student-portal-exam-schedule-assignment-plan.md), both written and committed before implementation started, per the user's direction.
 
-### Review gate
+- [x] Write spec and plan for the exam-slot backend + schedule-picker UI.
+- [x] Implement all phases (backend model/migration/service/views/urls/seed command/tests; frontend service methods/UI/tests).
+- [x] Verify: full `apps.applications` suite (120/120), new tests (15 backend + 4 frontend service + 4 frontend component), `npm run build`, `manage.py check`/`migrate`. Full results in [`implement/student-portal.implement.md`](implement/student-portal.implement.md).
+- [ ] Manual browser walkthrough against a running dev server — not yet done, disclosed as an open item in the implement log.
 
-No implementation may begin from this entry. The user must review and approve the linked spec and plan first.
+### Still not started
+
+- Sub-project B (`ExamPermitPage.tsx` → real permit) — requires its own separate spec/plan cycle before any work starts on it.
+- Sub-project C (`ResultsPage.tsx`) — explicitly excluded, collides with Prince Malonzo's active `apps.results`/`apps.exam_reviews` work.
+- Sub-project D (`ExamDelivery.tsx`) — bienvenido.mendoza's ticket.

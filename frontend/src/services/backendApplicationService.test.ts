@@ -556,6 +556,124 @@ describe('BackendApplicationService', () => {
     });
   });
 
+  it('maps requiredCorrections and the reviewer reason through to adminRemarks for a FOR_CORRECTION application', () => {
+    const application = mapBackendApplicationToFrontend({
+      id: 'application-id',
+      status: 'FOR_CORRECTION',
+      personal: {},
+      address: {},
+      school: {},
+      coursePreferences: [],
+      reviewStep: {
+        requiredCorrections: ['gradeRecordsUrl', 'photoUrl'],
+        reviewerReason: 'Form 137 copy was unreadable.',
+      },
+      examCycleId: '',
+      version: 1,
+      submittedAt: null,
+      createdAt: '2026-07-14T00:00:00Z',
+      updatedAt: '2026-07-14T00:00:00Z',
+    }, 'user-id');
+
+    expect(application.status).toBe('FOR_CORRECTION');
+    expect(application.requiredCorrections).toEqual(['gradeRecordsUrl', 'photoUrl']);
+    expect(application.adminRemarks).toBe('Form 137 copy was unreadable.');
+  });
+
+  describe('Exam schedule assignment', () => {
+    it('fetches the caller\'s own application', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse({ id: 'app-1', status: 'APPROVED', examStatus: '', assignedSlot: null }, { status: 200 }),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.getMyApplication();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.data?.id).toBe('app-1');
+      expect(fetcher).toHaveBeenCalledWith('http://backend.test/api/v1/applications/me/', expect.anything());
+    });
+
+    it('returns null data when the caller has no application yet', async () => {
+      const fetcher = vi.fn().mockResolvedValue(jsonResponse(null, { status: 200 }));
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.getMyApplication();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.data).toBeNull();
+    });
+
+    it('lists available exam slots', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse(
+          [{ id: 'slot-1', date: '2026-06-15', startTime: '08:00:00', endTime: '11:00:00', testCenter: 'UP Diliman', room: 'Benitez Hall R101', totalSlots: 50, remainingSlots: 45 }],
+          { status: 200 },
+        ),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.listExamSlots();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.data).toHaveLength(1);
+      expect(fetcher).toHaveBeenCalledWith('http://backend.test/api/v1/applications/exam-slots/', expect.anything());
+    });
+
+    it('assigns an exam slot and sends the slot id in the body', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse({ id: 'app-1', status: 'APPROVED', examStatus: 'SCHEDULED', assignedSlot: { id: 'slot-1' } }, { status: 200 }),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.assignExamSlot('slot-1');
+
+      expect(result.ok).toBe(true);
+      expect(fetcher).toHaveBeenCalledWith(
+        'http://backend.test/api/v1/applications/me/exam-slot/',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ slotId: 'slot-1' }) }),
+      );
+    });
+
+    it('fetches the caller\'s own exam permit', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse(
+          { id: 'permit-1', candidateId: 'PHL-2026-ABC123', fullName: 'Jan Delacruz', email: 'jan@example.test', testCenter: 'UP Diliman', room: 'Benitez Hall R101', seat: '1', examDate: '2026-06-15', qrCode: 'abc123', status: 'ISSUED' },
+          { status: 200 },
+        ),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.getMyExamPermit();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.data?.room).toBe('Benitez Hall R101');
+      expect(fetcher).toHaveBeenCalledWith('http://backend.test/api/v1/attendance/me/', expect.anything());
+    });
+
+    it('returns null data when the caller has no permit yet', async () => {
+      const fetcher = vi.fn().mockResolvedValue(jsonResponse(null, { status: 200 }));
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.getMyExamPermit();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.data).toBeNull();
+    });
+
+    it('surfaces a conflict when the slot is full', async () => {
+      const fetcher = vi.fn().mockResolvedValue(
+        jsonResponse({ error: { code: 'conflict', message: 'This exam slot is full.' } }, { status: 409 }),
+      );
+      const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service.assignExamSlot('slot-1');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.kind).toBe('CONFLICT');
+    });
+  });
+
   describe('Student Registration field configuration transport', () => {
     it('lists public Student Registration fields from the unauthenticated configuration endpoint', async () => {
       const fetcher = vi.fn().mockResolvedValue(
