@@ -426,14 +426,14 @@ class UniversityListQueryTests(APITestCase):
             )
         self.url = reverse("universities:university_list")
 
-    def test_paginates_with_default_page_size_20(self) -> None:
+    def test_paginates_with_default_page_size_10(self) -> None:
         first = self.client.get(self.url, {"page": 1})
         self.assertEqual(first.status_code, 200)
         self.assertEqual(first.data["count"], 25)
-        self.assertEqual(len(first.data["results"]), 20)
+        self.assertEqual(len(first.data["results"]), 10)
         self.assertIsNotNone(first.data["next"])
-        second = self.client.get(self.url, {"page": 2})
-        self.assertEqual(len(second.data["results"]), 5)
+        last = self.client.get(self.url, {"page": 3})
+        self.assertEqual(len(last.data["results"]), 5)
 
     def test_returns_plain_array_without_pagination_params(self) -> None:
         response = self.client.get(self.url)

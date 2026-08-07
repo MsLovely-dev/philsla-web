@@ -25,7 +25,7 @@ import {
 import type { ServiceFailure } from './serviceResult';
 
 /** Rows per page for the paginated registry tables. */
-export const MAINTENANCE_PAGE_SIZE = 20;
+export const MAINTENANCE_PAGE_SIZE = 10;
 
 export interface UniversityQuery {
   page: number;

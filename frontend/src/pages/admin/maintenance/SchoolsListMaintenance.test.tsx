@@ -116,18 +116,18 @@ describe('SchoolsListMaintenance', () => {
   });
 
   it('clamps back to the previous page when a delete empties the last page', async () => {
-    // 21 rows over a page size of 20: page 2 holds a single row. Deleting it must
+    // 11 rows over a page size of 10: page 2 holds a single row. Deleting it must
     // reload page 1 (page 2 no longer exists) instead of re-requesting the now
     // out-of-range page, which the backend 404s.
     const second = { ...school, id: '2', code: 'SCH-00002', name: 'Manila Science High School' };
-    let count = 21;
+    let count = 11;
     const listPage = vi.mocked(schoolService.listSchoolsPage).mockImplementation(async (params) =>
       serviceSuccess(
-        params.page === 2 ? pageResult([second], count) : pageResult([school], count, count > 20 ? 'next' : null),
+        params.page === 2 ? pageResult([second], count) : pageResult([school], count, count > 10 ? 'next' : null),
       ),
     );
     vi.spyOn(schoolService, 'deleteSchool').mockImplementation(async () => {
-      count = 20;
+      count = 10;
       return serviceSuccess(null);
     });
     const user = userEvent.setup();
