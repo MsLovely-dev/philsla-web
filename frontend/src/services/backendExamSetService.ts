@@ -271,6 +271,12 @@ export class BackendExamSetService {
     return this.apiClient.request<null>(`/api/v1/exams/exam-sets/${id}/`, { method: 'DELETE' });
   }
 
+  async autoAssembleExamSet(id: string): Promise<ServiceResult<ExamSetRecord>> {
+    return this.mapItem(await this.apiClient.request<ApiExamSet>(`/api/v1/exams/exam-sets/${id}/auto-assemble/`, {
+      method: 'POST',
+    }));
+  }
+
   private mapItem(result: ApiItemResult): ServiceResult<ExamSetRecord> {
     if (result.ok === false) {
       return result;

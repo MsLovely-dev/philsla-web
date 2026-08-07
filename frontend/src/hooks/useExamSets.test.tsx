@@ -56,6 +56,7 @@ function services(initialExamSets: ExamSetRecord[] = [examSet()]) {
       cloneExamSet: vi.fn().mockResolvedValue(serviceSuccess(examSet({ id: '8' }))),
       transitionExamSet: vi.fn().mockResolvedValue(serviceSuccess(examSet({ status: 'ACADEMIC_REVIEW' }))),
       deleteExamSet: vi.fn().mockResolvedValue(serviceSuccess(null)),
+      autoAssembleExamSet: vi.fn().mockResolvedValue(serviceSuccess(examSet({ items: [{ id: '901', displayOrder: 1, points: 5, selectionMethod: 'AUTOMATIC', selectedBy: 'System', selectedAt: '2026-08-05T00:00:00Z', blueprintSectionId: null, question: { id: '101', questionCode: 'Q-SYNTHETIC', questionType: '', questionTypeCode: '', subject: '', topic: '', difficulty: '', status: '', points: 5 } }] }))),
     },
     blueprintService: {
       listBlueprints: vi.fn().mockResolvedValue(serviceSuccess([blueprint])),
@@ -121,5 +122,18 @@ describe('useExamSets', () => {
 
     expect(result.current.examSets).toEqual([examSet()]);
     expect(result.current.mutationError?.message).toContain('Synthetic');
+  });
+
+  it('runs auto-assembly and merges the returned exam set', async () => {
+    const testServices = services();
+    const { result } = renderHook(() => useExamSets(testServices));
+    await waitFor(() => expect(result.current.loadState).toBe('ready'));
+
+    await act(async () => {
+      await result.current.autoAssemble('7');
+    });
+
+    expect(testServices.examSetService.autoAssembleExamSet).toHaveBeenCalledWith('7');
+    expect(result.current.examSets[0].items).toHaveLength(1);
   });
 });

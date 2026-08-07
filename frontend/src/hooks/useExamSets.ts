@@ -9,7 +9,7 @@ export type ExamSetsLoadState = 'loading' | 'ready' | 'empty' | 'error';
 export type ExamSetsMutationState = 'idle' | 'pending';
 
 export interface UseExamSetsServices {
-  examSetService: Pick<BackendExamSetService, 'listExamSets' | 'createExamSet' | 'updateExamSet' | 'cloneExamSet' | 'transitionExamSet' | 'deleteExamSet'>;
+  examSetService: Pick<BackendExamSetService, 'listExamSets' | 'createExamSet' | 'updateExamSet' | 'cloneExamSet' | 'transitionExamSet' | 'deleteExamSet' | 'autoAssembleExamSet'>;
   blueprintService: Pick<BackendExamBlueprintService, 'listBlueprints'>;
   questionBankService: Pick<BackendQuestionBankService, 'listQuestions'>;
 }
@@ -115,6 +115,11 @@ export function useExamSets(services: UseExamSetsServices = defaultServices) {
     [applyMutation, services.examSetService],
   );
 
+  const autoAssemble = useCallback(
+    (id: string) => applyMutation(() => services.examSetService.autoAssembleExamSet(id)),
+    [applyMutation, services.examSetService],
+  );
+
   const remove = useCallback(async (id: string): Promise<ServiceResult<null>> => {
     setMutationState('pending');
     setMutationError(null);
@@ -149,6 +154,7 @@ export function useExamSets(services: UseExamSetsServices = defaultServices) {
     update,
     clone,
     transition,
+    autoAssemble,
     remove,
   };
 }

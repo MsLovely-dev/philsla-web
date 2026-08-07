@@ -166,4 +166,17 @@ describe('BackendExamSetService', () => {
       expect(result.data[0].publishedHash).toBe('a'.repeat(64));
     }
   });
+
+  it('posts to the auto-assemble endpoint and maps the response', async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse(apiExamSet, 200));
+    const client = new ApiClient({ baseUrl: 'http://backend.test', fetcher });
+    const service = new BackendExamSetService(client);
+
+    const result = await service.autoAssembleExamSet('7');
+
+    expect(result.ok).toBe(true);
+    const [url, requestInit] = fetcher.mock.calls[0];
+    expect(String(url)).toContain('/api/v1/exams/exam-sets/7/auto-assemble/');
+    expect(requestInit?.method).toBe('POST');
+  });
 });
