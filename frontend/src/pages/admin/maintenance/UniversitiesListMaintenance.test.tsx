@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +13,6 @@ import {
   networkError,
   serviceSuccess,
   validationError,
-  type PaginatedResult,
 } from '../../../services/serviceResult';
 import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
@@ -35,8 +34,14 @@ const university: UniversityRecord = {
   updatedAt: '2026-08-06T00:00:00Z',
 };
 
-function pageResult<T>(results: T[], count = results.length, next: string | null = null): PaginatedResult<T> {
-  return { count, next, previous: null, results };
+function pageResult(results: UniversityRecord[], count = results.length, next: string | null = null) {
+  return {
+    count,
+    next,
+    previous: null,
+    results,
+    summary: { total: count, public: 0, private: 0, active: 0, totalCourses: 0 },
+  };
 }
 
 function renderPage() {
@@ -100,8 +105,8 @@ describe('UniversitiesListMaintenance', () => {
     await screen.findByText('No universities yet');
 
     await user.click(screen.getByRole('button', { name: /add university/i }));
-    await user.type(screen.getByPlaceholderText('Official name of university...'), university.name);
-    await user.type(screen.getByPlaceholderText('e.g. Quezon City'), university.city);
+    fireEvent.change(screen.getByPlaceholderText('Official name of university...'), { target: { value: university.name } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Quezon City'), { target: { value: university.city } });
     await user.click(screen.getByRole('button', { name: 'Save University' }));
 
     expect(createUniversity).toHaveBeenCalledWith(expect.objectContaining({
@@ -124,8 +129,8 @@ describe('UniversitiesListMaintenance', () => {
     await screen.findByText('No universities yet');
 
     await user.click(screen.getByRole('button', { name: /add university/i }));
-    await user.type(screen.getByPlaceholderText('Official name of university...'), university.name);
-    await user.type(screen.getByPlaceholderText('e.g. Quezon City'), university.city);
+    fireEvent.change(screen.getByPlaceholderText('Official name of university...'), { target: { value: university.name } });
+    fireEvent.change(screen.getByPlaceholderText('e.g. Quezon City'), { target: { value: university.city } });
     await user.click(screen.getByRole('button', { name: 'Save University' }));
 
     expect(await screen.findByText('A university with this name already exists in this region.')).toBeInTheDocument();

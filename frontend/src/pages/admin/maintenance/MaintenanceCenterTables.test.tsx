@@ -7,11 +7,17 @@ import StudentRegistrationMaintenance from './StudentRegistrationMaintenance';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
 import { universityService } from '../../../services/backendUniversityService';
 import { schoolService } from '../../../services/backendSchoolService';
-import { serviceSuccess, type PaginatedResult } from '../../../services/serviceResult';
+import { serviceSuccess } from '../../../services/serviceResult';
 import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 
-function emptyPage<T>(): PaginatedResult<T> {
-  return { count: 0, next: null, previous: null, results: [] };
+function emptyPage() {
+  return {
+    count: 0,
+    next: null,
+    previous: null,
+    results: [],
+    summary: { total: 0, public: 0, private: 0, active: 0, totalCourses: 0, totalCapacity: 0 },
+  };
 }
 
 describe('active Maintenance Center tables', () => {

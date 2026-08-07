@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { schoolService, type SchoolRecord } from '../../../services/backendSchoolService';
-import { serviceSuccess, validationError, type PaginatedResult } from '../../../services/serviceResult';
+import { serviceSuccess, validationError } from '../../../services/serviceResult';
 import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
 import SchoolsListMaintenance from './SchoolsListMaintenance';
 
@@ -19,8 +19,14 @@ const school: SchoolRecord = {
   updatedAt: '2026-08-06T00:00:00Z',
 };
 
-function pageResult<T>(results: T[], count = results.length, next: string | null = null): PaginatedResult<T> {
-  return { count, next, previous: null, results };
+function pageResult(results: SchoolRecord[], count = results.length, next: string | null = null) {
+  return {
+    count,
+    next,
+    previous: null,
+    results,
+    summary: { total: count, public: 0, private: 0, active: 0, totalCapacity: 0 },
+  };
 }
 
 function renderPage() {
