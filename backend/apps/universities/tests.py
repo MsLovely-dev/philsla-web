@@ -457,3 +457,39 @@ class UniversityListQueryTests(APITestCase):
         response = self.client.get(self.url, {"page": 1, "pageSize": 100, "ordering": "-name"})
         names = [item["name"] for item in response.data["results"]]
         self.assertEqual(names, sorted(names, reverse=True))
+
+    def test_list_includes_registry_wide_summary(self) -> None:
+        CollegeCourse.objects.create(
+            university=University.objects.first(),
+            college_name="College of Engineering",
+            program_code="BSCS",
+            program_name="Bachelor of Science in Computer Science",
+        )
+        response = self.client.get(self.url, {"page": 1})
+        summary = response.data["summary"]
+        self.assertEqual(summary["total"], 25)
+        self.assertEqual(summary["public"] + summary["private"], 25)
+        self.assertEqual(summary["totalCourses"], 1)
+        # Summary is registry-wide, independent of the list filters.
+        filtered = self.client.get(self.url, {"page": 1, "classification": "Public"})
+        self.assertEqual(filtered.data["summary"]["total"], 25)
+
+    def test_export_streams_filtered_csv_with_selected_columns(self) -> None:
+        response = self.client.get(
+            reverse("universities:university_export"),
+            {"classification": "Public", "columns": "code,name"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        content = b"".join(response.streaming_content).decode()
+        lines = [line for line in content.splitlines() if line]
+        self.assertEqual(lines[0], "Code,University Name")
+        self.assertEqual(len(lines) - 1, 13)  # 13 Public universities
+
+    def test_export_neutralizes_formula_injection(self) -> None:
+        University.objects.create(
+            classification="Public", name="=cmd Attack University", region="BARMM", city="Cotabato"
+        )
+        response = self.client.get(reverse("universities:university_export"), {"columns": "name"})
+        content = b"".join(response.streaming_content).decode()
+        self.assertIn("'=cmd Attack University", content)

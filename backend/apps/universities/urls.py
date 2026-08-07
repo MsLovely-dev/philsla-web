@@ -4,11 +4,13 @@ from .views import (
     CollegeCourseDetailView,
     CollegeCourseListCreateView,
     UniversityDetailView,
+    UniversityExportView,
     UniversityListCreateView,
 )
 
 urlpatterns = [
     path("", UniversityListCreateView.as_view(), name="university_list"),
+    path("export/", UniversityExportView.as_view(), name="university_export"),
     path("<int:university_id>/", UniversityDetailView.as_view(), name="university_detail"),
     path(
         "<int:university_id>/courses/",

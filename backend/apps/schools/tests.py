@@ -193,6 +193,35 @@ class SchoolListQueryTests(APITestCase):
         names = [item["name"] for item in response.data["results"]]
         self.assertEqual(names, sorted(names, reverse=True))
 
+    def test_list_includes_registry_wide_summary(self) -> None:
+        response = self.client.get(self.url, {"page": 1})
+        summary = response.data["summary"]
+        self.assertEqual(summary["total"], 25)
+        self.assertEqual(summary["public"] + summary["private"], 25)
+        self.assertEqual(summary["totalCapacity"], sum(1000 + i for i in range(25)))
+        filtered = self.client.get(self.url, {"page": 1, "classification": "Public"})
+        self.assertEqual(filtered.data["summary"]["total"], 25)
+
+    def test_export_streams_filtered_csv_with_selected_columns(self) -> None:
+        response = self.client.get(
+            reverse("schools:school_export"),
+            {"classification": "Public", "columns": "code,name"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/csv")
+        content = b"".join(response.streaming_content).decode()
+        lines = [line for line in content.splitlines() if line]
+        self.assertEqual(lines[0], "Code,Name")
+        self.assertEqual(len(lines) - 1, 13)  # 13 Public schools
+
+    def test_export_neutralizes_formula_injection(self) -> None:
+        School.objects.create(
+            classification="Public", name="=cmd Attack School", examinee_capacity=100, region="BARMM"
+        )
+        response = self.client.get(reverse("schools:school_export"), {"columns": "name"})
+        content = b"".join(response.streaming_content).decode()
+        self.assertIn("'=cmd Attack School", content)
+
     def test_unprivileged_role_cannot_manage_schools(self) -> None:
         User = get_user_model()
         student = User.objects.create_user(
