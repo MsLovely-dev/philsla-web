@@ -464,3 +464,15 @@ Build result: exit 0; Vite transformed 3,119 modules and emitted the existing la
 - PostgreSQL-compatible storage was not exercised for Tasks 1–4; focused backend tests used in-memory SQLite. A PostgreSQL rehearsal remains outstanding before treating database-specific behavior as verified.
 - Playwright was not run for this minimal Results Release screen. Browser-journey verification remains outstanding.
 - Repository-wide `npm run lint` is a known red baseline with unrelated TypeScript diagnostics in other modules. The last observed run exited `1`; no diagnostic referenced `ResultsRelease.tsx`, `ResultsRelease.test.tsx`, or `resultsReleaseService.ts`. It was not rerun as part of this focused final cleanup, and is not claimed as passing.
+
+## 2026-08-07 — Analytics final sign-off
+
+The analytics API documentation now explicitly defines the standard `401 NOT_AUTHENTICATED` and `403 PERMISSION_DENIED` contracts and records that the session aggregates are intentionally unpaginated within the bounded administrative overview. The Reporting Matrix regression suite now also resolves a deferred overview response after unmount and verifies that the unmounted page remains empty without a post-unmount rendering error.
+
+```text
+Command: npm test -- src/services/resultsAnalyticsService.test.ts src/pages/results/ReportingMatrix.test.tsx --run
+Result: exit 0; 2 test files passed; 11 tests passed.
+Build: not rerun because production code was unchanged (documentation and test coverage only).
+Diff check: git diff --check
+            passed before this implementation-record append.
+```

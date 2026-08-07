@@ -126,6 +126,22 @@ describe('ReportingMatrix', () => {
     expect(screen.queryByText('Stale released session')).not.toBeInTheDocument();
   });
 
+  it('settles a pending overview request safely after unmount', async () => {
+    const request = deferred<ServiceResult<ResultsAnalyticsOverview>>();
+    getOverviewMock.mockReturnValue(request.promise);
+    const view = render(<ReportingMatrix />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading released results analytics');
+    view.unmount();
+
+    await act(async () => {
+      request.resolve(serviceSuccess(overview));
+      await request.promise;
+    });
+
+    expect(view.container).toBeEmptyDOMElement();
+  });
+
   it('keeps a single main landmark when rendered through the protected reporting route layout', () => {
     const reportingRoute = APP_ROUTES.find((route) => route.path === '/admin/results/matrix');
     usePhilSAMock.mockReturnValue({

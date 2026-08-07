@@ -100,7 +100,7 @@ Score Management is backend-owned. `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN` may t
 
 ### `GET /api/v1/results/analytics/overview/`
 
-Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, and `SYSTEM_ADMIN`. It accepts no filters or identity inputs. The backend includes only score rows that are `APPROVED`, `RELEASED`, and belong to a session with `RESULTS_RELEASED` scoring status.
+Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, and `SYSTEM_ADMIN`. It accepts no filters or identity inputs. The backend includes only score rows that are `APPROVED`, `RELEASED`, and belong to a session with `RESULTS_RELEASED` scoring status. The `sessions` collection is intentionally unpaginated as part of this bounded administrative aggregate overview; it is not a candidate-level result collection and the response contains no pagination metadata.
 
 ```json
 {
@@ -127,6 +127,23 @@ Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMI
 ```
 
 `meanFinalScore` and each session `meanFinalScore` are `null` when no qualifying rows exist. The fixed bands are `0-59.99`, `60-69.99`, `70-79.99`, `80-89.99`, and `90-100`. Session `releasedAt` is the latest release-audit timestamp, or `null` if no audit exists. Responses never include candidate rows, names, IDs, LRNs, contact details, answer content, rankings, institutions, demographics, regions, agency data, qualifications, or admission decisions.
+
+Authentication and authorization failures use the standard safe API error envelope:
+
+```json
+{
+  "error": {
+    "code": "NOT_AUTHENTICATED | PERMISSION_DENIED",
+    "message": "<safe public message>",
+    "fields": {},
+    "meta": {},
+    "correlationId": "<request correlation ID>"
+  }
+}
+```
+
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned when the authenticated account does not have one of the permitted roles listed above.
 
 ### `GET /api/v1/results/release-summary/`
 
