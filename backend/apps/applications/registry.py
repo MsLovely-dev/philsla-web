@@ -87,7 +87,22 @@ class UnavailableLrnRegistry(LrnRegistry):
         raise RegistryUnavailable
 
 
+class DepEdLrnRegistry(LrnRegistry):
+    """Integration placeholder for the future DepEd LRN API.
+
+    This class exists so environments can be wired with
+    LRN_REGISTRY_PROVIDER=deped before the official API contract is available.
+    It must keep returning RegistryUnavailable until endpoint, auth, payload,
+    error mapping, timeout, rate-limit, and data-retention rules are approved.
+    """
+
+    def find(self, *, lrn: str) -> LrnRecord | None:
+        raise RegistryUnavailable
+
+
 def get_lrn_registry() -> LrnRegistry:
     if settings.LRN_REGISTRY_PROVIDER == "mock":
         return MockLrnRegistry()
+    if settings.LRN_REGISTRY_PROVIDER == "deped":
+        return DepEdLrnRegistry()
     return UnavailableLrnRegistry()

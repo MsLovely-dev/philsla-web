@@ -519,7 +519,9 @@ export default function StudentRegistrationMaintenance() {
       )}
       {selectedSection === 'Registration Methods' && (
         <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs font-bold text-blue-700">
-          Registration methods are predefined. Enable LRN or Manual Entry from the action switch; enabling one disables the other automatically. PhilSys is locked for future feature development.
+          Frontend API connectivity only confirms PhilSLA backend reachability. Manual Entry remains the active fallback.
+          LRN and PhilSys provider placeholders prepare the backend for official APIs, but they do not indicate live external
+          registry connections.
         </p>
       )}
     </div>

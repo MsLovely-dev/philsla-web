@@ -98,3 +98,11 @@ class LrnVerificationTests(TestCase):
         response = self.verify()
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.data["error"]["code"], "LRN_REGISTRY_UNAVAILABLE")
+
+    @override_settings(LRN_REGISTRY_PROVIDER="deped")
+    def test_deped_placeholder_returns_safe_unavailable_error(self):
+        response = self.verify()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["error"]["code"], "LRN_REGISTRY_UNAVAILABLE")
+        self.assertNotIn("123456789012", str(response.data))
+        self.assertNotIn("lovely@yopmail.com", str(response.data))
