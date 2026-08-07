@@ -798,6 +798,65 @@ class ExamSetApiTests(APITestCase):
         self.assertEqual(removed.status_code, 200)
         self.assertIn("Removed question Q-SCI-003", [entry["action"] for entry in removed.data["workflow_history"]])
 
+    def test_reordering_items_without_adding_or_removing_records_a_reordered_items_entry(self) -> None:
+        second_question = Question.objects.create(
+            question_code="Q-SCI-002", question_type=self.question_type, subject=self.subject, topic=self.topic,
+            competency=self.competency, difficulty="moderate", question_text="Second question.", points="5.00",
+            status=QuestionStatus.APPROVED, created_by=self.profile, approved_by=self.profile,
+        )
+        created = self.client.post(
+            reverse("exams:exam_set_list"),
+            {
+                **self.payload,
+                "items": [
+                    {"question_id": self.question.id, "display_order": 1, "points": 5},
+                    {"question_id": second_question.id, "display_order": 2, "points": 5},
+                ],
+            },
+            format="json",
+        )
+        exam_set_id = created.data["id"]
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": exam_set_id})
+        history_length_after_create = len(created.data["workflow_history"])
+
+        reordered = self.client.put(detail_url, {
+            **self.payload,
+            "items": [
+                {"question_id": second_question.id, "display_order": 1, "points": 5},
+                {"question_id": self.question.id, "display_order": 2, "points": 5},
+            ],
+        }, format="json")
+
+        self.assertEqual(reordered.status_code, 200)
+        # `ExamSetWorkflowHistory` orders newest-first (`Meta.ordering = ["-created_at"]`),
+        # so the rows this update added are the leading slice, not the trailing one. Exactly
+        # two new rows are expected: the unconditional "Updated exam set" entry plus the
+        # "Reordered items" entry -- and, since the question set itself didn't change, no
+        # "Added question"/"Removed question" rows.
+        new_row_count = len(reordered.data["workflow_history"]) - history_length_after_create
+        self.assertEqual(new_row_count, 2)
+        new_actions = {entry["action"] for entry in reordered.data["workflow_history"][:new_row_count]}
+        self.assertEqual(new_actions, {"Updated exam set", "Reordered items"})
+
+    def test_same_content_update_records_no_extra_item_audit_entries(self) -> None:
+        created = self.client.post(reverse("exams:exam_set_list"), self.payload, format="json")
+        exam_set_id = created.data["id"]
+        detail_url = reverse("exams:exam_set_detail", kwargs={"exam_set_id": exam_set_id})
+        history_length_after_create = len(created.data["workflow_history"])
+
+        unchanged = self.client.put(detail_url, {
+            **self.payload,
+            "items": [{"question_id": self.question.id, "display_order": 1, "points": 5}],
+        }, format="json")
+
+        self.assertEqual(unchanged.status_code, 200)
+        # Exactly one new row -- the unconditional "Updated exam set" entry -- and nothing
+        # else: no added/removed/replaced/reordered rows, since the item content and order
+        # are identical to what was already persisted. `ExamSetWorkflowHistory` orders
+        # newest-first, so that one new row is the leading entry, not the trailing one.
+        self.assertEqual(len(unchanged.data["workflow_history"]), history_length_after_create + 1)
+        self.assertEqual(unchanged.data["workflow_history"][0]["action"], "Updated exam set")
+
     def test_auto_assemble_selects_items_per_section_and_records_assembly_run(self) -> None:
         section = BlueprintSection.objects.create(
             blueprint_version=self.blueprint_version, section_number=1, section_name="Science",
