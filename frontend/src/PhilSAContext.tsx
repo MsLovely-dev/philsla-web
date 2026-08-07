@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { User, AuditLog, SupportTicket } from './types';
 import { createPrototypeAuthService } from './services';
-import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './services/contracts';
+import type { AuthIdentifierChallenge, AuthOtpChallenge, AuthPasswordResult, AuthSelfieChallenge, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './services/contracts';
 import { authorizationError } from './services/serviceResult';
 import type { ServiceResult } from './services/serviceResult';
 
@@ -117,7 +117,8 @@ interface PhilSAContextType {
   setUser: (user: User | null) => void;
   login: (email: string, password?: string) => Promise<boolean>;
   startLoginIdentifier: (identifier: string) => Promise<ServiceResult<AuthIdentifierChallenge>>;
-  verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthOtpChallenge>>;
+  verifyLoginPassword: (pendingAuthToken: string, password: string) => Promise<ServiceResult<AuthPasswordResult>>;
+  completeTemporaryPasswordChange: (passwordChangeToken: string, password: string, confirmPassword: string) => Promise<ServiceResult<AuthOtpChallenge>>;
   completeStaffActivation: (activationToken: string, password: string, confirmPassword: string) => Promise<ServiceResult<null>>;
   resendLoginOtp: (otpPendingAuthToken: string) => Promise<ServiceResult<AuthOtpChallenge>>;
   verifyLoginOtp: (otpPendingAuthToken: string, code: string) => Promise<ServiceResult<AuthSelfieChallenge>>;
@@ -325,11 +326,22 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   const verifyLoginPassword = async (
     pendingAuthToken: string,
     password: string,
-  ): Promise<ServiceResult<AuthOtpChallenge>> => {
+  ): Promise<ServiceResult<AuthPasswordResult>> => {
     if (!authService.verifyLoginPassword) {
       return authorizationError('Password login is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
     }
     return authService.verifyLoginPassword(pendingAuthToken, password);
+  };
+
+  const completeTemporaryPasswordChange = async (
+    passwordChangeToken: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<ServiceResult<AuthOtpChallenge>> => {
+    if (!authService.completeTemporaryPasswordChange) {
+      return authorizationError('Temporary password change is unavailable.', 'AUTH_FLOW_UNAVAILABLE');
+    }
+    return authService.completeTemporaryPasswordChange(passwordChangeToken, password, confirmPassword);
   };
 
   const completeStaffActivation = async (
@@ -462,7 +474,7 @@ export function PhilSAProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery, inspectPasswordRecovery, completePasswordRecovery, logout, auditLogs, addAuditLog, initializeAuth, isAuthInitialized, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
+    <PhilSAContext.Provider value={{ user, setUser, login, startLoginIdentifier, verifyLoginPassword, completeTemporaryPasswordChange, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery, inspectPasswordRecovery, completePasswordRecovery, logout, auditLogs, addAuditLog, initializeAuth, isAuthInitialized, isLoading, maintenanceModules, setMaintenanceModules, inputModules, setInputModules, tickets, addTicket, updateTicket }}>
       {children}
     </PhilSAContext.Provider>
   );

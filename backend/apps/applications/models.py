@@ -25,6 +25,16 @@ class ApplicationStatus(models.TextChoices):
     REJECTED = "REJECTED", "Rejected"
 
 
+class ApplicationCompletionStatus(models.TextChoices):
+    COMPLETE = "COMPLETE", "Complete"
+    PENDING_STUDENT_COMPLETION = "PENDING_STUDENT_COMPLETION", "Pending student completion"
+
+
+class ApplicationSubmissionSource(models.TextChoices):
+    STUDENT_REGISTRATION = "STUDENT_REGISTRATION", "Student registration"
+    ADMISSIONS_BULK_UPLOAD = "ADMISSIONS_BULK_UPLOAD", "Admissions bulk upload"
+
+
 class StudentApplication(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     candidate_id = models.CharField(max_length=17, unique=True, editable=False)
@@ -38,6 +48,31 @@ class StudentApplication(models.Model):
     lrn = models.CharField("LRN", max_length=12, blank=True, default="")
     exam_cycle_id = models.CharField(max_length=64, blank=True, default="")
     status = models.CharField(max_length=20, choices=ApplicationStatus.choices, default=ApplicationStatus.DRAFT)
+    completion_status = models.CharField(
+        max_length=40,
+        choices=ApplicationCompletionStatus.choices,
+        default=ApplicationCompletionStatus.COMPLETE,
+    )
+    submission_source = models.CharField(
+        max_length=40,
+        choices=ApplicationSubmissionSource.choices,
+        default=ApplicationSubmissionSource.STUDENT_REGISTRATION,
+    )
+    submitted_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="submitted_bulk_applications",
+        null=True,
+        blank=True,
+    )
+    bulk_upload_batch = models.ForeignKey(
+        "ApplicationBulkUploadBatch",
+        on_delete=models.PROTECT,
+        related_name="imported_applications",
+        null=True,
+        blank=True,
+    )
+    bulk_upload_row_number = models.PositiveIntegerField(null=True, blank=True)
     password_hash = models.CharField(max_length=128, blank=True, default="")
     version = models.PositiveIntegerField(default=1)
     submitted_at = models.DateTimeField(null=True, blank=True)
@@ -410,6 +445,79 @@ def _additional_fields(application: StudentApplication, section: str) -> dict:
 
 def _with_additional_fields(application: StudentApplication, section: str, data: dict) -> dict:
     return {**data, **_additional_fields(application, section)}
+
+
+class BulkUploadBatchStatus(models.TextChoices):
+    UPLOADED = "UPLOADED", "Uploaded"
+    VALIDATING = "VALIDATING", "Validating"
+    VALIDATED = "VALIDATED", "Validated"
+    CONFIRMING = "CONFIRMING", "Confirming"
+    COMPLETED = "COMPLETED", "Completed"
+    COMPLETED_WITH_ERRORS = "COMPLETED_WITH_ERRORS", "Completed with errors"
+    EXPIRED = "EXPIRED", "Expired"
+    FAILED = "FAILED", "Failed"
+
+
+class BulkUploadRowStatus(models.TextChoices):
+    VALID = "VALID", "Valid"
+    FIELD_ERROR = "FIELD_ERROR", "Field error"
+    CONFLICT = "CONFLICT", "Conflict"
+    IMPORTED = "IMPORTED", "Imported"
+    IMPORT_FAILED = "IMPORT_FAILED", "Import failed"
+
+
+class ApplicationBulkUploadBatch(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    template_version = models.CharField(max_length=40)
+    exam_cycle_id = models.CharField(max_length=64)
+    status = models.CharField(max_length=40, choices=BulkUploadBatchStatus.choices, default=BulkUploadBatchStatus.UPLOADED)
+    uploaded_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="application_bulk_upload_batches",
+    )
+    performed_by_role_snapshot = models.CharField(max_length=80)
+    expires_at = models.DateTimeField()
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    summary_counts = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def public_id(self) -> str:
+        return str(self.id)
+
+
+class ApplicationBulkUploadRowResult(models.Model):
+    batch = models.ForeignKey(ApplicationBulkUploadBatch, on_delete=models.CASCADE, related_name="row_results")
+    row_number = models.PositiveIntegerField()
+    status = models.CharField(max_length=40, choices=BulkUploadRowStatus.choices)
+    application = models.ForeignKey(
+        StudentApplication,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="bulk_upload_row_results",
+    )
+    submitted_lrn = models.CharField(max_length=12, blank=True, default="")
+    submitted_email = models.EmailField(blank=True, default="")
+    row_snapshot = models.JSONField(default=dict, blank=True)
+    errors = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["row_number", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("batch", "row_number"),
+                name="unique_bulk_upload_row_number_per_batch",
+            ),
+        ]
 
 
 class ApplicationAuditLog(models.Model):

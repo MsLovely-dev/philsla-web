@@ -9,6 +9,10 @@ import {
   X,
   Check,
   ChevronRight,
+  MapPin,
+  Building2,
+  Table as TableIcon,
+  LayoutGrid,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { PHILIPPINE_REGIONS, regionLabel } from '../../../data/philippineRegions';
@@ -30,6 +34,7 @@ const EMPTY_FORM: SchoolPayload = {
   name: '',
   examineeCapacity: 1000,
   region: PHILIPPINE_REGIONS[0].code,
+  status: 'Active',
 };
 
 export default function SchoolsListMaintenance() {
@@ -40,6 +45,7 @@ export default function SchoolsListMaintenance() {
   const [searchQuery, setSearchQuery] = useState('');
   const [classificationFilter, setClassificationFilter] = useState<'ALL' | SchoolClassification>('ALL');
   const [regionFilter, setRegionFilter] = useState<string>('ALL');
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
@@ -79,6 +85,11 @@ export default function SchoolsListMaintenance() {
     });
   }, [schools, classificationFilter, regionFilter, searchQuery]);
 
+  const totalCapacity = useMemo(
+    () => schools.reduce((sum, s) => sum + s.examineeCapacity, 0),
+    [schools],
+  );
+
   const handleOpenAddModal = () => {
     setEditingSchool(null);
     setError(null);
@@ -94,6 +105,7 @@ export default function SchoolsListMaintenance() {
       name: school.name,
       examineeCapacity: school.examineeCapacity,
       region: school.region,
+      status: school.status,
     });
     setIsModalOpen(true);
   };
@@ -202,7 +214,7 @@ export default function SchoolsListMaintenance() {
         </div>
 
         {/* Quick Stat Cards */}
-        <div className="grid grid-cols-3 gap-4 pt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Total Schools</div>
             <div className="text-2xl font-black text-philsa-navy mt-1">{schools.length}</div>
@@ -215,10 +227,14 @@ export default function SchoolsListMaintenance() {
             <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private Schools</div>
             <div className="text-2xl font-black text-purple-900 mt-1">{schools.filter((s) => s.classification === 'Private').length}</div>
           </div>
+          <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
+            <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Examinee Capacity</div>
+            <div className="text-2xl font-black text-emerald-900 mt-1">{totalCapacity.toLocaleString()}</div>
+          </div>
         </div>
       </div>
 
-      {error && (
+      {error && !isModalOpen && (
         <div className="card-philsa bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-4">
           {error}
         </div>
@@ -226,7 +242,8 @@ export default function SchoolsListMaintenance() {
 
       {/* Filter and Search Bar */}
       <div className="card-philsa bg-white p-5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
           {/* Search */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Search School / Code</label>
@@ -273,75 +290,178 @@ export default function SchoolsListMaintenance() {
               ))}
             </select>
           </div>
+          </div>
+
+          {/* View Layout Toggle */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 self-end md:self-auto">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'table' ? 'bg-white text-philsa-navy shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Table View"
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              <span>Table View</span>
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'grid' ? 'bg-white text-philsa-navy shadow-xs font-black' : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Grid Cards</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Schools Table */}
-      <div className="card-philsa bg-white overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-100 border-b border-philsa-border text-[11px] font-black uppercase text-philsa-navy tracking-wider">
-                <th className="py-3.5 px-4">School Code</th>
-                <th className="py-3.5 px-4">School Name</th>
-                <th className="py-3.5 px-4">Classification</th>
-                <th className="py-3.5 px-4">Region/Municipality/City</th>
-                <th className="py-3.5 px-4 text-center">Examinee Capacity</th>
-                <th className="py-3.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-xs">
-              {filteredSchools.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
-                    No schools match your search and filter criteria.
-                  </td>
+      {/* Schools List — Table or Grid */}
+      {viewMode === 'table' ? (
+        <div className="card-philsa bg-white overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-100 border-b border-philsa-border text-[11px] font-black uppercase text-philsa-navy tracking-wider">
+                  <th className="py-3.5 px-4">School Code</th>
+                  <th className="py-3.5 px-4">School Name</th>
+                  <th className="py-3.5 px-4">Classification</th>
+                  <th className="py-3.5 px-4">Region/Municipality/City</th>
+                  <th className="py-3.5 px-4 text-center">Examinee Capacity</th>
+                  <th className="py-3.5 px-4 text-center">Status</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
-              ) : (
-                filteredSchools.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-50/80 transition-all">
-                    <td className="py-3.5 px-4">
-                      <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block">
-                        {s.code}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 font-extrabold text-philsa-navy">{s.name}</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                        s.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'
-                      }`}>
-                        {s.classification}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 font-medium text-slate-700">{regionLabel(s.region)}</td>
-                    <td className="py-3.5 px-4 text-center font-bold text-slate-700 font-mono">
-                      {s.examineeCapacity.toLocaleString()} Seats
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleOpenEditModal(s)}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-philsa-navy hover:bg-slate-100 transition-all cursor-pointer"
-                          title="Edit School Details"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setPendingDelete(s)}
-                          className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
-                          title="Remove School"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {filteredSchools.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
+                      No schools match your search and filter criteria.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filteredSchools.map((s) => (
+                    <tr key={s.id} className="hover:bg-slate-50/80 transition-all">
+                      <td className="py-3.5 px-4">
+                        <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block">
+                          {s.code}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-extrabold text-philsa-navy">{s.name}</td>
+                      <td className="py-3.5 px-4">
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                          s.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'
+                        }`}>
+                          {s.classification}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-slate-700">{regionLabel(s.region)}</td>
+                      <td className="py-3.5 px-4 text-center font-bold text-slate-700 font-mono">
+                        {s.examineeCapacity.toLocaleString()} Seats
+                      </td>
+                      <td className="py-3.5 px-4 text-center">
+                        <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${
+                          s.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}>
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditModal(s)}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-philsa-navy hover:bg-slate-100 transition-all cursor-pointer"
+                            title="Edit School Details"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setPendingDelete(s)}
+                            className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-all cursor-pointer"
+                            title="Remove School"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      ) : filteredSchools.length === 0 ? (
+        <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
+          No schools match your search and filter criteria.
+        </div>
+      ) : (
+        /* GRID CARD VIEW */
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {filteredSchools.map((s) => (
+            <div
+              key={s.id}
+              className="card-philsa bg-white p-6 hover:shadow-xl hover:border-philsa-navy/40 transition-all group space-y-4 relative overflow-hidden border border-slate-200"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-philsa-bg border border-philsa-border flex items-center justify-center text-philsa-navy group-hover:bg-philsa-navy group-hover:text-white transition-all shadow-sm">
+                    <SchoolIcon className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                        {s.code}
+                      </span>
+                      <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                        s.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'
+                      }`}>
+                        {s.status}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black text-philsa-navy">{s.name}</h3>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleOpenEditModal(s)}
+                    className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all"
+                    title="Edit School Details"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setPendingDelete(s)}
+                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                    title="Remove School"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center gap-2 text-slate-600 font-medium">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>{regionLabel(s.region)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-600 font-medium">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span>{s.classification}</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-xs font-black text-philsa-navy">{s.examineeCapacity.toLocaleString()} Seats</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Examinee Capacity</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Add / Edit School Modal */}
       {isModalOpen && (
@@ -353,12 +473,18 @@ export default function SchoolsListMaintenance() {
                 {editingSchool ? 'Edit Accredited School' : 'Register New Accredited School'}
               </h3>
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => { setIsModalOpen(false); setError(null); }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {error && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold p-3 rounded-xl">
+                {error}
+              </div>
+            )}
 
             <form onSubmit={handleSave} className="space-y-4 text-xs">
               <div className="grid grid-cols-2 gap-4">
@@ -407,9 +533,9 @@ export default function SchoolsListMaintenance() {
                   <input
                     type="number"
                     required
-                    min={0}
-                    value={formData.examineeCapacity}
-                    onChange={(e) => setFormData({ ...formData, examineeCapacity: Number(e.target.value) })}
+                    min={1}
+                    value={formData.examineeCapacity === 0 ? '' : formData.examineeCapacity}
+                    onChange={(e) => setFormData({ ...formData, examineeCapacity: e.target.value === '' ? 0 : Number(e.target.value) })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   />
                 </div>
@@ -427,10 +553,22 @@ export default function SchoolsListMaintenance() {
                 </div>
               </div>
 
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Status</label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value === 'Inactive' ? 'Inactive' : 'Active' })}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+              </div>
+
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => { setIsModalOpen(false); setError(null); }}
                   className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-bold transition-all cursor-pointer"
                 >
                   Cancel

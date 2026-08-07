@@ -92,6 +92,45 @@ class UniversityApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_duplicate_name_in_same_region_is_rejected(self) -> None:
+        first = self.client.post(reverse("universities:university_list"), self.payload, format="json")
+        self.assertEqual(first.status_code, 201)
+
+        # Same name (different case) in the same region -> rejected (case-insensitive).
+        duplicate = self.client.post(
+            reverse("universities:university_list"),
+            {**self.payload, "name": self.payload["name"].upper()},
+            format="json",
+        )
+        self.assertContains(duplicate, "already exists", status_code=400)
+
+    def test_same_name_is_allowed_in_a_different_region(self) -> None:
+        first = self.client.post(reverse("universities:university_list"), self.payload, format="json")
+        self.assertEqual(first.status_code, 201)
+
+        other_region = self.client.post(
+            reverse("universities:university_list"),
+            {**self.payload, "region": "Region III"},
+            format="json",
+        )
+        self.assertEqual(other_region.status_code, 201)
+
+    def test_update_into_a_duplicate_name_is_rejected(self) -> None:
+        self.client.post(reverse("universities:university_list"), self.payload, format="json")
+        second = self.client.post(
+            reverse("universities:university_list"),
+            {**self.payload, "name": "Ateneo de Manila University"},
+            format="json",
+        )
+        second_id = second.data["id"]
+
+        collision = self.client.patch(
+            reverse("universities:university_detail", kwargs={"university_id": second_id}),
+            {"name": self.payload["name"]},
+            format="json",
+        )
+        self.assertContains(collision, "already exists", status_code=400)
+
     def test_unprivileged_role_cannot_manage_universities(self) -> None:
         User = get_user_model()
         student = User.objects.create_user(
@@ -209,6 +248,47 @@ class CollegeCourseApiTests(APITestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["degreeType"], "")
 
+    def test_duplicate_program_code_in_same_university_is_rejected(self) -> None:
+        first = self.client.post(self._list_url(), self.course_payload, format="json")
+        self.assertEqual(first.status_code, 201)
+
+        # Same program code (different case) under the same university -> rejected.
+        duplicate = self.client.post(
+            self._list_url(),
+            {**self.course_payload, "programCode": self.course_payload["programCode"].lower()},
+            format="json",
+        )
+        self.assertContains(duplicate, "already exists", status_code=400)
+
+    def test_same_program_code_is_allowed_in_a_different_university(self) -> None:
+        self.client.post(self._list_url(), self.course_payload, format="json")
+        other = University.objects.create(
+            classification="Private",
+            name="Ateneo de Manila University",
+            region="NCR",
+            city="Quezon City",
+        )
+        response = self.client.post(
+            self._list_url(university_id=other.id), self.course_payload, format="json"
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_update_into_a_duplicate_program_code_is_rejected(self) -> None:
+        self.client.post(self._list_url(), self.course_payload, format="json")
+        second = self.client.post(
+            self._list_url(),
+            {**self.course_payload, "programCode": "BSIT", "programName": "BS Information Technology"},
+            format="json",
+        )
+        second_id = second.data["id"]
+
+        collision = self.client.patch(
+            self._detail_url(second_id),
+            {"programCode": self.course_payload["programCode"]},
+            format="json",
+        )
+        self.assertContains(collision, "already exists", status_code=400)
+
     def test_unprivileged_role_cannot_manage_courses(self) -> None:
         User = get_user_model()
         student = User.objects.create_user(
@@ -224,7 +304,7 @@ class CollegeCourseApiTests(APITestCase):
 
 class SeedUniversitiesCommandTests(TestCase):
     def test_seed_command_is_idempotent_and_generates_sequential_codes(self) -> None:
-        call_command("seed_universities")
+        call_command("seed_university_registry")
 
         university_count = University.objects.count()
         course_count = CollegeCourse.objects.count()
@@ -236,6 +316,6 @@ class SeedUniversitiesCommandTests(TestCase):
         self.assertEqual(codes[-1], f"UNI-{university_count:05d}")
 
         # Running again must not create duplicates.
-        call_command("seed_universities")
+        call_command("seed_university_registry")
         self.assertEqual(University.objects.count(), university_count)
         self.assertEqual(CollegeCourse.objects.count(), course_count)

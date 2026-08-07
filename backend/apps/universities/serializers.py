@@ -46,6 +46,21 @@ class UniversitySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("University name is required.")
         return cleaned
 
+    def validate(self, attrs):
+        # A university name must be unique within a region (case-insensitive).
+        # Names may repeat across regions.
+        name = attrs.get("name", getattr(self.instance, "name", None))
+        region = attrs.get("region", getattr(self.instance, "region", None))
+        if name and region:
+            duplicates = University.objects.filter(name__iexact=name.strip(), region=region)
+            if self.instance is not None:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise serializers.ValidationError(
+                    {"name": "A university with this name already exists in this region."}
+                )
+        return attrs
+
 
 class CollegeCourseSerializer(serializers.ModelSerializer):
     universityId = serializers.IntegerField(source="university_id", read_only=True)
@@ -88,3 +103,20 @@ class CollegeCourseSerializer(serializers.ModelSerializer):
         if not cleaned:
             raise serializers.ValidationError("Program name is required.")
         return cleaned
+
+    def validate(self, attrs):
+        # A program code must be unique within its university (case-insensitive).
+        # The parent university comes from the URL (create) or the instance (update).
+        program_code = attrs.get("program_code", getattr(self.instance, "program_code", None))
+        university = self.context.get("university") or getattr(self.instance, "university", None)
+        if program_code and university is not None:
+            duplicates = CollegeCourse.objects.filter(
+                university=university, program_code__iexact=program_code.strip()
+            )
+            if self.instance is not None:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise serializers.ValidationError(
+                    {"programCode": "A course with this program code already exists for this university."}
+                )
+        return attrs

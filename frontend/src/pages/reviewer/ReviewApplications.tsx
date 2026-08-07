@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Search, Eye, CheckCircle,
   AlertTriangle,
@@ -13,7 +13,12 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { backendApplicationService, mapBackendApplicationsToReviewRows, type ReviewQueueFilters } from '../../services/backendApplicationService';
+import {
+  backendApplicationService,
+  mapBackendApplicationsToReviewRows,
+  type BulkUploadValidationSummary,
+  type ReviewQueueFilters,
+} from '../../services/backendApplicationService';
 import { buildApplicationReviewExportRows, exportApplicationReviewBatch } from '../../services/applicationReviewExportService';
 
 const STATUS_BADGES = {
@@ -38,8 +43,13 @@ export default function ReviewApplications() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState('');
 
-  const [activeModal, setActiveModal] = useState<'APPROVE' | 'REASSIGN' | 'CORRECTION' | 'FRAUD' | null>(null);
+  const [activeModal, setActiveModal] = useState<'APPROVE' | 'REASSIGN' | 'CORRECTION' | 'FRAUD' | 'BULK_UPLOAD' | null>(null);
   const [selectedApp, setSelectedApp] = useState<any>(null);
+  const [bulkUploadFile, setBulkUploadFile] = useState<File | null>(null);
+  const [bulkUploadBatch, setBulkUploadBatch] = useState<BulkUploadValidationSummary | null>(null);
+  const [bulkUploadError, setBulkUploadError] = useState('');
+  const [isBulkUploadBusy, setIsBulkUploadBusy] = useState(false);
+  const bulkUploadConfirmInFlight = useRef(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [schoolFilter, setSchoolFilter] = useState('');
@@ -67,6 +77,18 @@ export default function ReviewApplications() {
     ...(schoolOptions.find(school => school.value === schoolFilter)?.filter ?? {}),
     ...(dateFilter === 'TODAY' ? { submitted: 'today' } : {}),
   });
+
+  const refreshReviewQueue = async () => {
+    setIsLoadingQueue(true);
+    setQueueError('');
+    const result = await backendApplicationService.listReviewQueue(reviewQueueFilters());
+    setIsLoadingQueue(false);
+    if (result.ok === false) {
+      setQueueError(result.error.message);
+      return;
+    }
+    setApps(mapBackendApplicationsToReviewRows(result.data));
+  };
 
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_SERVICE_MODE !== 'backend') return;
@@ -161,6 +183,77 @@ export default function ReviewApplications() {
      setActiveModal(null);
      setSelectedApp(null);
      setDecisionError('');
+     setBulkUploadError('');
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadBulkTemplate = async () => {
+    setBulkUploadError('');
+    const result = await backendApplicationService.downloadBulkUploadTemplate();
+    if (result.ok === false) {
+      setBulkUploadError(result.error.message);
+      return;
+    }
+    downloadBlob(result.data, 'student-application-bulk-upload-template.csv');
+  };
+
+  const handleValidateBulkUpload = async () => {
+    if (!bulkUploadFile) return;
+    setIsBulkUploadBusy(true);
+    setBulkUploadError('');
+    const result = await backendApplicationService.validateBulkUploadCsv(bulkUploadFile);
+    setIsBulkUploadBusy(false);
+    if (result.ok === false) {
+      setBulkUploadError(result.error.message);
+      return;
+    }
+    if (result.data.status === 'FAILED') {
+      setBulkUploadError('The CSV could not be read. Download the template and make sure the file keeps the exact header row.');
+    }
+    setBulkUploadBatch(result.data);
+  };
+
+  const handleDownloadBulkErrors = async () => {
+    if (!bulkUploadBatch?.batchId) return;
+    setBulkUploadError('');
+    const result = await backendApplicationService.downloadBulkUploadErrors(bulkUploadBatch.batchId);
+    if (result.ok === false) {
+      setBulkUploadError(result.error.message);
+      return;
+    }
+    downloadBlob(result.data, `student-application-bulk-upload-errors-${bulkUploadBatch.batchId}.csv`);
+  };
+
+  const handleConfirmBulkUpload = async () => {
+    if (!bulkUploadBatch?.batchId) return;
+    if (!bulkUploadBatch.canConfirm) {
+      setBulkUploadError('Validate the CSV again before confirming this batch.');
+      return;
+    }
+    if (bulkUploadConfirmInFlight.current) return;
+    bulkUploadConfirmInFlight.current = true;
+    setIsBulkUploadBusy(true);
+    setBulkUploadError('');
+    try {
+      const result = await backendApplicationService.confirmBulkUpload(bulkUploadBatch.batchId);
+      if (result.ok === false) {
+        setBulkUploadError(result.error.message);
+        return;
+      }
+      setBulkUploadBatch(result.data);
+      await refreshReviewQueue();
+    } finally {
+      bulkUploadConfirmInFlight.current = false;
+      setIsBulkUploadBusy(false);
+    }
   };
 
   const handleReviewerDecision = async (
@@ -205,7 +298,11 @@ export default function ReviewApplications() {
       app.id.toLowerCase().includes(normalizedSearch) ||
       String(app.schoolName ?? '').toLowerCase().includes(normalizedSearch) ||
       String(app.universities?.[0] ?? '').toLowerCase().includes(normalizedSearch);
-    const matchesStatus = statusFilter === 'ALL' || app.status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'ALL' ||
+      (statusFilter === 'PENDING_STUDENT_COMPLETION'
+        ? app.completionStatus === 'PENDING_STUDENT_COMPLETION'
+        : app.status === statusFilter);
     const selectedSchool = schoolOptions.find(school => school.value === schoolFilter);
     const matchesSchool =
       !selectedSchool ||
@@ -259,6 +356,12 @@ export default function ReviewApplications() {
           <p className="text-philsa-gray text-xs font-black uppercase tracking-[0.2em] opacity-60">PhilSLA Admission Intelligence Unit</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+           <button
+             onClick={() => setActiveModal('BULK_UPLOAD')}
+             className="btn-secondary flex items-center gap-2"
+           >
+              <FileText className="w-4 h-4" /> Bulk Upload
+           </button>
            <button
              onClick={handleExportBatch}
              disabled={isLoadingQueue || isExporting || visibleApps.length === 0}
@@ -343,7 +446,12 @@ export default function ReviewApplications() {
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-philsa-gray pointer-events-none" />
               </div>
               <div className="flex bg-philsa-bg p-1 rounded-xl">
-                {['ALL', 'PENDING', 'REJECTED'].map((status) => (
+                {[
+                  ['ALL', 'ALL'],
+                  ['PENDING', 'PENDING'],
+                  ['PENDING_STUDENT_COMPLETION', 'PENDING STUDENT COMPLETION'],
+                  ['REJECTED', 'REJECTED'],
+                ].map(([status, label]) => (
                   <button
                     key={status}
                     onClick={() => setStatusFilter(status)}
@@ -354,7 +462,7 @@ export default function ReviewApplications() {
                         : 'text-philsa-gray hover:text-philsa-navy'
                     )}
                   >
-                    {status}
+                    {label}
                   </button>
                 ))}
               </div>
@@ -386,6 +494,7 @@ export default function ReviewApplications() {
                 </tr>
               )}
               {!isLoadingQueue && visibleApps.map((app) => {
+                const isPendingStudentCompletion = app.completionStatus === 'PENDING_STUDENT_COMPLETION';
                 const isDecisionFinal = ['ACCEPTED', 'APPROVED', 'REJECTED'].includes(app.status);
                 const displayCandidateId = app.candidateId || app.id;
 
@@ -430,7 +539,7 @@ export default function ReviewApplications() {
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      {!isDecisionFinal && (
+                      {!isDecisionFinal && !isPendingStudentCompletion && (
                         <>
                           <button 
                              onClick={() => handleOpenAction(app, 'APPROVE')}
@@ -471,6 +580,121 @@ export default function ReviewApplications() {
 
       {/* --- MODALS & DRAWERS --- */}
       <AnimatePresence>
+        {activeModal === 'BULK_UPLOAD' && (
+          <ModalWrapper title="Bulk Upload Student Applications" onClose={closeModal}>
+            <div className="space-y-6 text-philsa-navy">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleDownloadBulkTemplate}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" /> Download Template
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadBulkErrors}
+                  disabled={!bulkUploadBatch || (bulkUploadBatch.failedRows ?? 0) === 0}
+                  className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <FileText className="w-4 h-4" /> Download Error CSV
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="bulk-upload-csv" className="text-[10px] font-black uppercase tracking-widest text-philsa-gray">
+                  CSV File
+                </label>
+                <input
+                  id="bulk-upload-csv"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(event) => {
+                    setBulkUploadFile(event.target.files?.[0] ?? null);
+                    setBulkUploadBatch(null);
+                    setBulkUploadError('');
+                  }}
+                  className="block w-full rounded-xl border border-philsa-border bg-philsa-bg px-4 py-3 text-xs font-bold text-philsa-navy"
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleValidateBulkUpload}
+                  disabled={!bulkUploadFile || isBulkUploadBusy}
+                  className="px-5 py-2 bg-philsa-navy text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isBulkUploadBusy ? 'Processing...' : 'Validate'}
+                </button>
+              </div>
+
+              {bulkUploadError && (
+                <div role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-bold text-philsa-red">
+                  {bulkUploadError}
+                </div>
+              )}
+
+              {bulkUploadBatch && (
+                <div className="space-y-5">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {[
+                      ['Total', bulkUploadBatch.totalRows],
+                      ['Valid', bulkUploadBatch.validRows],
+                      ['Failed', bulkUploadBatch.failedRows],
+                      ['Conflicts', bulkUploadBatch.conflictRows],
+                      ['Field Errors', bulkUploadBatch.fieldErrorRows],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-xl border border-philsa-border bg-philsa-bg p-3">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-philsa-gray">{label}</p>
+                        <p className="text-xl font-black text-philsa-navy">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(bulkUploadBatch.rows ?? []).some(row => row.errors.length > 0) && (
+                    <div className="max-h-56 overflow-auto rounded-xl border border-philsa-border">
+                      <table className="w-full text-left">
+                        <thead className="bg-philsa-bg text-[9px] font-black uppercase tracking-widest text-philsa-gray">
+                          <tr>
+                            <th className="px-4 py-3">Row</th>
+                            <th className="px-4 py-3">Field</th>
+                            <th className="px-4 py-3">Code</th>
+                            <th className="px-4 py-3">Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-philsa-border text-xs font-bold">
+                          {(bulkUploadBatch.rows ?? []).flatMap(row =>
+                            row.errors.map((error, index) => (
+                              <tr key={`${row.rowNumber}-${error.field}-${index}`}>
+                                <td className="px-4 py-3">{row.rowNumber}</td>
+                                <td className="px-4 py-3">{error.field}</td>
+                                <td className="px-4 py-3">{error.code}</td>
+                                <td className="px-4 py-3">{error.reason}</td>
+                              </tr>
+                            )),
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end border-t border-slate-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={handleConfirmBulkUpload}
+                      disabled={!bulkUploadBatch || !bulkUploadBatch.canConfirm || isBulkUploadBusy}
+                      className="px-5 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      Confirm Import
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </ModalWrapper>
+        )}
+
         {/* APPROVAL MODAL */}
         {activeModal === 'APPROVE' && selectedApp && (
           <ModalWrapper title="Confirm Application" onClose={closeModal}>

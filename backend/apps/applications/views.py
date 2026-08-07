@@ -1,5 +1,8 @@
+import csv
+from io import StringIO
+
 from django.shortcuts import get_object_or_404
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponse
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
@@ -12,7 +15,8 @@ from apps.accounts.permissions import ObjectScopePermission, RoleRequiredPermiss
 from apps.accounts.roles import PortalRole, get_user_role
 
 from .audit import record_application_event
-from .models import ApplicationStatus, StudentApplication
+from .bulk_upload import build_bulk_upload_template_csv, confirm_bulk_upload_batch, validate_bulk_upload_csv
+from .models import ApplicationBulkUploadBatch, ApplicationCompletionStatus, ApplicationStatus, StudentApplication
 from .models import ApplicationAuditLog
 from .serializers import (
     ApplicationAuditLogSerializer,
@@ -20,6 +24,8 @@ from .serializers import (
     ApplicationSerializer,
     ApplicationSubmitSerializer,
     ApplicationUpdateSerializer,
+    BulkUploadBatchSerializer,
+    BulkUploadValidateSerializer,
     LrnVerificationSerializer,
     RegistrationAttachmentSerializer,
     RegistrationAttachmentUploadSerializer,
@@ -33,10 +39,16 @@ from .serializers import (
     Step2ManualDecisionSerializer,
 )
 from .services import (active_step2_configuration, create_draft, decide_application,
-                       decide_step2_manual_review, get_step2_verification, serialize_step2, submit_application,
+                       ApplicationConflict,
+                       decide_step2_manual_review, get_pending_student_profile_application,
+                       get_step2_verification, save_student_profile_draft,
+                       serialize_step2, serialize_student_profile_completion, submit_application,
+                       submit_student_profile,
                        update_draft, upload_step2_media, validate_manual_registration_selfie_face,
                        validate_registration_selfie_face, request_registration_email_otp,
-                       upload_registration_attachment, verify_registration_email_otp, verify_lrn)
+                       upload_registration_attachment, upload_student_profile_attachment,
+                       upload_student_profile_selfie,
+                       verify_registration_email_otp, verify_lrn)
 from .models import IdentityMediaType, Step2VerificationConfiguration
 from .throttling import DeviceScopedRateThrottle
 
@@ -271,14 +283,19 @@ class ApplicationReviewQueueView(APIView):
         search = request.query_params.get("search", "").strip()
 
         if status_filter:
-            status_map = {
-                "PENDING": [ApplicationStatus.SUBMITTED, ApplicationStatus.RESUBMITTED],
-                "ACCEPTED": [ApplicationStatus.APPROVED],
-                "APPROVED": [ApplicationStatus.APPROVED],
-                "REJECTED": [ApplicationStatus.REJECTED],
-                "FOR_CORRECTION": [ApplicationStatus.FOR_CORRECTION],
-            }
-            applications = applications.filter(status__in=status_map.get(status_filter, [status_filter]))
+            if status_filter == ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION:
+                applications = applications.filter(
+                    completion_status=ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION
+                )
+            else:
+                status_map = {
+                    "PENDING": [ApplicationStatus.SUBMITTED, ApplicationStatus.RESUBMITTED],
+                    "ACCEPTED": [ApplicationStatus.APPROVED],
+                    "APPROVED": [ApplicationStatus.APPROVED],
+                    "REJECTED": [ApplicationStatus.REJECTED],
+                    "FOR_CORRECTION": [ApplicationStatus.FOR_CORRECTION],
+                }
+                applications = applications.filter(status__in=status_map.get(status_filter, [status_filter]))
 
         if school_id:
             applications = applications.filter(school_info__school_id=school_id)
@@ -299,6 +316,88 @@ class ApplicationReviewQueueView(APIView):
                 | Q(course_preference_rows__university__icontains=search)
             ).distinct()
         return Response(ApplicationSerializer(applications, many=True, context={"request": request}).data)
+
+
+class BulkUploadTemplateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request) -> HttpResponse:
+        response = HttpResponse(build_bulk_upload_template_csv(), content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="student-application-bulk-upload-template.csv"'
+        return response
+
+
+class BulkUploadValidateView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request) -> Response:
+        serializer = BulkUploadValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = validate_bulk_upload_csv(uploaded_file=serializer.validated_data["file"], actor=request.user)
+        record_application_event(event="application_bulk_upload_validated", outcome="success", request=request, user=request.user)
+        batch = ApplicationBulkUploadBatch.objects.prefetch_related("row_results").get(id=result["batchId"])
+        return Response(BulkUploadBatchSerializer(batch).data)
+
+
+class BulkUploadBatchMixin:
+    def get_batch(self, request, batch_id):
+        batch = get_object_or_404(
+            ApplicationBulkUploadBatch.objects.prefetch_related("row_results"),
+            id=batch_id,
+        )
+        role = get_user_role(request.user)
+        user_id = getattr(request.user, "user_id", getattr(request.user, "id", None))
+        if role != PortalRole.SYSTEM_ADMIN.value and str(batch.uploaded_by_user_id) != str(user_id):
+            raise Http404("Bulk upload batch not found.")
+        return batch
+
+
+class BulkUploadBatchDetailView(BulkUploadBatchMixin, APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request, batch_id) -> Response:
+        batch = self.get_batch(request, batch_id)
+        return Response(BulkUploadBatchSerializer(batch).data)
+
+
+class BulkUploadErrorsCsvView(BulkUploadBatchMixin, APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def get(self, request, batch_id) -> HttpResponse:
+        batch = self.get_batch(request, batch_id)
+        stream = StringIO()
+        writer = csv.writer(stream)
+        writer.writerow(["rowNumber", "field", "code", "reason"])
+        for row in batch.row_results.all():
+            for error in row.errors:
+                writer.writerow([
+                    row.row_number,
+                    error.get("field", ""),
+                    error.get("code", ""),
+                    error.get("reason", ""),
+                ])
+        response = HttpResponse(stream.getvalue(), content_type="text/csv")
+        response["Content-Disposition"] = f'attachment; filename="student-application-bulk-upload-errors-{batch.public_id}.csv"'
+        return response
+
+
+class BulkUploadConfirmView(BulkUploadBatchMixin, APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.ADMISSIONS_REVIEWER, PortalRole.SYSTEM_ADMIN)
+
+    def post(self, request, batch_id) -> Response:
+        self.get_batch(request, batch_id)
+        try:
+            result = confirm_bulk_upload_batch(batch_id=batch_id, actor=request.user)
+        except ValueError as exc:
+            raise ApplicationConflict(str(exc)) from exc
+        record_application_event(event="application_bulk_upload_confirmed", outcome="success", request=request, user=request.user)
+        return Response(result)
 
 
 class ApplicationReviewerDecisionView(APIView):
@@ -330,6 +429,101 @@ class ApplicationReviewerDecisionView(APIView):
                 application=decided,
             )
         return Response(ApplicationSerializer(decided, context={"request": request}).data)
+
+
+class StudentProfileCompletionView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def get(self, request) -> Response:
+        try:
+            application = get_pending_student_profile_application(owner=request.user)
+        except StudentApplication.DoesNotExist as exc:
+            raise Http404("Student profile completion is not pending.") from exc
+        return Response(serialize_student_profile_completion(application, request=request))
+
+    def patch(self, request) -> Response:
+        serializer = ApplicationUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        expected_version = serializer.validated_data.pop("version")
+        updated = save_student_profile_draft(
+            owner=request.user,
+            expected_version=expected_version,
+            data=serializer.validated_data,
+        )
+        record_application_event(
+            event="bulk_upload_profile_draft_saved",
+            outcome="success",
+            request=request,
+            user=request.user,
+            application=updated,
+        )
+        return Response(serialize_student_profile_completion(updated, request=request))
+
+
+class StudentProfileAttachmentUploadView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request) -> Response:
+        serializer = RegistrationAttachmentUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        attachment = upload_student_profile_attachment(
+            owner=request.user,
+            field_name=serializer.validated_data["fieldName"],
+            uploaded_file=serializer.validated_data["file"],
+        )
+        record_application_event(
+            event="bulk_upload_profile_attachment_uploaded",
+            outcome="success",
+            request=request,
+            user=request.user,
+            application=attachment.application,
+        )
+        return Response(RegistrationAttachmentSerializer(attachment).data, status=status.HTTP_201_CREATED)
+
+
+class StudentProfileSelfieUploadView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request) -> Response:
+        serializer = RegistrationIdentitySelfieUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = upload_student_profile_selfie(
+            owner=request.user,
+            uploaded_file=serializer.validated_data["file"],
+        )
+        record_application_event(
+            event="bulk_upload_profile_selfie_uploaded",
+            outcome="success",
+            request=request,
+            user=request.user,
+        )
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class StudentProfileSubmitView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def post(self, request) -> Response:
+        serializer = ApplicationSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        submitted = submit_student_profile(
+            owner=request.user,
+            expected_version=serializer.validated_data["version"],
+        )
+        record_application_event(
+            event="bulk_upload_profile_completed",
+            outcome="success",
+            request=request,
+            user=request.user,
+            application=submitted,
+        )
+        return Response(serialize_student_profile_completion(submitted, request=request))
 
 
 class ApplicationDetailView(APIView):

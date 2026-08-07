@@ -47,3 +47,82 @@ Executes the approved plan (`plans/2026-08-05-universities-courses.md`) by repli
 - Region choices are re-declared in `universities/models.py` (identical values to `schools`) rather than importing across apps, keeping the app self-contained and mirroring the schools pattern.
 - Local dev DB migrated and seeded (`seed_universities`) so the screen is demo-ready in backend mode.
 - Approval-gate item from the plan (human sign-off on the field set + roles) is reflected by the field set actually implemented here; final reviewer sign-off happens on the PR.
+
+---
+
+# Implementation Log — Maintenance Table: List of DepEd SHS (demo-ready)
+
+**Owner:** JP Mayordo · **Executed:** 2026-08-06 (Thursday) · **Branch:** `jp.mayordo/deped-shs`
+**Plan:** `plans/2026-08-06-deped-shs.md` · **Spec:** `specs/2026-08-06-deped-shs.md`
+
+Aligned to the updated `BUILD_PLAN.md` goal: **"presentation-ready demo path by Friday, not 100% completion."**
+
+## Reality vs. the brief
+
+The Build Plan lists DepEd SHS as *"Not started — wire `DepEdSHSListMaintenance.tsx` to real backend CRUD."* Against the code that premise is stale: the equivalent screen `SchoolsListMaintenance.tsx` is **already** wired to `apps.schools` real CRUD (via `schoolService`, `ServiceResult`, `ConfirmationDialog`, `error`/`isSaving` states, region dropdown, auto `SCH-#####`) — shipped in PR #44. So the CRUD-wiring deliverable was already met. The genuine gap vs. the Universities slice was **frontend test coverage of the screen**, which this story closes. No production code was changed (additive, test-only) — the demo path cannot regress from it.
+
+## Phase A — Verify shipped slice ✅
+
+- `python manage.py test apps.schools --settings=config.settings.test` → **5 passed** (unchanged).
+- `npx vitest run src/services/backendSchoolService.test.ts` → **4 passed** (unchanged).
+- Confirmed `SchoolsListMaintenance.tsx` already uses `schoolService` + `ServiceResult` + `ConfirmationDialog` — no rewire needed.
+
+## Phase B — Screen component test ✅
+
+- Added `frontend/src/pages/admin/maintenance/SchoolsListMaintenance.test.tsx` (5 tests): mount/list renders rows, empty state, create round-trips through `createSchool` (no `code` sent), backend `validationError` keeps the modal open + shows the banner, delete via `ConfirmationDialog` (`Remove School` → `Agree`) calls `deleteSchool` and drops the row.
+- Written against the **real** non-paginated `schoolService` — deliberately NOT copied from the broken paginated `UniversitiesListMaintenance.test.tsx`.
+- `npx vitest run src/pages/admin/maintenance/SchoolsListMaintenance.test.tsx` → **5 passed**.
+
+## Phase C — e2e smoke ✅
+
+- Added `frontend/e2e/maintenance-schools.spec.ts` mirroring `maintenance-universities.spec.ts` (prototype/Mock mode, SYSTEM_ADMIN session, single page session): list → add → edit (rename) → delete via confirm dialog.
+- `npx playwright test e2e/maintenance-schools.spec.ts` → **1 passed** — run with `VITE_AUTH_SERVICE_MODE=prototype` to override the local `.env.local` (see note).
+
+## Checks run (observed, not assumed)
+
+| Check | Result |
+|---|---|
+| `python manage.py test apps.schools --settings=config.settings.test` | **5 passed** (unchanged) |
+| `npx vitest run src/services/backendSchoolService.test.ts` | **4 passed** (unchanged) |
+| `npx vitest run src/pages/admin/maintenance/SchoolsListMaintenance.test.tsx` | **5 passed** (new) |
+| `npx playwright test e2e/maintenance-schools.spec.ts` (prototype mode) | **1 passed** (new) |
+| `npm run lint` (`tsc --noEmit`) | **No errors in the added files.** 36 pre-existing repo-wide errors in unrelated files, present before this work. |
+
+## Notes / pre-existing issues surfaced (not caused here)
+
+- **Local `.env.local` forces backend mode** (`VITE_AUTH_SERVICE_MODE="backend"`), so `npm run dev` (Playwright's webServer) runs the app in backend auth mode and the `philsa_user` session seed is ignored → protected route redirects to login. This breaks BOTH e2e specs equally; the pre-existing `maintenance-universities.spec.ts` fails identically here. Run e2e with a `VITE_AUTH_SERVICE_MODE=prototype` override to verify green.
+- **Two live University backends (tech debt, out of scope per Build Plan):** `apps.universities` (`/api/v1/universities/`, simple, consumed by the frontend) vs. `apps.configuration` admin registry (`/api/v1/configuration/admin/universities/`, paginated + versioned + Module-38 scoped, documented as canonical but consumed by no frontend). The orphaned `UniversitiesListMaintenance.test.tsx` (8 failing) was written for the configuration contract and imports symbols the shipped service doesn't export. Recommend a separate reconciliation story. Not touched here.
+- Regression check: the 9 failures in `src/pages/admin/maintenance` (`UniversitiesListMaintenance.test.tsx` 8/8, `MaintenanceCenterTables.test.tsx` 1/4) are all in files this story did not modify (`git status` shows only new files) and are pre-existing on `main`; vitest isolates test files, so the new Schools test cannot affect them.
+
+## Manual-test findings + fixes (2026-08-06)
+
+Manual backend-mode testing (`system.admin@yopmail.com`, live Django on `:8000`, Vite on `:3000`) surfaced two issues; both fixed on this branch (now includes production changes, no longer test-only).
+
+1. **UX bug — Examinee Capacity "0200".** `SchoolsListMaintenance.tsx` bound `value={formData.examineeCapacity}` with `onChange={... Number(e.target.value)}`. Clearing the field made `Number("") === 0`, redrawing a sticky `"0"` that prefixed further typing → `"0200"`. Fixed: render `''` when the value is `0` and map an empty string back to `0` on change (`min` bumped `0 → 1`). Component test still **5 passed**.
+2. **Validation decision — duplicate schools → unique per name + region (case-insensitive).** Chosen because DepEd SHS names legitimately repeat across regions. Implemented:
+   - Model: `UniqueConstraint(Lower("name"), "region", name="unique_school_name_per_region")` + migration `schools/0002_school_unique_school_name_per_region.py`.
+   - Serializer: object-level `validate()` returns a clean 400 `{"name": "A school with this name already exists in this region."}` (case-insensitive, region-scoped, self-excluding on update) instead of a raw IntegrityError.
+   - Tests: +3 (`apps.schools` now **8 passed**) — same-region dup rejected, different-region allowed, update-into-collision rejected.
+   - Dev-DB note: the local dev DB here is **PostgreSQL** (not SQLite as the docs say). It held one duplicate from manual testing (`SCH-00017 / Calapan Central School / MIMAROPA`); removed it (kept earliest) so the constraint migration applied — dev DB back to 15 seeded schools.
+3. **UX bug — validation warning hidden behind the modal.** The error was only rendered in the page-level banner, which sits behind the modal's `fixed inset-0 z-50` overlay, so a duplicate rejection was invisible while the modal was open. Fixed: render the error **inside the modal** (top of the dialog) so it's visible where the user is working and the modal stays open for correction; the page-level banner is now gated to `!isModalOpen` to avoid a duplicated message. Component test still **5 passed**.
+
+## Universities & Courses — duplicate validation + fixes (2026-08-06)
+
+Applied the same duplicate-validation treatment to the Universities & Courses maintenance table (module also owned by JP). Changes are in `apps.universities` — the app the frontend actually consumes (`/api/v1/universities/`) — not the unused `apps.configuration` registry.
+
+- **University → unique name per region (case-insensitive).** `UniqueConstraint(Lower("name"), "region", name="unique_university_name_per_region")` + serializer `validate()` → 400 `{"name": "A university with this name already exists in this region."}`. Names may repeat across regions.
+- **CollegeCourse → unique program code per university (case-insensitive).** `UniqueConstraint(Lower("program_code"), "university", name="unique_course_code_per_university")` + serializer `validate()` → 400 `{"programCode": "A course with this program code already exists for this university."}`. The parent university is injected into the serializer context on create (`CollegeCourseSerializer(data=..., context={"university": university})`); on update it comes from the instance.
+- Migration `universities/0005_collegecourse_unique_course_code_per_university_and_more.py`; applied to the dev DB (no existing duplicates — 6 universities / 13 courses).
+- **Frontend** (`UniversitiesListMaintenance.tsx`): mirrored the Schools polish — errors now render inside both the university and course modals, the page banner is gated to `!isUniModalOpen && !isCourseModalOpen`, and closing a modal clears the error.
+- **Tests:** +6 (`apps.universities` now **19 passed**) — university: same-region dup rejected, different-region allowed, update-collision; course: same-university dup rejected, different-university allowed, update-collision.
+- **Fixed a pre-existing collision surfaced by running the suite:** `seed_universities` was defined in **both** `apps.universities` and `apps.configuration`; Django resolves the duplicate command name to `configuration`, so `call_command("seed_universities")` seeded the wrong table and the `apps.universities` seed test saw 0 rows (this failed on `main` too). Renamed the `apps.universities` command to **`seed_university_registry`** (and pointed its test at the new name), leaving `configuration`'s `seed_universities` untouched. Both apps' seed tests now pass. (Full two-backend reconciliation remains a separate story.)
+
+## Schools ⇄ Universities UI/UX consistency (2026-08-06)
+
+Audited the two Maintenance screens and closed the portable feature gaps so Schools matches Universities:
+
+- **Table ⇄ Grid Cards toggle** on Schools (mirrors Universities' `viewMode`): grid mode renders each school as a card (icon tile, code chip, status pill, region, classification, capacity footer).
+- **4th summary stat card** — "Total Examinee Capacity" (sum), stat row widened to `grid-cols-2 sm:grid-cols-4`.
+- **Status (Active/Inactive)** — new `status` field on the `School` model (`ActivationStatus` TextChoices, default Active) + migration `schools/0003_school_status`, serializer field, frontend service types/mapping, a Status column + pill in the table, a pill on grid cards, and a Status dropdown in the modal.
+- Tests: `apps.schools` now **9** (added status default/set test); frontend **9** (component 5 + service 4, updated for `status`).
+- Not ported (Universities-only, no Schools equivalent): college-course drill-down, president/email/phone/established-year/city fields, city search. Documented for the audit trail.

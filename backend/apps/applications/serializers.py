@@ -5,6 +5,7 @@ from apps.accounts.serializers import validate_password_policy
 
 from .models import (
     ApplicationAuditLog,
+    ApplicationBulkUploadBatch,
     IdentityMediaType,
     Step2VerificationConfiguration,
     StudentApplication,
@@ -26,14 +27,25 @@ class ApplicationSerializer(serializers.ModelSerializer):
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
     examCycleId = serializers.CharField(source="exam_cycle_id", read_only=True)
     candidateId = serializers.CharField(source="candidate_id", read_only=True)
+    completionStatus = serializers.CharField(source="completion_status", read_only=True)
+    submissionSource = serializers.CharField(source="submission_source", read_only=True)
+    submittedByUserId = serializers.CharField(source="submitted_by_user_id", read_only=True, allow_null=True)
+    bulkUploadBatchId = serializers.CharField(source="bulk_upload_batch_id", read_only=True, allow_null=True)
+    bulkUploadRowNumber = serializers.IntegerField(source="bulk_upload_row_number", read_only=True, allow_null=True)
 
     class Meta:
         model = StudentApplication
         fields = (
             "id", "candidateId", "status", "personal", "address", "school", "coursePreferences",
-            "reviewStep", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt",
+            "reviewStep", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId",
+            "completionStatus", "submissionSource", "submittedByUserId", "bulkUploadBatchId",
+            "bulkUploadRowNumber", "version", "submittedAt", "createdAt", "updatedAt",
         )
-        read_only_fields = ("id", "candidateId", "status", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId", "version", "submittedAt", "createdAt", "updatedAt")
+        read_only_fields = (
+            "id", "candidateId", "status", "lrnProfile", "photoUrl", "additionalAttachments", "examCycleId",
+            "completionStatus", "submissionSource", "submittedByUserId", "bulkUploadBatchId",
+            "bulkUploadRowNumber", "version", "submittedAt", "createdAt", "updatedAt",
+        )
 
     def get_lrnProfile(self, obj):
         verification = getattr(obj, "step2_verification", None)
@@ -127,6 +139,12 @@ class ApplicationSubmitSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 
 
+class StudentProfileCompletionSerializer(serializers.Serializer):
+    application = serializers.DictField(read_only=True)
+    fields = serializers.ListField(child=serializers.DictField(), read_only=True)
+    progress = serializers.DictField(read_only=True)
+
+
 class ApplicationAuditLogSerializer(serializers.ModelSerializer):
     applicationId = serializers.SerializerMethodField()
     candidateId = serializers.SerializerMethodField()
@@ -195,6 +213,69 @@ class ReviewerDecisionSerializer(serializers.Serializer):
         required=False,
         allow_empty=True,
     )
+
+
+class BulkUploadValidateSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+
+class BulkUploadBatchSerializer(serializers.ModelSerializer):
+    batchId = serializers.CharField(source="public_id", read_only=True)
+    totalRows = serializers.SerializerMethodField()
+    validRows = serializers.SerializerMethodField()
+    failedRows = serializers.SerializerMethodField()
+    conflictRows = serializers.SerializerMethodField()
+    fieldErrorRows = serializers.SerializerMethodField()
+    canConfirm = serializers.SerializerMethodField()
+    rows = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ApplicationBulkUploadBatch
+        fields = (
+            "batchId",
+            "status",
+            "totalRows",
+            "validRows",
+            "failedRows",
+            "conflictRows",
+            "fieldErrorRows",
+            "canConfirm",
+            "rows",
+            "created_at",
+            "expires_at",
+            "confirmed_at",
+            "completed_at",
+        )
+        read_only_fields = fields
+
+    def get_totalRows(self, obj):
+        return obj.summary_counts.get("totalRows", 0)
+
+    def get_validRows(self, obj):
+        return obj.summary_counts.get("validRows", 0)
+
+    def get_failedRows(self, obj):
+        return obj.summary_counts.get("failedRows", 0)
+
+    def get_conflictRows(self, obj):
+        return obj.summary_counts.get("conflictRows", 0)
+
+    def get_fieldErrorRows(self, obj):
+        return obj.summary_counts.get("fieldErrorRows", 0)
+
+    def get_canConfirm(self, obj):
+        return obj.status == "VALIDATED" and self.get_validRows(obj) > 0
+
+    def get_rows(self, obj):
+        return [
+            {
+                "rowNumber": row.row_number,
+                "status": row.status,
+                "applicationId": str(row.application_id) if row.application_id else None,
+                "errors": row.errors,
+            }
+            for row in obj.row_results.all()
+        ]
 
 
 class LrnVerificationSerializer(serializers.Serializer):

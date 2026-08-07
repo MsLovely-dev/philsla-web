@@ -128,17 +128,25 @@ class ScoreProcessingTests(SimpleTestCase):
         second = generate_score_seed_data(candidate_count=120, seed=2027)
 
         self.assertEqual(first.score_records, second.score_records)
-        self.assertEqual(len(first.applications), 120)
-        self.assertEqual(len(first.score_records), 120)
+        self.assertEqual(len(first.exam_sessions), 3)
+        self.assertEqual(len(first.applications), 360)
+        self.assertEqual(len(first.score_records), 360)
         self.assertEqual(first.exam_sessions[0].is_closed, True)
         self.assertEqual(first.exam_sessions[0].already_processed, False)
         self.assertEqual(
             [population.id for population in first.ranking_populations],
-            ["POP-REGULAR-2027", "POP-PWD-2027"],
+            [
+                "POP-REGULAR-2027",
+                "POP-PWD-2027",
+                "POP-STEM-2027",
+                "POP-STEM-PWD-2027",
+                "POP-SPECIAL-2027",
+                "POP-SPECIAL-PWD-2027",
+            ],
         )
         self.assertTrue(any(record.review_status == "PENDING" for record in first.score_records))
         self.assertTrue(any(record.review_status == "REJECTED" for record in first.score_records))
 
         scale = generate_score_seed_data(candidate_count=200_000, seed=2027)
-        self.assertEqual(len(scale.applications), 200_000)
-        self.assertEqual(len(scale.score_records), 200_000)
+        self.assertEqual(len(scale.applications), 600_000)
+        self.assertEqual(len(scale.score_records), 600_000)

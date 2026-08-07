@@ -107,6 +107,42 @@ export interface ReviewQueueFilters {
   submitted?: 'today';
 }
 
+export interface BulkUploadRowError {
+  field: string;
+  submittedValue?: string;
+  code: string;
+  reason: string;
+}
+
+export interface BulkUploadRowResult {
+  rowNumber: number;
+  status: 'VALID' | 'FIELD_ERROR' | 'CONFLICT' | 'IMPORTED' | 'IMPORT_FAILED';
+  applicationId: string | null;
+  errors: BulkUploadRowError[];
+}
+
+export interface BulkUploadValidationSummary {
+  batchId: string;
+  status: 'VALIDATED' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED' | 'EXPIRED' | string;
+  totalRows: number;
+  validRows: number;
+  failedRows: number;
+  conflictRows: number;
+  fieldErrorRows: number;
+  importedRows?: number;
+  rejectedRows?: number;
+  canConfirm: boolean;
+  rows?: BulkUploadRowResult[];
+}
+
+export interface BulkUploadBatchDetail extends BulkUploadValidationSummary {
+  rows: BulkUploadRowResult[];
+  created_at?: string;
+  expires_at?: string;
+  confirmed_at?: string | null;
+  completed_at?: string | null;
+}
+
 export interface Step2VerificationResult {
   id: string;
   status: 'IN_PROGRESS' | 'PASSED' | 'MANUAL_REVIEW' | 'REJECTED';
@@ -137,10 +173,30 @@ export interface BackendApplication {
   photoUrl?: string;
   additionalAttachments?: RegistrationAttachment[];
   examCycleId: string;
+  completionStatus?: 'COMPLETE' | 'PENDING_STUDENT_COMPLETION';
+  submissionSource?: 'STUDENT_REGISTRATION' | 'ADMISSIONS_BULK_UPLOAD';
+  submittedByUserId?: string | null;
+  bulkUploadBatchId?: string | null;
+  bulkUploadRowNumber?: number | null;
   version: number;
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StudentProfileRequirement {
+  section: string;
+  fieldKey: string;
+  label: string;
+  type: 'field' | 'file' | string;
+  required: boolean;
+}
+
+export interface StudentProfileProgress {
+  completed: number;
+  total: number;
+  percent: number;
+  remaining: StudentProfileRequirement[];
 }
 
 export interface RegistrationAttachment {
@@ -163,6 +219,27 @@ export interface BackendApplicationDraftInput {
   school: Record<string, unknown>;
   coursePreferences: Record<string, unknown>[];
   reviewStep: Record<string, unknown>;
+}
+
+export interface StudentProfileCompletion {
+  application: BackendApplication;
+  fields: StudentRegistrationFieldConfig[];
+  progress: StudentProfileProgress;
+}
+
+export interface StudentProfileSelfieUploadResult {
+  uploadedMedia: Array<'SELFIE'>;
+  results: Record<string, unknown>;
+  progress: StudentProfileProgress;
+}
+
+export interface StudentProfileDraftInput {
+  version: number;
+  personal?: Record<string, unknown>;
+  address?: Record<string, unknown>;
+  school?: Record<string, unknown>;
+  coursePreferences?: Record<string, unknown>[];
+  reviewStep?: Record<string, unknown>;
 }
 
 export interface BackendRegistrationSubmittedAuditLog {
@@ -312,6 +389,46 @@ export class BackendApplicationService {
     });
   }
 
+  async getStudentProfileCompletion(): Promise<ServiceResult<StudentProfileCompletion>> {
+    return this.apiClient.request<StudentProfileCompletion>('/api/v1/applications/profile/');
+  }
+
+  async saveStudentProfileDraft(input: StudentProfileDraftInput): Promise<ServiceResult<StudentProfileCompletion>> {
+    return this.apiClient.request<StudentProfileCompletion>('/api/v1/applications/profile/', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async uploadStudentProfileAttachment(
+    fieldName: string,
+    file: File,
+  ): Promise<ServiceResult<RegistrationAttachment>> {
+    const body = new FormData();
+    body.append('fieldName', fieldName);
+    body.append('file', file);
+    return this.apiClient.request<RegistrationAttachment>('/api/v1/applications/profile/attachments/', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  async uploadStudentProfileSelfie(file: File): Promise<ServiceResult<StudentProfileSelfieUploadResult>> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.apiClient.request<StudentProfileSelfieUploadResult>('/api/v1/applications/profile/selfie/', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  async submitStudentProfile(version: number): Promise<ServiceResult<StudentProfileCompletion>> {
+    return this.apiClient.request<StudentProfileCompletion>('/api/v1/applications/profile/submit/', {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    });
+  }
+
   async listStep2Configurations(): Promise<ServiceResult<Array<Step2Configuration & { id: number; status: boolean }>>> {
     return this.apiClient.request<Array<Step2Configuration & { id: number; status: boolean }>>('/api/v1/applications/configuration/step-2/');
   }
@@ -388,6 +505,33 @@ export class BackendApplicationService {
     const query = searchParams.toString();
 
     return this.apiClient.request<BackendApplication[]>(`/api/v1/applications/review-queue/${query ? `?${query}` : ''}`);
+  }
+
+  async downloadBulkUploadTemplate(): Promise<ServiceResult<Blob>> {
+    return this.apiClient.requestBlob('/api/v1/applications/bulk-upload/template/');
+  }
+
+  async validateBulkUploadCsv(file: File): Promise<ServiceResult<BulkUploadValidationSummary>> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.apiClient.request<BulkUploadValidationSummary>('/api/v1/applications/bulk-upload/validate/', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  async getBulkUploadBatch(batchId: string): Promise<ServiceResult<BulkUploadBatchDetail>> {
+    return this.apiClient.request<BulkUploadBatchDetail>(`/api/v1/applications/bulk-upload/${batchId}/`);
+  }
+
+  async downloadBulkUploadErrors(batchId: string): Promise<ServiceResult<Blob>> {
+    return this.apiClient.requestBlob(`/api/v1/applications/bulk-upload/${batchId}/errors.csv`);
+  }
+
+  async confirmBulkUpload(batchId: string): Promise<ServiceResult<BulkUploadValidationSummary>> {
+    return this.apiClient.request<BulkUploadValidationSummary>(`/api/v1/applications/bulk-upload/${batchId}/confirm/`, {
+      method: 'POST',
+    });
   }
 
   async listRegistrationSubmittedAuditLogs(): Promise<ServiceResult<BackendRegistrationSubmittedAuditLog[]>> {
@@ -556,6 +700,7 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
     candidateId: application.candidateId,
     userId,
     status: application.status === 'SUBMITTED' || application.status === 'RESUBMITTED' ? 'PENDING' : application.status === 'APPROVED' ? 'ACCEPTED' : application.status === 'FOR_CORRECTION' ? 'FOR_CORRECTION' : 'REJECTED',
+    completionStatus: application.completionStatus,
     submittedAt: application.submittedAt ?? undefined,
     firstName: firstNonEmpty(lrnProfile.firstName, personal.firstName),
     middleName: firstNonEmpty(lrnProfile.middleName, personal.middleName),

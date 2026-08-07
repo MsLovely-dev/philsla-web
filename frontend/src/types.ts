@@ -14,12 +14,29 @@ export type UserRole =
   | 'TESTING_CENTER_ADMIN'
   | 'TECH_SUPPORT';
 
+export type BackendPortalRole =
+  | 'STUDENT'
+  | 'ADMISSIONS_REVIEWER'
+  | 'ITEM_WRITER'
+  | 'ACADEMIC_REVIEWER'
+  | 'PROCTOR'
+  | 'PROCTOR_ADMIN'
+  | 'UNIVERSITY_ADMIN'
+  | 'TESTING_CENTER_ADMIN'
+  | 'EXAM_ADMINISTRATOR'
+  | 'SYSTEM_ADMIN'
+  | 'CHED_ADMIN'
+  | 'DEPED_ADMIN'
+  | 'TESDA_ADMIN'
+  | 'EXECUTIVE';
+
 export interface User {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   role: UserRole;
+  backendRole?: BackendPortalRole;
   permissions?: string[];
   avatar?: string;
   candidateId?: string;
@@ -62,6 +79,7 @@ export interface Application {
   candidateId?: string;
   userId: string;
   status: ApplicationStatus;
+  completionStatus?: 'COMPLETE' | 'PENDING_STUDENT_COMPLETION';
   submittedAt?: string;
   
   // Personal Info

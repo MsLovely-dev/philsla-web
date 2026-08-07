@@ -62,6 +62,7 @@ import ReviewApplicationAuditLogs from '../pages/reviewer/ReviewApplicationAudit
 import ReviewApplications from '../pages/reviewer/ReviewApplications';
 import TestingCenterAvailability from '../pages/reviewer/TestingCenterAvailability';
 import StudentApplication from '../pages/StudentApplication';
+import StudentProfile from '../pages/student/StudentProfile';
 import SupportDashboard from '../pages/support/SupportDashboard';
 import SystemCompliance from '../pages/SystemCompliance';
 import SystemIntegration from '../pages/admin/SystemIntegration';
@@ -74,7 +75,8 @@ import ProctorMonitoring from '../pages/proctor/ProctorMonitoring';
 import ProctorReadiness from '../pages/proctor/ProctorReadiness';
 import ProctorSchedule from '../pages/proctor/ProctorSchedule';
 import StudentDeviceRegistration from '../pages/proctor/StudentDeviceRegistration';
-import { UserRole } from '../types';
+import { User, UserRole } from '../types';
+import { canAccessStudentRegistrationMaintenance } from './roleAccess';
 
 export const ALL_USER_ROLES = [
   'STUDENT', 'ADMISSIONS_REVIEWER', 'UNIVERSITY_ADMIN', 'ITEM_WRITER',
@@ -90,6 +92,13 @@ export interface AppRouteDefinition {
   access: RouteAccess;
   allowedRoles?: readonly UserRole[];
   layout?: 'dashboard' | 'standalone';
+  /**
+   * When set, this is the exclusive authorization check for the route:
+   * `allowedRoles` and the module-permission fallback are both bypassed.
+   * Reserved for routes that need an exact backend role, not just the
+   * collapsed frontend display role.
+   */
+  strictAccess?: (user: User) => boolean;
 }
 
 const withSystemAdmin = (...roles: UserRole[]): readonly UserRole[] =>
@@ -111,6 +120,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/unauthorized', element: <UnauthorizedPage />, access: 'protected', allowedRoles: ALL_USER_ROLES, layout: 'standalone' },
 
   { path: '/dashboard', element: <Dashboard />, access: 'protected', allowedRoles: ALL_USER_ROLES },
+  { path: '/student/profile', element: <StudentProfile />, access: 'protected', allowedRoles: STUDENT },
   { path: '/student/application', element: <StudentApplication />, access: 'protected', allowedRoles: STUDENT },
   { path: '/student/permit', element: <ExamPermitPage />, access: 'protected', allowedRoles: STUDENT },
   { path: '/student/results', element: <ResultsPage />, access: 'protected', allowedRoles: STUDENT },
@@ -157,7 +167,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
   { path: '/admin/center-control', element: <CenterManagement />, access: 'protected', allowedRoles: withSystemAdmin('TESTING_CENTER_ADMIN') },
 
   { path: '/admin/maintenance', element: <MaintenanceHub />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER', 'EXAM_ADMINISTRATOR', 'PROCTOR', 'PROCTOR_ADMIN') },
-  { path: '/admin/maintenance/registration', element: <StudentRegistrationMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
+  { path: '/admin/maintenance/registration', element: <StudentRegistrationMaintenance />, access: 'protected', allowedRoles: ['SYSTEM_ADMIN'], strictAccess: canAccessStudentRegistrationMaintenance },
   { path: '/admin/maintenance/schools', element: <SchoolsListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/universities', element: <UniversitiesListMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },
   { path: '/admin/maintenance/review-student-application', element: <ReviewStudentApplicationMaintenance />, access: 'protected', allowedRoles: withSystemAdmin('UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER') },

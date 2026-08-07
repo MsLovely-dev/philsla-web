@@ -19,6 +19,7 @@ class AccountProfile(models.Model):
     role = models.CharField(max_length=32, choices=[(role.value, role.value) for role in PortalRole])
     lrn = models.CharField("LRN", max_length=12, unique=True, null=True, blank=True)
     scopes = models.JSONField(default=dict, blank=True)
+    must_change_password = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

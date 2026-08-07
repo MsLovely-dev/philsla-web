@@ -89,7 +89,7 @@ class CollegeCourseListCreateView(APIView):
 
     def post(self, request, university_id) -> Response:
         university = self.get_university(university_id)
-        serializer = CollegeCourseSerializer(data=request.data)
+        serializer = CollegeCourseSerializer(data=request.data, context={"university": university})
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
             course = serializer.save(university=university)

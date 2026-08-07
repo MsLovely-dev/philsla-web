@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Lower
 
 
 SCHOOL_CODE_PREFIX = "SCH"
@@ -9,6 +10,11 @@ SCHOOL_CODE_PADDING = 5
 class SchoolClassification(models.TextChoices):
     PUBLIC = "Public", "Public"
     PRIVATE = "Private", "Private"
+
+
+class ActivationStatus(models.TextChoices):
+    ACTIVE = "Active", "Active"
+    INACTIVE = "Inactive", "Inactive"
 
 
 class PhilippineRegion(models.TextChoices):
@@ -51,6 +57,11 @@ class School(models.Model):
     name = models.CharField(max_length=200)
     examinee_capacity = models.PositiveIntegerField(default=0)
     region = models.CharField(max_length=20, choices=PhilippineRegion.choices)
+    status = models.CharField(
+        max_length=10,
+        choices=ActivationStatus.choices,
+        default=ActivationStatus.ACTIVE,
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -63,6 +74,13 @@ class School(models.Model):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "region",
+                name="unique_school_name_per_region",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"

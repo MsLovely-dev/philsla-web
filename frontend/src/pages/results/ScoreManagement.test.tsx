@@ -43,9 +43,9 @@ function mockBatchStatus(status: ScoreBatchStatus) {
   ]);
 }
 
-async function renderScoreManagement() {
+async function renderScoreManagement(initialEntries = ['/admin/results/scores']) {
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <ScoreManagement />
     </MemoryRouter>,
   );
@@ -76,6 +76,41 @@ describe('ScoreManagement', () => {
     await renderScoreManagement();
 
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /reprocess scoring/i }).disabled).toBe(false);
+  });
+
+  it('loads the selected batch from the URL query when returning from candidate detail', async () => {
+    getBatchesMock.mockResolvedValue([
+      {
+        id: 'SESSION-2027-REGULAR',
+        label: 'Regular Batch',
+        examName: 'PhilSA NAT',
+        status: 'SCORING_PROCESSED',
+        totalCandidates: 500,
+        processingBatchId: 'SCORE-PROC-001',
+        processedAt: '2026-08-03T08:00:00Z',
+        processedBy: 'admin-1',
+      },
+      {
+        id: 'SESSION-2027-STEM',
+        label: 'STEM Batch',
+        examName: 'PhilSA STEM',
+        status: 'SCORING_PROCESSED',
+        totalCandidates: 250,
+        processingBatchId: 'SCORE-PROC-002',
+        processedAt: '2026-08-03T08:00:00Z',
+        processedBy: 'admin-1',
+      },
+    ]);
+
+    await renderScoreManagement(['/admin/results/scores?batch=SESSION-2027-STEM']);
+
+    await waitFor(() => expect(getResultPageMock).toHaveBeenCalledWith('SESSION-2027-STEM', expect.objectContaining({
+      page: 1,
+      pageSize: 100,
+      sortKey: 'finalScore',
+      sortDirection: 'desc',
+    })));
+    expect(screen.getByRole<HTMLSelectElement>('combobox', { name: /select examination batch/i }).value).toBe('SESSION-2027-STEM');
   });
 
   it('shows the candidate identifier in the results table', async () => {
