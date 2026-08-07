@@ -198,6 +198,34 @@ export interface BackendApplication {
   submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  examStatus?: 'SCHEDULED' | '';
+  assignedSlot?: BackendExamSlot | null;
+}
+
+export interface BackendExamSlot {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  testCenter: string;
+  room: string;
+  totalSlots: number;
+  remainingSlots: number;
+}
+
+export interface BackendExamPermit {
+  id: string;
+  candidateId: string;
+  fullName: string;
+  email: string;
+  testCenter: string;
+  room: string;
+  seat: string;
+  examDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  qrCode: string;
+  status: 'ISSUED' | 'USED' | 'VOID';
 }
 
 export interface StudentProfileRequirement {
@@ -562,6 +590,29 @@ export class BackendApplicationService {
     return this.apiClient.request<BackendApplication>(`/api/v1/applications/${applicationId}/`);
   }
 
+  async getMyApplication(): Promise<ServiceResult<BackendApplication | null>> {
+    return this.apiClient.request<BackendApplication | null>('/api/v1/applications/me/');
+  }
+
+  async listExamSlots(): Promise<ServiceResult<BackendExamSlot[]>> {
+    return this.apiClient.request<BackendExamSlot[]>('/api/v1/applications/exam-slots/');
+  }
+
+  async assignExamSlot(slotId: string): Promise<ServiceResult<BackendApplication>> {
+    return this.apiClient.request<BackendApplication>('/api/v1/applications/me/exam-slot/', {
+      method: 'POST',
+      body: JSON.stringify({ slotId }),
+    });
+  }
+
+  // Note: this is apps.attendance's endpoint (a different Django app than the
+  // rest of this file), not apps.applications -- kept here anyway so the
+  // frontend has one service per domain (Student Portal) rather than one per
+  // backend app boundary. The permit is auto-issued by assignExamSlot above.
+  async getMyExamPermit(): Promise<ServiceResult<BackendExamPermit | null>> {
+    return this.apiClient.request<BackendExamPermit | null>('/api/v1/attendance/me/');
+  }
+
   async getApplicationPhoto(applicationId: string): Promise<ServiceResult<Blob>> {
     return this.apiClient.requestBlob(`/api/v1/applications/${applicationId}/identity-media/SELFIE/`);
   }
@@ -752,7 +803,15 @@ export function mapBackendApplicationToFrontend(application: BackendApplication,
     gwa: Number.isFinite(parsedGwa) ? parsedGwa : 0,
     universities: normalizedPreferences.map((preference) => preference.university),
     courses: normalizedPreferences.map((preference) => preference.course),
-    examScheduleId: firstNonEmpty(application.reviewStep?.examScheduleId, application.reviewStep?.scheduleId),
+    examScheduleId: firstNonEmpty(application.assignedSlot?.id, application.reviewStep?.examScheduleId, application.reviewStep?.scheduleId),
+    examStatus: application.examStatus === 'SCHEDULED' ? 'SCHEDULED' : undefined,
+    examDate: application.assignedSlot?.date,
+    examTestCenter: application.assignedSlot?.testCenter,
+    examRoom: application.assignedSlot?.room,
+    requiredCorrections: Array.isArray(application.reviewStep?.requiredCorrections)
+      ? (application.reviewStep.requiredCorrections as string[])
+      : undefined,
+    adminRemarks: firstNonEmpty(application.reviewStep?.reviewerReason) || undefined,
     additionalHighPriorityFields,
   };
 }

@@ -1,6 +1,4 @@
 import type { BackendPortalRole, User, UserRole } from '../types';
-import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
-import type { User, UserRole } from '../types';
 import type { AuthCredentials, AuthIdentifierChallenge, AuthOtpChallenge, AuthPasswordResult, AuthSelfieChallenge, AuthService, AuthSession, PasswordRecoveryInspection, PasswordRecoveryRequestResult } from './contracts';
 import { sharedApiClient, type ApiClient } from './apiClient';
 import { authorizationError, serviceSuccess } from './serviceResult';

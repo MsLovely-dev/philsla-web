@@ -1,6 +1,48 @@
+from datetime import datetime
+
 from django.utils import timezone
 
 from .models import AttendanceRecord, ExamPermit
+
+
+def issue_or_update_exam_permit(*, application, slot) -> ExamPermit:
+    """Issues (or re-issues, if the application already has one) the exam
+    permit for a StudentApplication once its exam slot is confirmed.
+
+    Called from apps.applications.services.assign_exam_slot inside the same
+    atomic transaction, so a confirmed slot and its permit are created
+    together or not at all. The seat number is a simple running count of how
+    many permits this slot has issued so far -- there's no finer-grained
+    seat map anywhere in the system to draw from.
+    """
+    personal = getattr(application, "personal_info", None)
+    full_name = f"{personal.first_name} {personal.last_name}".strip() if personal else ""
+    email = personal.email if personal else ""
+
+    seat_number = slot.total_slots - slot.remaining_slots
+    expires_at = (
+        timezone.make_aware(datetime.combine(slot.date, slot.start_time))
+        if slot.date and slot.start_time
+        else None
+    )
+
+    permit, _ = ExamPermit.objects.update_or_create(
+        application=application,
+        defaults={
+            "candidate_id": application.candidate_id,
+            "full_name": full_name,
+            "email": email,
+            "test_center": slot.test_center,
+            "room": slot.room,
+            "seat": str(seat_number),
+            "exam_date": slot.date,
+            "exam_start_time": slot.start_time,
+            "exam_end_time": slot.end_time,
+            "expires_at": expires_at,
+            "status": ExamPermit.Status.ISSUED,
+        },
+    )
+    return permit
 
 
 class AttendanceError(Exception):

@@ -219,7 +219,16 @@ export function ExamRoute({ children }: { children: ReactNode }) {
 
   if (!isAuthInitialized || isLoading || pendingStudentProfile.loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  if (user.role !== 'STUDENT') return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+  if (user.role !== 'STUDENT' && user.role !== 'SYSTEM_ADMIN') {
+    return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+  }
+
+  // SYSTEM_ADMIN previewing this page has no real (or mock) application to
+  // check eligibility against -- let the preview straight through, same as
+  // every other Student Portal page's admin-preview path this sprint.
+  if (user.role === 'SYSTEM_ADMIN') {
+    return <MaintenanceGuard>{children}</MaintenanceGuard>;
+  }
   if (pendingStudentProfile.pending) {
     return <Navigate to="/student/profile" state={{ from: location.pathname, notice: 'Profile completion is required before accessing the exam.' }} replace />;
   }

@@ -14,7 +14,10 @@ from .views import (
     BulkUploadErrorsCsvView,
     BulkUploadTemplateView,
     BulkUploadValidateView,
+    ExamSlotListView,
     LrnVerificationView,
+    MyApplicationExamSlotView,
+    MyApplicationView,
     PublicStep2ConfigurationView,
     RegistrationIntegrationStatusView,
     RegistrationEmailOtpRequestView,
@@ -33,6 +36,9 @@ from .views import (
 )
 
 urlpatterns = [
+    path("me/", MyApplicationView.as_view(), name="mine"),
+    path("me/exam-slot/", MyApplicationExamSlotView.as_view(), name="mine-exam-slot"),
+    path("exam-slots/", ExamSlotListView.as_view(), name="exam-slots"),
     path("registration/integration-status/", RegistrationIntegrationStatusView.as_view(), name="registration-integration-status"),
     path("registration/lrn/verify/", LrnVerificationView.as_view(), name="verify-lrn"),
     path("registration/email-otp/request/", RegistrationEmailOtpRequestView.as_view(), name="registration-email-otp-request"),

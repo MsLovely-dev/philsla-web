@@ -129,7 +129,10 @@ export default function ExamDelivery({ inlineMode = false }: { inlineMode?: bool
   
   const [stream, setStream] = useState<MediaStream | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const micLevelFrameRef = useRef<number | null>(null);
+
   // Snapshot states
   const [studentPhoto, setStudentPhoto] = useState<string | null>(null);
   const [isPhotoCounting, setIsPhotoCounting] = useState(false);
@@ -180,41 +183,144 @@ export default function ExamDelivery({ inlineMode = false }: { inlineMode?: bool
     { id: 'begin_exam', label: '7. Begin Exam' }
   ];
 
-  // Webcam media initialization and control
+  // Webcam media initialization and control. Kept alive through step 4
+  // (Environment Check) too, not just 1-3, so the mic-level meter there can
+  // read the real audio track instead of only the camera-check steps.
+  //
+  // navigator.mediaDevices itself (not just getUserMedia failing) can be
+  // undefined -- insecure origins, some embedded/webview browsers, privacy
+  // settings -- and accessing .getUserMedia on it throws synchronously,
+  // before the promise chain (and its .catch()) even exists. With no
+  // ErrorBoundary anywhere in this app, that uncaught throw blanks the
+  // entire page. Guard existence first, and wrap the call itself in
+  // try/catch as defense in depth.
   useEffect(() => {
-    if (appState === 'READINESS' && (activeStep === 1 || activeStep === 2 || activeStep === 3)) {
+    if (appState === 'READINESS' && (activeStep === 1 || activeStep === 2 || activeStep === 3 || activeStep === 4)) {
       let activeStream: MediaStream | null = null;
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(s => {
-          activeStream = s;
-          setStream(s);
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-          }
-        })
-        .catch(err => {
-          console.warn("Camera hardware access rejected or not found, launching simulated visual stream.", err);
-          setStream(null);
-        });
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        console.warn("navigator.mediaDevices.getUserMedia is unavailable in this context, launching simulated visual stream.");
+        setStream(null);
+        return;
+      }
+
+      try {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(s => {
+            activeStream = s;
+            setStream(s);
+            if (videoRef.current) {
+              videoRef.current.srcObject = s;
+            }
+          })
+          .catch(err => {
+            console.warn("Camera hardware access rejected or not found, launching simulated visual stream.", err);
+            setStream(null);
+          });
+      } catch (err) {
+        console.warn("Camera hardware access threw synchronously, launching simulated visual stream.", err);
+        setStream(null);
+      }
 
       return () => {
-        if (activeStream) {
-          activeStream.getTracks().forEach(track => track.stop());
+        try {
+          if (activeStream) {
+            activeStream.getTracks().forEach(track => track.stop());
+          }
+        } catch {
+          // Teardown must never throw past this boundary.
         }
         setStream(null);
       };
     }
   }, [appState, activeStep]);
 
-  // Pulsing mic level simulation
+  // Real mic-level metering from the actual audio track, via Web Audio's
+  // AnalyserNode -- replaces the old Math.random() pulse. Only runs on Step
+  // 5 (Environment Check), where the meter is actually shown.
+  //
+  // Everything here is wrapped in try/catch, both setup and teardown. This
+  // app has no ErrorBoundary anywhere (a known, pre-existing gap -- see the
+  // QR-scanning ticket's identical C1 finding), so any uncaught synchronous
+  // throw from a media API unmounts the entire React tree to a blank white
+  // page. That's a real risk here specifically: React.StrictMode (see
+  // main.tsx) double-invokes every effect once in dev -- mount, cleanup,
+  // mount again -- which creates two real AudioContexts in quick
+  // succession while the first is still (asynchronously) closing. Browsers
+  // cap how many concurrently-live AudioContexts are allowed and throw
+  // synchronously past that limit, so this is exactly the kind of edge
+  // case that class of bug lives in.
   useEffect(() => {
-    if (activeStep === 4) {
+    if (activeStep !== 4 || !stream) return;
+
+    let audioContext: AudioContext | null = null;
+    let analyser: AnalyserNode | null = null;
+    let source: MediaStreamAudioSourceNode | null = null;
+    let frameId: number | null = null;
+
+    try {
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) return;
+
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      audioContext = new AudioContextCtor();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source = audioContext.createMediaStreamSource(new MediaStream(audioTracks));
+      source.connect(analyser);
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const activeAnalyser = analyser;
+      const tick = () => {
+        try {
+          activeAnalyser.getByteFrequencyData(data);
+          const average = data.reduce((sum, value) => sum + value, 0) / data.length;
+          setMicActiveLevel(Math.min(100, Math.round((average / 255) * 100)));
+        } catch {
+          // Stop quietly rather than let a per-frame failure loop forever.
+          return;
+        }
+        frameId = requestAnimationFrame(tick);
+        micLevelFrameRef.current = frameId;
+      };
+      tick();
+    } catch (error) {
+      console.warn('Real mic-level metering unavailable, leaving the level meter at its last value.', error);
+    }
+
+    return () => {
+      try {
+        if (micLevelFrameRef.current !== null) cancelAnimationFrame(micLevelFrameRef.current);
+        source?.disconnect();
+        analyser?.disconnect();
+        if (audioContext && audioContext.state !== 'closed') {
+          audioContext.close().catch(() => {});
+        }
+      } catch {
+        // Teardown must never throw past this boundary -- there is no
+        // ErrorBoundary anywhere in this app to catch it.
+      } finally {
+        audioContextRef.current = null;
+        analyserRef.current = null;
+      }
+    };
+  }, [activeStep, stream]);
+
+  // Fallback pulse for the same meter when mic access was denied/unavailable
+  // -- keeps the UI from just sitting at zero if there's genuinely no real
+  // signal to read.
+  useEffect(() => {
+    if (activeStep === 4 && !stream) {
       const interval = setInterval(() => {
         setMicActiveLevel(Math.floor(10 + Math.random() * 55));
       }, 120);
       return () => clearInterval(interval);
     }
-  }, [activeStep]);
+  }, [activeStep, stream]);
 
   // Simulated Webcam 5-second video capture
   const startWebcamRecording = () => {
@@ -304,6 +410,23 @@ export default function ExamDelivery({ inlineMode = false }: { inlineMode?: bool
     }, 120);
   };
 
+  // Reveal count derived purely from the progress value itself, then the
+  // logs array is *replaced* (not appended to) via slice. This is the fix
+  // for a real crash: the previous version tracked "which log is next" with
+  // a plain mutable variable incremented as a side effect inside a setState
+  // updater. React.StrictMode deliberately double-invokes updater functions
+  // in dev to catch exactly this kind of impurity -- the second invocation
+  // reads the already-incremented index, desyncing it from the logs array
+  // and eventually pushing `undefined` into it, which crashes at render
+  // time (`undefined.startsWith(...)`) with no ErrorBoundary anywhere in
+  // this app to catch it. Deriving the reveal count from `next` instead
+  // means both invocations compute the identical result -- idempotent by
+  // construction, safe regardless of how many times React calls it.
+  function revealedLogs(logs: string[], progress: number): string[] {
+    const revealCount = Math.min(logs.length, Math.ceil((progress / 100) * logs.length));
+    return logs.slice(0, revealCount);
+  }
+
   const startSecurityScan = () => {
     setSecurityScanned('scanning');
     setSecurityProgress(0);
@@ -316,20 +439,16 @@ export default function ExamDelivery({ inlineMode = false }: { inlineMode?: bool
       "Checking virtual machine drivers...",
       "Status: SECURE. Workspace locked."
     ];
-    let logIdx = 0;
-    
+
     const interval = setInterval(() => {
       setSecurityProgress(prev => {
-        if (prev >= 100) {
+        const next = prev >= 100 ? 100 : prev + 5;
+        setSecurityLogs(revealedLogs(logs, next));
+        if (next >= 100) {
           clearInterval(interval);
           setSecurityScanned('completed');
-          return 100;
         }
-        if (prev % 15 === 0 && logIdx < logs.length) {
-          setSecurityLogs(l => [...l, logs[logIdx]]);
-          logIdx++;
-        }
-        return prev + 5;
+        return next;
       });
     }, 50);
   };
@@ -346,20 +465,16 @@ export default function ExamDelivery({ inlineMode = false }: { inlineMode?: bool
       "Disabling clipboard copying and screenshot hooks...",
       "Status: SECURE. Tauri Sandbox active."
     ];
-    let logIdx = 0;
-    
+
     const interval = setInterval(() => {
       setTauriHandshakeProgress(prev => {
-        if (prev >= 100) {
+        const next = prev >= 100 ? 100 : prev + 5;
+        setTauriLogs(revealedLogs(logs, next));
+        if (next >= 100) {
           clearInterval(interval);
           setTauriHandshake('completed');
-          return 100;
         }
-        if (prev % 15 === 0 && logIdx < logs.length) {
-          setTauriLogs(l => [...l, logs[logIdx]]);
-          logIdx++;
-        }
-        return prev + 5;
+        return next;
       });
     }, 50);
   };
@@ -376,20 +491,16 @@ export default function ExamDelivery({ inlineMode = false }: { inlineMode?: bool
       "Verifying biometric buffering block size (2.4 GB free)...",
       "Status: LOADED. 40 secure questions ready."
     ];
-    let logIdx = 0;
-    
+
     const interval = setInterval(() => {
       setOfflineDbProgress(prev => {
-        if (prev >= 100) {
+        const next = prev >= 100 ? 100 : prev + 5;
+        setOfflineDbLogs(revealedLogs(logs, next));
+        if (next >= 100) {
           clearInterval(interval);
           setOfflineDbVerified('completed');
-          return 100;
         }
-        if (prev % 15 === 0 && logIdx < logs.length) {
-          setOfflineDbLogs(l => [...l, logs[logIdx]]);
-          logIdx++;
-        }
-        return prev + 5;
+        return next;
       });
     }, 50);
   };

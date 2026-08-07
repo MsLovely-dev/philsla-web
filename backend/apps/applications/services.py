@@ -13,10 +13,12 @@ from django.core.files.base import ContentFile
 from django.core.mail import EmailMultiAlternatives
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
+from django.http import Http404
 from django.utils.crypto import constant_time_compare
 from django.utils import timezone
 from rest_framework.exceptions import APIException, ValidationError
 
+from apps.attendance.services import issue_or_update_exam_permit
 from apps.configuration.models import ConfigurableField, ConfigurableFieldPriority
 
 from .identity_verification import (
@@ -26,7 +28,8 @@ from .identity_verification import (
     get_selfie_face_validator,
     get_student_id_recognizer,
 )
-from .models import (ApplicationCompletionStatus, ApplicationIdentityMedia, ApplicationStatus, ApplicationSubmissionSource, IdentityMediaType,
+from .models import (ApplicationCompletionStatus, ApplicationExamStatus, ApplicationIdentityMedia, ApplicationStatus,
+                     ApplicationSubmissionSource, ExamSlot, IdentityMediaType,
                      RegistrationSelfieMedia,
                      Step2Verification, Step2VerificationConfiguration,
                      Step2VerificationStatus, StudentApplication,
@@ -1068,6 +1071,57 @@ def _locked_owned(*, application_id, owner) -> StudentApplication:
 def _check_version(application: StudentApplication, expected_version: int) -> None:
     if application.version != expected_version:
         raise ApplicationConflict("The application was changed by another request. Reload and try again.")
+
+
+def get_my_application(*, owner) -> StudentApplication | None:
+    owner_id = getattr(owner, "user_id", owner.id)
+    return (
+        StudentApplication.objects.exclude(status=ApplicationStatus.DRAFT)
+        .filter(owner_id=owner_id)
+        .order_by("-updated_at")
+        .first()
+    )
+
+
+@transaction.atomic
+def assign_exam_slot(*, owner, slot_id) -> StudentApplication:
+    """Atomically assigns the caller's own approved, unscheduled application to an
+    exam slot. `select_for_update()` on the slot row is what makes the capacity
+    check safe under concurrent requests: the second of two simultaneous
+    assignment attempts for the last seat blocks until the first transaction
+    commits, then re-reads `remaining_slots` and correctly finds it exhausted.
+    """
+    owner_id = getattr(owner, "user_id", owner.id)
+    application = (
+        StudentApplication.objects.select_for_update()
+        .exclude(status=ApplicationStatus.DRAFT)
+        .filter(owner_id=owner_id)
+        .order_by("-updated_at")
+        .first()
+    )
+    if application is None:
+        raise Http404("No application found for this account.")
+    if application.status != ApplicationStatus.APPROVED:
+        raise ApplicationConflict("Application is not approved yet.")
+    if application.assigned_slot_id:
+        raise ApplicationConflict("An exam slot is already assigned.")
+
+    try:
+        slot = ExamSlot.objects.select_for_update().get(id=slot_id)
+    except ExamSlot.DoesNotExist as exc:
+        raise Http404("Exam slot not found.") from exc
+    if slot.remaining_slots <= 0:
+        raise ApplicationConflict("This exam slot is full.")
+
+    slot.remaining_slots -= 1
+    slot.save(update_fields=["remaining_slots"])
+    application.assigned_slot = slot
+    application.exam_status = ApplicationExamStatus.SCHEDULED
+    application.save(update_fields=["assigned_slot", "exam_status"])
+
+    issue_or_update_exam_permit(application=application, slot=slot)
+
+    return application
 
 
 def get_pending_student_profile_application(*, owner) -> StudentApplication:

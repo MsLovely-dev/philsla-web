@@ -16,7 +16,7 @@ from apps.accounts.roles import PortalRole, get_user_role
 
 from .audit import record_application_event
 from .bulk_upload import build_bulk_upload_template_csv, confirm_bulk_upload_batch, validate_bulk_upload_csv
-from .models import ApplicationBulkUploadBatch, ApplicationCompletionStatus, ApplicationStatus, StudentApplication
+from .models import ApplicationBulkUploadBatch, ApplicationCompletionStatus, ApplicationStatus, ExamSlot, StudentApplication
 from .models import ApplicationAuditLog
 from .serializers import (
     ApplicationAuditLogSerializer,
@@ -26,6 +26,8 @@ from .serializers import (
     ApplicationUpdateSerializer,
     BulkUploadBatchSerializer,
     BulkUploadValidateSerializer,
+    ExamSlotAssignSerializer,
+    ExamSlotSerializer,
     LrnVerificationSerializer,
     RegistrationAttachmentSerializer,
     RegistrationAttachmentUploadSerializer,
@@ -38,9 +40,9 @@ from .serializers import (
     Step2MediaUploadSerializer,
     Step2ManualDecisionSerializer,
 )
-from .services import (active_step2_configuration, create_draft, decide_application,
+from .services import (active_step2_configuration, assign_exam_slot, create_draft, decide_application,
                        ApplicationConflict,
-                       decide_step2_manual_review, get_pending_student_profile_application,
+                       decide_step2_manual_review, get_my_application, get_pending_student_profile_application,
                        get_step2_verification, save_student_profile_draft,
                        serialize_step2, serialize_student_profile_completion, submit_application,
                        submit_student_profile,
@@ -438,6 +440,43 @@ class ApplicationReviewerDecisionView(APIView):
                 application=decided,
             )
         return Response(ApplicationSerializer(decided, context={"request": request}).data)
+
+
+class MyApplicationView(APIView):
+    """The caller's own application, scoped entirely by `request.user` — no
+    application id is ever accepted from the client here, so there is no
+    object-permission class to wire up: the queryset itself is the scope.
+    """
+
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def get(self, request) -> Response:
+        application = get_my_application(owner=request.user)
+        if application is None:
+            return Response(None)
+        return Response(ApplicationSerializer(application, context={"request": request}).data)
+
+
+class ExamSlotListView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def get(self, request) -> Response:
+        slots = ExamSlot.objects.filter(remaining_slots__gt=0)
+        return Response(ExamSlotSerializer(slots, many=True).data)
+
+
+class MyApplicationExamSlotView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def post(self, request) -> Response:
+        serializer = ExamSlotAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        updated = assign_exam_slot(owner=request.user, slot_id=serializer.validated_data["slotId"])
+        record_application_event(event="application_exam_slot_assigned", outcome="success", request=request, user=request.user)
+        return Response(ApplicationSerializer(updated, context={"request": request}).data)
 
 
 class StudentProfileCompletionView(APIView):

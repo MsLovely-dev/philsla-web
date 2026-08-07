@@ -25,6 +25,15 @@ class ExamPermit(models.Model):
         USED = "USED", "Used"
         VOID = "VOID", "Void"
 
+    application = models.OneToOneField(
+        "applications.StudentApplication",
+        on_delete=models.CASCADE,
+        related_name="exam_permit",
+        null=True,
+        blank=True,
+        help_text="The web-side application this permit was auto-issued for, if any. "
+        "Null for permits created another way (e.g. the seed_sample_permits command).",
+    )
     candidate_id = models.CharField(max_length=64)
     full_name = models.CharField(max_length=255)
     email = models.EmailField(blank=True)
@@ -32,6 +41,8 @@ class ExamPermit(models.Model):
     room = models.CharField(max_length=100, blank=True)
     seat = models.CharField(max_length=50, blank=True)
     exam_date = models.DateField(null=True, blank=True)
+    exam_start_time = models.TimeField(null=True, blank=True)
+    exam_end_time = models.TimeField(null=True, blank=True)
     expires_at = models.DateTimeField(
         null=True,
         blank=True,

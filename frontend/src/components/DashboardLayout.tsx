@@ -71,8 +71,9 @@ interface SidebarGroup {
 const SIDEBAR_GROUPS: SidebarGroup[] = [
   {
     label: 'Student Portal',
-    roles: ['STUDENT'],
+    roles: ['STUDENT', 'SYSTEM_ADMIN'],
     items: [
+      { icon: LayoutDashboard, label: 'Dashboard', href: '/student/dashboard' },
       { icon: User, label: 'Profile', href: '/student/profile' },
       { icon: FileText, label: 'Application', href: '/student/application' },
       { icon: ClipboardList, label: 'Exam Permit', href: '/student/permit' },
