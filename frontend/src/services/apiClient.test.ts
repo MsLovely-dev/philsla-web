@@ -139,4 +139,27 @@ describe('ApiClient', () => {
       }),
     );
   });
+
+  it('does not replay an ambiguous POST across alternative base URLs when fallback is disabled', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new TypeError('response connection lost'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const client = new ApiClient({ baseUrl: 'http://backend.test', fetcher });
+
+    const result = await client.request(
+      '/api/v1/results/score-management/batches/SESSION-1/release/',
+      { method: 'POST' },
+      { allowAlternativeBaseUrlFallback: false },
+    );
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/results/score-management/batches/SESSION-1/release/',
+      expect.objectContaining({ method: 'POST', credentials: 'include' }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ kind: 'NETWORK', retryable: true }),
+    });
+    consoleError.mockRestore();
+  });
 });

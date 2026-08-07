@@ -331,6 +331,24 @@ Diff check: git diff --check
             passed.
 ```
 
+## 2026-08-07 — Results Release ambiguous mutation replay hardening
+
+The shared API client now accepts a typed `allowAlternativeBaseUrlFallback` request option. Existing callers preserve the prior cross-base fallback behavior by default, while Results Release processing and release POSTs disable it so a committed mutation whose response connection is lost is not replayed against alternative local URLs. A network failure closes the stale confirmation and refetches the authoritative release summary without repeating the mutation.
+
+Test-first and verification evidence:
+
+```text
+RED: npm test -- src/services/apiClient.test.ts src/services/resultsReleaseService.test.ts src/pages/admin/hub/ResultsRelease.test.tsx --run
+     25 tests ran; 4 expected failures showed four fetch attempts for each ambiguous mutation and no authoritative page refetch.
+GREEN: the same focused command passed 3 files and all 25 tests.
+Build: npm run build
+       passed; 3,119 modules transformed. The existing large-chunk advisory remained.
+TypeScript: npm run lint
+            failed on existing unrelated errors in other modules; no diagnostic referenced the changed Results Release or API client files.
+Diff check: git diff --check
+            passed before this implementation-record append.
+```
+
 The tests emitted the existing warning that `backend/staticfiles/` is absent. One check invocation from the repository root failed because `manage.py` is under `backend/`; rerunning the exact check from `backend/` passed.
 
 ## 2026-08-07 — Released results analytics reporting matrix

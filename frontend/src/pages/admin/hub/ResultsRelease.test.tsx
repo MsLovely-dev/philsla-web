@@ -2,7 +2,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { networkError, serviceSuccess, type ServiceResult } from '../../../services/serviceResult';
+import { conflictError, networkError, serviceSuccess, type ServiceResult } from '../../../services/serviceResult';
 import { resultsReleaseService, type ResultsReleaseResponse, type ResultsReleaseSummary } from '../../../services/resultsReleaseService';
 import ResultsRelease from './ResultsRelease';
 
@@ -193,15 +193,30 @@ describe('ResultsRelease', () => {
     resolveRelease(serviceSuccess({ id: processedSession.id, status: 'RESULTS_RELEASED', releasedCount: 110, notificationQueuedCount: 0, notificationSkippedCount: 0, notificationFailedCount: 0 }));
   });
 
-  it('keeps the confirmation open and displays a safe action error', async () => {
+  it('keeps the confirmation open and displays a safe non-network action error', async () => {
     const user = userEvent.setup();
     listMock.mockResolvedValue(listSuccess(processedSession));
-    releaseMock.mockResolvedValue(networkError('Release could not be completed.'));
+    releaseMock.mockResolvedValue(conflictError('Release could not be completed.'));
     renderResultsRelease();
 
     await user.click(await screen.findByRole('button', { name: /release results/i }));
     await user.click(screen.getByRole('button', { name: /confirm release/i }));
 
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('Release could not be completed.');
+  });
+
+  it('refetches authoritative state after an ambiguous network failure without replaying release', async () => {
+    const user = userEvent.setup();
+    listMock.mockResolvedValueOnce(listSuccess(processedSession)).mockResolvedValueOnce(listSuccess(releasedSession));
+    releaseMock.mockResolvedValue(networkError('The release outcome could not be confirmed.'));
+    renderResultsRelease();
+
+    await user.click(await screen.findByRole('button', { name: /release results/i }));
+    await user.click(screen.getByRole('button', { name: /confirm release/i }));
+
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(2));
+    expect(releaseMock).toHaveBeenCalledTimes(1);
+    expect((await screen.findAllByText('Results released')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 });

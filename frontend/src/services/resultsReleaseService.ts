@@ -76,6 +76,7 @@ export class ResultsReleaseService {
     return this.apiClient.request<ResultsReleaseProcessResponse>(
       `/api/v1/results/score-management/batches/${encodeURIComponent(sessionId)}/process/`,
       { method: 'POST', body: JSON.stringify({ allowReprocessing: false }) },
+      { allowAlternativeBaseUrlFallback: false },
     );
   }
 
@@ -83,6 +84,7 @@ export class ResultsReleaseService {
     return this.apiClient.request<ResultsReleaseResponse>(
       `/api/v1/results/score-management/batches/${encodeURIComponent(sessionId)}/release/`,
       { method: 'POST' },
+      { allowAlternativeBaseUrlFallback: false },
     );
   }
 }

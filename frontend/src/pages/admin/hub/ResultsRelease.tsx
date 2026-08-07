@@ -77,6 +77,11 @@ export default function ResultsRelease() {
       const result = await resultsReleaseService.process(session.id);
       setIsSubmitting(false);
       if ('error' in result) {
+        if (result.error.kind === 'NETWORK') {
+          setPendingAction(null);
+          await load();
+          return;
+        }
         setActionError(result.error.message);
         return;
       }
@@ -86,6 +91,11 @@ export default function ResultsRelease() {
       const result = await resultsReleaseService.release(session.id);
       setIsSubmitting(false);
       if ('error' in result) {
+        if (result.error.kind === 'NETWORK') {
+          setPendingAction(null);
+          await load();
+          return;
+        }
         setActionError(result.error.message);
         return;
       }

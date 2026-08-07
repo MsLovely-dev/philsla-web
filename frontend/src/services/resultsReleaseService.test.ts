@@ -142,6 +142,24 @@ describe('ResultsReleaseService', () => {
     });
   });
 
+  it.each(['process', 'release'] as const)(
+    'does not replay an ambiguous %s mutation across alternative base URLs',
+    async (operation) => {
+      const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('response connection lost'));
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const service = new ResultsReleaseService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+      const result = await service[operation]('SESSION-1');
+
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        ok: false,
+        error: expect.objectContaining({ kind: 'NETWORK', retryable: true }),
+      });
+      consoleError.mockRestore();
+    },
+  );
+
   it('exports the singleton service surface needed by the release screen', () => {
     expect(resultsReleaseService).toBeInstanceOf(ResultsReleaseService);
     expect(resultsReleaseService.list).toBeTypeOf('function');
