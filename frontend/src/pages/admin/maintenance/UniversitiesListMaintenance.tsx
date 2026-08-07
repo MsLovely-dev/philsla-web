@@ -147,6 +147,7 @@ export default function UniversitiesListMaintenance() {
     universitiesLoaded,
     universitiesError,
     universitySummary,
+    universitiesLoading,
     ensureUniversities,
     setUniversityQuery,
     reloadUniversities,
@@ -224,6 +225,11 @@ export default function UniversitiesListMaintenance() {
   const hasActiveFilters = Boolean(
     universityQuery.search || universityQuery.classification || universityQuery.region || universityQuery.status,
   );
+
+  const handleClearFilters = () => {
+    setSearchInput('');
+    setUniversityQuery({ search: '', classification: '', region: '', status: '' });
+  };
 
   const handleSearchInput = (value: string) => {
     setSearchInput(value);
@@ -681,8 +687,12 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* LIST DISPLAY: empty-registry CTA, no-match, otherwise table/grid + pagination */}
-          {universityCount === 0 && !hasActiveFilters ? (
+          {/* LIST DISPLAY: in-flight loading, empty-registry CTA, no-match, otherwise table/grid + pagination */}
+          {universitiesLoading && universityCount === 0 ? (
+            <div className="flex justify-center py-16">
+              <LoadingState title="Loading university registry" message="Fetching the accredited university list." />
+            </div>
+          ) : universityCount === 0 && !hasActiveFilters ? (
             <div className="flex justify-center py-16">
             <EmptyState
               title="No universities yet"
@@ -698,8 +708,19 @@ export default function UniversitiesListMaintenance() {
             />
             </div>
           ) : universityCount === 0 ? (
-            <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
-              No universities match your search and filter criteria.
+            <div className="flex justify-center py-16">
+              <EmptyState
+                title="No matching universities"
+                message="No universities match your current search and filters."
+                action={
+                  <button
+                    onClick={handleClearFilters}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <X className="w-4 h-4 shrink-0" /> Clear filters
+                  </button>
+                }
+              />
             </div>
           ) : viewMode === 'table' ? (
             <div className="space-y-6">

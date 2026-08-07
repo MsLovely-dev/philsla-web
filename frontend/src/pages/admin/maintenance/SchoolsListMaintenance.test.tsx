@@ -224,4 +224,24 @@ describe('SchoolsListMaintenance', () => {
       expect(listPage).toHaveBeenCalledWith(expect.objectContaining({ search: 'science' })),
     );
   });
+
+  it('offers a clear-filters action when a filter matches no rows, and clears it', async () => {
+    const listPage = vi.mocked(schoolService.listSchoolsPage).mockImplementation(async (params) =>
+      serviceSuccess(params.search ? pageResult([], 0) : pageResult([school], 1)),
+    );
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('button', { name: school.name });
+
+    await user.type(screen.getByPlaceholderText('Name or code...'), 'no-such-school');
+    const clearButton = await screen.findByRole('button', { name: /clear filters/i });
+    await user.click(clearButton);
+
+    await waitFor(() =>
+      expect(listPage).toHaveBeenLastCalledWith(
+        expect.objectContaining({ search: '', classification: '', region: '', status: '' }),
+      ),
+    );
+    expect(await screen.findByRole('button', { name: school.name })).toBeInTheDocument();
+  });
 });

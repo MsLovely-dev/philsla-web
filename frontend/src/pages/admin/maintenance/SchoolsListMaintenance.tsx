@@ -83,6 +83,7 @@ export default function SchoolsListMaintenance() {
     schoolCount,
     schoolQuery,
     schoolsLoaded,
+    schoolsLoading,
     schoolsError,
     schoolSummary,
     ensureSchools,
@@ -117,6 +118,11 @@ export default function SchoolsListMaintenance() {
   const hasActiveFilters = Boolean(
     schoolQuery.search || schoolQuery.classification || schoolQuery.region || schoolQuery.status,
   );
+
+  const handleClearFilters = () => {
+    setSearchInput('');
+    setSchoolQuery({ search: '', classification: '', region: '', status: '' });
+  };
 
   const handleSearchInput = (value: string) => {
     setSearchInput(value);
@@ -412,8 +418,12 @@ export default function SchoolsListMaintenance() {
         </div>
       </div>
 
-      {/* Schools List: empty-registry CTA, no-match, otherwise table/grid + pagination */}
-      {schoolCount === 0 && !hasActiveFilters ? (
+      {/* Schools List: in-flight loading, empty-registry CTA, no-match, otherwise table/grid + pagination */}
+      {schoolsLoading && schoolCount === 0 ? (
+        <div className="flex justify-center py-16">
+          <LoadingState title="Loading school registry" message="Fetching the accredited school list." />
+        </div>
+      ) : schoolCount === 0 && !hasActiveFilters ? (
         <div className="flex justify-center py-16">
         <EmptyState
           title="No schools yet"
@@ -429,8 +439,19 @@ export default function SchoolsListMaintenance() {
         />
         </div>
       ) : schoolCount === 0 ? (
-        <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
-          No schools match your search and filter criteria.
+        <div className="flex justify-center py-16">
+          <EmptyState
+            title="No matching schools"
+            message="No schools match your current search and filters."
+            action={
+              <button
+                onClick={handleClearFilters}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
+              >
+                <X className="w-4 h-4 shrink-0" /> Clear filters
+              </button>
+            }
+          />
         </div>
       ) : viewMode === 'table' ? (
         <div className="space-y-6">
