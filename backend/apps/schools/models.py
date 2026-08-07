@@ -81,6 +81,10 @@ class School(models.Model):
                 name="unique_school_name_per_region",
             )
         ]
+        indexes = [
+            models.Index(fields=["classification", "status"]),
+            models.Index(fields=["region"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"

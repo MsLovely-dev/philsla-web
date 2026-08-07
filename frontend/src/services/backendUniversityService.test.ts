@@ -212,4 +212,55 @@ describe('MockUniversityService', () => {
     const afterDelete = await service.listCourses(universityId);
     expect(afterDelete.ok && afterDelete.data).toEqual([]);
   });
+
+  it('paginates, filters, and searches listUniversitiesPage', async () => {
+    const service = new MockUniversityService();
+    for (let index = 0; index < 25; index += 1) {
+      await service.createUniversity({
+        ...samplePayload,
+        name: `University ${String(index).padStart(2, '0')}`,
+        classification: index % 2 === 0 ? 'Public' : 'Private',
+      });
+    }
+
+    const firstPage = await service.listUniversitiesPage({ page: 1, pageSize: 20 });
+    expect(firstPage.ok && firstPage.data.count).toBe(25);
+    expect(firstPage.ok && firstPage.data.results).toHaveLength(20);
+    expect(firstPage.ok && firstPage.data.next).not.toBeNull();
+
+    const secondPage = await service.listUniversitiesPage({ page: 2, pageSize: 20 });
+    expect(secondPage.ok && secondPage.data.results).toHaveLength(5);
+
+    const publicOnly = await service.listUniversitiesPage({ page: 1, pageSize: 100, classification: 'Public' });
+    expect(publicOnly.ok && publicOnly.data.results.every((u) => u.classification === 'Public')).toBe(true);
+
+    const searched = await service.listUniversitiesPage({ page: 1, pageSize: 100, search: 'University 07' });
+    expect(searched.ok && searched.data.count).toBe(1);
+  });
+
+  it('exports a CSV that neutralizes formula injection in free-text fields', async () => {
+    const service = new MockUniversityService();
+    await service.createUniversity({ ...samplePayload, name: '=cmd|/c calc' });
+
+    const result = await service.exportUniversities({ columns: ['name'] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const text = await result.data.text();
+    // A leading "=" is escaped with a single quote so spreadsheets treat it as text.
+    expect(text).toContain("'=cmd|/c calc");
+    expect(text).not.toMatch(/\r\n=cmd/);
+  });
+
+  it('exports only the requested columns', async () => {
+    const service = new MockUniversityService();
+    await service.createUniversity(samplePayload);
+
+    const result = await service.exportUniversities({ columns: ['name'] });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const [header] = (await result.data.text()).split('\r\n');
+    expect(header).toBe('University Name');
+  });
 });

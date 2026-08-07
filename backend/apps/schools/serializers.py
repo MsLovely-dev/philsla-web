@@ -4,7 +4,9 @@ from .models import School
 
 
 class SchoolSerializer(serializers.ModelSerializer):
-    examineeCapacity = serializers.IntegerField(source="examinee_capacity", min_value=0)
+    examineeCapacity = serializers.IntegerField(
+        source="examinee_capacity", min_value=1, max_value=100000
+    )
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
 

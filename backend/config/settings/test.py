@@ -23,6 +23,7 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {  # noqa: F405
     "registration_lrn_verify": "1000/min",
     "registration_email_otp": "1000/min",
     "registration_selfie_face": "1000/min",
+    "maintenance_write": "1000/min",
 }
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 DEFAULT_FROM_EMAIL = "PhilSA Admissions <no-reply@example.test>"

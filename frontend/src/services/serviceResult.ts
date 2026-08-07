@@ -31,6 +31,14 @@ export type ServiceResult<TData, TMeta = undefined> =
   | ServiceSuccess<TData, TMeta>
   | ServiceFailure;
 
+/** Standard DRF page-number response shape (count/next/previous/results). */
+export interface PaginatedResult<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
 export function serviceSuccess<TData, TMeta = undefined>(
   data: TData,
   meta?: TMeta,

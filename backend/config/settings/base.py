@@ -110,6 +110,9 @@ STORAGES = {
 STEP2_MAX_IMAGE_BYTES = env_int("STEP2_MAX_IMAGE_BYTES", 5 * 1024 * 1024)
 EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES = env_int("EXAM_REVIEW_MAX_ANSWER_SHEET_BYTES", 10 * 1024 * 1024)
 REGISTRATION_ATTACHMENT_MAX_BYTES = env_int("REGISTRATION_ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024)
+# Maximum rows accepted in a single Maintenance Center bulk import (universities,
+# schools, college courses). Imports are atomic, so this bounds one transaction.
+MAINTENANCE_IMPORT_MAX_ROWS = env_int("MAINTENANCE_IMPORT_MAX_ROWS", 1000)
 STEP2_DOCUMENT_RECOGNITION_PROVIDER = os.environ.get("STEP2_DOCUMENT_RECOGNITION_PROVIDER", "unavailable")
 STEP1_SELFIE_FACE_PROVIDER = os.environ.get("STEP1_SELFIE_FACE_PROVIDER", "unavailable")
 STEP1_SELFIE_MIN_IMAGE_WIDTH = env_int("STEP1_SELFIE_MIN_IMAGE_WIDTH", 480)
@@ -139,6 +142,7 @@ REST_FRAMEWORK = {
         "registration_lrn_verify": "20/min",
         "registration_email_otp": "5/min",
         "registration_selfie_face": "30/min",
+        "maintenance_write": "60/min",
     },
     "PAGE_SIZE": 10,
 }

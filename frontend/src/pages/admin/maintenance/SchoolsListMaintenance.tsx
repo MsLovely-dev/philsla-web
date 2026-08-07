@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   School as SchoolIcon,
   Search,
@@ -6,6 +6,7 @@ import {
   Edit3,
   Trash2,
   Download,
+  Upload,
   X,
   Check,
   ChevronRight,
@@ -23,7 +24,21 @@ import {
   type SchoolRecord,
 } from '../../../services/backendSchoolService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog } from '../../../components/ui';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Pagination, Select, StatusToggle } from '../../../components/ui';
+import { MAINTENANCE_PAGE_SIZE, useMaintenanceData } from '../../../services/maintenanceDataContext';
+import {
+  ExportConfigModal,
+  type ExportColumnOption,
+  type ExportSelection,
+} from '../../../components/maintenance/ExportConfigModal';
+import {
+  ImportConfigModal,
+  type ImportColumnOption,
+  type ImportOutcome,
+  type ImportRow,
+} from '../../../components/maintenance/ImportConfigModal';
+import { importErrorsFromResult } from '../../../services/importTypes';
+import { downloadBlob } from '../../../services/csvExportService';
 
 function isSchoolClassification(value: string): value is SchoolClassification {
   return value === 'Public' || value === 'Private';
@@ -37,63 +52,88 @@ const EMPTY_FORM: SchoolPayload = {
   status: 'Active',
 };
 
+type SchoolExportColumn = ExportColumnOption & { get: (s: SchoolRecord) => unknown };
+const SCHOOL_EXPORT_COLUMNS: SchoolExportColumn[] = [
+  { key: 'code', label: 'Code', get: (s) => s.code },
+  { key: 'classification', label: 'Classification', get: (s) => s.classification },
+  { key: 'name', label: 'Name', get: (s) => s.name },
+  { key: 'examineeCapacity', label: 'Examinee Capacity', get: (s) => s.examineeCapacity },
+  { key: 'region', label: 'Region/Municipality/City', get: (s) => regionLabel(s.region) },
+  { key: 'status', label: 'Status', get: (s) => s.status },
+];
+
+const EXPORT_SCOPE_OPTIONS = [
+  { value: 'filtered', label: 'Only rows matching current filters' },
+  { value: 'all', label: 'All rows' },
+];
+
+// Import columns mirror the export labels so an exported file round-trips. The
+// code is auto-generated, so it is not importable.
+const SCHOOL_IMPORT_COLUMNS: ImportColumnOption[] = [
+  { key: 'name', label: 'Name', required: true },
+  { key: 'classification', label: 'Classification', required: true },
+  { key: 'examineeCapacity', label: 'Examinee Capacity', required: true },
+  { key: 'region', label: 'Region/Municipality/City', required: true },
+  { key: 'status', label: 'Status' },
+];
+
 export default function SchoolsListMaintenance() {
-  const [schools, setSchools] = useState<SchoolRecord[]>([]);
+  const {
+    schools,
+    schoolCount,
+    schoolQuery,
+    schoolsLoaded,
+    schoolsLoading,
+    schoolsError,
+    schoolSummary,
+    ensureSchools,
+    setSchoolQuery,
+    reloadSchools,
+    reloadSchoolsAfterDelete,
+  } = useMaintenanceData();
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [classificationFilter, setClassificationFilter] = useState<'ALL' | SchoolClassification>('ALL');
-  const [regionFilter, setRegionFilter] = useState<string>('ALL');
+  const [searchInput, setSearchInput] = useState(schoolQuery.search);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewingSchool, setViewingSchool] = useState<SchoolRecord | null>(null);
   const [editingSchool, setEditingSchool] = useState<SchoolRecord | null>(null);
   const [formData, setFormData] = useState<SchoolPayload>(EMPTY_FORM);
 
   const [pendingDelete, setPendingDelete] = useState<SchoolRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Load the current page once; instant on tab re-entry (query state lives in the provider).
   useEffect(() => {
-    let active = true;
-    schoolService.listSchools().then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setSchools(result.data);
-      } else {
-        setError((result as ServiceFailure).error.message);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+    ensureSchools();
+  }, [ensureSchools]);
 
-  const uniqueRegions = useMemo(() => {
-    return Array.from(new Set(schools.map((s) => s.region))).sort();
-  }, [schools]);
-
-  const filteredSchools = useMemo(() => {
-    return schools.filter((s) => {
-      if (classificationFilter !== 'ALL' && s.classification !== classificationFilter) return false;
-      if (regionFilter !== 'ALL' && s.region !== regionFilter) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        if (!s.name.toLowerCase().includes(q) && !s.code.toLowerCase().includes(q)) return false;
-      }
-      return true;
-    });
-  }, [schools, classificationFilter, regionFilter, searchQuery]);
-
-  const totalCapacity = useMemo(
-    () => schools.reduce((sum, s) => sum + s.examineeCapacity, 0),
-    [schools],
+  const hasActiveFilters = Boolean(
+    schoolQuery.search || schoolQuery.classification || schoolQuery.region || schoolQuery.status,
   );
+
+  const handleClearFilters = () => {
+    setSearchInput('');
+    setSchoolQuery({ search: '', classification: '', region: '', status: '' });
+  };
+
+  const handleSearchInput = (value: string) => {
+    setSearchInput(value);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => setSchoolQuery({ search: value.trim() }), 300);
+  };
 
   const handleOpenAddModal = () => {
     setEditingSchool(null);
     setError(null);
-    setFormData({ ...EMPTY_FORM, region: uniqueRegions[0] ?? PHILIPPINE_REGIONS[0].code });
+    setFormData({ ...EMPTY_FORM });
     setIsModalOpen(true);
   };
 
@@ -126,12 +166,9 @@ export default function SchoolsListMaintenance() {
       return;
     }
 
-    if (editingSchool) {
-      setSchools((prev) => prev.map((s) => (s.id === result.data.id ? result.data : s)));
-    } else {
-      setSchools((prev) => [result.data, ...prev]);
-    }
+    reloadSchools();
     setIsModalOpen(false);
+    setViewingSchool(null); // a completed save closes the details modal too
   };
 
   const handleConfirmDelete = async () => {
@@ -145,27 +182,76 @@ export default function SchoolsListMaintenance() {
       setPendingDelete(null);
       return;
     }
-    setSchools((prev) => prev.filter((s) => s.id !== pendingDelete.id));
+    reloadSchoolsAfterDelete();
     setPendingDelete(null);
+    setViewingSchool(null); // the record is gone, so close the details modal too
   };
 
-  const exportCSV = () => {
-    const headers = ['Code', 'Classification', 'Name', 'Examinee Capacity', 'Region/Municipality/City'];
-    const rows = filteredSchools.map((s) => [
-      `"${s.code}"`,
-      `"${s.classification}"`,
-      `"${s.name}"`,
-      s.examineeCapacity,
-      `"${regionLabel(s.region)}"`,
-    ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const link = document.createElement('a');
-    link.setAttribute('href', encodeURI(csvContent));
-    link.setAttribute('download', `philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExport = async ({ columns, scope }: ExportSelection) => {
+    // The backend streams the whole filtered set in one request.
+    setIsExporting(true);
+    const result = await schoolService.exportSchools({
+      columns,
+      ...(scope === 'all'
+        ? {}
+        : {
+            search: schoolQuery.search,
+            classification: schoolQuery.classification,
+            region: schoolQuery.region,
+            status: schoolQuery.status,
+          }),
+    });
+    setIsExporting(false);
+    setIsExportModalOpen(false);
+    if (result.ok) {
+      downloadBlob(`philSA_List_of_Schools_${new Date().toISOString().slice(0, 10)}.csv`, result.data);
+    } else {
+      setError((result as ServiceFailure).error.message);
+    }
   };
+
+  const handleImport = async (rows: ImportRow[]): Promise<ImportOutcome> => {
+    setIsImporting(true);
+    const result = await schoolService.importSchools(rows);
+    setIsImporting(false);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        message: (result as ServiceFailure).error.message,
+        errors: importErrorsFromResult(result),
+      };
+    }
+    reloadSchools();
+    return { ok: true, created: result.data.created };
+  };
+
+  // First load shows a distinct loading/error state; when cached it is already loaded.
+  if (!schoolsLoaded && schoolsError) {
+    return (
+      <div className="flex justify-center py-16">
+        <ErrorState
+          title="School registry unavailable"
+          message={schoolsError}
+          action={
+            <button
+              onClick={reloadSchools}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer"
+            >
+              Try again
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (!schoolsLoaded) {
+    return (
+      <div className="flex justify-center py-16">
+        <LoadingState title="Loading school registry" message="Fetching the accredited school list." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -197,39 +283,45 @@ export default function SchoolsListMaintenance() {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button
-              onClick={exportCSV}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2"
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
             >
-              <Download className="w-4 h-4" /> Export CSV
+              <Upload className="w-4 h-4 shrink-0" /> Import CSV
+            </button>
+            <button
+              onClick={() => setIsExportModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
+            >
+              <Download className="w-4 h-4 shrink-0" /> Export CSV
             </button>
             <button
               onClick={handleOpenAddModal}
-              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2"
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4" /> Add New School
+              <Plus className="w-4 h-4 shrink-0" /> Add New School
             </button>
           </div>
         </div>
 
-        {/* Quick Stat Cards */}
+        {/* Quick Stat Cards (registry-wide totals) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Total Schools</div>
-            <div className="text-2xl font-black text-philsa-navy mt-1">{schools.length}</div>
+            <div className="text-2xl font-black text-philsa-navy mt-1">{schoolSummary.total.toLocaleString()}</div>
           </div>
           <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public / State</div>
-            <div className="text-2xl font-black text-blue-900 mt-1">{schools.filter((s) => s.classification === 'Public').length}</div>
+            <div className="text-2xl font-black text-blue-900 mt-1">{schoolSummary.public.toLocaleString()}</div>
           </div>
           <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private Schools</div>
-            <div className="text-2xl font-black text-purple-900 mt-1">{schools.filter((s) => s.classification === 'Private').length}</div>
+            <div className="text-2xl font-black text-purple-900 mt-1">{schoolSummary.private.toLocaleString()}</div>
           </div>
           <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
             <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Examinee Capacity</div>
-            <div className="text-2xl font-black text-emerald-900 mt-1">{totalCapacity.toLocaleString()}</div>
+            <div className="text-2xl font-black text-emerald-900 mt-1">{schoolSummary.totalCapacity.toLocaleString()}</div>
           </div>
         </div>
       </div>
@@ -243,7 +335,7 @@ export default function SchoolsListMaintenance() {
       {/* Filter and Search Bar */}
       <div className="card-philsa bg-white p-5 space-y-4">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
           {/* Search */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Search School / Code</label>
@@ -251,8 +343,8 @@ export default function SchoolsListMaintenance() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => handleSearchInput(e.target.value)}
                 placeholder="Name or code..."
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
               />
@@ -262,33 +354,41 @@ export default function SchoolsListMaintenance() {
           {/* Classification */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
-            <select
-              value={classificationFilter}
-              onChange={(e) => {
-                const value = e.target.value;
-                if (value === 'ALL' || isSchoolClassification(value)) setClassificationFilter(value);
-              }}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+            <Select
+              value={schoolQuery.classification}
+              onChange={(e) => setSchoolQuery({ classification: e.target.value as SchoolClassification | '' })}
             >
-              <option value="ALL">All Classifications</option>
+              <option value="">All Classifications</option>
               <option value="Public">Public Schools</option>
               <option value="Private">Private Schools</option>
-            </select>
+            </Select>
           </div>
 
           {/* Region */}
           <div className="space-y-1">
             <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region/Municipality/City</label>
-            <select
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+            <Select
+              value={schoolQuery.region}
+              onChange={(e) => setSchoolQuery({ region: e.target.value })}
             >
-              <option value="ALL">All Regions</option>
-              {uniqueRegions.map((r) => (
-                <option key={r} value={r}>{regionLabel(r)}</option>
+              <option value="">All Regions</option>
+              {PHILIPPINE_REGIONS.map((region) => (
+                <option key={region.code} value={region.code}>{region.label}</option>
               ))}
-            </select>
+            </Select>
+          </div>
+
+          {/* Status */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Status</label>
+            <Select
+              value={schoolQuery.status}
+              onChange={(e) => setSchoolQuery({ status: e.target.value as SchoolRecord['status'] | '' })}
+            >
+              <option value="">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </Select>
           </div>
           </div>
 
@@ -318,9 +418,44 @@ export default function SchoolsListMaintenance() {
         </div>
       </div>
 
-      {/* Schools List — Table or Grid */}
-      {viewMode === 'table' ? (
-        <div className="card-philsa bg-white overflow-hidden p-0">
+      {/* Schools List: in-flight loading, empty-registry CTA, no-match, otherwise table/grid + pagination */}
+      {schoolsLoading && schoolCount === 0 ? (
+        <div className="flex justify-center py-16">
+          <LoadingState title="Loading school registry" message="Fetching the accredited school list." />
+        </div>
+      ) : schoolCount === 0 && !hasActiveFilters ? (
+        <div className="flex justify-center py-16">
+        <EmptyState
+          title="No schools yet"
+          message="Add your first accredited school to start building the registry."
+          action={
+            <button
+              onClick={handleOpenAddModal}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4 shrink-0" /> Add your first school
+            </button>
+          }
+        />
+        </div>
+      ) : schoolCount === 0 ? (
+        <div className="flex justify-center py-16">
+          <EmptyState
+            title="No matching schools"
+            message="No schools match your current search and filters."
+            action={
+              <button
+                onClick={handleClearFilters}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
+              >
+                <X className="w-4 h-4 shrink-0" /> Clear filters
+              </button>
+            }
+          />
+        </div>
+      ) : viewMode === 'table' ? (
+        <div className="space-y-6">
+        <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -335,21 +470,22 @@ export default function SchoolsListMaintenance() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {filteredSchools.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
-                      No schools match your search and filter criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredSchools.map((s) => (
+                {schools.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50/80 transition-all">
                       <td className="py-3.5 px-4">
-                        <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block">
+                        <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block whitespace-nowrap">
                           {s.code}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 font-extrabold text-philsa-navy">{s.name}</td>
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => setViewingSchool(s)}
+                          className="font-extrabold text-philsa-navy hover:text-blue-700 transition-colors cursor-pointer text-left"
+                          title="View school details"
+                        >
+                          {s.name}
+                        </button>
+                      </td>
                       <td className="py-3.5 px-4">
                         <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
                           s.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'
@@ -387,20 +523,23 @@ export default function SchoolsListMaintenance() {
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
+                  ))}
               </tbody>
             </table>
           </div>
         </div>
-      ) : filteredSchools.length === 0 ? (
-        <div className="card-philsa bg-white p-12 text-center text-slate-400 font-medium border border-slate-200">
-          No schools match your search and filter criteria.
+        <Pagination
+          page={schoolQuery.page}
+          pageSize={MAINTENANCE_PAGE_SIZE}
+          totalCount={schoolCount}
+          onPageChange={(page) => setSchoolQuery({ page })}
+        />
         </div>
       ) : (
-        /* GRID CARD VIEW */
+        <div className="space-y-6">
+        {/* GRID CARD VIEW */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {filteredSchools.map((s) => (
+          {schools.map((s) => (
             <div
               key={s.id}
               className="card-philsa bg-white p-6 hover:shadow-xl hover:border-philsa-navy/40 transition-all group space-y-4 relative overflow-hidden border border-slate-200"
@@ -412,7 +551,7 @@ export default function SchoolsListMaintenance() {
                   </div>
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                      <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 whitespace-nowrap">
                         {s.code}
                       </span>
                       <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
@@ -421,21 +560,27 @@ export default function SchoolsListMaintenance() {
                         {s.status}
                       </span>
                     </div>
-                    <h3 className="text-base font-black text-philsa-navy">{s.name}</h3>
+                    <button
+                      onClick={() => setViewingSchool(s)}
+                      className="text-base font-black text-philsa-navy hover:text-blue-700 transition-colors cursor-pointer text-left"
+                      title="View school details"
+                    >
+                      {s.name}
+                    </button>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => handleOpenEditModal(s)}
-                    className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all"
+                    className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
                     title="Edit School Details"
                   >
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setPendingDelete(s)}
-                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
                     title="Remove School"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -461,12 +606,22 @@ export default function SchoolsListMaintenance() {
             </div>
           ))}
         </div>
+        <Pagination
+          page={schoolQuery.page}
+          pageSize={MAINTENANCE_PAGE_SIZE}
+          totalCount={schoolCount}
+          onPageChange={(page) => setSchoolQuery({ page })}
+        />
+        </div>
       )}
 
-      {/* Add / Edit School Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+      {/* Add / Edit School Modal — stacks above the details modal when opened from it */}
+      <ModalShell
+        isOpen={isModalOpen}
+        onClose={() => { setIsModalOpen(false); setError(null); }}
+        zClass="z-[110]"
+        className="max-w-xl p-6 space-y-6"
+      >
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <SchoolIcon className="w-5 h-5 text-philsa-navy" />
@@ -500,18 +655,17 @@ export default function SchoolsListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Classification *</label>
-                  <select
+                  <Select
                     value={formData.classification}
                     onChange={(e) => {
                       if (isSchoolClassification(e.target.value)) {
                         setFormData({ ...formData, classification: e.target.value });
                       }
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Public">Public</option>
                     <option value="Private">Private</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -541,28 +695,23 @@ export default function SchoolsListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Region/Municipality/City *</label>
-                  <select
+                  <Select
                     value={formData.region}
                     onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     {PHILIPPINE_REGIONS.map((region) => (
                       <option key={region.code} value={region.code}>{region.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
 
               <div className="space-y-1">
                 <label className="font-bold text-slate-700">Status</label>
-                <select
+                <StatusToggle
                   value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value === 'Inactive' ? 'Inactive' : 'Active' })}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
+                  onChange={(status) => setFormData({ ...formData, status })}
+                />
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
@@ -582,9 +731,109 @@ export default function SchoolsListMaintenance() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </ModalShell>
+
+      {/* School Details Modal — full-screen backdrop; the edit/delete modals stack above it (z-[110]) so cancelling returns here */}
+      <ModalShell
+        isOpen={viewingSchool !== null}
+        onClose={() => setViewingSchool(null)}
+        backdrop={!isModalOpen && pendingDelete === null}
+        className="max-w-lg p-6 space-y-5"
+      >
+        {viewingSchool && (
+          <>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
+                <SchoolIcon className="w-5 h-5 text-philsa-navy" />
+                School Details
+              </h3>
+              <button
+                onClick={() => setViewingSchool(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+                aria-label="Close details"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono bg-slate-100 border border-slate-200 text-slate-600 px-2 py-0.5 rounded-md inline-block whitespace-nowrap">
+                  {viewingSchool.code}
+                </span>
+                <h4 className="text-xl font-black text-philsa-navy">{viewingSchool.name}</h4>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</div>
+                  <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${viewingSchool.classification === 'Public' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>
+                    {viewingSchool.classification}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Status</div>
+                  <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${viewingSchool.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                    {viewingSchool.status}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region/Municipality/City</div>
+                  <div className="font-bold text-slate-700">{regionLabel(viewingSchool.region)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Examinee Capacity</div>
+                  <div className="font-bold text-slate-700 font-mono">{viewingSchool.examineeCapacity.toLocaleString()} Seats</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Created</div>
+                  <div className="font-medium text-slate-600">{new Date(viewingSchool.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Last Updated</div>
+                  <div className="font-medium text-slate-600">{new Date(viewingSchool.updatedAt).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setPendingDelete(viewingSchool)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+              <button
+                onClick={() => handleOpenEditModal(viewingSchool)}
+                className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+              >
+                <Edit3 className="w-4 h-4" /> Edit
+              </button>
+            </div>
+          </>
+        )}
+      </ModalShell>
+
+      <ExportConfigModal
+        isOpen={isExportModalOpen}
+        title="Export schools"
+        columns={SCHOOL_EXPORT_COLUMNS}
+        scopeOptions={EXPORT_SCOPE_OPTIONS}
+        scopeCounts={{ filtered: schoolCount, all: schoolSummary.total }}
+        isExporting={isExporting}
+        onCancel={() => setIsExportModalOpen(false)}
+        onExport={handleExport}
+      />
+
+      <ImportConfigModal
+        isOpen={isImportModalOpen}
+        title="Import schools"
+        columns={SCHOOL_IMPORT_COLUMNS}
+        templateFilename="Schools_template.csv"
+        isImporting={isImporting}
+        onCancel={() => setIsImportModalOpen(false)}
+        onImport={handleImport}
+      />
 
       <ConfirmationDialog
         isOpen={pendingDelete !== null}

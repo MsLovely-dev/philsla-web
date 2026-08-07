@@ -5,8 +5,20 @@ import ExamBlueprintMaintenance from './ExamBlueprintMaintenance';
 import SchoolsListMaintenance from './SchoolsListMaintenance';
 import StudentRegistrationMaintenance from './StudentRegistrationMaintenance';
 import UniversitiesListMaintenance from './UniversitiesListMaintenance';
-import { backendUniversityService } from '../../../services/backendUniversityService';
+import { universityService } from '../../../services/backendUniversityService';
+import { schoolService } from '../../../services/backendSchoolService';
 import { serviceSuccess } from '../../../services/serviceResult';
+import { MaintenanceDataProvider } from '../../../services/maintenanceDataContext';
+
+function emptyPage() {
+  return {
+    count: 0,
+    next: null,
+    previous: null,
+    results: [],
+    summary: { total: 0, public: 0, private: 0, active: 0, totalCourses: 0, totalCapacity: 0 },
+  };
+}
 
 describe('active Maintenance Center tables', () => {
   beforeEach(() => {
@@ -29,10 +41,11 @@ describe('active Maintenance Center tables', () => {
   it('starts the schools table empty and ignores saved browser data', async () => {
     localStorage.setItem('philsa_maintenance_schools_list', JSON.stringify([{ name: 'Saved Mock School' }]));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    vi.spyOn(schoolService, 'listSchoolsPage').mockResolvedValue(serviceSuccess(emptyPage()));
 
-    render(<MemoryRouter><SchoolsListMaintenance /></MemoryRouter>);
+    render(<MaintenanceDataProvider><MemoryRouter><SchoolsListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 
-    expect(await screen.findByText('No schools match your search and filter criteria.')).toBeInTheDocument();
+    expect(await screen.findByText('No schools yet')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock School')).not.toBeInTheDocument();
     expect(setItem).not.toHaveBeenCalled();
     setItem.mockRestore();
@@ -41,11 +54,11 @@ describe('active Maintenance Center tables', () => {
   it('loads an empty universities table from the backend and ignores saved browser data', async () => {
     localStorage.setItem('philsa_maintenance_universities_list', JSON.stringify([{ name: 'Saved Mock University' }]));
     const setItem = vi.spyOn(Storage.prototype, 'setItem');
-    vi.spyOn(backendUniversityService, 'listUniversities').mockResolvedValue(serviceSuccess([]));
+    vi.spyOn(universityService, 'listUniversitiesPage').mockResolvedValue(serviceSuccess(emptyPage()));
 
-    render(<MemoryRouter><UniversitiesListMaintenance /></MemoryRouter>);
+    render(<MaintenanceDataProvider><MemoryRouter><UniversitiesListMaintenance /></MemoryRouter></MaintenanceDataProvider>);
 
-    expect(await screen.findByText('No universities match your search and filter criteria.')).toBeInTheDocument();
+    expect(await screen.findByText('No universities yet')).toBeInTheDocument();
     expect(screen.queryByText('Saved Mock University')).not.toBeInTheDocument();
     await waitFor(() => expect(setItem).not.toHaveBeenCalled());
     setItem.mockRestore();

@@ -1,5 +1,7 @@
 import { sharedApiClient, type ApiClient } from './apiClient';
-import { serviceSuccess, type ServiceResult } from './serviceResult';
+import { serviceSuccess, type PaginatedResult, type ServiceResult } from './serviceResult';
+import type { ImportRow, ImportSummary } from './importTypes';
+import { toCsv } from './csvExportService';
 
 export type UniversityClassification = 'Public' | 'Private';
 export type ActivationStatus = 'Active' | 'Inactive';
@@ -41,6 +43,49 @@ export interface UniversityPayload {
   establishedYear: number | null;
   status: ActivationStatus;
 }
+
+export interface UniversityListParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  classification?: UniversityClassification | '';
+  region?: string;
+  status?: ActivationStatus | '';
+  ordering?: string;
+}
+
+export interface UniversitySummary {
+  total: number;
+  public: number;
+  private: number;
+  active: number;
+  totalCourses: number;
+}
+
+export type UniversityPage = PaginatedResult<UniversityRecord> & { summary: UniversitySummary };
+
+export interface UniversityExportParams {
+  columns: string[];
+  search?: string;
+  classification?: UniversityClassification | '';
+  region?: string;
+  status?: ActivationStatus | '';
+}
+
+// Column set for the mock/prototype CSV export (backend owns the real one).
+const MOCK_UNIVERSITY_COLUMNS: Record<string, { header: string; get: (u: UniversityRecord) => unknown }> = {
+  code: { header: 'Code', get: (u) => u.code },
+  name: { header: 'University Name', get: (u) => u.name },
+  classification: { header: 'Classification', get: (u) => u.classification },
+  region: { header: 'Region', get: (u) => u.region },
+  city: { header: 'City', get: (u) => u.city },
+  presidentRector: { header: 'President/Rector', get: (u) => u.presidentRector },
+  email: { header: 'Email', get: (u) => u.email },
+  phone: { header: 'Phone', get: (u) => u.phone },
+  establishedYear: { header: 'Established', get: (u) => u.establishedYear ?? '' },
+  courseCount: { header: 'Course Count', get: (u) => u.courseCount },
+  status: { header: 'Status', get: (u) => u.status },
+};
 
 /**
  * API shape returned by `/api/v1/universities/`. The serializer already emits
@@ -113,11 +158,15 @@ interface ApiCollegeCourse {
 
 export interface UniversityService {
   listUniversities(): Promise<ServiceResult<UniversityRecord[]>>;
+  listUniversitiesPage(params: UniversityListParams): Promise<ServiceResult<UniversityPage>>;
+  exportUniversities(params: UniversityExportParams): Promise<ServiceResult<Blob>>;
+  importUniversities(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>>;
   createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>>;
   updateUniversity(id: string, payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>>;
   deleteUniversity(id: string): Promise<ServiceResult<null>>;
   listCourses(universityId: string): Promise<ServiceResult<CollegeCourseRecord[]>>;
   createCourse(universityId: string, payload: CollegeCoursePayload): Promise<ServiceResult<CollegeCourseRecord>>;
+  importCourses(universityId: string, rows: ImportRow[]): Promise<ServiceResult<ImportSummary>>;
   updateCourse(
     universityId: string,
     courseId: string,
@@ -139,6 +188,42 @@ export class BackendUniversityService implements UniversityService {
     const result = await this.apiClient.request<ApiUniversity[]>(UNIVERSITIES_ENDPOINT);
     if (!result.ok) return result as ServiceResult<UniversityRecord[]>;
     return serviceSuccess(result.data.map((item) => this.fromApiUniversity(item)));
+  }
+
+  async listUniversitiesPage(params: UniversityListParams): Promise<ServiceResult<UniversityPage>> {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page ?? 1));
+    query.set('pageSize', String(params.pageSize ?? 20));
+    if (params.search) query.set('search', params.search);
+    if (params.classification) query.set('classification', params.classification);
+    if (params.region) query.set('region', params.region);
+    if (params.status) query.set('status', params.status);
+    if (params.ordering) query.set('ordering', params.ordering);
+    const result = await this.apiClient.request<PaginatedResult<ApiUniversity> & { summary: UniversitySummary }>(
+      `${UNIVERSITIES_ENDPOINT}?${query.toString()}`,
+    );
+    if (!result.ok) return result as ServiceResult<UniversityPage>;
+    return serviceSuccess({
+      ...result.data,
+      results: result.data.results.map((item) => this.fromApiUniversity(item)),
+    });
+  }
+
+  exportUniversities(params: UniversityExportParams): Promise<ServiceResult<Blob>> {
+    const query = new URLSearchParams();
+    if (params.columns.length) query.set('columns', params.columns.join(','));
+    if (params.search) query.set('search', params.search);
+    if (params.classification) query.set('classification', params.classification);
+    if (params.region) query.set('region', params.region);
+    if (params.status) query.set('status', params.status);
+    return this.apiClient.requestBlob(`${UNIVERSITIES_ENDPOINT}export/?${query.toString()}`);
+  }
+
+  importUniversities(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    return this.apiClient.request<ImportSummary>(`${UNIVERSITIES_ENDPOINT}import/`, {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
   }
 
   async createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>> {
@@ -179,6 +264,13 @@ export class BackendUniversityService implements UniversityService {
         body: JSON.stringify(this.toApiCoursePayload(payload)),
       }),
     );
+  }
+
+  importCourses(universityId: string, rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    return this.apiClient.request<ImportSummary>(`${coursesEndpoint(universityId)}import/`, {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
+    });
   }
 
   async updateCourse(
@@ -290,6 +382,79 @@ export class MockUniversityService implements UniversityService {
     return serviceSuccess(this.universities.map((university) => ({ ...university })));
   }
 
+  async listUniversitiesPage(params: UniversityListParams): Promise<ServiceResult<UniversityPage>> {
+    let items = this.universities.map((university) => ({ ...university }));
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter(
+        (u) =>
+          u.code.toLowerCase().includes(q) ||
+          u.name.toLowerCase().includes(q) ||
+          u.city.toLowerCase().includes(q),
+      );
+    }
+    if (params.classification) items = items.filter((u) => u.classification === params.classification);
+    if (params.region) items = items.filter((u) => u.region === params.region);
+    if (params.status) items = items.filter((u) => u.status === params.status);
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    if (params.ordering === '-name') items.reverse();
+    const pageSize = params.pageSize ?? 20;
+    const page = params.page ?? 1;
+    const start = (page - 1) * pageSize;
+    return serviceSuccess({
+      count: items.length,
+      next: start + pageSize < items.length ? `?page=${page + 1}` : null,
+      previous: page > 1 ? `?page=${page - 1}` : null,
+      results: items.slice(start, start + pageSize),
+      summary: {
+        total: this.universities.length,
+        public: this.universities.filter((u) => u.classification === 'Public').length,
+        private: this.universities.filter((u) => u.classification === 'Private').length,
+        active: this.universities.filter((u) => u.status === 'Active').length,
+        totalCourses: this.courses.length,
+      },
+    });
+  }
+
+  async exportUniversities(params: UniversityExportParams): Promise<ServiceResult<Blob>> {
+    let items = this.universities.map((university) => ({ ...university }));
+    if (params.search) {
+      const q = params.search.toLowerCase();
+      items = items.filter(
+        (u) =>
+          u.code.toLowerCase().includes(q) ||
+          u.name.toLowerCase().includes(q) ||
+          u.city.toLowerCase().includes(q),
+      );
+    }
+    if (params.classification) items = items.filter((u) => u.classification === params.classification);
+    if (params.region) items = items.filter((u) => u.region === params.region);
+    if (params.status) items = items.filter((u) => u.status === params.status);
+    const keys = params.columns.length
+      ? params.columns.filter((k) => k in MOCK_UNIVERSITY_COLUMNS)
+      : Object.keys(MOCK_UNIVERSITY_COLUMNS);
+    const header = keys.map((k) => MOCK_UNIVERSITY_COLUMNS[k].header);
+    const rows = items.map((u) => keys.map((k) => MOCK_UNIVERSITY_COLUMNS[k].get(u)));
+    return serviceSuccess(new Blob([toCsv(header, rows)], { type: 'text/csv' }));
+  }
+
+  async importUniversities(rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    for (const row of rows) {
+      await this.createUniversity({
+        classification: (row.classification as UniversityClassification) || 'Public',
+        name: row.name ?? '',
+        region: row.region ?? '',
+        city: row.city ?? '',
+        presidentRector: row.presidentRector ?? '',
+        email: row.email ?? '',
+        phone: row.phone ?? '',
+        establishedYear: row.establishedYear ? Number(row.establishedYear) : null,
+        status: (row.status as ActivationStatus) || 'Active',
+      });
+    }
+    return serviceSuccess({ created: rows.length });
+  }
+
   async createUniversity(payload: UniversityPayload): Promise<ServiceResult<UniversityRecord>> {
     this.sequence += 1;
     const now = new Date().toISOString();
@@ -345,6 +510,23 @@ export class MockUniversityService implements UniversityService {
     this.courses = [...this.courses, course];
     this.syncCourseCount(universityId);
     return serviceSuccess({ ...course });
+  }
+
+  async importCourses(universityId: string, rows: ImportRow[]): Promise<ServiceResult<ImportSummary>> {
+    for (const row of rows) {
+      await this.createCourse(universityId, {
+        collegeName: row.collegeName ?? '',
+        programCode: row.programCode ?? '',
+        programName: row.programName ?? '',
+        degreeType: row.degreeType ?? '',
+        majorSpecialization: row.majorSpecialization ?? '',
+        durationYears: row.durationYears ? Number(row.durationYears) : 4,
+        totalUnits: row.totalUnits ? Number(row.totalUnits) : 0,
+        cutoffPercentile: row.cutoffPercentile ? Number(row.cutoffPercentile) : 0,
+        status: (row.status as ActivationStatus) || 'Active',
+      });
+    }
+    return serviceSuccess({ created: rows.length });
   }
 
   async updateCourse(

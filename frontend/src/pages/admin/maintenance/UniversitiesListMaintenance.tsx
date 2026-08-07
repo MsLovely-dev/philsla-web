@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   GraduationCap,
   Search,
@@ -19,6 +19,7 @@ import {
   Layers,
   Sparkles,
   ExternalLink,
+  Upload,
   School as SchoolIcon,
   Table as TableIcon,
   LayoutGrid
@@ -35,7 +36,21 @@ import {
   type UniversityRecord,
 } from '../../../services/backendUniversityService';
 import type { ServiceFailure } from '../../../services/serviceResult';
-import { ConfirmationDialog } from '../../../components/ui';
+import { ConfirmationDialog, EmptyState, ErrorState, LoadingState, ModalShell, Pagination, Select, StatusToggle } from '../../../components/ui';
+import { MAINTENANCE_PAGE_SIZE, useMaintenanceData } from '../../../services/maintenanceDataContext';
+import {
+  ExportConfigModal,
+  type ExportColumnOption,
+  type ExportSelection,
+} from '../../../components/maintenance/ExportConfigModal';
+import {
+  ImportConfigModal,
+  type ImportColumnOption,
+  type ImportOutcome,
+  type ImportRow,
+} from '../../../components/maintenance/ImportConfigModal';
+import { importErrorsFromResult } from '../../../services/importTypes';
+import { downloadBlob, downloadCsv, toCsv } from '../../../services/csvExportService';
 
 function isUniversityClassification(value: string): value is UniversityClassification {
   return value === 'Public' || value === 'Private';
@@ -65,19 +80,102 @@ const EMPTY_UNI_FORM: UniversityPayload = {
   status: 'Active',
 };
 
+type UniversityExportColumn = ExportColumnOption & { get: (u: UniversityRecord) => unknown };
+const UNIVERSITY_EXPORT_COLUMNS: UniversityExportColumn[] = [
+  { key: 'code', label: 'Code', get: (u) => u.code },
+  { key: 'name', label: 'University Name', get: (u) => u.name },
+  { key: 'classification', label: 'Classification', get: (u) => u.classification },
+  { key: 'region', label: 'Region', get: (u) => regionLabel(u.region) },
+  { key: 'city', label: 'City', get: (u) => u.city },
+  { key: 'presidentRector', label: 'President/Rector', sensitive: true, get: (u) => u.presidentRector },
+  { key: 'email', label: 'Email', sensitive: true, get: (u) => u.email },
+  { key: 'phone', label: 'Phone', sensitive: true, get: (u) => u.phone },
+  { key: 'establishedYear', label: 'Established', get: (u) => u.establishedYear ?? '' },
+  { key: 'courseCount', label: 'Course Count', get: (u) => u.courseCount },
+  { key: 'status', label: 'Status', get: (u) => u.status },
+];
+
+type CourseExportColumn = ExportColumnOption & { get: (c: CollegeCourseRecord) => unknown };
+const COURSE_EXPORT_COLUMNS: CourseExportColumn[] = [
+  { key: 'programCode', label: 'Program Code', get: (c) => c.programCode },
+  { key: 'programName', label: 'Program Name', get: (c) => c.programName },
+  { key: 'collegeName', label: 'College', get: (c) => c.collegeName },
+  { key: 'degreeType', label: 'Degree Type', get: (c) => c.degreeType },
+  { key: 'majorSpecialization', label: 'Specialization', get: (c) => c.majorSpecialization },
+  { key: 'durationYears', label: 'Duration (Yrs)', get: (c) => c.durationYears },
+  { key: 'totalUnits', label: 'Total Units', get: (c) => c.totalUnits },
+  { key: 'cutoffPercentile', label: 'Cutoff %', get: (c) => c.cutoffPercentile },
+  { key: 'status', label: 'Status', get: (c) => c.status },
+];
+
+const EXPORT_SCOPE_OPTIONS = [
+  { value: 'filtered', label: 'Only rows matching current filters' },
+  { value: 'all', label: 'All rows' },
+];
+
+// Import columns mirror the export labels so an exported file round-trips. Codes
+// are auto-generated and course counts are computed, so neither is importable.
+const UNIVERSITY_IMPORT_COLUMNS: ImportColumnOption[] = [
+  { key: 'name', label: 'University Name', required: true },
+  { key: 'classification', label: 'Classification', required: true },
+  { key: 'region', label: 'Region', required: true },
+  { key: 'city', label: 'City', required: true },
+  { key: 'presidentRector', label: 'President/Rector' },
+  { key: 'email', label: 'Email' },
+  { key: 'phone', label: 'Phone' },
+  { key: 'establishedYear', label: 'Established' },
+  { key: 'status', label: 'Status' },
+];
+
+const COURSE_IMPORT_COLUMNS: ImportColumnOption[] = [
+  { key: 'programCode', label: 'Program Code', required: true },
+  { key: 'programName', label: 'Program Name', required: true },
+  { key: 'collegeName', label: 'College', required: true },
+  { key: 'degreeType', label: 'Degree Type' },
+  { key: 'majorSpecialization', label: 'Specialization' },
+  { key: 'durationYears', label: 'Duration (Yrs)' },
+  { key: 'totalUnits', label: 'Total Units' },
+  { key: 'cutoffPercentile', label: 'Cutoff %' },
+  { key: 'status', label: 'Status' },
+];
+
 export default function UniversitiesListMaintenance() {
-  const [universities, setUniversities] = useState<UniversityRecord[]>([]);
-  const [courses, setCourses] = useState<CollegeCourseRecord[]>([]);
+  const {
+    universities,
+    universityCount,
+    universityQuery,
+    universitiesLoaded,
+    universitiesError,
+    universitySummary,
+    universitiesLoading,
+    ensureUniversities,
+    setUniversityQuery,
+    reloadUniversities,
+    reloadUniversitiesAfterDelete,
+    adjustCourseCount,
+    courses: coursesByUniversity,
+    coursesError,
+    ensureCourses,
+    reloadCourses,
+    setCourseRecord,
+    removeCourseRecord,
+  } = useMaintenanceData();
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Selected University State (drill-down into College Courses)
   const [selectedUniversity, setSelectedUniversity] = useState<UniversityRecord | null>(null);
 
-  // Search & Filter for Universities
-  const [uniSearch, setUniSearch] = useState('');
-  const [uniRegionFilter, setUniRegionFilter] = useState('ALL');
-  const [uniClassFilter, setUniClassFilter] = useState('ALL');
+  // Courses come from the shared per-university cache. `undefined` means "not
+  // fetched yet" (show loading); a fetched university stays cached for instant
+  // re-open.
+  const courseList = selectedUniversity ? coursesByUniversity[selectedUniversity.id] : undefined;
+  const courses = courseList ?? [];
+  const isLoadingCourses = Boolean(selectedUniversity) && courseList === undefined && !coursesError;
+
+  // Search input (debounced) drives the server-side query held in the provider.
+  const [searchInput, setSearchInput] = useState(universityQuery.search);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
 
   // Search & Filter for Courses (inside selected university)
@@ -85,6 +183,10 @@ export default function UniversitiesListMaintenance() {
   const [collegeFilter, setCollegeFilter] = useState('ALL');
 
   // Modals
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isUniModalOpen, setIsUniModalOpen] = useState(false);
   const [editingUniversity, setEditingUniversity] = useState<UniversityRecord | null>(null);
   const [uniFormData, setUniFormData] = useState<UniversityPayload>(EMPTY_UNI_FORM);
@@ -98,78 +200,42 @@ export default function UniversitiesListMaintenance() {
   const [isSavingCourse, setIsSavingCourse] = useState(false);
   const [pendingCourseDelete, setPendingCourseDelete] = useState<CollegeCourseRecord | null>(null);
   const [isDeletingCourse, setIsDeletingCourse] = useState(false);
+  const [viewingCourse, setViewingCourse] = useState<CollegeCourseRecord | null>(null);
 
+  // Load the university list once into the shared cache; instant on tab re-entry.
   useEffect(() => {
-    let active = true;
-    universityService.listUniversities().then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setUniversities(result.data);
-      } else {
-        setError((result as ServiceFailure).error.message);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+    ensureUniversities();
+  }, [ensureUniversities]);
 
   // Load the selected university's courses from the nested endpoint on drill-down.
+  // Load the selected university's courses once into the shared cache; a
+  // previously-opened university is served from cache with no refetch.
   useEffect(() => {
-    if (!selectedUniversity) {
-      setCourses([]);
-      return;
-    }
-    let active = true;
-    universityService.listCourses(selectedUniversity.id).then((result) => {
-      if (!active) return;
-      if (result.ok) {
-        setCourses(result.data);
-      } else {
-        setError((result as ServiceFailure).error.message);
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [selectedUniversity]);
+    if (selectedUniversity) ensureCourses(selectedUniversity.id);
+  }, [selectedUniversity, ensureCourses]);
 
-  // Keep the in-memory university list's course count in step with course changes,
+  // Course-count deltas are applied against the shared cache (adjustCourseCount)
   // so the list-view column and totals stay accurate without a full refetch.
-  const applyCourseCountDelta = (universityId: string, delta: number) => {
-    setUniversities((prev) =>
-      prev.map((u) => (u.id === universityId ? { ...u, courseCount: Math.max(0, u.courseCount + delta) } : u)),
-    );
-  };
 
   // Helper to count courses for each university (server-provided on the list payload).
   const getCourseCountForUniversity = (uniId: string) => {
     return universities.find((u) => u.id === uniId)?.courseCount ?? 0;
   };
 
-  const totalCourses = useMemo(
-    () => universities.reduce((sum, u) => sum + u.courseCount, 0),
-    [universities],
+  const hasActiveFilters = Boolean(
+    universityQuery.search || universityQuery.classification || universityQuery.region || universityQuery.status,
   );
 
-  const uniqueUniRegions = useMemo(() => {
-    return Array.from(new Set(universities.map(u => u.region))).sort();
-  }, [universities]);
+  const handleClearFilters = () => {
+    setSearchInput('');
+    setUniversityQuery({ search: '', classification: '', region: '', status: '' });
+  };
 
-  const filteredUniversities = useMemo(() => {
-    return universities.filter(u => {
-      if (uniClassFilter !== 'ALL' && u.classification !== uniClassFilter) return false;
-      if (uniRegionFilter !== 'ALL' && u.region !== uniRegionFilter) return false;
-      if (uniSearch.trim()) {
-        const q = uniSearch.toLowerCase();
-        const matchName = u.name.toLowerCase().includes(q);
-        const matchCode = u.code.toLowerCase().includes(q);
-        const matchCity = u.city.toLowerCase().includes(q);
-        if (!matchName && !matchCode && !matchCity) return false;
-      }
-      return true;
-    });
-  }, [universities, uniClassFilter, uniRegionFilter, uniSearch]);
+  const handleSearchInput = (value: string) => {
+    setSearchInput(value);
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => setUniversityQuery({ search: value.trim() }), 300);
+  };
 
   // Courses filtered for selected university
   const universityCourses = useMemo(() => {
@@ -199,7 +265,7 @@ export default function UniversitiesListMaintenance() {
   const handleOpenAddUniModal = () => {
     setEditingUniversity(null);
     setError(null);
-    setUniFormData({ ...EMPTY_UNI_FORM, region: uniqueUniRegions[0] ?? PHILIPPINE_REGIONS[0].code });
+    setUniFormData({ ...EMPTY_UNI_FORM });
     setIsUniModalOpen(true);
   };
 
@@ -237,13 +303,9 @@ export default function UniversitiesListMaintenance() {
       return;
     }
 
-    if (editingUniversity) {
-      setUniversities((prev) => prev.map((u) => (u.id === result.data.id ? result.data : u)));
-      if (selectedUniversity?.id === result.data.id) {
-        setSelectedUniversity(result.data);
-      }
-    } else {
-      setUniversities((prev) => [result.data, ...prev]);
+    reloadUniversities();
+    if (editingUniversity && selectedUniversity?.id === result.data.id) {
+      setSelectedUniversity(result.data);
     }
 
     setIsUniModalOpen(false);
@@ -268,8 +330,7 @@ export default function UniversitiesListMaintenance() {
     }
 
     const removedId = pendingDelete.id;
-    setUniversities((prev) => prev.filter((u) => u.id !== removedId));
-    setCourses((prev) => prev.filter((c) => c.universityId !== removedId));
+    reloadUniversitiesAfterDelete();
     if (selectedUniversity?.id === removedId) {
       setSelectedUniversity(null);
     }
@@ -328,13 +389,12 @@ export default function UniversitiesListMaintenance() {
       return;
     }
 
-    if (editingCourse) {
-      setCourses((prev) => prev.map((c) => (c.id === result.data.id ? result.data : c)));
-    } else {
-      setCourses((prev) => [...prev, result.data]);
-      applyCourseCountDelta(selectedUniversity.id, 1);
+    setCourseRecord(selectedUniversity.id, result.data);
+    if (!editingCourse) {
+      adjustCourseCount(selectedUniversity.id, 1);
     }
     setIsCourseModalOpen(false);
+    setViewingCourse(null); // a completed save closes the details modal too
   };
 
   const handleConfirmDeleteCourse = async () => {
@@ -349,57 +409,94 @@ export default function UniversitiesListMaintenance() {
       return;
     }
     const removedId = pendingCourseDelete.id;
-    setCourses((prev) => prev.filter((c) => c.id !== removedId));
-    applyCourseCountDelta(selectedUniversity.id, -1);
+    removeCourseRecord(selectedUniversity.id, removedId);
+    adjustCourseCount(selectedUniversity.id, -1);
     setPendingCourseDelete(null);
+    setViewingCourse(null); // the record is gone, so close the details modal too
   };
 
-  const exportCSV = () => {
+  const handleExport = async ({ columns, scope }: ExportSelection) => {
     if (selectedUniversity) {
-      const headers = ['Program Code', 'Program Name', 'College', 'Degree Type', 'Specialization', 'Duration (Yrs)', 'Total Units', 'Cutoff %', 'Status'];
-      const rows = universityCourses.map(c => [
-        `"${c.programCode}"`,
-        `"${c.programName}"`,
-        `"${c.collegeName}"`,
-        `"${c.degreeType}"`,
-        `"${c.majorSpecialization}"`,
-        c.durationYears,
-        c.totalUnits,
-        c.cutoffPercentile,
-        `"${c.status}"`
-      ]);
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `${selectedUniversity.code}_College_Courses.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Courses are held client-side; export straight from the cache.
+      setIsExportModalOpen(false);
+      const cols = COURSE_EXPORT_COLUMNS.filter((c) => columns.includes(c.key));
+      const source = scope === 'all' ? universityCourses : filteredCourses;
+      const csv = toCsv(cols.map((c) => c.label), source.map((row) => cols.map((c) => c.get(row))));
+      downloadCsv(`${selectedUniversity.code}_College_Courses.csv`, csv);
+      return;
+    }
+    // Universities are paginated: the backend streams the whole filtered set in one request.
+    setIsExporting(true);
+    const result = await universityService.exportUniversities({
+      columns,
+      ...(scope === 'all'
+        ? {}
+        : {
+            search: universityQuery.search,
+            classification: universityQuery.classification,
+            region: universityQuery.region,
+            status: universityQuery.status,
+          }),
+    });
+    setIsExporting(false);
+    setIsExportModalOpen(false);
+    if (result.ok) {
+      downloadBlob('philSA_List_of_Universities.csv', result.data);
     } else {
-      const headers = ['Code', 'University Name', 'Classification', 'Region', 'City', 'President/Rector', 'Email', 'Established', 'Course Count', 'Status'];
-      const rows = filteredUniversities.map(u => [
-        `"${u.code}"`,
-        `"${u.name}"`,
-        `"${u.classification}"`,
-        `"${regionLabel(u.region)}"`,
-        `"${u.city}"`,
-        `"${u.presidentRector}"`,
-        `"${u.email}"`,
-        u.establishedYear ?? '',
-        getCourseCountForUniversity(u.id),
-        `"${u.status}"`
-      ]);
-      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `philSA_List_of_Universities.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      setError((result as ServiceFailure).error.message);
     }
   };
+
+  const handleImport = async (rows: ImportRow[]): Promise<ImportOutcome> => {
+    setIsImporting(true);
+    const result = selectedUniversity
+      ? await universityService.importCourses(selectedUniversity.id, rows)
+      : await universityService.importUniversities(rows);
+    setIsImporting(false);
+
+    if (!result.ok) {
+      return {
+        ok: false,
+        message: (result as ServiceFailure).error.message,
+        errors: importErrorsFromResult(result),
+      };
+    }
+
+    if (selectedUniversity) {
+      reloadCourses(selectedUniversity.id);
+      adjustCourseCount(selectedUniversity.id, result.data.created);
+    } else {
+      reloadUniversities();
+    }
+    return { ok: true, created: result.data.created };
+  };
+
+  // First load shows a distinct loading/error state; when cached it is already loaded.
+  if (!universitiesLoaded && universitiesError) {
+    return (
+      <div className="flex justify-center py-16">
+        <ErrorState
+          title="University registry unavailable"
+          message={universitiesError}
+          action={
+            <button
+              onClick={reloadUniversities}
+              className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer"
+            >
+              Try again
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+  if (!universitiesLoaded) {
+    return (
+      <div className="flex justify-center py-16">
+        <LoadingState title="Loading university registry" message="Fetching the accredited university list." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -411,7 +508,7 @@ export default function UniversitiesListMaintenance() {
           <ChevronRight className="w-3.5 h-3.5" />
           <button
             onClick={() => setSelectedUniversity(null)}
-            className={`hover:text-philsa-navy font-bold ${!selectedUniversity ? 'text-philsa-navy font-black' : ''}`}
+            className={`hover:text-philsa-navy font-bold cursor-pointer ${!selectedUniversity ? 'text-philsa-navy font-black' : ''}`}
           >
             List of Universities
           </button>
@@ -461,39 +558,45 @@ export default function UniversitiesListMaintenance() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 shrink-0">
                 <button
-                  onClick={exportCSV}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2"
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
                 >
-                  <Download className="w-4 h-4" /> Export CSV
+                  <Upload className="w-4 h-4 shrink-0" /> Import CSV
+                </button>
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-philsa-navy bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap shrink-0"
+                >
+                  <Download className="w-4 h-4 shrink-0" /> Export CSV
                 </button>
                 <button
                   onClick={handleOpenAddUniModal}
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap shrink-0"
                 >
-                  <Plus className="w-4 h-4" /> Add University
+                  <Plus className="w-4 h-4 shrink-0" /> Add University
                 </button>
               </div>
             </div>
 
-            {/* Quick Summary Cards */}
+            {/* Quick Summary Cards (registry-wide totals) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Accredited Universities</div>
-                <div className="text-2xl font-black text-philsa-navy mt-1">{universities.length}</div>
+                <div className="text-2xl font-black text-philsa-navy mt-1">{universitySummary.total.toLocaleString()}</div>
               </div>
               <div className="p-4 bg-blue-50/50 border border-blue-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-blue-600 tracking-wider">Public / State</div>
-                <div className="text-2xl font-black text-blue-900 mt-1">{universities.filter(u => u.classification === 'Public').length}</div>
+                <div className="text-2xl font-black text-blue-900 mt-1">{universitySummary.public.toLocaleString()}</div>
               </div>
               <div className="p-4 bg-purple-50/50 border border-purple-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-purple-600 tracking-wider">Private</div>
-                <div className="text-2xl font-black text-purple-900 mt-1">{universities.filter(u => u.classification === 'Private').length}</div>
+                <div className="text-2xl font-black text-purple-900 mt-1">{universitySummary.private.toLocaleString()}</div>
               </div>
               <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
                 <div className="text-[10px] font-extrabold uppercase text-emerald-600 tracking-wider">Total Degree Courses</div>
-                <div className="text-2xl font-black text-emerald-900 mt-1">{totalCourses}</div>
+                <div className="text-2xl font-black text-emerald-900 mt-1">{universitySummary.totalCourses.toLocaleString()}</div>
               </div>
             </div>
           </div>
@@ -501,7 +604,7 @@ export default function UniversitiesListMaintenance() {
           {/* Filter and Search Bar */}
           <div className="card-philsa bg-white p-5 space-y-4">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
                 {/* Search */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Search University / City</label>
@@ -509,8 +612,8 @@ export default function UniversitiesListMaintenance() {
                     <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
-                      value={uniSearch}
-                      onChange={e => setUniSearch(e.target.value)}
+                      value={searchInput}
+                      onChange={e => handleSearchInput(e.target.value)}
                       placeholder="Name, code, city..."
                       className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                     />
@@ -520,30 +623,41 @@ export default function UniversitiesListMaintenance() {
                 {/* Classification */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Classification</label>
-                  <select
-                    value={uniClassFilter}
-                    onChange={e => setUniClassFilter(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                  <Select
+                    value={universityQuery.classification}
+                    onChange={e => setUniversityQuery({ classification: e.target.value as UniversityClassification | '' })}
                   >
-                    <option value="ALL">All Classifications</option>
+                    <option value="">All Classifications</option>
                     <option value="Public">Public</option>
                     <option value="Private">Private</option>
-                  </select>
+                  </Select>
                 </div>
 
                 {/* Region */}
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Region</label>
-                  <select
-                    value={uniRegionFilter}
-                    onChange={e => setUniRegionFilter(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
+                  <Select
+                    value={universityQuery.region}
+                    onChange={e => setUniversityQuery({ region: e.target.value })}
                   >
-                    <option value="ALL">All Regions</option>
-                    {uniqueUniRegions.map(r => (
-                      <option key={r} value={r}>{regionLabel(r)}</option>
+                    <option value="">All Regions</option>
+                    {PHILIPPINE_REGIONS.map((region) => (
+                      <option key={region.code} value={region.code}>{region.label}</option>
                     ))}
-                  </select>
+                  </Select>
+                </div>
+
+                {/* Status */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Status</label>
+                  <Select
+                    value={universityQuery.status}
+                    onChange={e => setUniversityQuery({ status: e.target.value as UniversityRecord['status'] | '' })}
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </Select>
                 </div>
               </div>
 
@@ -573,8 +687,43 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* TABLE VIEW DISPLAY */}
-          {viewMode === 'table' ? (
+          {/* LIST DISPLAY: in-flight loading, empty-registry CTA, no-match, otherwise table/grid + pagination */}
+          {universitiesLoading && universityCount === 0 ? (
+            <div className="flex justify-center py-16">
+              <LoadingState title="Loading university registry" message="Fetching the accredited university list." />
+            </div>
+          ) : universityCount === 0 && !hasActiveFilters ? (
+            <div className="flex justify-center py-16">
+            <EmptyState
+              title="No universities yet"
+              message="Add your first accredited university to start building the registry."
+              action={
+                <button
+                  onClick={handleOpenAddUniModal}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-2 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4 shrink-0" /> Add your first university
+                </button>
+              }
+            />
+            </div>
+          ) : universityCount === 0 ? (
+            <div className="flex justify-center py-16">
+              <EmptyState
+                title="No matching universities"
+                message="No universities match your current search and filters."
+                action={
+                  <button
+                    onClick={handleClearFilters}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap"
+                  >
+                    <X className="w-4 h-4 shrink-0" /> Clear filters
+                  </button>
+                }
+              />
+            </div>
+          ) : viewMode === 'table' ? (
+            <div className="space-y-6">
             <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -591,14 +740,7 @@ export default function UniversitiesListMaintenance() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredUniversities.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">
-                          No universities match your search and filter criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredUniversities.map((uni) => {
+                    {universities.map((uni) => {
                         const count = getCourseCountForUniversity(uni.id);
                         return (
                           <tr
@@ -606,7 +748,7 @@ export default function UniversitiesListMaintenance() {
                             className="hover:bg-slate-50/80 transition-all group"
                           >
                             <td className="py-3.5 px-4">
-                              <span className="font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-1 rounded-md border border-slate-200">
+                              <span className="inline-block whitespace-nowrap font-mono text-xs font-bold bg-slate-100 text-slate-800 px-2 py-1 rounded-md border border-slate-200">
                                 {uni.code}
                               </span>
                             </td>
@@ -672,16 +814,23 @@ export default function UniversitiesListMaintenance() {
                             </td>
                           </tr>
                         );
-                      })
-                    )}
+                      })}
                   </tbody>
                 </table>
               </div>
             </div>
+            <Pagination
+              page={universityQuery.page}
+              pageSize={MAINTENANCE_PAGE_SIZE}
+              totalCount={universityCount}
+              onPageChange={(page) => setUniversityQuery({ page })}
+            />
+            </div>
           ) : (
-            /* GRID VIEW DISPLAY */
+            <div className="space-y-6">
+            {/* GRID VIEW DISPLAY */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {filteredUniversities.map((uni) => {
+              {universities.map((uni) => {
                 const count = getCourseCountForUniversity(uni.id);
                 return (
                   <div
@@ -696,7 +845,7 @@ export default function UniversitiesListMaintenance() {
                         </div>
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                            <span className="font-mono text-[10px] font-black bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200 whitespace-nowrap">
                               {uni.code}
                             </span>
                             <span className="text-[10px] font-bold text-slate-400">Est. {uni.establishedYear ?? '—'}</span>
@@ -710,14 +859,14 @@ export default function UniversitiesListMaintenance() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={(e) => handleOpenEditUniModal(uni, e)}
-                          className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all"
+                          className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
                           title="Edit University"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={(e) => requestDeleteUni(uni, e)}
-                          className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                          className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
                           title="Delete University"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -753,6 +902,13 @@ export default function UniversitiesListMaintenance() {
                   </div>
                 );
               })}
+            </div>
+            <Pagination
+              page={universityQuery.page}
+              pageSize={MAINTENANCE_PAGE_SIZE}
+              totalCount={universityCount}
+              onPageChange={(page) => setUniversityQuery({ page })}
+            />
             </div>
           )}
         </>
@@ -792,7 +948,13 @@ export default function UniversitiesListMaintenance() {
 
               <div className="flex items-center gap-2.5">
                 <button
-                  onClick={exportCSV}
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Upload className="w-4 h-4 text-slate-500" /> Import Courses
+                </button>
+                <button
+                  onClick={() => setIsExportModalOpen(true)}
                   className="px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <Download className="w-4 h-4 text-slate-500" /> Export Courses
@@ -834,7 +996,42 @@ export default function UniversitiesListMaintenance() {
             </div>
           </div>
 
-          {/* College Courses List Table */}
+          {/* College Courses: loading, error, then empty-registry CTA, otherwise the table */}
+          {isLoadingCourses ? (
+            <div className="flex justify-center py-16">
+              <LoadingState title="Loading college courses" message="Fetching this university's degree programs." />
+            </div>
+          ) : coursesError && courseList === undefined ? (
+            <div className="flex justify-center py-16">
+              <ErrorState
+                title="Couldn't load college courses"
+                message={coursesError}
+                action={
+                  <button
+                    onClick={() => ensureCourses(selectedUniversity.id)}
+                    className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-philsa-navy hover:bg-philsa-navy/90 text-white transition-all cursor-pointer"
+                  >
+                    Try again
+                  </button>
+                }
+              />
+            </div>
+          ) : universityCourses.length === 0 ? (
+            <div className="flex justify-center py-16">
+            <EmptyState
+              title="No college courses yet"
+              message="Add the first degree program offered by this university."
+              action={
+                <button
+                  onClick={handleOpenAddCourseModal}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-philsa-navy hover:bg-slate-800 text-white transition-all cursor-pointer shadow-xs flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4 shrink-0" /> Add the first course
+                </button>
+              }
+            />
+            </div>
+          ) : (
           <div className="card-philsa bg-white overflow-hidden p-0 border border-slate-200">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -856,12 +1053,18 @@ export default function UniversitiesListMaintenance() {
                     filteredCourses.map((crs) => (
                       <tr key={crs.id} className="hover:bg-slate-50/80 transition-all">
                         <td className="py-3.5 px-4">
-                          <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-md inline-block">
+                          <span className="text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-md inline-block whitespace-nowrap">
                             {crs.programCode}
                           </span>
                         </td>
                         <td className="py-3.5 px-4">
-                          <span className="font-extrabold text-philsa-navy text-sm">{crs.programName}</span>
+                          <button
+                            onClick={() => setViewingCourse(crs)}
+                            className="font-extrabold text-philsa-navy text-sm text-left hover:text-blue-700 transition-colors cursor-pointer"
+                            title="View program details"
+                          >
+                            {crs.programName}
+                          </button>
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
@@ -888,13 +1091,16 @@ export default function UniversitiesListMaintenance() {
               </table>
             </div>
           </div>
+          )}
         </div>
       )}
 
       {/* University Add / Edit Modal */}
-      {isUniModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+      <ModalShell
+        isOpen={isUniModalOpen}
+        onClose={() => { setIsUniModalOpen(false); setError(null); }}
+        className="max-w-xl p-6 space-y-6"
+      >
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <GraduationCap className="w-5 h-5 text-philsa-navy" />
@@ -928,18 +1134,17 @@ export default function UniversitiesListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Classification *</label>
-                  <select
+                  <Select
                     value={uniFormData.classification}
                     onChange={e => {
                       if (isUniversityClassification(e.target.value)) {
                         setUniFormData({ ...uniFormData, classification: e.target.value });
                       }
                     }}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     <option value="Public">Public</option>
                     <option value="Private">Private</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -958,15 +1163,14 @@ export default function UniversitiesListMaintenance() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Region *</label>
-                  <select
+                  <Select
                     value={uniFormData.region}
                     onChange={e => setUniFormData({ ...uniFormData, region: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
                   >
                     {PHILIPPINE_REGIONS.map((region) => (
                       <option key={region.code} value={region.code}>{region.label}</option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Main Campus City *</label>
@@ -1030,14 +1234,10 @@ export default function UniversitiesListMaintenance() {
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Status</label>
-                  <select
+                  <StatusToggle
                     value={uniFormData.status}
-                    onChange={e => setUniFormData({ ...uniFormData, status: e.target.value === 'Inactive' ? 'Inactive' : 'Active' })}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:bg-white focus:outline-none focus:ring-2 focus:ring-philsa-navy/20"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+                    onChange={status => setUniFormData({ ...uniFormData, status })}
+                  />
                 </div>
               </div>
 
@@ -1058,14 +1258,103 @@ export default function UniversitiesListMaintenance() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </ModalShell>
+
+      {/* College Course Details Modal — full-screen backdrop; the edit/delete modals stack above it (z-[110]) so cancelling returns here */}
+      <ModalShell
+        isOpen={viewingCourse !== null}
+        onClose={() => setViewingCourse(null)}
+        backdrop={!isCourseModalOpen && pendingCourseDelete === null}
+        className="max-w-lg p-6 space-y-5"
+      >
+        {viewingCourse && (
+          <>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-philsa-navy" />
+                Program Details
+              </h3>
+              <button
+                onClick={() => setViewingCourse(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer"
+                aria-label="Close details"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono font-bold bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded-md inline-block whitespace-nowrap">
+                  {viewingCourse.programCode}
+                </span>
+                <h4 className="text-xl font-black text-philsa-navy">{viewingCourse.programName}</h4>
+                <p className="text-xs font-semibold text-philsa-gray">{viewingCourse.collegeName}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Degree Type</div>
+                  <div className="font-bold text-slate-700">{viewingCourse.degreeType || '—'}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Major / Specialization</div>
+                  <div className="font-bold text-slate-700">{viewingCourse.majorSpecialization || '—'}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Duration</div>
+                  <div className="font-bold text-slate-700">{viewingCourse.durationYears} {viewingCourse.durationYears === 1 ? 'Year' : 'Years'}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Total Units</div>
+                  <div className="font-bold text-slate-700 font-mono">{viewingCourse.totalUnits}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Cutoff Percentile</div>
+                  <div className="font-bold text-slate-700 font-mono">{viewingCourse.cutoffPercentile}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Status</div>
+                  <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-full border ${viewingCourse.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                    {viewingCourse.status}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Created</div>
+                  <div className="font-medium text-slate-600">{new Date(viewingCourse.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-philsa-gray">Last Updated</div>
+                  <div className="font-medium text-slate-600">{new Date(viewingCourse.updatedAt).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                onClick={() => { setError(null); setPendingCourseDelete(viewingCourse); }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+              <button
+                onClick={() => handleOpenEditCourseModal(viewingCourse)}
+                className="px-5 py-2 rounded-xl bg-philsa-navy hover:bg-philsa-navy/90 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-philsa-navy/10 flex items-center gap-1.5"
+              >
+                <Edit3 className="w-4 h-4" /> Edit
+              </button>
+            </div>
+          </>
+        )}
+      </ModalShell>
 
       {/* College Course Add / Edit Modal */}
-      {isCourseModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
+      <ModalShell
+        isOpen={isCourseModalOpen}
+        onClose={() => { setIsCourseModalOpen(false); setError(null); }}
+        zClass="z-[110]"
+        className="max-w-xl p-6 space-y-6"
+      >
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <h3 className="text-lg font-black text-philsa-navy flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-philsa-navy" />
@@ -1205,9 +1494,34 @@ export default function UniversitiesListMaintenance() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+      </ModalShell>
+
+      <ExportConfigModal
+        isOpen={isExportModalOpen}
+        title={selectedUniversity ? 'Export college courses' : 'Export universities'}
+        columns={selectedUniversity ? COURSE_EXPORT_COLUMNS : UNIVERSITY_EXPORT_COLUMNS}
+        scopeOptions={EXPORT_SCOPE_OPTIONS}
+        scopeCounts={
+          selectedUniversity
+            ? { filtered: filteredCourses.length, all: universityCourses.length }
+            : { filtered: universityCount, all: universitySummary.total }
+        }
+        isExporting={isExporting}
+        onCancel={() => setIsExportModalOpen(false)}
+        onExport={handleExport}
+      />
+
+      <ImportConfigModal
+        isOpen={isImportModalOpen}
+        title={selectedUniversity ? 'Import college courses' : 'Import universities'}
+        columns={selectedUniversity ? COURSE_IMPORT_COLUMNS : UNIVERSITY_IMPORT_COLUMNS}
+        templateFilename={
+          selectedUniversity ? `${selectedUniversity.code}_College_Courses_template.csv` : 'Universities_template.csv'
+        }
+        isImporting={isImporting}
+        onCancel={() => setIsImportModalOpen(false)}
+        onImport={handleImport}
+      />
 
       <ConfirmationDialog
         isOpen={pendingDelete !== null}

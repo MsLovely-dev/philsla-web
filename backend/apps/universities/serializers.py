@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import CollegeCourse, University
@@ -8,7 +9,7 @@ class UniversitySerializer(serializers.ModelSerializer):
         source="president_rector", required=False, allow_blank=True, default=""
     )
     establishedYear = serializers.IntegerField(
-        source="established_year", required=False, allow_null=True, min_value=0
+        source="established_year", required=False, allow_null=True, min_value=1000
     )
     courseCount = serializers.SerializerMethodField()
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
@@ -46,6 +47,11 @@ class UniversitySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("University name is required.")
         return cleaned
 
+    def validate_establishedYear(self, value):
+        if value is not None and value > timezone.now().year:
+            raise serializers.ValidationError("Established year cannot be in the future.")
+        return value
+
     def validate(self, attrs):
         # A university name must be unique within a region (case-insensitive).
         # Names may repeat across regions.
@@ -72,9 +78,11 @@ class CollegeCourseSerializer(serializers.ModelSerializer):
     majorSpecialization = serializers.CharField(
         source="major_specialization", required=False, allow_blank=True, default=""
     )
-    durationYears = serializers.IntegerField(source="duration_years", required=False, min_value=1)
-    totalUnits = serializers.IntegerField(source="total_units", required=False, min_value=0)
-    cutoffPercentile = serializers.FloatField(source="cutoff_percentile", required=False, min_value=0)
+    durationYears = serializers.IntegerField(source="duration_years", required=False, min_value=1, max_value=10)
+    totalUnits = serializers.IntegerField(source="total_units", required=False, min_value=0, max_value=500)
+    cutoffPercentile = serializers.FloatField(
+        source="cutoff_percentile", required=False, min_value=0, max_value=100
+    )
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
 
