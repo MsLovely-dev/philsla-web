@@ -100,7 +100,7 @@ Score Management is backend-owned. `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN` may t
 
 ### `GET /api/v1/results/analytics/overview/`
 
-Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, and `SYSTEM_ADMIN`. It accepts no filters or identity inputs. The backend includes only score rows that are `APPROVED`, `RELEASED`, and belong to a session with `RESULTS_RELEASED` scoring status. The `sessions` collection is intentionally unpaginated as part of this bounded administrative aggregate overview; it is not a candidate-level result collection and the response contains no pagination metadata.
+Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, and `SYSTEM_ADMIN`. It accepts no filters or identity inputs. The backend includes only score rows that are `APPROVED`, `RELEASED`, and belong to a session with `RESULTS_RELEASED` scoring status. The `sessions` collection is intentionally unpaginated and returns one aggregate row per qualifying released session; it is not a candidate-level result collection and the response contains no pagination metadata. The database query count is bounded independently of the number of qualifying sessions, but response cardinality is not capped.
 
 ```json
 {

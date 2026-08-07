@@ -61,7 +61,6 @@ export default function ReportingMatrix() {
     void loadOverview();
     return () => {
       mounted.current = false;
-      requestSequence.current += 1;
     };
   }, [loadOverview]);
 

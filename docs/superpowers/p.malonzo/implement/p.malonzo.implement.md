@@ -467,12 +467,15 @@ Build result: exit 0; Vite transformed 3,119 modules and emitted the existing la
 
 ## 2026-08-07 — Analytics final sign-off
 
-The analytics API documentation now explicitly defines the standard `401 NOT_AUTHENTICATED` and `403 PERMISSION_DENIED` contracts and records that the session aggregates are intentionally unpaginated within the bounded administrative overview. The Reporting Matrix regression suite now also resolves a deferred overview response after unmount and verifies that the unmounted page remains empty without a post-unmount rendering error.
+The analytics API documentation now explicitly defines the standard `401 NOT_AUTHENTICATED` and `403 PERMISSION_DENIED` contracts and records that the session aggregates are intentionally unpaginated, with one aggregate row per qualifying released session. Database query count is bounded independently of the number of sessions, but response cardinality is not capped. The Reporting Matrix regression suite resolves a deferred overview response after unmount and verifies that the result is not inspected after unmount, directly exercising the mounted-request guard.
 
 ```text
+Mutation check: temporarily removed the mounted guard and ran the unmount test only.
+Mutation result: expected failure; the observable result `ok` getter was called once.
 Command: npm test -- src/services/resultsAnalyticsService.test.ts src/pages/results/ReportingMatrix.test.tsx --run
 Result: exit 0; 2 test files passed; 11 tests passed.
-Build: not rerun because production code was unchanged (documentation and test coverage only).
-Diff check: git diff --check
-            passed before this implementation-record append.
+TypeScript: npm run lint
+            exited 1 on the existing unrelated baseline; no diagnostic referenced ReportingMatrix.tsx or ReportingMatrix.test.tsx.
+Build: npm run build
+       passed; 3,119 modules transformed. Existing chunk-size advisory remained.
 ```

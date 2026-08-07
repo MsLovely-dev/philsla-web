@@ -128,6 +128,9 @@ describe('ReportingMatrix', () => {
 
   it('settles a pending overview request safely after unmount', async () => {
     const request = deferred<ServiceResult<ResultsAnalyticsOverview>>();
+    const okGetter = vi.fn(() => true);
+    const unmountedResult = {} as ServiceResult<ResultsAnalyticsOverview>;
+    Object.defineProperty(unmountedResult, 'ok', { get: okGetter });
     getOverviewMock.mockReturnValue(request.promise);
     const view = render(<ReportingMatrix />);
 
@@ -135,10 +138,11 @@ describe('ReportingMatrix', () => {
     view.unmount();
 
     await act(async () => {
-      request.resolve(serviceSuccess(overview));
+      request.resolve(unmountedResult);
       await request.promise;
     });
 
+    expect(okGetter).not.toHaveBeenCalled();
     expect(view.container).toBeEmptyDOMElement();
   });
 
@@ -148,7 +152,7 @@ describe('ReportingMatrix', () => {
       user: { id: 'admin-1', email: 'admin@example.test', firstName: 'Admin', lastName: 'User', role: 'SYSTEM_ADMIN' },
       logout: vi.fn(),
       maintenanceModules: [],
-    } as ReturnType<typeof usePhilSA>);
+    } as unknown as ReturnType<typeof usePhilSA>);
 
     expect(reportingRoute).toBeDefined();
     render(
