@@ -6,6 +6,7 @@ from django.utils import timezone
 from apps.accounts.models import AccountProfile
 
 from .models import (
+    BlueprintSection,
     ExamSet,
     ExamSetAssemblyRun,
     ExamSetAssemblyRunItem,
@@ -39,7 +40,7 @@ def auto_assemble_exam_set(*, exam_set: ExamSet, actor_profile: AccountProfile) 
         .order_by("display_order")
     )
 
-    selected: list[tuple[Question, object]] = []
+    selected: list[tuple[Question, BlueprintSection]] = []
     selected_ids: set[int] = set()
     shortfall_count = 0
     shortfalls: list[str] = []
