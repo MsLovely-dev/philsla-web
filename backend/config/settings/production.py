@@ -32,6 +32,8 @@ if not os.environ.get("REDIS_URL", ""):
 
 if LRN_REGISTRY_PROVIDER == "mock":  # noqa: F405
     raise ImproperlyConfigured("LRN_REGISTRY_PROVIDER=mock is not allowed in production.")
+if LRN_REGISTRY_PROVIDER == "deped" and (not LRN_DEPED_VERIFY_URL or not LRN_DEPED_API_TOKEN):  # noqa: F405
+    raise ImproperlyConfigured("LRN_DEPED_VERIFY_URL and LRN_DEPED_API_TOKEN are required when LRN_REGISTRY_PROVIDER=deped.")
 if PHILSYS_REGISTRY_PROVIDER == "mock":  # noqa: F405
     raise ImproperlyConfigured("PHILSYS_REGISTRY_PROVIDER=mock is not allowed in production.")
 if STEP2_DOCUMENT_RECOGNITION_PROVIDER == "mock":  # noqa: F405

@@ -45,8 +45,8 @@ The baseline health and authentication boundaries, the first student-application
 | `POST` | `/api/v1/applications/profile/selfie/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Upload the required profile biometric selfie after server-side face validation | Implemented |
 | `POST` | `/api/v1/applications/profile/submit/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Validate and complete the profile so the application can enter normal admissions review | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
-| `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
-| `GET` | `/api/v1/applications/registration/integration-status/` | Public; no credentials required | `AllowAny` | Return safe frontend-facing status for PhilSLA backend connectivity and registration provider readiness | Implemented; external DepEd and PhilSys providers remain unavailable placeholders |
+| `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider and configured DepEd LRN test provider |
+| `GET` | `/api/v1/applications/registration/integration-status/` | Public; no credentials required | `AllowAny` | Return safe frontend-facing status for PhilSLA backend connectivity and registration provider readiness | Implemented; DepEd LRN reports available only when URL and backend-only token are configured; PhilSys remains locked or placeholder |
 | `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
 | `POST` | `/api/v1/applications/registration/email-otp/verify/` | Public; device/network throttled | `AllowAny` | Verify a registration email OTP and issue a short-lived email verification token | Implemented |
 | `POST` | `/api/v1/applications/registration/attachments/` | Public with `X-Registration-Session-Id` | `AllowAny` | Upload one private PDF/JPEG/PNG file for a configured Step 1 file field | Implemented |
@@ -340,21 +340,21 @@ Test coverage: `backend/apps/configuration/tests/test_university_registry_endpoi
 
 This endpoint lets the frontend show System Integration readiness without calling external registries directly. It confirms PhilSLA backend reachability and reports Manual Registration, LRN Verification, and PhilSys National ID readiness using safe labels only. It must not expose provider URLs, credentials, tokens, raw registry payloads, real LRN values, National ID values, or student records.
 
-Manual Registration is reported as `available`. LRN may report `unavailable`, `mock`, or `placeholder` depending on `LRN_REGISTRY_PROVIDER`. PhilSys reports `locked` or `placeholder` depending on `PHILSYS_REGISTRY_PROVIDER`. Placeholder statuses mean the backend boundary exists but no live external API is connected.
+Manual Registration is reported as `available`. LRN may report `unavailable`, `mock`, `placeholder`, or `available` depending on `LRN_REGISTRY_PROVIDER` and whether the DepEd verify URL plus backend-only API token are configured. PhilSys reports `locked` or `placeholder` depending on `PHILSYS_REGISTRY_PROVIDER`. Placeholder statuses mean the backend boundary exists but no live external API is connected.
 
 Before draft creation, call `POST /api/v1/applications/registration/lrn/verify/`:
 
 ```json
 {
-  "lrn": "123456789012",
-  "verificationCategory": "email",
-  "verificationValue": "lovely@yopmail.com"
+  "lrn": "817222062752",
+  "verificationCategory": "birthday",
+  "verificationValue": "2012-08-07"
 }
 ```
 
-`verificationCategory` may be `email`, `birthday`, `student_id`, `mobile`, or `mother_name`. The backend compares `verificationValue` with the corresponding registered value in the configured LRN registry provider when those fields are supplied. A mismatch returns `400 LRN_VERIFICATION_FAILED`.
+`verificationCategory` may be `email`, `birthday`, `student_id`, `mobile`, or `mother_name`. The configured DepEd provider uses `birthday` because the upstream request requires LRN plus birth date. The synthetic local/test provider also supports the other categories for registration-flow testing. The backend compares `verificationValue` with the corresponding registered value in the configured LRN registry provider when those fields are supplied. A mismatch returns `400 LRN_VERIFICATION_FAILED`.
 
-Local and test settings use a synthetic registry record for that LRN. A successful response contains an opaque, 15-minute `verificationToken`, the registry-sourced read-only profile, and an immutable snapshot of the active identity verification configuration. The profile contains the Step 1 high-priority information returned by the registry: LRN, birth date, first/middle/last name, extension name when applicable, sex, school ID, school name, grade level, enrollment status, and school year. The student must then complete the Step 1 Identity & Biometrics selfie flow using the same registration token. When a verification token is supplied during account creation, the backend overwrites those high-priority fields with verified registry values and marks the identity state as `VERIFIED`.
+Local and test settings use a synthetic registry record for that LRN. Environments configured with `LRN_REGISTRY_PROVIDER=deped`, `LRN_DEPED_VERIFY_URL`, and a backend-only `LRN_DEPED_API_TOKEN` call the DepEd LRN verify provider from the backend. The frontend never receives the provider URL, token, or raw provider payload. A successful response contains an opaque, 15-minute `verificationToken`, the registry-sourced read-only profile, and an immutable snapshot of the active identity verification configuration. The profile contains the Step 1 high-priority information returned by the registry: LRN, birth date, first/middle/last name, extension name when applicable, sex, school ID, school name, grade level, enrollment status, and school year. DepEd compact values are normalized before reaching the frontend, for example `F` to `Female` and `ENROLLED` to `Enrolled`; when the provider omits school year, the backend derives it from `ACTIVE_EXAM_CYCLE_ID` when possible. The student must then complete the Step 1 Identity & Biometrics selfie flow using the same registration token. When a verification token is supplied during account creation, the backend overwrites those high-priority fields with verified registry values and marks the identity state as `VERIFIED`.
 
 Step 1 Identity & Biometrics uses two token-protected selfie endpoints:
 
@@ -369,7 +369,7 @@ Step 1 field visibility and priority are driven by the shared configurable field
 
 Student registration verification methods are also maintained as configurable rows with `type: "Verification Method"`. Exactly one enabled Step 1 verification method is allowed. Enabling LRN or Manual Entry automatically disables the other verification methods, and the API rejects attempts to disable or delete the last enabled verification method. PhilSys is predefined but locked until future feature development is complete; attempts to enable it return `400 BAD REQUEST`. Ordinary `Student Registration Field` rows keep independent enable/disable behavior.
 
-The primary local test learner (`123456789012`, birthdate `2008-05-15`) is Lovely Mae R Chavez of Taysan High School and Child Development Center, Grade 12. Only Grade 12 learners are eligible. Synthetic LRN `901234567899` represents an ineligible Grade 11 learner. No synthetic registry provider is enabled by base or production settings, and production rejects `LRN_REGISTRY_PROVIDER=mock`; the real DepEd provider remains `TBD`.
+The primary local test learner (`123456789012`, birthdate `2008-05-15`) is Lovely Mae R Chavez of Taysan High School and Child Development Center, Grade 12. Only Grade 12 learners are eligible. Synthetic LRN `901234567899` represents an ineligible Grade 11 learner. No synthetic registry provider is enabled by base or production settings, and production rejects `LRN_REGISTRY_PROVIDER=mock`. The DepEd provider is implemented behind the registry boundary and requires `LRN_DEPED_VERIFY_URL` plus backend-only `LRN_DEPED_API_TOKEN`; missing credentials fail closed as `LRN_REGISTRY_UNAVAILABLE` for verification attempts and `placeholder` in integration status.
 
 Unknown LRNs return `400 LRN_VERIFICATION_FAILED`; an unavailable registry returns `503 LRN_REGISTRY_UNAVAILABLE`; an existing active application in `ACTIVE_EXAM_CYCLE_ID` returns `409 CONFLICT`. Five failed attempts for one LRN start a 15-minute `429 LRN_COOLDOWN`. A separate device/network throttle applies on top. A conditional database uniqueness constraint protects both LRN/cycle and owner/cycle against concurrent non-rejected registrations. LRN values and dates of birth are not written to request or audit logs.
 

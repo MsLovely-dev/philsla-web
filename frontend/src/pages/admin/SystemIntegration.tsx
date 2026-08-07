@@ -73,6 +73,36 @@ function methodIcon(id: RegistrationIntegrationMethod['id']) {
   return <Activity className="h-5 w-5" aria-hidden="true" />;
 }
 
+function methodDetails(method: RegistrationIntegrationMethod) {
+  if (method.id === 'lrn' && method.status === 'available') {
+    return [
+      'DepEd LRN test provider',
+      'POST /api/v1/learners/verify',
+      'Bearer token is stored backend-only',
+      'Requires LRN and birthday',
+    ];
+  }
+  if (method.id === 'lrn') {
+    return [
+      'DepEd LRN adapter',
+      'Birthday verification is required when provider is active',
+      'No browser-to-DepEd calls',
+    ];
+  }
+  if (method.id === 'philsys') {
+    return [
+      'PhilSys adapter locked',
+      'Official API requirements pending',
+      'No browser-to-PhilSys calls',
+    ];
+  }
+  return [
+    'PhilSLA registration endpoint',
+    'No external registry dependency',
+    'Always available when backend is reachable',
+  ];
+}
+
 function connectionCopy(state: ConnectionState) {
   switch (state) {
     case 'checking':
@@ -221,6 +251,17 @@ export default function SystemIntegration() {
                   : 'Applicants must use PhilSLA registration endpoints; no browser-to-provider connection is allowed.'}
               </p>
             </div>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Provider Boundary</p>
+              <ul className="mt-2 space-y-1.5 text-xs font-bold text-slate-700">
+                {methodDetails(method).map((detail) => (
+                  <li key={detail} className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-philsa-red" aria-hidden="true" />
+                    <span>{detail}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </article>
         ))}
       </section>
@@ -235,8 +276,9 @@ export default function SystemIntegration() {
           ))}
         </div>
         <p className="mt-3 text-xs font-semibold leading-relaxed text-slate-600">
-          The frontend checks PhilSLA backend readiness only. DepEd LRN and PhilSys credentials, payload mapping,
-          retries, throttling, and safe error handling remain backend-owned.
+          The frontend checks PhilSLA backend readiness only. DepEd LRN credentials, payload mapping,
+          request IDs, retries, throttling, and safe error handling remain backend-owned. PhilSys remains locked
+          until an official provider contract is approved.
         </p>
       </section>
     </div>

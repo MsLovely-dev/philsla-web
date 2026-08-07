@@ -421,57 +421,33 @@ Frontend verification:
   - First sandboxed run failed before tests loaded with Vite/esbuild `Error: spawn EPERM`.
   - Escalated rerun passed: 3 test files, 18 tests.
 - `npm run lint`
-  - Failed with repository-wide TypeScript errors outside the Score Management demo files.
-  - Classification: unrelated repository debt, not a Score Management demo blocker based on the focused Score Management test pass.
-  - Representative failures include `src/pages/admin/CommandCenter.tsx` impossible union comparisons, missing `html5-qrcode` declarations in proctor QR scan files, duplicate identifiers in `src/services/backendAuthService.ts`, and unrelated user/application type mismatches.
+  - Failed on existing repository-wide TypeScript errors outside this change, including `CommandCenter.tsx`, `backendAuthService.ts`, `QrScanModal.tsx`, and pre-existing `StudentApplication.tsx` type errors unrelated to the new status panel.
+- `npm run build`
+  - Passed, Vite production bundle built successfully.
 
-Demo rehearsal:
+## 2026-08-08 - DepEd LRN Provider Integration
 
-- Seed commands:
-  - `..\venv\Scripts\python.exe manage.py seed_score_management --count 25 --seed 2027 --reset --settings=config.settings.local`
-    - Passed, seeded 75 score records across 3 score batches.
-  - `..\venv\Scripts\python.exe manage.py seed_score_candidate_profiles --count 25 --seed 2027 --reset --settings=config.settings.local`
-    - Passed, removed 600 previously seeded application rows and seeded 75 linked student application profiles.
-- Demo environment:
-  - Backend API rehearsal used Django/DRF APIClient with `SERVER_NAME=localhost` under `config.settings.local`.
-  - Backend URL: not started as a long-running server in this execution.
-  - Frontend URL: not started as a long-running server in this execution.
-  - Demo account type: `SYSTEM_ADMIN` principal through the DRF API client.
-- First API rehearsal attempt:
-  - Blocked by local `ALLOWED_HOSTS` because DRF APIClient defaulted to `testserver`.
-  - Classification: environment issue, not a Score Management demo blocker.
-  - Rerun used `SERVER_NAME=localhost`.
-- API rehearsal results:
-  - Batch list: `200`, 3 batches.
-  - Process regular batch: `202`, `SCORING_PROCESSED`, 25 processed, 0 excluded.
-  - Results page: `200`, 25 total records, 5 returned for page size 5.
-  - Search: `200`, returned matching records.
-  - Release-status filter before release: `200`, 25 `NOT_RELEASED` records.
-  - Candidate profile for `PHL-2027-000001`: `200`, returned both `score` and `profile` payloads.
-  - Release regular batch: `200`, `RESULTS_RELEASED`, 25 released, 0 notifications queued because seeded synthetic `@philsa.example.test` emails are skipped.
-  - Export regular batch: `200`, `text/csv`, 1922 bytes.
-- Steps passed:
-  - Load available examination sessions.
-  - Select a batch.
-  - Show backend-paginated candidate score results.
-  - Search, filter, and sort candidate results.
-  - Process scoring for a ready batch.
-  - Open candidate detail and show read-only score/profile context.
-  - Release processed results.
-  - Export processed score results.
-- Blockers:
-  - No backend or frontend long-running server was started, so this was not a live browser rehearsal.
-  - Repository-wide frontend lint remains blocked by unrelated TypeScript debt outside Score Management.
-- Fallback talking points:
-  - If the selected regular batch has already been processed or released during rehearsal, use one of the other seeded demo batches or reseed the synthetic data.
-  - If Redis is unavailable, release remains successful and notifications remain queued or skipped according to the outbox rules; SMTP dispatch is not required for the demo path.
-  - School and government recipient delivery remains outside this sprint pending downstream contracts.
+Work completed:
 
-Freeze and follow-up classification:
+- Replaced the DepEd LRN placeholder behavior with a backend-owned DepEd verify adapter.
+- Kept the frontend boundary unchanged: public registration still calls `POST /api/v1/applications/registration/lrn/verify/` only.
+- Added backend-only configuration for `LRN_DEPED_VERIFY_URL`, `LRN_DEPED_API_TOKEN`, and `LRN_DEPED_TIMEOUT_SECONDS`.
+- Mapped the received provider response into PhilSLA's stable verification profile:
+  - `fullName` to first/middle/last name fields.
+  - `sex: "F"` to `Female` and `sex: "M"` to `Male`.
+  - `enrollmentStatus: "ENROLLED"` to `Enrolled`.
+  - Missing `schoolYear` to `ACTIVE_EXAM_CYCLE_ID` plus the next year, such as `2026-2027`.
+- Rejected provider responses whose `learner.lrn` does not match the applicant-submitted LRN.
+- Removed the frontend demo email fallback that inserted `aurelio.delacruz@philsys.gov.ph` after LRN verification.
+- Kept provider URL, token, transaction reference, verification timestamp, and raw provider payload out of browser responses.
 
-- Demo blocker: none found in focused Score Management backend verification, focused frontend verification, or API-level rehearsal.
-- P0 post-freeze fix: none identified.
-- Post-demo implementation plan required: Application Review result synchronization; expanded Score Management audit events; recipient-target release ledger and API behavior for schools and government.
-- External contract required: school, government, DepEd, CHED, TESDA, and Student Portal result-display/delivery contracts.
-- Production rehearsal required: PostgreSQL-compatible large-batch rehearsal and official ranking/percentile methodology confirmation.
-- Out of scope for this sprint: System Integration and downstream external recipient delivery.
+Verification:
+
+- `..\venv\Scripts\python.exe manage.py test apps.applications.tests.test_lrn_verification --settings=config.settings.test`
+  - Passed, 13 tests.
+- `..\venv\Scripts\python.exe manage.py test apps.applications.tests.test_application_endpoints --settings=config.settings.test`
+  - Passed, 51 tests.
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+- `npm test -- StudentApplication.test.tsx`
+  - Passed, 4 tests.
