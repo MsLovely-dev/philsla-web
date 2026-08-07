@@ -2254,6 +2254,8 @@ git commit -m "test(exam-set-hub-parity): extend e2e journey with auto-assemble 
 Run: `cd backend && .venv/Scripts/python.exe manage.py test --settings=config.settings.test`
 Expected: PASS except the pre-existing, out-of-scope failures already documented in `docs/superpowers/i.sandoval/i.sandoval.task.md`.
 
+**Additional pre-existing failures found during this plan's execution (not previously documented anywhere, verified unrelated via `git stash` on two separate occasions — Task 4 and Task 12):** `apps.core.tests.test_result_app_boundaries.ResultAppBoundaryTests.test_score_management_and_exam_review_have_distinct_app_labels` and `apps.core.tests.test_result_migration_boundaries.ResultMigrationBoundaryTests.test_results_and_exam_reviews_have_independent_leaf_nodes` — both concern a `ScoreReleaseNotification` model and a `results` migration leaf, unrelated to `apps.exams`. Expect these 2 failures in addition to whatever is already documented above.
+
 - [ ] **Step 2: Run the full frontend unit suite**
 
 Run: `cd frontend && npm test`
