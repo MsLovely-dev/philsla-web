@@ -43,6 +43,11 @@ export function useExamSets(services: UseExamSetsServices = defaultServices) {
     setLoadState('loading');
     setLoadError(null);
 
+    // Only the exam-sets fetch is load-bearing for `loadState`/`loadError`: it's the one
+    // thing every consuming page (Dashboard, Packages, Audit) fundamentally needs. Blueprint
+    // and Question Bank data are needed only by the Dashboard's create-form/question-picker,
+    // so their failures degrade gracefully (empty lists) instead of blocking the whole page --
+    // an unrelated Blueprint/Question Bank outage should not make Packages/Audit unusable.
     const [examSetResult, blueprintResult, questionResult] = await Promise.all([
       services.examSetService.listExamSets(),
       services.blueprintService.listBlueprints(),
@@ -51,19 +56,16 @@ export function useExamSets(services: UseExamSetsServices = defaultServices) {
 
     if (!mounted.current || generation !== loadGeneration.current) return;
 
-    const failure = [examSetResult, blueprintResult, questionResult].find((result) => result.ok === false);
-    if (failure?.ok === false) {
-      setLoadError(failure.error);
+    if (examSetResult.ok === false) {
+      setLoadError(examSetResult.error);
       setLoadState('error');
       return;
     }
 
-    if (examSetResult.ok && blueprintResult.ok && questionResult.ok) {
-      setExamSets(examSetResult.data);
-      setBlueprints(blueprintResult.data);
-      setQuestions(questionResult.data);
-      setLoadState(examSetResult.data.length > 0 ? 'ready' : 'empty');
-    }
+    setExamSets(examSetResult.data);
+    setBlueprints(blueprintResult.ok ? blueprintResult.data : []);
+    setQuestions(questionResult.ok ? questionResult.data : []);
+    setLoadState(examSetResult.data.length > 0 ? 'ready' : 'empty');
   }, [services.blueprintService, services.examSetService, services.questionBankService]);
 
   useEffect(() => {

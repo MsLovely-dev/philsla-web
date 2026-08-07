@@ -124,6 +124,19 @@ describe('useExamSets', () => {
     expect(result.current.mutationError?.message).toContain('Synthetic');
   });
 
+  it('degrades gracefully when blueprints/questions fail but exam sets load, instead of forcing an error state', async () => {
+    const injected = services();
+    injected.blueprintService.listBlueprints.mockResolvedValue(networkError('Synthetic blueprint outage.'));
+    injected.questionBankService.listQuestions.mockResolvedValue(networkError('Synthetic question bank outage.'));
+    const { result } = renderHook(() => useExamSets(injected));
+
+    await waitFor(() => expect(result.current.loadState).toBe('ready'));
+    expect(result.current.loadError).toBeNull();
+    expect(result.current.examSets).toEqual([examSet()]);
+    expect(result.current.blueprints).toEqual([]);
+    expect(result.current.questions).toEqual([]);
+  });
+
   it('runs auto-assembly and merges the returned exam set', async () => {
     const testServices = services();
     const { result } = renderHook(() => useExamSets(testServices));
