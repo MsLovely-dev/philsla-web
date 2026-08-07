@@ -402,3 +402,65 @@ Build: npm run build
 Diff check: git diff --check
             passed.
 ```
+
+## 2026-08-07 — Results Release orchestration Tasks 1–4 consolidated record
+
+The implemented scope follows the approved minimal `plans/2026-08-07-results-release-orchestration.md` plan. The broader 2026-08-06 design and core plan are retained as explicitly superseded history. No release-policy, hold, publication-snapshot, notification, model, migration, or dependency work from those older documents was implemented.
+
+### Runtime and storage evidence
+
+- `py -3.13 --version` reported `Python 3.13.14`. Every Django command listed below used this launcher; the separately observed default `python --version` value of `Python 3.14.5` did not run these Django checks.
+- `node --version` reported `v24.16.0`.
+- `config.settings.test` uses an in-memory SQLite database (`ENGINE=django.db.backends.sqlite3`, `NAME=:memory:`). The focused backend results below therefore do not constitute PostgreSQL verification.
+
+### Task 1 — administrative release summary
+
+Implemented the paginated `/api/v1/results/release-summary/` contract with validated page, page-size, status, and search filters; safe aggregate-only rows; bounded page aggregation; and conservative processing/release readiness.
+
+```text
+Command: py -3.13 manage.py test apps.results.tests.test_results_release_api --settings=config.settings.test
+Result: exit 0; 13 tests passed; Django system check reported no issues.
+Note: the existing warning that backend/staticfiles/ is absent was emitted.
+```
+
+### Task 2 — process/release operator permissions
+
+Authorized `SYSTEM_ADMIN` and `EXAM_ADMINISTRATOR` for release summary, score processing, and batch release while retaining candidate list/profile/export restrictions and backend authority.
+
+```text
+Command: py -3.13 manage.py test apps.results.tests.test_results_release_api apps.results.tests.test_score_management_api --settings=config.settings.test
+Result: exit 0; 48 tests passed; Django system check reported no issues.
+Database: in-memory SQLite through config.settings.test.
+```
+
+### Task 3 — typed frontend orchestration service
+
+Added typed `list`, `process`, and `release` methods over the shared API client, including encoded IDs, standard `ServiceResult` failures, and no alternative-base replay for mutations whose network outcome is ambiguous.
+
+```text
+Command: npm test -- src/services/resultsReleaseService.test.ts --run
+Result: exit 0; 1 test file passed; 9 tests passed.
+```
+
+### Task 4 — authoritative admin screen
+
+Removed mock/localStorage candidate and notification authority. The screen now provides loading, global-empty, filtered-empty, safe error/retry, page-scoped summary labels, responsive table overflow, filters, pagination, confirmation/cancel flows, pending guards, authoritative network-failure refetch, stale-list-response protection, and final released state.
+
+```text
+RED command: npm test -- src/pages/admin/hub/ResultsRelease.test.tsx
+RED result: 15 tests ran; 2 expected failures proved the global-looking page-total labels and undifferentiated filtered-empty message.
+GREEN command: npm test -- src/pages/admin/hub/ResultsRelease.test.tsx
+GREEN result: 1 test file passed; 15 tests passed.
+Final combined command: npm test -- src/services/resultsReleaseService.test.ts src/pages/admin/hub/ResultsRelease.test.tsx --run
+Final combined result: exit 0; 2 test files passed; 24 tests passed.
+Build command: npm run build
+Build result: exit 0; Vite transformed 3,119 modules and emitted the existing large-chunk advisory.
+```
+
+### Rollout, rollback, and outstanding verification
+
+- Roll out the backend summary and permission contracts before or with the connected frontend. Existing `/api/v1/results/score-management/batches/{sessionId}/process/` and `/release/` paths remain the mutation boundary.
+- Roll back by reverting the frontend screen/service and backend summary/permission commits as a coordinated application release. There is no database rollback because this minimal plan added no model or migration.
+- PostgreSQL-compatible storage was not exercised for Tasks 1–4; focused backend tests used in-memory SQLite. A PostgreSQL rehearsal remains outstanding before treating database-specific behavior as verified.
+- Playwright was not run for this minimal Results Release screen. Browser-journey verification remains outstanding.
+- Repository-wide `npm run lint` is a known red baseline with unrelated TypeScript diagnostics in other modules. The last observed run exited `1`; no diagnostic referenced `ResultsRelease.tsx`, `ResultsRelease.test.tsx`, or `resultsReleaseService.ts`. It was not rerun as part of this focused final cleanup, and is not claimed as passing.

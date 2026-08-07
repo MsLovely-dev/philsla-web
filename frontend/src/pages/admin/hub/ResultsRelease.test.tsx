@@ -54,6 +54,10 @@ function listSuccess(...sessions: ResultsReleaseSummary[]) {
   return serviceSuccess({ count: sessions.length, page: 1, pageSize: 25, results: sessions });
 }
 
+function listPage(count: number, page: number, pageSize: number, ...sessions: ResultsReleaseSummary[]) {
+  return serviceSuccess({ count, page, pageSize, results: sessions });
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
@@ -75,11 +79,62 @@ describe('ResultsRelease', () => {
     expect(screen.getAllByText('Ready for processing')).not.toHaveLength(0);
   });
 
+  it('labels candidate totals as current-page values when more pages exist', async () => {
+    listMock.mockResolvedValue(listPage(30, 1, 1, readySession));
+    renderResultsRelease();
+
+    await screen.findByText('PhilSA Regular Examination 2027');
+    expect(screen.getByText('Sessions').parentElement).toHaveTextContent('30');
+    expect(screen.getByText('Candidates on this page').parentElement).toHaveTextContent('120');
+    expect(screen.getByText('Approved on this page').parentElement).toHaveTextContent('110');
+    expect(screen.getByText('Released on this page').parentElement).toHaveTextContent('0');
+  });
+
+  it('shows loading feedback while release summaries are pending', async () => {
+    const request = deferred<ReturnType<typeof listSuccess>>();
+    listMock.mockReturnValueOnce(request.promise);
+    renderResultsRelease();
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading release summaries');
+    await act(async () => { request.resolve(listSuccess(readySession)); });
+    expect(await screen.findByText('PhilSA Regular Examination 2027')).toBeInTheDocument();
+  });
+
   it('shows an empty state when no release summaries exist', async () => {
     listMock.mockResolvedValue(listSuccess());
     renderResultsRelease();
 
     expect(await screen.findByText(/no examination sessions are available/i)).toBeInTheDocument();
+  });
+
+  it('distinguishes an empty filtered result from a globally empty release list', async () => {
+    const user = userEvent.setup();
+    listMock.mockResolvedValueOnce(listSuccess(readySession)).mockResolvedValueOnce(listSuccess());
+    renderResultsRelease();
+
+    await screen.findByText('PhilSA Regular Examination 2027');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Release status' }), 'RESULTS_RELEASED');
+
+    expect(await screen.findByText(/no examination sessions match the current filters/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no examination sessions are available for results release/i)).not.toBeInTheDocument();
+  });
+
+  it('loads the requested page and updates pagination controls', async () => {
+    const user = userEvent.setup();
+    const pageTwoSession = { ...releasedSession, name: 'PhilSA Special Examination 2027' };
+    listMock
+      .mockResolvedValueOnce(listPage(2, 1, 1, readySession))
+      .mockResolvedValueOnce(listPage(2, 2, 1, pageTwoSession));
+    renderResultsRelease();
+
+    expect(await screen.findByText('Page 1 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Next' }));
+
+    expect(await screen.findByText('PhilSA Special Examination 2027')).toBeInTheDocument();
+    expect(screen.getByText('Page 2 of 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   });
 
   it('shows a safe load error and retries the summary request', async () => {

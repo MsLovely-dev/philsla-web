@@ -1,5 +1,7 @@
 # Results Release and Analytics Design
 
+> **SUPERSEDED — 2026-08-07.** This is a preserved historical proposal and must not be used for implementation. The approved minimal Results Release design and executable scope are recorded in [`../plans/2026-08-07-results-release-orchestration.md`](../plans/2026-08-07-results-release-orchestration.md); its no-model, no-migration orchestration replaces the policy/hold/publication architecture proposed here.
+
 - Date: 2026-08-06
 - Owner: Prince Barachiel Malonzo (`P.Malonzo`)
 - Branch: `p.malonzo/results-release`

@@ -1,5 +1,7 @@
 # Results Release Core Implementation Plan
 
+> **SUPERSEDED — 2026-08-07.** Retained only as planning history; do not execute its persistence, policy, hold, publication, notification, or migration tasks. It was replaced by the approved minimal [`2026-08-07-results-release-orchestration.md`](2026-08-07-results-release-orchestration.md) plan, which reuses the existing Score Management models and process/release services without adding models or migrations.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the admin Results Release mock/localStorage workflow with database-backed policy, readiness, hold, partial-publication, and publication-history APIs and a connected React page.

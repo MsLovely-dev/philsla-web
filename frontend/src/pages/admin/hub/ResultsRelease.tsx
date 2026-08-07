@@ -142,7 +142,7 @@ export default function ResultsRelease() {
         </div>
 
         {pageState.kind === 'loading' && <div className="flex items-center justify-center gap-2 p-10 text-sm font-semibold text-philsa-gray" role="status"><Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />Loading release summaries…</div>}
-        {pageState.kind === 'empty' && <p className="p-10 text-center text-sm font-semibold text-philsa-gray">No examination sessions are available for results release.</p>}
+        {pageState.kind === 'empty' && <p className="p-10 text-center text-sm font-semibold text-philsa-gray">{search.trim() || status ? 'No examination sessions match the current filters.' : 'No examination sessions are available for results release.'}</p>}
         {pageState.kind === 'forbidden' && <p role="alert" className="p-8 text-center text-sm font-semibold text-philsa-red">{pageState.message}</p>}
         {pageState.kind === 'error' && <div className="space-y-3 p-8 text-center"><p role="alert" className="text-sm font-semibold text-philsa-red">{pageState.message}</p><button type="button" onClick={() => void load()} className="btn-secondary">Retry</button></div>}
 
@@ -150,9 +150,9 @@ export default function ResultsRelease() {
           <div className="grid grid-cols-2 gap-px border-b border-philsa-border bg-philsa-border sm:grid-cols-4">
             {[
               ['Sessions', pageState.count],
-              ['Candidates', pageState.sessions.reduce((total, session) => total + session.totalCandidates, 0)],
-              ['Approved', pageState.sessions.reduce((total, session) => total + session.approvedScores, 0)],
-              ['Released', pageState.sessions.reduce((total, session) => total + session.releasedScores, 0)],
+              ['Candidates on this page', pageState.sessions.reduce((total, session) => total + session.totalCandidates, 0)],
+              ['Approved on this page', pageState.sessions.reduce((total, session) => total + session.approvedScores, 0)],
+              ['Released on this page', pageState.sessions.reduce((total, session) => total + session.releasedScores, 0)],
             ].map(([label, value]) => <div key={String(label)} className="bg-white p-4"><p className="text-[10px] font-black uppercase tracking-wider text-philsa-gray">{label}</p><p className="mt-1 text-xl font-black text-philsa-navy">{value}</p></div>)}
           </div>
           <div className="overflow-x-auto">
