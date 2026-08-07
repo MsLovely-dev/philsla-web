@@ -11,7 +11,7 @@ from apps.accounts.permissions import RoleRequiredPermission, require_roles
 from apps.accounts.roles import PortalRole
 from apps.core.pagination import StandardPageNumberPagination
 
-from .audit import record_configuration_event
+from .audit import record_configuration_audit, record_configuration_event
 from .models import CollegeCourse, ConfigurableField, University
 from .permissions import UniversityRegistryPermission, assigned_university_ids
 from .serializers import (
@@ -181,6 +181,14 @@ class ConfigurableFieldAdminView(APIView):
             actor_id = getattr(request.user, "user_id", request.user.id)
             field = serializer.save(created_by_id=actor_id, updated_by_id=actor_id)
         record_configuration_event(event="configurable_field_created", outcome="success", request=request, user=request.user)
+        record_configuration_audit(
+            action="created",
+            field_id=field.id,
+            before={},
+            after=ConfigurableFieldSerializer(field).data,
+            request=request,
+            user=request.user,
+        )
         return Response(ConfigurableFieldSerializer(field).data, status=status.HTTP_201_CREATED)
 
 
@@ -193,6 +201,7 @@ class ConfigurableFieldAdminDetailView(APIView):
 
     def patch(self, request, field_id) -> Response:
         field = self.get_object(field_id)
+        before_snapshot = ConfigurableFieldSerializer(field).data
         serializer = ConfigurableFieldSerializer(field, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
@@ -201,10 +210,19 @@ class ConfigurableFieldAdminDetailView(APIView):
             enforce_verification_method_policy(candidate)
             updated = serializer.save(updated_by_id=getattr(request.user, "user_id", request.user.id))
         record_configuration_event(event="configurable_field_updated", outcome="success", request=request, user=request.user)
+        record_configuration_audit(
+            action="updated",
+            field_id=updated.id,
+            before=before_snapshot,
+            after=ConfigurableFieldSerializer(updated).data,
+            request=request,
+            user=request.user,
+        )
         return Response(ConfigurableFieldSerializer(updated).data)
 
     def put(self, request, field_id) -> Response:
         field = self.get_object(field_id)
+        before_snapshot = ConfigurableFieldSerializer(field).data
         serializer = ConfigurableFieldSerializer(field, data=request.data)
         serializer.is_valid(raise_exception=True)
         with transaction.atomic():
@@ -213,14 +231,32 @@ class ConfigurableFieldAdminDetailView(APIView):
             enforce_verification_method_policy(candidate)
             updated = serializer.save(updated_by_id=getattr(request.user, "user_id", request.user.id))
         record_configuration_event(event="configurable_field_updated", outcome="success", request=request, user=request.user)
+        record_configuration_audit(
+            action="updated",
+            field_id=updated.id,
+            before=before_snapshot,
+            after=ConfigurableFieldSerializer(updated).data,
+            request=request,
+            user=request.user,
+        )
         return Response(ConfigurableFieldSerializer(updated).data)
 
     def delete(self, request, field_id) -> Response:
         field = self.get_object(field_id)
+        before_snapshot = ConfigurableFieldSerializer(field).data
+        field_pk = field.id
         with transaction.atomic():
             assert_can_delete(field)
             field.delete()
         record_configuration_event(event="configurable_field_deleted", outcome="success", request=request, user=request.user)
+        record_configuration_audit(
+            action="deleted",
+            field_id=field_pk,
+            before=before_snapshot,
+            after={},
+            request=request,
+            user=request.user,
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
