@@ -1,10 +1,11 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Clock } from 'lucide-react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { PublicLayout } from '../components/PublicLayout';
 import { LoadingState } from '../components/ui';
 import { INITIAL_MAINTENANCE_MODULES, usePhilSA } from '../PhilSAContext';
+import { backendApplicationService } from '../services/backendApplicationService';
 import { useMockData } from '../services/mockService';
 import { User, UserRole } from '../types';
 
@@ -50,6 +51,34 @@ function routeForUser(user: User, maintenanceModules: typeof INITIAL_MAINTENANCE
   }
 
   return routeForRole(user.role);
+}
+
+function usePendingStudentProfile(user: User | null) {
+  const [state, setState] = useState({ loading: false, pending: false });
+
+  useEffect(() => {
+    if (!user || user.role !== 'STUDENT') {
+      setState({ loading: false, pending: false });
+      return;
+    }
+
+    let cancelled = false;
+    setState({ loading: true, pending: false });
+    void backendApplicationService.getStudentProfileCompletion().then((result) => {
+      if (cancelled) return;
+      setState({ loading: false, pending: result.ok });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.role]);
+
+  return state;
+}
+
+function isStudentProfileCompletionRoute(pathname: string) {
+  return pathname === '/student/profile' || pathname === '/dashboard';
 }
 
 function moduleKey(moduleName: string) {
@@ -159,9 +188,13 @@ export function ProtectedRoute({ allowedRoles, children, layout = 'dashboard', s
   const { user, isAuthInitialized, isLoading, maintenanceModules } = useProtectedAuth();
   const location = useLocation();
   const modules = maintenanceModules?.length ? maintenanceModules : INITIAL_MAINTENANCE_MODULES;
+  const pendingStudentProfile = usePendingStudentProfile(user);
 
-  if (!isAuthInitialized || isLoading) return <LoadingScreen />;
+  if (!isAuthInitialized || isLoading || pendingStudentProfile.loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  if (user.role === 'STUDENT' && pendingStudentProfile.pending && !isStudentProfileCompletionRoute(location.pathname)) {
+    return <Navigate to="/student/profile" state={{ from: location.pathname, notice: 'Profile completion is required before accessing this feature.' }} replace />;
+  }
 
   if (strictAccess) {
     if (!strictAccess(user)) return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
@@ -182,10 +215,14 @@ export function ExamRoute({ children }: { children: ReactNode }) {
   const { user, isAuthInitialized, isLoading } = useProtectedAuth();
   const { applications } = useMockData();
   const location = useLocation();
+  const pendingStudentProfile = usePendingStudentProfile(user);
 
-  if (!isAuthInitialized || isLoading) return <LoadingScreen />;
+  if (!isAuthInitialized || isLoading || pendingStudentProfile.loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   if (user.role !== 'STUDENT') return <Navigate to="/unauthorized" state={{ from: location.pathname }} replace />;
+  if (pendingStudentProfile.pending) {
+    return <Navigate to="/student/profile" state={{ from: location.pathname, notice: 'Profile completion is required before accessing the exam.' }} replace />;
+  }
 
   const application = applications.find((item) => item.userId === user.id);
   if (!application || !['SCHEDULED', 'CHECKED_IN', 'IN_PROGRESS'].includes(application.examStatus ?? '')) {

@@ -21,6 +21,7 @@ class ResultAppBoundaryTests(SimpleTestCase):
                 "RankingPopulation",
                 "ScoreProcessingBatch",
                 "ScoreReleaseAuditLog",
+                "ScoreReleaseNotification",
             },
         )
         self.assertEqual(

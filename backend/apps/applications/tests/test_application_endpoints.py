@@ -10,7 +10,7 @@ from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core import mail
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -19,7 +19,9 @@ from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 from apps.applications.models import (
     ApplicationAuditLog,
+    ApplicationCompletionStatus,
     ApplicationIdentityMedia,
+    ApplicationSubmissionSource,
     ApplicationStatus,
     IdentityMediaType,
     RegistrationSelfieMedia,
@@ -76,6 +78,26 @@ def complete_payload():
     }
 
 
+def create_bulk_pending_application(owner, **overrides):
+    payload = complete_payload()
+    payload["personal"]["email"] = getattr(owner, "email", "bulk.student@example.test")
+    return StudentApplication.objects.create(
+        owner=owner,
+        lrn=payload["school"]["lrn"],
+        exam_cycle_id="2026",
+        status=ApplicationStatus.SUBMITTED,
+        completion_status=ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION,
+        submission_source=ApplicationSubmissionSource.ADMISSIONS_BULK_UPLOAD,
+        submitted_at=timezone.now(),
+        personal=payload["personal"],
+        address=payload["address"],
+        school=payload["school"],
+        course_preferences=payload["coursePreferences"],
+        review_step=payload["reviewStep"],
+        **overrides,
+    )
+
+
 def verify_registration_email(client, email: str) -> str:
     request_response = client.post(
         reverse("applications:registration-email-otp-request"),
@@ -112,6 +134,184 @@ class ApplicationEndpointTests(TestCase):
         body = dict(payload or {})
         body["verificationToken"] = verification.data["verificationToken"]
         return self.client.post(reverse("applications:create"), body, format="json")
+
+    def test_student_profile_progress_counts_missing_dynamic_required_field(self):
+        application = create_bulk_pending_application(self.user)
+        RegistrationSelfieMedia.objects.create(
+            application=application,
+            file=ContentFile(b"\xff\xd8\xff\xe0selfie", name="selfie.jpg"),
+            content_type="image/jpeg",
+            size=10,
+            sha256=hashlib.sha256(b"\xff\xd8\xff\xe0selfie").hexdigest(),
+        )
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Guardian Contact Number",
+            field_section="Personal Information",
+            input_type="text",
+            priority="High Priority",
+            is_enabled=True,
+        )
+
+        from apps.applications.services import build_student_profile_progress
+
+        progress = build_student_profile_progress(application)
+
+        self.assertGreater(progress["total"], progress["completed"])
+        self.assertIn("Guardian Contact Number", [item["label"] for item in progress["remaining"]])
+
+    def test_student_profile_progress_requires_selfie(self):
+        application = create_bulk_pending_application(self.user)
+
+        from apps.applications.services import build_student_profile_progress
+
+        progress = build_student_profile_progress(application)
+
+        self.assertIn("selfie", [item["fieldKey"] for item in progress["remaining"]])
+
+    def test_student_profile_submit_marks_bulk_application_complete(self):
+        application = create_bulk_pending_application(self.user)
+        RegistrationSelfieMedia.objects.create(
+            application=application,
+            file=ContentFile(b"\xff\xd8\xff\xe0selfie", name="selfie.jpg"),
+            content_type="image/jpeg",
+            size=10,
+            sha256=hashlib.sha256(b"\xff\xd8\xff\xe0selfie").hexdigest(),
+        )
+
+        from apps.applications.services import submit_student_profile
+
+        submitted = submit_student_profile(owner=principal(self.user), expected_version=application.version)
+
+        self.assertEqual(submitted.completion_status, ApplicationCompletionStatus.COMPLETE)
+        self.assertEqual(submitted.status, ApplicationStatus.SUBMITTED)
+        self.assertEqual(submitted.version, application.version + 1)
+
+    def test_student_profile_submit_rejects_missing_selfie(self):
+        application = create_bulk_pending_application(self.user)
+
+        from apps.applications.services import submit_student_profile
+
+        with self.assertRaisesMessage(Exception, "Selfie"):
+            submit_student_profile(owner=principal(self.user), expected_version=application.version)
+
+    def test_student_profile_draft_rejects_non_bulk_application(self):
+        application = StudentApplication.objects.create(
+            owner=self.user,
+            status=ApplicationStatus.SUBMITTED,
+            completion_status=ApplicationCompletionStatus.COMPLETE,
+            submission_source=ApplicationSubmissionSource.STUDENT_REGISTRATION,
+            personal=complete_payload()["personal"],
+        )
+
+        from apps.applications.services import ApplicationConflict, save_student_profile_draft
+
+        with self.assertRaises(ApplicationConflict):
+            save_student_profile_draft(
+                owner=principal(self.user),
+                expected_version=application.version,
+                data={"personal": {"firstName": "Changed"}},
+            )
+
+    def test_student_can_read_pending_bulk_profile(self):
+        application = create_bulk_pending_application(self.user)
+
+        response = self.client.get(reverse("applications:student-profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["application"]["id"], str(application.id))
+        self.assertEqual(
+            response.data["application"]["completionStatus"],
+            ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION,
+        )
+        self.assertIn("progress", response.data)
+        self.assertIn("fields", response.data)
+
+    def test_non_student_cannot_read_student_profile(self):
+        create_bulk_pending_application(self.user)
+        self.client.force_authenticate(user=principal(self.user, PortalRole.ADMISSIONS_REVIEWER.value))
+
+        response = self.client.get(reverse("applications:student-profile"))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_student_profile_draft_endpoint_saves_versioned_changes(self):
+        application = create_bulk_pending_application(self.user)
+
+        response = self.client.patch(
+            reverse("applications:student-profile"),
+            {
+                "version": application.version,
+                "personal": {
+                    **application.personal,
+                    "firstName": "Updated",
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["application"]["personal"]["firstName"], "Updated")
+        self.assertEqual(response.data["application"]["version"], application.version + 1)
+
+    def test_student_profile_submit_endpoint_completes_application(self):
+        application = create_bulk_pending_application(self.user)
+        RegistrationSelfieMedia.objects.create(
+            application=application,
+            file=ContentFile(b"\xff\xd8\xff\xe0selfie", name="selfie.jpg"),
+            content_type="image/jpeg",
+            size=10,
+            sha256=hashlib.sha256(b"\xff\xd8\xff\xe0selfie").hexdigest(),
+        )
+
+        response = self.client.post(
+            reverse("applications:student-profile-submit"),
+            {"version": application.version},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["application"]["completionStatus"], ApplicationCompletionStatus.COMPLETE)
+
+    @override_settings(STEP1_SELFIE_FACE_PROVIDER="mock")
+    def test_student_profile_selfie_endpoint_uploads_required_selfie(self):
+        application = create_bulk_pending_application(self.user)
+        image = SimpleUploadedFile("selfie.jpg", b"\xff\xd8\xff\xe0selfie-image", content_type="image/jpeg")
+
+        response = self.client.post(
+            reverse("applications:student-profile-selfie"),
+            {"file": image},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["uploadedMedia"], ["SELFIE"])
+        self.assertTrue(RegistrationSelfieMedia.objects.filter(application=application).exists())
+
+    def test_student_profile_attachment_endpoint_uploads_configured_file(self):
+        create_bulk_pending_application(self.user)
+        ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Scholarship Certification",
+            field_section="Additional Information",
+            input_type="file",
+            priority="High Priority",
+            is_enabled=True,
+        )
+        file = SimpleUploadedFile("pwd.pdf", b"%PDF-1.4 profile", content_type="application/pdf")
+
+        response = self.client.post(
+            reverse("applications:student-profile-attachment"),
+            {"fieldName": "Scholarship Certification", "file": file},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["fieldKey"], "Scholarship Certification")
 
     def test_generate_candidate_id_uses_phl_prefix(self):
         candidate_id = generate_candidate_id(year=2027)

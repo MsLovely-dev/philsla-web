@@ -366,3 +366,24 @@ Files changed:
 - `backend/config/settings/base.py`
 - `docs/api/API-ENDPOINTS.md`
 - `docs/superpowers/a.depositar/implement/a.depositar.implement.md`
+
+## 2026-08-06 - Score Release Dispatch Claim Hardening
+
+Plan reference:
+
+- Follow-up implementation for the remaining Score Management email dispatch hardening task.
+
+Work completed:
+
+- Added a `PROCESSING` notification state so workers claim outbox rows before SMTP delivery.
+- Refactored dispatch so the row claim is committed before email sending starts, reducing database lock time during slow SMTP delivery.
+- Kept final delivery updates separate: successful sends become `SENT`, failures become `FAILED`.
+- Added stale `PROCESSING` retry support through `SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS`.
+- Documented the new worker claim and retry behavior.
+
+Test-first evidence:
+
+- Red run: `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_management_api.ScoreManagementApiTests.test_dispatch_claims_notifications_before_sending_email --settings=config.settings.test`
+- Red result: failed because the dispatch path did not expose the row as claimed before email send.
+- Green run: same focused test after implementation.
+- Green result: passed, 1 test.

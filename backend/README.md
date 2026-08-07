@@ -75,6 +75,7 @@ SCORE_RELEASE_EMAIL_AUTO_ENQUEUE="true"
 SCORE_RELEASE_EMAIL_DISPATCH_BATCH_SIZE="500"
 SCORE_RELEASE_EMAIL_DISPATCH_MAX_BATCHES="1000"
 SCORE_RELEASE_EMAIL_MAX_ATTEMPTS="3"
+SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS="900"
 SCORE_RELEASE_EMAIL_QUEUE_CHUNK_SIZE="5000"
 ```
 
@@ -84,7 +85,7 @@ python manage.py rqworker default --worker-class rq.SimpleWorker --settings=conf
 
 Use `rq.SimpleWorker` on Windows because the default RQ worker uses `os.fork()`, which is only available on Unix-like systems.
 
-If the worker is not running, queued notifications remain `PENDING`. They can still be sent manually with:
+If the worker is not running, queued notifications remain `PENDING`. While a worker is sending email, rows are claimed as `PROCESSING`; stale claims older than `SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS` can be retried by a later worker. Queued notifications can still be sent manually with:
 
 ```powershell
 python manage.py dispatch_score_release_notifications --limit 500 --settings=config.settings.local

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Search, Eye, CheckCircle,
   AlertTriangle,
@@ -49,6 +49,7 @@ export default function ReviewApplications() {
   const [bulkUploadBatch, setBulkUploadBatch] = useState<BulkUploadValidationSummary | null>(null);
   const [bulkUploadError, setBulkUploadError] = useState('');
   const [isBulkUploadBusy, setIsBulkUploadBusy] = useState(false);
+  const bulkUploadConfirmInFlight = useRef(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [schoolFilter, setSchoolFilter] = useState('');
@@ -233,16 +234,26 @@ export default function ReviewApplications() {
 
   const handleConfirmBulkUpload = async () => {
     if (!bulkUploadBatch?.batchId) return;
-    setIsBulkUploadBusy(true);
-    setBulkUploadError('');
-    const result = await backendApplicationService.confirmBulkUpload(bulkUploadBatch.batchId);
-    setIsBulkUploadBusy(false);
-    if (result.ok === false) {
-      setBulkUploadError(result.error.message);
+    if (!bulkUploadBatch.canConfirm) {
+      setBulkUploadError('Validate the CSV again before confirming this batch.');
       return;
     }
-    setBulkUploadBatch(result.data);
-    await refreshReviewQueue();
+    if (bulkUploadConfirmInFlight.current) return;
+    bulkUploadConfirmInFlight.current = true;
+    setIsBulkUploadBusy(true);
+    setBulkUploadError('');
+    try {
+      const result = await backendApplicationService.confirmBulkUpload(bulkUploadBatch.batchId);
+      if (result.ok === false) {
+        setBulkUploadError(result.error.message);
+        return;
+      }
+      setBulkUploadBatch(result.data);
+      await refreshReviewQueue();
+    } finally {
+      bulkUploadConfirmInFlight.current = false;
+      setIsBulkUploadBusy(false);
+    }
   };
 
   const handleReviewerDecision = async (
@@ -672,7 +683,7 @@ export default function ReviewApplications() {
                     <button
                       type="button"
                       onClick={handleConfirmBulkUpload}
-                      disabled={!bulkUploadBatch || bulkUploadBatch.validRows === 0 || isBulkUploadBusy}
+                      disabled={!bulkUploadBatch || !bulkUploadBatch.canConfirm || isBulkUploadBusy}
                       className="px-5 py-2 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/10 hover:bg-emerald-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       Confirm Import
