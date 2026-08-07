@@ -259,6 +259,38 @@ describe('ExamSets', () => {
     expect(autoAssemble).toHaveBeenCalledWith('7');
   });
 
+  it('keeps error feedback visible for a failed transition while the assembly workspace is open', async () => {
+    // Regression test: the notice/mutationError blocks used to live inside the
+    // `{!selectedRecordId && (...)}`-gated dashboard section, so any failure that
+    // happened while the workspace was open (selectedRecordId truthy) was completely
+    // invisible to the user -- the button would just silently re-enable.
+    const transition = vi.fn().mockResolvedValue(conflictError('Synthetic transition conflict.'));
+    mockUseExamSets.mockReturnValue(hookState({ transition }));
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('button', { name: /back to exam sets/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Submit for Review' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Synthetic transition conflict.');
+    expect(screen.getByRole('button', { name: /back to exam sets/i })).toBeInTheDocument();
+  });
+
+  it('keeps mutationError feedback visible after opening the assembly workspace', () => {
+    // Covers the onUpdateItems/onAutoAssemble path specifically: those are wired directly
+    // to the hook's update()/autoAssemble() without a local setNotice() wrapper, so their
+    // only feedback channel is the hook's own mutationError -- which must render regardless
+    // of whether the dashboard list or the workspace is the currently visible view.
+    mockUseExamSets.mockReturnValue(hookState({
+      mutationError: { kind: 'CONFLICT', message: 'Synthetic mutation failure.' },
+    }));
+    renderPage();
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Synthetic mutation failure.');
+  });
+
   it('shows metric tiles computed from the loaded exam sets', () => {
     mockUseExamSets.mockReturnValue(hookState({
       examSets: [

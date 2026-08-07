@@ -221,6 +221,19 @@ export default function ExamSets() {
     <div className="mx-auto flex w-full max-w-[1420px] flex-col gap-5 text-philsa-navy">
       <ExamHubTabs activeTab="setAssembly" onTabChange={handleHubTabChange} />
 
+      {notice && (
+        <div role={notice.type === 'error' ? 'alert' : 'status'} className={`flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm ${notice.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+          {notice.type === 'error' ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
+          <span>{notice.message}</span>
+        </div>
+      )}
+
+      {mutationError && !notice && (
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {mutationError.message}
+        </div>
+      )}
+
       {!selectedRecordId && (
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-5 border-b border-slate-200 bg-gradient-to-r from-slate-950 to-slate-800 px-5 py-6 text-white sm:flex-row sm:items-center sm:justify-between sm:px-7">
@@ -240,19 +253,6 @@ export default function ExamSets() {
             <Plus className="h-4 w-4" /> Create Exam Set
           </button>
         </div>
-
-        {notice && (
-          <div role={notice.type === 'error' ? 'alert' : 'status'} className={`mx-5 mt-5 flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm sm:mx-7 ${notice.type === 'error' ? 'border-red-200 bg-red-50 text-red-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
-            {notice.type === 'error' ? <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />}
-            <span>{notice.message}</span>
-          </div>
-        )}
-
-        {mutationError && !notice && (
-          <div role="alert" className="mx-5 mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:mx-7">
-            {mutationError.message}
-          </div>
-        )}
 
         {loadState === 'loading' && (
           <div role="status" aria-live="polite" className="flex min-h-64 items-center justify-center gap-3 text-sm font-semibold text-slate-600">

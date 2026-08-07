@@ -229,10 +229,14 @@ test('auto-assembles and publishes an Exam Set', async ({ page }) => {
   await expect.poll(() => autoAssembleCalled).toBe(true);
 
   await page.getByRole('button', { name: 'Submit for Review' }).click();
-  await expect(page.getByText('ACADEMIC REVIEW')).toBeVisible();
+  // `{ exact: true }` targets the status badge specifically: the success notice ("...moved
+  // to ACADEMIC REVIEW.") is now also visible while the workspace is open (see the fix that
+  // moved the notice/mutationError blocks out of the dashboard-only gated section), so a
+  // loose substring match would otherwise resolve to both elements.
+  await expect(page.getByText('ACADEMIC REVIEW', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Approve' }).click();
-  await expect(page.getByText('APPROVED')).toBeVisible();
+  await expect(page.getByText('APPROVED', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await expect(page.getByText('PUBLISHED', { exact: true })).toBeVisible();
