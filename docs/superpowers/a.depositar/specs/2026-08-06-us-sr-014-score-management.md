@@ -44,12 +44,12 @@ Implemented in the current repository:
 
 Partially implemented or future work:
 
-- Automatic transfer from Exam Review into Score Management is not complete. Current demo data is seed-backed, and Exam Review finalization does not yet create Score Management rows.
-- Hard locking during a live processing job is simulated by synchronous processing rules; production queue/worker locking remains TBD.
-- Synchronization of official score results back into Application Review storage is not complete. Current candidate detail can display score-anchored application context, but it does not persist official score fields into Application Review records.
-- Publication currently releases results inside Score Management, makes them exportable, and sends student availability emails when a matching application email exists. Student Portal result display and school/government distribution remain separate downstream work.
-- Full audit coverage for processing started, failed, export, synchronization, and distribution events is not complete.
-- The official University of the Philippines ranking methodology must be confirmed before production use.
+- Partial: automatic transfer from Exam Review into Score Management is not complete. Current demo data is seed-backed, and Exam Review finalization does not yet create Score Management rows.
+- Production rehearsal required: hard locking during a live processing job is simulated by synchronous processing rules; production queue/worker locking remains unverified.
+- Post-demo implementation plan required: synchronization of official score results back into Application Review storage is not complete. Current candidate detail can display score-anchored application context, but it does not persist official score fields into Application Review records.
+- Blocked by external contract: publication currently releases results inside Score Management, makes them exportable, and sends student availability emails when a matching application email exists. Student Portal result display and school/government distribution remain separate downstream work.
+- Post-demo implementation plan required: full audit coverage for processing started, failed, export, synchronization, and distribution events is not complete.
+- Production rehearsal required: the official University of the Philippines ranking methodology must be confirmed before production use.
 
 ## Preconditions
 
@@ -246,33 +246,33 @@ Student, school, and government distribution contracts remain TBD until the Resu
 
 | ID | Acceptance Criteria | Current Status |
 | --- | --- | --- |
-| AC-01 | Given examination scores have been approved in Exam Review, when the approved records are transferred to Score Management, then the system shall automatically lock the examination records against further modification. | Partial: score rows are read-only in Score Management; automatic Exam Review transfer and production lock remain TBD. |
-| AC-02 | Given approved examination records are available in Score Management, when the System Admin initiates ranking computation, then the system shall compute each candidate's percentile rank and overall ranking using the configured University of the Philippines methodology. | Partial: backend computes rank and percentile; official UP methodology confirmation remains TBD. |
+| AC-01 | Given examination scores have been approved in Exam Review, when the approved records are transferred to Score Management, then the system shall automatically lock the examination records against further modification. | Partial: score rows are read-only in Score Management; automatic Exam Review transfer requires a post-demo implementation plan and production lock behavior requires rehearsal. |
+| AC-02 | Given approved examination records are available in Score Management, when the System Admin initiates ranking computation, then the system shall compute each candidate's percentile rank and overall ranking using the configured University of the Philippines methodology. | Production rehearsal required: backend computes rank and percentile with the working formula; official UP methodology confirmation remains required before production use. |
 | AC-03 | Given students may take different examination sets within the same examination group, when ranking computation is performed, then the system shall calculate percentile rankings using the configured examination population. | Implemented for configured ranking populations. |
-| AC-04 | Given ranking computation has been completed, when examination results are finalized, then the system shall update the candidate's Application Review record with assigned exam set, final score, percentile rank, and overall rank. | Partial: score-anchored application display exists; persistent Application Review synchronization remains TBD. |
+| AC-04 | Given ranking computation has been completed, when examination results are finalized, then the system shall update the candidate's Application Review record with assigned exam set, final score, percentile rank, and overall rank. | Post-demo implementation plan required: score-anchored application display exists; persistent Application Review synchronization storage and field mapping remain unapproved. |
 | AC-05 | Given finalized examination results are available, when the System Admin opens Score Management, then the system shall display assigned exam set, final score, percentile rank, overall rank, and publication status for each candidate. | Implemented for Score Management result rows. |
 | AC-06 | Given finalized examination results are available, when the System Admin searches or filters examination records, then the system shall display only matching records. | Implemented. |
-| AC-07 | Given finalized examination results are ready for release, when the System Admin publishes results, then the system shall update publication status and make official results available to authorized recipients. | Partial: Score Management release status is implemented; downstream recipient distribution remains TBD. |
+| AC-07 | Given finalized examination results are ready for release, when the System Admin publishes results, then the system shall update publication status and make official results available to authorized recipients. | Blocked by external contract: Score Management release status and student availability notification are implemented; downstream recipient distribution remains outside this sprint. |
 | AC-08 | Given examination results have been published, when the System Admin views examination records, then the system shall display publication status, publication date, publication time, and publishing user. | Partial: release status and audit row exist; publication metadata display requires UI/API confirmation. |
-| AC-09 | Given an approved examination record exists in Score Management, when the System Admin attempts to modify the examination score in Exam Review, then the system shall prevent direct modification of the approved examination score. | Partial: Score Management is read-only; Exam Review-to-Score Management lock integration remains TBD. |
+| AC-09 | Given an approved examination record exists in Score Management, when the System Admin attempts to modify the examination score in Exam Review, then the system shall prevent direct modification of the approved examination score. | Post-demo implementation plan required: Score Management is read-only; Exam Review-to-Score Management lock integration remains unapproved. |
 | AC-10 | Given the System Admin requests an export of examination results, when export completes, then the system shall generate a downloadable report containing finalized examination results. | Implemented as CSV export for processed approved scores. |
 
 ## Business Rules
 
 | ID | Business Rule | Current Status |
 | --- | --- | --- |
-| BR-01 | Only examination scores approved through Exam Review shall be forwarded to Score Management. | Partial: domain behavior supports approved scores; automatic forwarding remains TBD. |
+| BR-01 | Only examination scores approved through Exam Review shall be forwarded to Score Management. | Partial: domain behavior supports approved scores; automatic forwarding requires a post-demo implementation plan. |
 | BR-02 | Score Management shall be accessible only to authorized System Administrators. | Implemented. |
 | BR-03 | Upon transfer to Score Management, the system shall automatically lock approved records against further modification. | Partial. |
 | BR-04 | Percentile and overall rankings shall be computed only when initiated by the System Admin. | Implemented. |
-| BR-05 | Percentile ranks shall be calculated using the configured percentile ranking methodology and applicable examination population. | Implemented with working formula; final authority confirmation remains TBD. |
-| BR-06 | Overall rankings shall be generated using the configured ranking methodology. | Implemented with competition ranking; final authority confirmation remains TBD. |
-| BR-07 | After ranking computation is completed, the system shall synchronize official examination results to the candidate's Application Review record. | TBD. |
+| BR-05 | Percentile ranks shall be calculated using the configured percentile ranking methodology and applicable examination population. | Production rehearsal required: implemented with working formula; final authority confirmation remains required before production use. |
+| BR-06 | Overall rankings shall be generated using the configured ranking methodology. | Production rehearsal required: implemented with competition ranking; final authority confirmation remains required before production use. |
+| BR-07 | After ranking computation is completed, the system shall synchronize official examination results to the candidate's Application Review record. | Post-demo implementation plan required. |
 | BR-08 | Examination scores, percentile rankings, and overall rankings shall be read-only within Score Management. | Implemented. |
-| BR-09 | Only the System Admin may publish official examination results to students, schools, and government agencies. | Partial: System Admin release exists; recipient distribution remains TBD. |
+| BR-09 | Only the System Admin may publish official examination results to students, schools, and government agencies. | Blocked by external contract: System Admin release exists; school and government distribution contracts remain undefined. |
 | BR-10 | Published examination results shall include publication status, publication date, publication time, and publishing user. | Partial. |
 | BR-11 | The System Admin may export finalized examination results for authorized reporting purposes. | Implemented. |
-| BR-12 | Every ranking computation, synchronization to Application Review, publication, export, and distribution activity shall be recorded in the audit log. | Partial. |
+| BR-12 | Every ranking computation, synchronization to Application Review, publication, export, and distribution activity shall be recorded in the audit log. | Post-demo implementation plan required for expanded audit coverage. |
 
 ## Audit Log Events
 
@@ -280,11 +280,11 @@ Student, school, and government distribution contracts remain TBD until the Resu
 | --- | --- | --- | --- |
 | Score Processing Started | System Admin clicks Process Scoring | Actor, Examination Session ID, Processing Batch ID, Total Candidate Count, Timestamp | Partial: processing batch stores processing metadata; explicit started audit event requires confirmation. |
 | Score Processing Completed | System computes rankings and percentiles | Processing Batch ID, Processed Record Count, Duration, Timestamp | Partial: processing batch stores completed metadata. |
-| Score Processing Failed | Processing terminates due to validation or system error | Processing Batch ID, Failure Reason, Failed Record Count if applicable, Timestamp | TBD. |
+| Score Processing Failed | Processing terminates due to validation or system error | Processing Batch ID, Failure Reason, Failed Record Count if applicable, Timestamp | Post-demo implementation plan required. |
 | Results Released | System Admin publishes examination results | Actor, Examination Session ID, Published Candidate Count, Timestamp | Implemented through release audit row. |
 | Score Reprocessing Initiated | System Admin initiates reprocessing after approved correction | Actor, Examination Session ID, Previous Processing Batch ID, New Processing Batch ID, Reason, Timestamp | Partial: reprocessing can be allowed before release; reason/audit details remain TBD. |
-| Results Exported | System Admin exports examination results | Actor, Examination Session ID, Export Format, Exported Record Count, Timestamp | TBD. |
-| Results Distributed | System distributes published results to selected recipients | Actor/System, Examination Session ID, Recipient Type, Distributed Count, Failure Count, Timestamp | TBD. |
+| Results Exported | System Admin exports examination results | Actor, Examination Session ID, Export Format, Exported Record Count, Timestamp | Post-demo implementation plan required. |
+| Results Distributed | System distributes published results to selected recipients | Actor/System, Examination Session ID, Recipient Type, Distributed Count, Failure Count, Timestamp | Blocked by external contract. |
 
 ## User-Facing Dialogs And Status Messages
 

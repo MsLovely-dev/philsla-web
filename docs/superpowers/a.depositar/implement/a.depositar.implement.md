@@ -387,3 +387,91 @@ Test-first evidence:
 - Red result: failed because the dispatch path did not expose the row as claimed before email send.
 - Green run: same focused test after implementation.
 - Green result: passed, 1 test.
+
+## 2026-08-07 - Score Management Friday Demo Freeze
+
+Plan reference:
+
+- `docs/superpowers/a.depositar/plans/2026-08-07-score-management-build-plan.md`
+
+Scope:
+
+- Freeze the backend-backed Score Management demo path.
+- Verify implemented Score Management backend and frontend behavior.
+- Record remaining production gates without adding unapproved product behavior.
+
+Task 1 status normalization:
+
+- Updated `docs/superpowers/a.depositar/specs/2026-08-06-us-sr-014-score-management.md` to use conservative qualitative labels for partial, blocked, post-demo, and production-rehearsal items.
+- Updated `docs/superpowers/a.depositar/a.depositar.task.md` with the Friday freeze stance: no new Score Management product behavior after freeze unless it is a P0 demo blocker and receives PR review.
+
+Backend verification:
+
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+- `..\venv\Scripts\python.exe manage.py test apps.results.tests.test_score_processing apps.results.tests.test_score_management_seed_command apps.results.tests.test_score_management_api apps.results.tests.test_score_management_models --settings=config.settings.test`
+  - Passed, 45 tests.
+  - Non-blocking warning observed: no directory at `backend\staticfiles\`.
+- `..\venv\Scripts\python.exe manage.py makemigrations --check --dry-run --settings=config.settings.local`
+  - Passed, `No changes detected`.
+
+Frontend verification:
+
+- `npm test -- ScoreManagement ScoreCandidateDetail scoreManagementService`
+  - First sandboxed run failed before tests loaded with Vite/esbuild `Error: spawn EPERM`.
+  - Escalated rerun passed: 3 test files, 18 tests.
+- `npm run lint`
+  - Failed with repository-wide TypeScript errors outside the Score Management demo files.
+  - Classification: unrelated repository debt, not a Score Management demo blocker based on the focused Score Management test pass.
+  - Representative failures include `src/pages/admin/CommandCenter.tsx` impossible union comparisons, missing `html5-qrcode` declarations in proctor QR scan files, duplicate identifiers in `src/services/backendAuthService.ts`, and unrelated user/application type mismatches.
+
+Demo rehearsal:
+
+- Seed commands:
+  - `..\venv\Scripts\python.exe manage.py seed_score_management --count 25 --seed 2027 --reset --settings=config.settings.local`
+    - Passed, seeded 75 score records across 3 score batches.
+  - `..\venv\Scripts\python.exe manage.py seed_score_candidate_profiles --count 25 --seed 2027 --reset --settings=config.settings.local`
+    - Passed, removed 600 previously seeded application rows and seeded 75 linked student application profiles.
+- Demo environment:
+  - Backend API rehearsal used Django/DRF APIClient with `SERVER_NAME=localhost` under `config.settings.local`.
+  - Backend URL: not started as a long-running server in this execution.
+  - Frontend URL: not started as a long-running server in this execution.
+  - Demo account type: `SYSTEM_ADMIN` principal through the DRF API client.
+- First API rehearsal attempt:
+  - Blocked by local `ALLOWED_HOSTS` because DRF APIClient defaulted to `testserver`.
+  - Classification: environment issue, not a Score Management demo blocker.
+  - Rerun used `SERVER_NAME=localhost`.
+- API rehearsal results:
+  - Batch list: `200`, 3 batches.
+  - Process regular batch: `202`, `SCORING_PROCESSED`, 25 processed, 0 excluded.
+  - Results page: `200`, 25 total records, 5 returned for page size 5.
+  - Search: `200`, returned matching records.
+  - Release-status filter before release: `200`, 25 `NOT_RELEASED` records.
+  - Candidate profile for `PHL-2027-000001`: `200`, returned both `score` and `profile` payloads.
+  - Release regular batch: `200`, `RESULTS_RELEASED`, 25 released, 0 notifications queued because seeded synthetic `@philsa.example.test` emails are skipped.
+  - Export regular batch: `200`, `text/csv`, 1922 bytes.
+- Steps passed:
+  - Load available examination sessions.
+  - Select a batch.
+  - Show backend-paginated candidate score results.
+  - Search, filter, and sort candidate results.
+  - Process scoring for a ready batch.
+  - Open candidate detail and show read-only score/profile context.
+  - Release processed results.
+  - Export processed score results.
+- Blockers:
+  - No backend or frontend long-running server was started, so this was not a live browser rehearsal.
+  - Repository-wide frontend lint remains blocked by unrelated TypeScript debt outside Score Management.
+- Fallback talking points:
+  - If the selected regular batch has already been processed or released during rehearsal, use one of the other seeded demo batches or reseed the synthetic data.
+  - If Redis is unavailable, release remains successful and notifications remain queued or skipped according to the outbox rules; SMTP dispatch is not required for the demo path.
+  - School and government recipient delivery remains outside this sprint pending downstream contracts.
+
+Freeze and follow-up classification:
+
+- Demo blocker: none found in focused Score Management backend verification, focused frontend verification, or API-level rehearsal.
+- P0 post-freeze fix: none identified.
+- Post-demo implementation plan required: Application Review result synchronization; expanded Score Management audit events; recipient-target release ledger and API behavior for schools and government.
+- External contract required: school, government, DepEd, CHED, TESDA, and Student Portal result-display/delivery contracts.
+- Production rehearsal required: PostgreSQL-compatible large-batch rehearsal and official ranking/percentile methodology confirmation.
+- Out of scope for this sprint: System Integration and downstream external recipient delivery.
