@@ -85,10 +85,21 @@ describe('ExamSetAudit', () => {
     expect(rows[2]).toHaveTextContent('Set One');
   });
 
-  it('shows a retryable error state instead of the empty state when the load fails', async () => {
+  it('shows a retryable error state instead of stale audit rows when the load fails', async () => {
+    // Seeds a populated exam set (with non-empty workflowHistory) under loadState: 'error',
+    // matching ExamSetPublished.test.tsx's equivalent test -- this proves that stale/populated
+    // data from a prior successful load doesn't leak through when a later reload fails, rather
+    // than merely proving the (trivially true) case where examSets was already empty.
     const reload = vi.fn();
     mockUseExamSets.mockReturnValue(hookState({
-      examSets: [],
+      examSets: [
+        baseRecord({
+          id: '1', title: 'Set One', examCode: 'EXAM-1',
+          workflowHistory: [
+            { id: 'h1', previousStatus: null, newStatus: 'DRAFT', action: 'Created exam set', remarks: '', initiatedBy: 'Admin', createdAt: '2026-08-01T00:00:00Z' },
+          ],
+        }),
+      ],
       loadState: 'error',
       loadError: { kind: 'NETWORK', message: 'Synthetic load failure.' },
       reload,
@@ -97,6 +108,7 @@ describe('ExamSetAudit', () => {
     render(<MemoryRouter><ExamSetAudit /></MemoryRouter>);
 
     expect(screen.getByRole('alert')).toHaveTextContent('Synthetic load failure.');
+    expect(screen.queryByText('Set One')).not.toBeInTheDocument();
     expect(screen.queryByText('No audit history yet')).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
 

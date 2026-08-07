@@ -71,6 +71,7 @@ function hookState(overrides: Record<string, unknown> = {}) {
     update: vi.fn().mockResolvedValue(serviceSuccess(record)),
     clone: vi.fn().mockResolvedValue(serviceSuccess(record)),
     transition: vi.fn().mockResolvedValue(serviceSuccess(record)),
+    autoAssemble: vi.fn().mockResolvedValue(serviceSuccess(record)),
     remove: vi.fn().mockResolvedValue(serviceSuccess(null)),
     ...overrides,
   };
@@ -242,6 +243,20 @@ describe('ExamSets', () => {
 
     expect(screen.getByRole('button', { name: /back to exam sets/i })).toBeInTheDocument();
     expect(screen.queryByRole('dialog', { name: /edit exam set/i })).not.toBeInTheDocument();
+  });
+
+  it('runs auto-assembly from inside the assembly workspace', async () => {
+    const autoAssemble = vi.fn().mockResolvedValue(serviceSuccess(record));
+    mockUseExamSets.mockReturnValue(hookState({ autoAssemble }));
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByRole('button', { name: /back to exam sets/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /run auto-selection/i }));
+
+    expect(autoAssemble).toHaveBeenCalledWith('7');
   });
 
   it('shows metric tiles computed from the loaded exam sets', () => {
