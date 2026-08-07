@@ -349,3 +349,23 @@ Build: npm run build
 Diff check: git diff --check
             passed.
 ```
+
+## 2026-08-07 — Results Release mutation error contract
+
+Score processing and release lifecycle failures now pass through the configured DRF exception handler instead of returning a raw `{detail}` body. Missing sessions return the standard `404 NOT_FOUND` envelope; safe lifecycle failures return `409 CONFLICT`; serializer failures remain `400 VALIDATION_FAILED`. The adapter maps the finite known domain messages to documented public messages and replaces any unexpected service text with a generic session-state conflict message.
+
+Test-first and verification evidence:
+
+```text
+RED: py -3.13 manage.py test apps.results.tests.test_results_release_api apps.results.tests.test_score_management_api --settings=config.settings.test
+     46 tests ran; 4 expected failures showed raw 400 responses where exact 404/409 envelopes were required.
+GREEN: the same focused command passed all 48 tests, including each documented process precondition.
+Frontend: npm test -- --run src/services/resultsReleaseService.test.ts
+          1 file passed, 7 tests passed using a complete backend-shaped conflict envelope.
+Django check: py -3.13 manage.py check --settings=config.settings.local
+              passed with no issues.
+Diff check: git diff --check
+            passed.
+```
+
+The first sandboxed frontend test attempt failed before collection because esbuild could not spawn (`EPERM`). The required escalated rerun passed. Backend tests emitted the existing warning that `backend/staticfiles/` is absent; it did not affect results.

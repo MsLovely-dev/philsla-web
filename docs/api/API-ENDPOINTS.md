@@ -166,7 +166,7 @@ Each row contains only `{id, name, status, isClosed, totalCandidates, approvedSc
 }
 ```
 
-The backend validates that `allowReprocessing` is a boolean, the session exists, the session is closed, approved scores are present, and the session has not already been processed unless `allowReprocessing` is true. Processing uses approved records only, groups by ranking population, applies competition ranking, computes percentile as the percent of approved candidates in the same population with lower final scores, writes `overallRank`, `percentile`, processing timestamp, processing batch, and leaves release status as `NOT_RELEASED`.
+The backend validates that `allowReprocessing` is a boolean, the session exists, the session is closed, approved scores are present, and the session has not already been processed unless `allowReprocessing` is true. Invalid request data returns `400 VALIDATION_FAILED`, an unknown session returns `404 NOT_FOUND`, and closed-state, approved-score, already-processed, or already-released lifecycle failures return `409 CONFLICT`. Processing uses approved records only, groups by ranking population, applies competition ranking, computes percentile as the percent of approved candidates in the same population with lower final scores, writes `overallRank`, `percentile`, processing timestamp, processing batch, and leaves release status as `NOT_RELEASED`.
 
 Successful response:
 
@@ -211,7 +211,23 @@ Successful response:
 }
 ```
 
-`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues no-score availability email notifications in chunks for released candidates with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend attempts to enqueue a Django RQ dispatch job after the release transaction commits; if Redis is unavailable, release remains successful and notifications stay `PENDING`. The worker claims rows as `PROCESSING`, commits that claim before sending SMTP, and then marks each row `SENT` or `FAILED`. Stale `PROCESSING` claims older than `SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS` can be retried while below the configured attempt limit. The worker drains pending notifications across multiple batches. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues no-score availability email notifications in chunks for released candidates with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend attempts to enqueue a Django RQ dispatch job after the release transaction commits; if Redis is unavailable, release remains successful and notifications stay `PENDING`. The worker claims rows as `PROCESSING`, commits that claim before sending SMTP, and then marks each row `SENT` or `FAILED`. Stale `PROCESSING` claims older than `SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS` can be retried while below the configured attempt limit. The worker drains pending notifications across multiple batches. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. An unknown session returns `404 NOT_FOUND`; a session that is not ready for release returns `409 CONFLICT` with `Scores must be processed before release.`.
+
+Expected process and release failures use the standard safe API error envelope. For example:
+
+```json
+{
+  "error": {
+    "code": "CONFLICT",
+    "message": "Scores must be processed before release.",
+    "fields": {},
+    "meta": {},
+    "correlationId": "00000000-0000-4000-8000-000000000000"
+  }
+}
+```
+
+The mutation adapters expose only the documented stable messages. Unexpected internal service text is replaced by a generic session-state conflict message.
 
 Successful release response:
 

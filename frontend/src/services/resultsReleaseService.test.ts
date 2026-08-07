@@ -117,6 +117,31 @@ describe('ResultsReleaseService', () => {
     });
   });
 
+  it('surfaces the safe backend release-conflict envelope', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response({
+      error: {
+        code: 'CONFLICT',
+        message: 'Scores must be processed before release.',
+        fields: {},
+        meta: {},
+        correlationId: '123e4567-e89b-12d3-a456-426614174000',
+      },
+    }, 409));
+    const service = new ResultsReleaseService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    await expect(service.release('SESSION-1')).resolves.toEqual({
+      ok: false,
+      error: {
+        kind: 'CONFLICT',
+        status: 409,
+        code: 'CONFLICT',
+        message: 'Scores must be processed before release.',
+        retryable: false,
+        meta: {},
+      },
+    });
+  });
+
   it('exports the singleton service surface needed by the release screen', () => {
     expect(resultsReleaseService).toBeInstanceOf(ResultsReleaseService);
     expect(resultsReleaseService.list).toBeTypeOf('function');
