@@ -1361,7 +1361,7 @@ def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], acto
 
 def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
     exam_set.validation_results.all().delete()
-    items = list(exam_set.items.all().select_related("question"))
+    items = list(exam_set.items.all().select_related("question", "blueprint_section"))
     blueprint_status = exam_set.blueprint_version.status
     blueprint_ready = blueprint_status in {BlueprintStatus.APPROVED, BlueprintStatus.PUBLISHED}
     ExamSetValidationResult.objects.create(
@@ -1392,6 +1392,76 @@ def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
         actual_value=str(non_approved_count),
         message="All questions are approved." if non_approved_count == 0 else "One or more questions are not yet approved.",
     )
+
+    sections = list(
+        exam_set.blueprint_version.sections.prefetch_related("difficulty_requirements")
+    )
+    total_target_marks = Decimal("0")
+    for section in sections:
+        total_target_marks += section.total_marks
+        section_items = [item for item in items if item.blueprint_section_id == section.pk]
+
+        ExamSetValidationResult.objects.create(
+            exam_set=exam_set,
+            validation_code=f"section_item_count_{section.pk}",
+            validation_name=f"{section.section_name}: item count",
+            result=ValidationResult.PASSED if len(section_items) == section.item_count else ValidationResult.WARNING,
+            expected_value=str(section.item_count),
+            actual_value=str(len(section_items)),
+            message=(
+                f"{section.section_name} has the required {section.item_count} items."
+                if len(section_items) == section.item_count
+                else f"{section.section_name} has {len(section_items)} items; expects {section.item_count}."
+            ),
+        )
+
+        for distribution in section.difficulty_requirements.all():
+            actual = sum(1 for item in section_items if item.question.difficulty == distribution.difficulty)
+            ExamSetValidationResult.objects.create(
+                exam_set=exam_set,
+                validation_code=f"section_difficulty_{section.pk}_{distribution.difficulty}",
+                validation_name=f"{section.section_name}: {distribution.difficulty} items",
+                result=ValidationResult.PASSED if actual >= distribution.required_item_count else ValidationResult.WARNING,
+                expected_value=str(distribution.required_item_count),
+                actual_value=str(actual),
+                message=(
+                    f"{section.section_name} has enough {distribution.difficulty} items."
+                    if actual >= distribution.required_item_count
+                    else f"{section.section_name} needs {distribution.required_item_count} {distribution.difficulty} items; has {actual}."
+                ),
+            )
+
+        for type_distribution in section.question_type_requirements.select_related("question_type").all():
+            actual = sum(1 for item in section_items if item.question.question_type_id == type_distribution.question_type_id)
+            ExamSetValidationResult.objects.create(
+                exam_set=exam_set,
+                validation_code=f"section_question_type_{section.pk}_{type_distribution.question_type_id}",
+                validation_name=f"{section.section_name}: {type_distribution.question_type.name} items",
+                result=ValidationResult.PASSED if actual >= type_distribution.required_item_count else ValidationResult.WARNING,
+                expected_value=str(type_distribution.required_item_count),
+                actual_value=str(actual),
+                message=(
+                    f"{section.section_name} has enough {type_distribution.question_type.name} items."
+                    if actual >= type_distribution.required_item_count
+                    else f"{section.section_name} needs {type_distribution.required_item_count} {type_distribution.question_type.name} items; has {actual}."
+                ),
+            )
+
+    if sections:
+        actual_marks = sum(item.points for item in items)
+        ExamSetValidationResult.objects.create(
+            exam_set=exam_set,
+            validation_code="marks_compliance",
+            validation_name="Marks compliance",
+            result=ValidationResult.PASSED if actual_marks == total_target_marks else ValidationResult.WARNING,
+            expected_value=str(total_target_marks),
+            actual_value=str(actual_marks),
+            message=(
+                "Total item marks match the blueprint target."
+                if actual_marks == total_target_marks
+                else f"Total item marks are {actual_marks}; blueprint target is {total_target_marks}."
+            ),
+        )
 
 
 @transaction.atomic

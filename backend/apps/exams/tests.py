@@ -9,7 +9,7 @@ from rest_framework.test import APIClient, APITestCase
 from apps.accounts.models import AccountProfile
 from apps.accounts.roles import PortalRole
 
-from .models import AcademicYear, Agency, BlueprintCategory, BlueprintSection, BlueprintVersion, ExamBlueprint, ExamSet, ExamSetStatus, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
+from .models import AcademicYear, Agency, BlueprintCategory, BlueprintDifficultyDistribution, BlueprintSection, BlueprintVersion, ExamBlueprint, ExamSet, ExamSetStatus, ExamType, Question, QuestionChoice, QuestionStatus, QuestionType, Subject, Topic, Competency
 from .services import ExamSetLifecycleConflict, create_or_update_exam_set, transition_exam_set
 
 
@@ -687,6 +687,32 @@ class ExamSetApiTests(APITestCase):
 
         self.assertIsNotNone(other_published.data["published_hash"])
         self.assertNotEqual(other_published.data["published_hash"], published.data["published_hash"])
+
+    def test_validation_checklist_covers_section_difficulty_and_marks_compliance(self) -> None:
+        section = BlueprintSection.objects.create(
+            blueprint_version=self.blueprint_version,
+            section_number=1,
+            section_name="Science",
+            subject=self.subject,
+            item_count=2,
+            total_marks="10.00",
+            passing_score="5.00",
+            time_limit_minutes=30,
+            display_order=1,
+        )
+        BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="easy", required_item_count=1)
+        BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="moderate", required_item_count=1)
+
+        created = self.client.post(reverse("exams:exam_set_list"), {
+            **self.payload,
+            "items": [{"question_id": self.question.id, "blueprint_section_id": section.id, "display_order": 1, "points": 5}],
+        }, format="json")
+
+        codes = {result["validation_code"]: result for result in created.data["validation_results"]}
+        self.assertEqual(codes[f"section_item_count_{section.id}"]["result"], "warning")
+        self.assertEqual(codes[f"section_difficulty_{section.id}_easy"]["result"], "passed")
+        self.assertEqual(codes[f"section_difficulty_{section.id}_moderate"]["result"], "warning")
+        self.assertEqual(codes["marks_compliance"]["result"], "warning")
 
 
 class SubjectAdminApiTests(APITestCase):
