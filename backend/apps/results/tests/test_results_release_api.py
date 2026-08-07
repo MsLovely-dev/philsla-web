@@ -193,6 +193,10 @@ class ResultsReleaseSummaryApiTests(TestCase):
 
         self.assertEqual(self.client.get(reverse("results:score-management-batches")).status_code, 403)
         self.assertEqual(
+            self.client.get(reverse("results:score-management-results", args=[self.ready_session.id])).status_code,
+            403,
+        )
+        self.assertEqual(
             self.client.get(
                 reverse("results:score-management-profile", args=[self.ready_session.id, self.score.candidate_id]),
             ).status_code,
