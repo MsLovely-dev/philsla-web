@@ -222,6 +222,87 @@ class LoginEndpointTests(TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertFalse(lockout_model.objects.filter(user=user).exists())
 
+    def test_temporary_password_login_requires_password_change_before_otp(self) -> None:
+        user = get_user_model().objects.create_user(
+            username="temporary-student",
+            email="temporary.student@example.test",
+            password="TempPass1!",
+        )
+        AccountProfile.objects.create(
+            user=user,
+            role=PortalRole.STUDENT.value,
+            lrn="999999999999",
+            must_change_password=True,
+        )
+
+        identifier_response = self.client.post(
+            "/api/v1/auth/login/identifier/",
+            data={"identifier": "temporary.student@example.test"},
+            content_type="application/json",
+        )
+        self.assertEqual(identifier_response.status_code, 202)
+
+        password_response = self.client.post(
+            "/api/v1/auth/login/password/",
+            data={
+                "pendingAuthToken": identifier_response.json()["pendingAuthToken"],
+                "password": "TempPass1!",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(password_response.status_code, 202)
+        payload = password_response.json()
+        self.assertEqual(payload["nextStep"], "password_change")
+        self.assertIn("passwordChangeToken", payload)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_temporary_password_change_sets_permanent_password_and_continues_to_otp(self) -> None:
+        user = get_user_model().objects.create_user(
+            username="temporary-student",
+            email="temporary.student@example.test",
+            password="TempPass1!",
+        )
+        AccountProfile.objects.create(
+            user=user,
+            role=PortalRole.STUDENT.value,
+            lrn="999999999999",
+            must_change_password=True,
+        )
+        identifier_response = self.client.post(
+            "/api/v1/auth/login/identifier/",
+            data={"identifier": "temporary.student@example.test"},
+            content_type="application/json",
+        )
+        password_response = self.client.post(
+            "/api/v1/auth/login/password/",
+            data={
+                "pendingAuthToken": identifier_response.json()["pendingAuthToken"],
+                "password": "TempPass1!",
+            },
+            content_type="application/json",
+        )
+
+        change_response = self.client.post(
+            "/api/v1/auth/login/password/change/",
+            data={
+                "passwordChangeToken": password_response.json()["passwordChangeToken"],
+                "password": "Permanent1!",
+                "confirmPassword": "Permanent1!",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(change_response.status_code, 202)
+        payload = change_response.json()
+        self.assertEqual(payload["nextStep"], "otp")
+        self.assertIn("otpPendingAuthToken", payload)
+        self.assertEqual(len(mail.outbox), 1)
+        user.refresh_from_db()
+        profile = AccountProfile.objects.get(user=user)
+        self.assertFalse(profile.must_change_password)
+        self.assertTrue(user.check_password("Permanent1!"))
+
     def test_otp_step_requires_six_digit_code(self) -> None:
         response = self.client.post(
             "/api/v1/auth/login/otp/",

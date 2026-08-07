@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models.functions import Lower
 
 
 UNIVERSITY_CODE_PREFIX = "UNI"
@@ -79,6 +80,13 @@ class University(models.Model):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "region",
+                name="unique_university_name_per_region",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.code} - {self.name}"
@@ -117,6 +125,13 @@ class CollegeCourse(models.Model):
 
     class Meta:
         ordering = ["program_code"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("program_code"),
+                "university",
+                name="unique_course_code_per_university",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.program_code} - {self.program_name}"

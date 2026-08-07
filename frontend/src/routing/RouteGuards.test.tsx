@@ -173,6 +173,43 @@ describe('ProtectedRoute', () => {
 
     expect(screen.getByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
   });
+
+  it('renders content when strictAccess grants it, regardless of allowedRoles', () => {
+    mockUsePhilSA.mockReturnValue({
+      user: { ...admin, role: 'GOVERNMENT', backendRole: 'DEPED_ADMIN' },
+      isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
+      maintenanceModules: [],
+    } as unknown as ReturnType<typeof usePhilSA>);
+
+    renderAtTarget((children) => (
+      <ProtectedRoute allowedRoles={['SYSTEM_ADMIN']} strictAccess={(user) => user.backendRole === 'DEPED_ADMIN'} layout="standalone">
+        {children}
+      </ProtectedRoute>
+    ));
+
+    expect(screen.getByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
+  });
+
+  it('redirects to unauthorized when strictAccess denies, even with a matching module-permission fallback', () => {
+    mockUsePhilSA.mockReturnValue({
+      user: { ...admin, role: 'UNIVERSITY_ADMIN', permissions: ['MOD_31_READ'] },
+      isLoading: false,
+      isAuthInitialized: true,
+      initializeAuth: vi.fn(),
+      maintenanceModules: [{ id: '31', name: 'User Accounts', path: '/target', category: 'System Admin', status: 'ACTIVE' }],
+    } as unknown as ReturnType<typeof usePhilSA>);
+
+    renderAtTarget((children) => (
+      <ProtectedRoute allowedRoles={['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN']} strictAccess={() => false} layout="standalone">
+        {children}
+      </ProtectedRoute>
+    ));
+
+    expect(screen.getByRole('heading', { name: 'Unauthorized page' })).toBeInTheDocument();
+    expect(screen.getByText('Location: /unauthorized')).toBeInTheDocument();
+  });
 });
 
 describe('PublicRoute', () => {
