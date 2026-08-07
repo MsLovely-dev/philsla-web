@@ -77,4 +77,25 @@ describe('ExamSetAssemblyWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /run auto-selection/i }));
     expect(onAutoAssemble).toHaveBeenCalled();
   });
+
+  it('disables item-row mutation controls and add-question button while pending', () => {
+    render(
+      <ExamSetAssemblyWorkspace
+        record={record()}
+        questions={[]}
+        pending={true}
+        onUpdateItems={() => {}}
+        onAutoAssemble={() => {}}
+        onTransition={() => {}}
+        onDelete={() => {}}
+        onBack={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /add question item/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /move q-sci-001 up/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /move q-sci-001 down/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /replace/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /remove/i })).toBeDisabled();
+  });
 });

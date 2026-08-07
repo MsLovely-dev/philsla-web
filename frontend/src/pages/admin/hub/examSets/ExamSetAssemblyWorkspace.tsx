@@ -117,7 +117,7 @@ export function ExamSetAssemblyWorkspace({ record, questions, pending, onUpdateI
           <div className="flex items-center justify-between">
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-black text-slate-700">Form total: {totalPoints} Points</span>
             {editable && (
-              <button type="button" onClick={() => setPickerTarget({ mode: 'add', index: null })} className={ACTION_BUTTON}>
+              <button type="button" disabled={pending} onClick={() => setPickerTarget({ mode: 'add', index: null })} className={ACTION_BUTTON}>
                 <Plus className="h-3.5 w-3.5" /> Add Question Item
               </button>
             )}
@@ -142,10 +142,10 @@ export function ExamSetAssemblyWorkspace({ record, questions, pending, onUpdateI
                         </div>
                         {editable && (
                           <div className="flex shrink-0 gap-1">
-                            <button type="button" aria-label={`Move ${item.question.questionCode} up`} disabled={index === 0} onClick={() => handleMove(index, -1)} className="rounded-lg border border-slate-200 bg-white p-1.5 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
-                            <button type="button" aria-label={`Move ${item.question.questionCode} down`} disabled={index === record.items.length - 1} onClick={() => handleMove(index, 1)} className="rounded-lg border border-slate-200 bg-white p-1.5 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
-                            <button type="button" onClick={() => setPickerTarget({ mode: 'replace', index })} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-black uppercase">Replace</button>
-                            <button type="button" aria-label={`Remove ${item.question.questionCode}`} onClick={() => handleRemove(index)} className="rounded-lg border border-red-200 bg-white px-2 py-1.5 text-[10px] font-black uppercase text-red-700">Remove</button>
+                            <button type="button" aria-label={`Move ${item.question.questionCode} up`} disabled={pending || index === 0} onClick={() => handleMove(index, -1)} className="rounded-lg border border-slate-200 bg-white p-1.5 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
+                            <button type="button" aria-label={`Move ${item.question.questionCode} down`} disabled={pending || index === record.items.length - 1} onClick={() => handleMove(index, 1)} className="rounded-lg border border-slate-200 bg-white p-1.5 disabled:opacity-30"><ArrowDown className="h-3.5 w-3.5" /></button>
+                            <button type="button" disabled={pending} onClick={() => setPickerTarget({ mode: 'replace', index })} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-black uppercase disabled:opacity-30">Replace</button>
+                            <button type="button" aria-label={`Remove ${item.question.questionCode}`} disabled={pending} onClick={() => handleRemove(index)} className="rounded-lg border border-red-200 bg-white px-2 py-1.5 text-[10px] font-black uppercase text-red-700 disabled:opacity-30">Remove</button>
                           </div>
                         )}
                       </div>
