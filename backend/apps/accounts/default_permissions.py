@@ -16,16 +16,16 @@ ROLE_PERMISSION_RULES: dict[str, tuple[tuple[tuple[str, ...], tuple[str, ...]], 
     ),
     PortalRole.PROCTOR.value: (
         (("26",), READ_ONLY),
-        (("25", "27", "28", "29", "40", "41", "42"), OPERATE),
+        (("25", "27", "28", "29"), OPERATE),
     ),
     PortalRole.PROCTOR_ADMIN.value: (
         (("26",), READ_ONLY),
-        (("25", "27", "28", "29", "40", "41", "42"), OPERATE),
+        (("25", "27", "28", "29"), OPERATE),
         (("30",), MANAGE),
     ),
     PortalRole.UNIVERSITY_ADMIN.value: (
         (("1", "10", "15"), READ_ONLY),
-        (("11", "12", "13", "14", "36", "38", "39", "43", "44", "45"), OPERATE),
+        (("11", "12", "13", "14", "36", "38", "39"), OPERATE),
         (("37",), MANAGE),
         (("20",), DECIDE),
     ),
@@ -34,7 +34,7 @@ ROLE_PERMISSION_RULES: dict[str, tuple[tuple[tuple[str, ...], tuple[str, ...]], 
     ),
     PortalRole.EXAM_ADMINISTRATOR.value: (
         (("16", "22", "15", "7", "6"), READ_ONLY),
-        (("17", "18", "19", "21", "43"), MANAGE),
+        (("18", "19", "21"), MANAGE),
         (("20", "46"), DECIDE),
     ),
     PortalRole.SYSTEM_ADMIN.value: (
