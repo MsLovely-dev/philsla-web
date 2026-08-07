@@ -500,3 +500,30 @@ Diff check: git diff --check
 ```
 
 The first sandboxed Vitest invocation could not start because esbuild subprocess creation returned `spawn EPERM`; the elevated rerun produced the RED evidence. An initial Playwright assertion was narrowed from an ambiguous page text match (the hidden status-filter option and the table status both read `Results released`) to the visible Results Release table status; the application workflow itself had completed. Student Results and the cross-feature Exam Review-to-student journey were intentionally not added or changed here because they remain on separately preserved branch scope; this verification covers only Results Release plus aggregate analytics.
+
+## 2026-08-07 - Coordinator final release verification
+
+Fresh coordinator-observed verification evidence:
+
+```text
+Backend check: py -3.13 manage.py check --settings=config.settings.local
+               passed.
+Migration check: py -3.13 manage.py makemigrations --check --dry-run --settings=config.settings.local
+                 No changes detected.
+Focused backend: analytics, release, and Score Management suites
+                 53/53 passed.
+Full backend: 471/471 passed in 208.249s on in-memory SQLite.
+Focused frontend changed area: 6 files, 48 tests passed.
+Route tests: 8/8 passed.
+Playwright: npm run test:e2e -- e2e/results-release-analytics.spec.ts e2e/exam-review.spec.ts
+            3/3 Chromium tests passed.
+Production build: passed; 3,119 modules transformed. The existing >500 kB chunk advisory remained.
+Full frontend suite: 44 files passed, 3 failed; 283 tests passed, 9 failed.
+                     The failures are pre-existing: QrScanModal missing html5-qrcode and
+                     university-maintenance backendUniversityService export issues.
+TypeScript: npm run lint failed on the listed unrelated baseline diagnostics. After the last fix,
+            no ResultsRelease, ReportingMatrix, results-service, or apiClient diagnostic remained.
+PostgreSQL rehearsal: skipped because PHILSA_POSTGRES_TEST_DATABASE_URL was absent; this remains a production gate.
+Root status: clean.
+Diff check: git diff --check passed.
+```
