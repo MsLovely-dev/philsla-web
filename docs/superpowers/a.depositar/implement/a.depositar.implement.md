@@ -387,3 +387,18 @@ Test-first evidence:
 - Red result: failed because the dispatch path did not expose the row as claimed before email send.
 - Green run: same focused test after implementation.
 - Green result: passed, 1 test.
+## 2026-08-07 - System Integration Provider Placeholder Preparation
+
+Implemented safe provider placeholders for future DepEd LRN and PhilSys registration integrations, plus a frontend System Integration status surface. Manual Registration remained the active usable path.
+
+Verification:
+- `..\venv\Scripts\python.exe manage.py check --settings=config.settings.local`
+  - Passed, `System check identified no issues (0 silenced).`
+- `..\venv\Scripts\python.exe manage.py test apps.applications.tests.test_lrn_verification apps.applications.tests.test_integration_status --settings=config.settings.test`
+  - Passed, 15 tests.
+- `npm test -- backendApplicationService.test.ts StudentApplication.test.tsx StudentRegistrationMaintenance.test.tsx`
+  - Passed, 49 tests across 3 files.
+- `npm run lint`
+  - Failed on existing repository-wide TypeScript errors outside this change, including `CommandCenter.tsx`, `backendAuthService.ts`, `QrScanModal.tsx`, and pre-existing `StudentApplication.tsx` type errors unrelated to the new status panel.
+- `npm run build`
+  - Passed, Vite production bundle built successfully.

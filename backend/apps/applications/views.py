@@ -50,6 +50,7 @@ from .services import (active_step2_configuration, create_draft, decide_applicat
                        upload_student_profile_selfie,
                        verify_registration_email_otp, verify_lrn)
 from .models import IdentityMediaType, Step2VerificationConfiguration
+from .integration_status import registration_integration_status
 from .throttling import DeviceScopedRateThrottle
 
 
@@ -70,6 +71,14 @@ class LrnVerificationView(APIView):
         )
         record_application_event(event="registration_lrn_verified", outcome="success", request=request)
         return Response(result)
+
+
+class RegistrationIntegrationStatusView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request) -> Response:
+        return Response(registration_integration_status())
 
 
 class RegistrationEmailOtpRequestView(APIView):
