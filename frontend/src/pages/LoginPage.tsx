@@ -64,6 +64,8 @@ export default function LoginPage() {
   const [resendingOtp, setResendingOtp] = useState(false);
   const [otpResendCooldown, setOtpResendCooldown] = useState(0);
   const [otpExpiresIn, setOtpExpiresIn] = useState(0);
+  const [failedPasswordAttempts, setFailedPasswordAttempts] = useState(0);
+  const [lastAttemptedIdentifier, setLastAttemptedIdentifier] = useState('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const { startLoginIdentifier, verifyLoginPassword, completeTemporaryPasswordChange, completeStaffActivation, resendLoginOtp, verifyLoginOtp, completeLoginSelfie, requestPasswordRecovery } = usePhilSA();
   const navigate = useNavigate();
@@ -239,8 +241,16 @@ export default function LoginPage() {
 
     if (result.ok === false) {
       setError(result.error.message);
+      if (identifier === lastAttemptedIdentifier) {
+        setFailedPasswordAttempts((previous) => previous + 1);
+      } else {
+        setLastAttemptedIdentifier(identifier);
+        setFailedPasswordAttempts(1);
+      }
       return;
     }
+
+    setFailedPasswordAttempts(0);
 
     if (result.data.nextStep === 'password_change') {
       setPasswordChangeToken(result.data.passwordChangeToken);
@@ -566,6 +576,14 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* Matches backend AUTH_PASSWORD_MAX_ATTEMPTS (5) so this only appears once the account is actually locked, never before. */}
+          {step === 'password' && failedPasswordAttempts >= 5 && (
+            <div className="bg-amber-50 border border-amber-100 text-amber-700 px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              Multiple sign-in attempts have failed. For your security, please wait a few minutes before trying again.
+            </div>
+          )}
+
           {notice && step !== 'otp' && (
             <div className="bg-[#e5f1ec] border border-[#00563F]/15 text-[#00563F] px-5 py-4 rounded-2xl mb-8 text-sm font-bold flex items-center gap-3">
               <CheckCircle2 className="w-4 h-4" />
@@ -589,7 +607,10 @@ export default function LoginPage() {
                     inputMode="email"
                     aria-label="Account email"
                     value={identifier}
-                    onChange={(event) => setIdentifier(event.target.value)}
+                    onChange={(event) => {
+                      setIdentifier(event.target.value);
+                      setFailedPasswordAttempts(0);
+                    }}
                     placeholder="Enter your account email"
                     className="input-philsa pl-14"
                     autoComplete="username"
