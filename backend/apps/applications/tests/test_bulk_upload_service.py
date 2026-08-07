@@ -13,12 +13,14 @@ from apps.applications.bulk_upload import (
     BULK_UPLOAD_COLUMNS,
     BULK_UPLOAD_TEMPLATE_VERSION,
     build_bulk_upload_template_csv,
+    confirm_bulk_upload_batch,
     validate_bulk_upload_csv,
 )
 from apps.applications.models import (
     ApplicationBulkUploadBatch,
     ApplicationBulkUploadRowResult,
     ApplicationStatus,
+    BulkUploadBatchStatus,
     BulkUploadRowStatus,
     StudentApplication,
 )
@@ -84,6 +86,8 @@ class BulkUploadServiceTests(TestCase):
         rows = list(csv.reader(StringIO(build_bulk_upload_template_csv())))
 
         self.assertEqual(rows[0], BULK_UPLOAD_COLUMNS)
+        self.assertIn("isPwd", rows[0])
+        self.assertIn("pwdType", rows[0])
 
     def test_template_csv_includes_a_valid_sample_row(self):
         rows = list(csv.DictReader(StringIO(build_bulk_upload_template_csv())))
@@ -101,6 +105,31 @@ class BulkUploadServiceTests(TestCase):
         self.assertTrue(result["canConfirm"])
         self.assertEqual(ApplicationBulkUploadBatch.objects.count(), 1)
         self.assertEqual(ApplicationBulkUploadRowResult.objects.get().status, BulkUploadRowStatus.VALID)
+
+    def test_confirm_resumes_a_batch_left_in_confirming_state(self):
+        result = validate_bulk_upload_csv(uploaded_file=csv_file([valid_row()]), actor=self.actor)
+        batch = ApplicationBulkUploadBatch.objects.get(id=result["batchId"])
+        batch.status = BulkUploadBatchStatus.CONFIRMING
+        batch.save(update_fields=["status", "updated_at"])
+
+        confirmed = confirm_bulk_upload_batch(batch_id=batch.id, actor=self.actor)
+
+        self.assertEqual(confirmed["status"], "COMPLETED")
+        self.assertEqual(confirmed["importedRows"], 1)
+        self.assertEqual(StudentApplication.objects.get().submission_source, "ADMISSIONS_BULK_UPLOAD")
+
+    def test_confirm_imports_pwd_values_from_the_csv(self):
+        result = validate_bulk_upload_csv(
+            uploaded_file=csv_file([valid_row(isPwd="true", pwdType="Visual Disability")]),
+            actor=self.actor,
+        )
+
+        confirmed = confirm_bulk_upload_batch(batch_id=result["batchId"], actor=self.actor)
+
+        self.assertEqual(confirmed["status"], "COMPLETED")
+        application = StudentApplication.objects.get()
+        self.assertEqual(application.personal["isPwd"], "Yes")
+        self.assertEqual(application.personal["pwdType"], "Visual Disability")
 
     def test_validation_accepts_browser_csv_content_type_variants(self):
         uploaded_file = csv_file([valid_row()])

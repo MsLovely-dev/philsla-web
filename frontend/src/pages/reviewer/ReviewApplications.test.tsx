@@ -124,6 +124,21 @@ describe('ReviewApplications bulk upload', () => {
     expect(await screen.findByRole('button', { name: /confirm import/i })).toBeDisabled();
   });
 
+  it('disables confirm import when the validated batch is not confirmable', async () => {
+    const user = userEvent.setup();
+    serviceMocks.validateBulkUploadCsv.mockResolvedValue({
+      ok: true,
+      data: { batchId: 'batch-id', status: 'CONFIRMING', totalRows: 5, validRows: 5, failedRows: 0, conflictRows: 0, fieldErrors: 0, fieldErrorRows: 0, canConfirm: false, rows: [] },
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: /bulk upload/i }));
+    await user.upload(screen.getByLabelText(/csv file/i), new File(['csv'], 'students.csv', { type: 'text/csv' }));
+    await user.click(screen.getByRole('button', { name: /^validate$/i }));
+
+    expect(await screen.findByRole('button', { name: /confirm import/i })).toBeDisabled();
+  });
+
   it('shows a readable message when the backend cannot parse the CSV', async () => {
     const user = userEvent.setup();
     serviceMocks.validateBulkUploadCsv.mockResolvedValue({

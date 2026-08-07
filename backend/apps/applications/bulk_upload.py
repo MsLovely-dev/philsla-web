@@ -24,7 +24,7 @@ from apps.applications.models import (
 )
 
 
-BULK_UPLOAD_TEMPLATE_VERSION = "2026-08-06.v1"
+BULK_UPLOAD_TEMPLATE_VERSION = "2026-08-06.v2"
 BULK_UPLOAD_COLUMNS = [
     "templateVersion",
     "firstName",
@@ -49,6 +49,8 @@ BULK_UPLOAD_COLUMNS = [
     "enrollmentStatus",
     "schoolYear",
     "gwa",
+    "isPwd",
+    "pwdType",
     "firstChoiceUniversity",
     "firstChoiceCourse",
     "secondChoiceUniversity",
@@ -116,6 +118,8 @@ def build_bulk_upload_template_csv() -> str:
             "enrollmentStatus": "Enrolled",
             "schoolYear": "2026-2027",
             "gwa": "92.5",
+            "isPwd": "false",
+            "pwdType": "",
             "firstChoiceUniversity": "UP Diliman",
             "firstChoiceCourse": "BS Physics",
             "secondChoiceUniversity": "",
@@ -194,12 +198,13 @@ def confirm_bulk_upload_batch(*, batch_id, actor) -> dict:
             batch.status = BulkUploadBatchStatus.EXPIRED
             batch.save(update_fields=["status", "updated_at"])
             raise ValueError("This bulk upload batch has expired.")
-        if batch.status != BulkUploadBatchStatus.VALIDATED:
+        if batch.status not in {BulkUploadBatchStatus.VALIDATED, BulkUploadBatchStatus.CONFIRMING}:
             raise ValueError("Only validated bulk upload batches can be confirmed.")
 
-        batch.status = BulkUploadBatchStatus.CONFIRMING
-        batch.confirmed_at = now
-        batch.save(update_fields=["status", "confirmed_at", "updated_at"])
+        if batch.status == BulkUploadBatchStatus.VALIDATED:
+            batch.status = BulkUploadBatchStatus.CONFIRMING
+            batch.confirmed_at = now
+            batch.save(update_fields=["status", "confirmed_at", "updated_at"])
 
     valid_rows = ApplicationBulkUploadRowResult.objects.filter(
         batch_id=batch_id,
@@ -333,6 +338,10 @@ def _field_errors(row: dict) -> list[dict]:
             errors.append(_error("dateOfBirth", row["dateOfBirth"], "invalid_date", "Use YYYY-MM-DD. Example: 2008-05-15."))
     if row["lrn"] and (not row["lrn"].isdigit() or len(row["lrn"]) != 12):
         errors.append(_error("lrn", row["lrn"], "invalid_lrn", "LRN must be exactly 12 numeric digits. Example: 123456789012."))
+    if row["isPwd"].lower() not in {"", "true", "false", "yes", "no"}:
+        errors.append(_error("isPwd", row["isPwd"], "invalid_boolean", "Use true or false."))
+    if row["isPwd"].lower() in {"true", "yes"} and not row["pwdType"]:
+        errors.append(_error("pwdType", row["pwdType"], "required_when_pwd", "PWD type is required when isPwd is true."))
     if row["email"]:
         try:
             validate_email(row["email"])
@@ -412,6 +421,7 @@ def _final_conflict_errors(row: dict) -> list[dict]:
 
 
 def _personal_payload(row: dict) -> dict:
+    is_pwd = row.get("isPwd", "").lower() in {"true", "yes"}
     return {
         "firstName": row.get("firstName", ""),
         "middleName": row.get("middleName", ""),
@@ -422,6 +432,8 @@ def _personal_payload(row: dict) -> dict:
         "email": row.get("email", ""),
         "mobile": row.get("mobile", ""),
         "identityVerificationStatus": "MANUAL_PENDING",
+        "isPwd": "Yes" if is_pwd else "No",
+        "pwdType": row.get("pwdType", "") if is_pwd else "",
     }
 
 

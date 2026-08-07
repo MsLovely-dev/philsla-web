@@ -26,7 +26,7 @@ from .identity_verification import (
     get_selfie_face_validator,
     get_student_id_recognizer,
 )
-from .models import (ApplicationCompletionStatus, ApplicationIdentityMedia, ApplicationStatus, IdentityMediaType,
+from .models import (ApplicationCompletionStatus, ApplicationIdentityMedia, ApplicationStatus, ApplicationSubmissionSource, IdentityMediaType,
                      RegistrationSelfieMedia,
                      Step2Verification, Step2VerificationConfiguration,
                      Step2VerificationStatus, StudentApplication,
@@ -80,6 +80,28 @@ STEP1_CONFIG_FIELD_PAYLOAD_KEYS = {
     "PWD ID Attachment": ("personal", "pwdIdFilename"),
     "Accommodation Needed": ("personal", "pwdAccommodation"),
 }
+PROFILE_STATIC_REQUIREMENTS = (
+    ("personal", "firstName", "First Name"),
+    ("personal", "lastName", "Last Name"),
+    ("personal", "dateOfBirth", "Birth Date"),
+    ("personal", "sex", "Sex"),
+    ("personal", "email", "Email Address"),
+    ("personal", "mobile", "Mobile Number"),
+    ("address", "region", "Region"),
+    ("address", "province", "Province"),
+    ("address", "city", "City"),
+    ("address", "barangay", "Barangay"),
+    ("address", "street", "Street"),
+    ("address", "postalCode", "Postal Code"),
+    ("school", "lrn", "LRN"),
+    ("school", "schoolId", "School ID"),
+    ("school", "name", "School Name"),
+    ("school", "academicTrack", "Academic Track"),
+    ("school", "gradeLevel", "Grade Level"),
+    ("school", "enrollmentStatus", "Enrollment Status"),
+    ("school", "schoolYear", "School Year"),
+    ("school", "gwa", "GWA"),
+)
 
 
 class LrnVerificationRejected(APIException):
@@ -1048,6 +1070,194 @@ def _check_version(application: StudentApplication, expected_version: int) -> No
         raise ApplicationConflict("The application was changed by another request. Reload and try again.")
 
 
+def get_pending_student_profile_application(*, owner) -> StudentApplication:
+    owner_id = getattr(owner, "user_id", getattr(owner, "id", None))
+    application = (
+        StudentApplication.objects
+        .select_related("owner", "personal_info", "address_info", "school_info", "review_info")
+        .prefetch_related("course_preference_rows", "additional_fields", "additional_attachments")
+        .filter(
+            owner_id=owner_id,
+            submission_source=ApplicationSubmissionSource.ADMISSIONS_BULK_UPLOAD,
+            completion_status=ApplicationCompletionStatus.PENDING_STUDENT_COMPLETION,
+        )
+        .exclude(status=ApplicationStatus.REJECTED)
+        .order_by("-submitted_at", "-created_at")
+        .first()
+    )
+    if application is None:
+        raise StudentApplication.DoesNotExist
+    return application
+
+
+def _profile_requirement(section: str, field_key: str, label: str, requirement_type: str, completed: bool) -> dict:
+    return {
+        "section": section,
+        "fieldKey": field_key,
+        "label": label,
+        "type": requirement_type,
+        "required": True,
+        "completed": completed,
+    }
+
+
+def _profile_dynamic_value(application: StudentApplication, field: ConfigurableField):
+    section, key = _payload_location_for_config_field(field)
+    payload = getattr(application, section)
+    value = payload.get(key)
+    if field.field_name not in STEP1_CONFIG_FIELD_PAYLOAD_KEYS and _is_blank_step1_value(value):
+        alternate_section = "school" if section == "personal" else "personal"
+        value = getattr(application, alternate_section).get(key)
+    return section, key, value
+
+
+def build_student_profile_progress(application: StudentApplication) -> dict:
+    requirements = []
+    requirements.append(
+        _profile_requirement(
+            "identity",
+            "selfie",
+            "Biometric Selfie",
+            "selfie",
+            hasattr(application, "registration_selfie"),
+        )
+    )
+    for section, field_key, label in PROFILE_STATIC_REQUIREMENTS:
+        value = getattr(application, section).get(field_key)
+        requirements.append(_profile_requirement(section, field_key, label, "field", not _is_blank_step1_value(value)))
+
+    preferences = application.course_preferences
+    preferences_complete = bool(preferences) and all(
+        item.get("university") and item.get("course")
+        for item in preferences
+    )
+    requirements.append(_profile_requirement("coursePreferences", "coursePreferences", "Course Preferences", "field", preferences_complete))
+
+    review_step = application.review_step
+    requirements.append(_profile_requirement("reviewStep", "privacyConsent", "Privacy Consent", "field", review_step.get("privacyConsent") is True))
+    requirements.append(_profile_requirement("reviewStep", "declarationAccepted", "Declaration", "field", review_step.get("declarationAccepted") is True))
+
+    for field in _active_step1_registration_fields():
+        if field.priority != ConfigurableFieldPriority.HIGH:
+            continue
+        if field.field_name in OPTIONAL_IDENTITY_FIELD_NAMES:
+            continue
+        if _is_pwd_dependent_field(field) and not _truthy_step1_value(application.personal.get("isPwd")):
+            continue
+        section, key, value = _profile_dynamic_value(application, field)
+        if field.input_type == "file":
+            completed = _registration_attachment_exists(field=field, application=application)
+            requirements.append(_profile_requirement(field.field_section, field.field_name, field.field_name, "file", completed))
+            continue
+        completed = not _is_blank_step1_value(value)
+        if completed and field.input_type == "dropdown":
+            completed = str(value) in field.option_values
+        requirements.append(_profile_requirement(section, key, field.field_name, "field", completed))
+
+    seen = set()
+    unique_requirements = []
+    for item in requirements:
+        key = (item["section"], item["fieldKey"], item["type"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_requirements.append(item)
+
+    total = len(unique_requirements)
+    completed = sum(1 for item in unique_requirements if item["completed"])
+    percent = 100 if total == 0 else round((completed / total) * 100)
+    remaining = [
+        {key: value for key, value in item.items() if key != "completed"}
+        for item in unique_requirements
+        if not item["completed"]
+    ]
+    return {"completed": completed, "total": total, "percent": percent, "remaining": remaining}
+
+
+def serialize_student_profile_completion(application: StudentApplication, *, request=None) -> dict:
+    from apps.applications.serializers import ApplicationSerializer
+    from apps.configuration.serializers import ConfigurableFieldSerializer
+
+    fields = _active_step1_registration_fields().order_by("display_order", "field_name")
+    return {
+        "application": ApplicationSerializer(application, context={"request": request}).data,
+        "fields": ConfigurableFieldSerializer(fields, many=True).data,
+        "progress": build_student_profile_progress(application),
+    }
+
+
+@transaction.atomic
+def save_student_profile_draft(*, owner, expected_version: int, data: dict) -> StudentApplication:
+    try:
+        application = StudentApplication.objects.select_for_update().get(
+            id=get_pending_student_profile_application(owner=owner).id,
+        )
+    except StudentApplication.DoesNotExist as exc:
+        raise ApplicationConflict("Student profile completion is not pending.") from exc
+    _check_version(application, expected_version)
+    if application.status != ApplicationStatus.SUBMITTED:
+        raise ApplicationConflict("Only submitted bulk-uploaded applications can be completed.")
+    allowed_fields = {"personal", "address", "school", "course_preferences", "review_step"}
+    if "personal" in data:
+        _flatten_step1_dynamic_fields(data)
+    for field, value in data.items():
+        if field in allowed_fields:
+            setattr(application, field, value)
+    application.version += 1
+    application.save()
+    return application
+
+
+def _validate_student_profile_complete(application: StudentApplication) -> None:
+    errors = {}
+    if not hasattr(application, "registration_selfie"):
+        errors.setdefault("selfie", []).append("Selfie is required.")
+
+    for section, field_key, label in PROFILE_STATIC_REQUIREMENTS:
+        if _is_blank_step1_value(getattr(application, section).get(field_key)):
+            errors.setdefault(section, []).append(f"Missing required field: {label}.")
+
+    _validate_step1_configured_fields(
+        {"personal": application.personal, "school": application.school},
+        errors,
+        application=application,
+    )
+
+    lrn = str(application.school.get("lrn", ""))
+    if lrn and (len(lrn) != 12 or not lrn.isdigit()):
+        errors.setdefault("school", []).append("LRN must be exactly 12 numeric digits.")
+
+    if not application.course_preferences:
+        errors["coursePreferences"] = ["At least one course preference is required."]
+    elif any(not item.get("university") or not item.get("course") for item in application.course_preferences):
+        errors["coursePreferences"] = ["Every preference requires university and course."]
+
+    if application.review_step.get("privacyConsent") is not True or application.review_step.get("declarationAccepted") is not True:
+        errors["reviewStep"] = ["Privacy consent and declaration acceptance are required."]
+
+    if errors:
+        raise ValidationError(errors)
+
+
+@transaction.atomic
+def submit_student_profile(*, owner, expected_version: int) -> StudentApplication:
+    try:
+        application = StudentApplication.objects.select_for_update().get(
+            id=get_pending_student_profile_application(owner=owner).id,
+        )
+    except StudentApplication.DoesNotExist as exc:
+        raise ApplicationConflict("Student profile completion is not pending.") from exc
+    _check_version(application, expected_version)
+    if application.status != ApplicationStatus.SUBMITTED:
+        raise ApplicationConflict("Only submitted bulk-uploaded applications can be completed.")
+    _validate_student_profile_complete(application)
+    application.completion_status = ApplicationCompletionStatus.COMPLETE
+    application.version += 1
+    application.submitted_at = timezone.now()
+    application.save(update_fields=["completion_status", "version", "submitted_at", "updated_at"])
+    return application
+
+
 def _validate_complete(application: StudentApplication) -> None:
     required = {
         "personal": ("firstName", "lastName", "dateOfBirth", "email", "mobile"),
@@ -1097,10 +1307,8 @@ def _registration_attachment_exists(
     return False
 
 
-def upload_registration_attachment(*, registration_session_id: str, field_name: str, uploaded_file) -> StudentApplicationAdditionalAttachment:
-    if not registration_session_id:
-        raise ValidationError({"registrationSessionId": ["Registration session is required before uploading an attachment."]})
-    field = ConfigurableField.objects.filter(
+def _configured_registration_file_field(field_name: str) -> ConfigurableField | None:
+    return ConfigurableField.objects.filter(
         module=STUDENT_REGISTRATION_MODULE,
         section=STEP_1_REGISTRATION_SECTION,
         field_type=STUDENT_REGISTRATION_FIELD_TYPE,
@@ -1108,6 +1316,12 @@ def upload_registration_attachment(*, registration_session_id: str, field_name: 
         input_type="file",
         is_enabled=True,
     ).first()
+
+
+def upload_registration_attachment(*, registration_session_id: str, field_name: str, uploaded_file) -> StudentApplicationAdditionalAttachment:
+    if not registration_session_id:
+        raise ValidationError({"registrationSessionId": ["Registration session is required before uploading an attachment."]})
+    field = _configured_registration_file_field(field_name)
     if field is None:
         raise ValidationError({"fieldName": ["This attachment field is not configured or is inactive."]})
 
@@ -1137,6 +1351,85 @@ def upload_registration_attachment(*, registration_session_id: str, field_name: 
         size=uploaded_file.size,
         sha256=digest.hexdigest(),
     )
+
+
+@transaction.atomic
+def upload_student_profile_attachment(*, owner, field_name: str, uploaded_file) -> StudentApplicationAdditionalAttachment:
+    application = get_pending_student_profile_application(owner=owner)
+    field = _configured_registration_file_field(field_name)
+    if field is None:
+        raise ValidationError({"fieldName": ["This attachment field is not configured or is inactive."]})
+
+    content_type = _validated_registration_attachment_content_type(uploaded_file)
+    digest = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        digest.update(chunk)
+    uploaded_file.seek(0)
+
+    existing = StudentApplicationAdditionalAttachment.objects.filter(
+        application=application,
+        section=field.field_section,
+        field_key=field.field_name,
+    ).first()
+    if existing is not None:
+        existing.file.delete(save=False)
+        existing.delete()
+
+    return StudentApplicationAdditionalAttachment.objects.create(
+        application=application,
+        section=field.field_section,
+        field_key=field.field_name,
+        file=uploaded_file,
+        original_filename=getattr(uploaded_file, "name", "")[:255] or field.field_name,
+        content_type=content_type,
+        size=uploaded_file.size,
+        sha256=digest.hexdigest(),
+    )
+
+
+@transaction.atomic
+def upload_student_profile_selfie(*, owner, uploaded_file) -> dict:
+    application = get_pending_student_profile_application(owner=owner)
+    content_type = _validated_image_content_type(uploaded_file)
+    try:
+        selfie_face_result = get_selfie_face_validator().validate(image_file=uploaded_file, content_type=content_type)
+    except SelfieFaceValidationUnavailable as exc:
+        raise ValidationError({"file": ["Server-side selfie face validation is not configured."]}) from exc
+    except SelfieFaceValidationFailed as exc:
+        raise ValidationError({"file": [str(exc)]}) from exc
+
+    digest = hashlib.sha256()
+    for chunk in uploaded_file.chunks():
+        digest.update(chunk)
+    uploaded_file.seek(0)
+
+    existing_selfie = getattr(application, "registration_selfie", None)
+    if existing_selfie is not None:
+        existing_selfie.file.delete(save=False)
+        existing_selfie.delete()
+
+    RegistrationSelfieMedia.objects.create(
+        application=application,
+        file=uploaded_file,
+        content_type=content_type,
+        size=uploaded_file.size,
+        sha256=digest.hexdigest(),
+    )
+    application.refresh_from_db()
+    return {
+        "uploadedMedia": [IdentityMediaType.SELFIE],
+        "results": {
+            "serverFaceValidation": {
+                "provider": settings.STEP1_SELFIE_FACE_PROVIDER,
+                "faceCount": selfie_face_result.face_count,
+                "confidence": selfie_face_result.confidence,
+                "boundingBox": selfie_face_result.bounding_box,
+                "faceCovered": selfie_face_result.face_covered,
+                "checks": selfie_face_result.checks,
+            },
+        },
+        "progress": build_student_profile_progress(application),
+    }
 
 
 def _validated_registration_attachment_content_type(uploaded_file) -> str:
