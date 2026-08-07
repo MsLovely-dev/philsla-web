@@ -479,3 +479,24 @@ TypeScript: npm run lint
 Build: npm run build
        passed; 3,119 modules transformed. Existing chunk-size advisory remained.
 ```
+
+## 2026-08-07 - Results Release and analytics browser verification
+
+Added the scoped Playwright journey `frontend/e2e/results-release-analytics.spec.ts`. With complete synthetic release-summary, process, release, and analytics-overview responses, an `EXAM_ADMINISTRATOR` enters the protected Results Release route, processes one session once, releases it once, observes the final `Results released` state, then opens the protected Reporting Matrix and sees `Released Results Overview` without candidate ID or LRN text. The test counts each mutation request exactly once. The Reporting Matrix route now includes `EXAM_ADMINISTRATOR` while preserving `EXECUTIVE`, `GOVERNMENT`, `UNIVERSITY_ADMIN`, and `SYSTEM_ADMIN`; route-table assertions state both exact role lists.
+
+Test-first route authorization evidence:
+
+```text
+RED: npm test -- src/routing/routes.test.tsx --run
+     8 tests ran; the new exact Reporting Matrix role assertion failed because EXAM_ADMINISTRATOR was absent.
+GREEN: npm test -- src/routing/routes.test.tsx --run
+       exit 0; 1 file passed, 8 tests passed.
+Playwright: npm run test:e2e -- e2e/results-release-analytics.spec.ts
+            exit 0; 1 Chromium test passed.
+Regression: npm run test:e2e -- e2e/exam-review.spec.ts
+            exit 0; 2 Chromium tests passed.
+Diff check: git diff --check
+            exit 0.
+```
+
+The first sandboxed Vitest invocation could not start because esbuild subprocess creation returned `spawn EPERM`; the elevated rerun produced the RED evidence. An initial Playwright assertion was narrowed from an ambiguous page text match (the hidden status-filter option and the table status both read `Results released`) to the visible Results Release table status; the application workflow itself had completed. Student Results and the cross-feature Exam Review-to-student journey were intentionally not added or changed here because they remain on separately preserved branch scope; this verification covers only Results Release plus aggregate analytics.
