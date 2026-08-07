@@ -1,4 +1,4 @@
-import { Shield } from 'lucide-react';
+import { AlertCircle, RefreshCw, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ExamHubTabs, type ExamHubTabKey } from '../../../components/ExamHubTabs';
 import { useExamSets } from '../../../hooks/useExamSets';
@@ -6,7 +6,7 @@ import { statusClasses, statusLabel } from './examSets/examSetUi';
 
 export default function ExamSetPublished() {
   const navigate = useNavigate();
-  const { examSets, loadState } = useExamSets();
+  const { examSets, loadState, loadError, reload } = useExamSets();
 
   const packages = examSets.filter((record) => record.status === 'APPROVED' || record.status === 'PUBLISHED');
 
@@ -41,7 +41,22 @@ export default function ExamSetPublished() {
           </div>
         )}
 
-        {loadState !== 'loading' && packages.length === 0 && (
+        {loadState === 'error' && (
+          <div role="alert" className="flex min-h-56 flex-col items-center justify-center gap-2 p-8 text-center">
+            <AlertCircle className="h-9 w-9 text-red-600" />
+            <h2 className="text-lg font-black text-red-900">Published Exams could not be loaded</h2>
+            <p className="max-w-md text-sm text-red-700">{loadError?.message ?? 'The request could not be completed.'}</p>
+            <button
+              type="button"
+              onClick={() => void reload()}
+              className="mt-2 inline-flex items-center gap-2 rounded-xl bg-red-700 px-4 py-2 text-xs font-black uppercase text-white"
+            >
+              <RefreshCw className="h-4 w-4" /> Retry
+            </button>
+          </div>
+        )}
+
+        {loadState !== 'loading' && loadState !== 'error' && packages.length === 0 && (
           <div className="flex min-h-56 flex-col items-center justify-center gap-2 p-8 text-center">
             <Shield className="h-9 w-9 text-slate-400" />
             <h2 className="text-lg font-black text-slate-900">No approved or published exam sets yet</h2>
@@ -49,7 +64,7 @@ export default function ExamSetPublished() {
           </div>
         )}
 
-        {packages.length > 0 && (
+        {loadState !== 'error' && packages.length > 0 && (
           <div className="grid gap-4 p-5 sm:grid-cols-2 sm:p-7">
             {packages.map((record) => (
               <article key={record.id} className="rounded-2xl border border-slate-200 bg-white p-4">

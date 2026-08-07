@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { ExamSetRecord } from '../../../services/backendExamSetService';
@@ -74,5 +75,26 @@ describe('ExamSetPublished', () => {
     expect(screen.getByText('Approved Set')).toBeInTheDocument();
     expect(screen.getByText('Published Set')).toBeInTheDocument();
     expect(screen.getByText('a'.repeat(64), { exact: false })).toBeInTheDocument();
+  });
+
+  it('shows a retryable error state instead of the empty state when the load fails', async () => {
+    const reload = vi.fn();
+    mockUseExamSets.mockReturnValue(hookState({
+      examSets: [
+        baseRecord({ id: '2', title: 'Approved Set', status: 'APPROVED' }),
+      ],
+      loadState: 'error',
+      loadError: { kind: 'NETWORK', message: 'Synthetic load failure.' },
+      reload,
+    }));
+
+    render(<MemoryRouter><ExamSetPublished /></MemoryRouter>);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Synthetic load failure.');
+    expect(screen.queryByText('Approved Set')).not.toBeInTheDocument();
+    expect(screen.queryByText('No approved or published exam sets yet')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(reload).toHaveBeenCalledOnce();
   });
 });
