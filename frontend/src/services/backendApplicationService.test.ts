@@ -50,6 +50,26 @@ describe('BackendApplicationService', () => {
     );
   });
 
+  it('loads registration integration status from the backend', async () => {
+    const fetcher = vi.fn().mockResolvedValue(jsonResponse({
+      backend: { status: 'connected' },
+      methods: [
+        { id: 'manual', label: 'Manual Registration', status: 'available', active: true, message: 'Manual Registration is available.' },
+        { id: 'lrn', label: 'LRN Verification', status: 'placeholder', active: false, message: 'LRN verification is prepared for provider integration but no live DepEd connection is active.' },
+        { id: 'philsys', label: 'PhilSys National ID', status: 'locked', active: false, message: 'PhilSys National ID integration is locked until official API requirements are approved.' },
+      ],
+    }, { status: 200 }));
+    const service = new BackendApplicationService(new ApiClient({ baseUrl: 'http://backend.test', fetcher }));
+
+    const result = await service.getRegistrationIntegrationStatus();
+
+    expect(result.ok).toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      'http://backend.test/api/v1/applications/registration/integration-status/',
+      expect.objectContaining({ credentials: 'include' }),
+    );
+  });
+
   it('requests a registration email OTP through the backend', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       jsonResponse(

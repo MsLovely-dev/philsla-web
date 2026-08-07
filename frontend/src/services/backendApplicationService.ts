@@ -27,6 +27,22 @@ export interface LrnVerificationResult {
   step2: Step2Configuration;
 }
 
+export type RegistrationIntegrationMethodId = 'manual' | 'lrn' | 'philsys';
+export type RegistrationIntegrationMethodStatus = 'available' | 'mock' | 'placeholder' | 'unavailable' | 'locked';
+
+export interface RegistrationIntegrationMethod {
+  id: RegistrationIntegrationMethodId;
+  label: string;
+  status: RegistrationIntegrationMethodStatus;
+  active: boolean;
+  message: string;
+}
+
+export interface RegistrationIntegrationStatus {
+  backend: { status: 'connected' };
+  methods: RegistrationIntegrationMethod[];
+}
+
 export interface RegistrationEmailOtpRequestResult {
   email: string;
   expiresInSeconds: number;
@@ -316,6 +332,10 @@ export class BackendApplicationService {
         } : {}),
       }),
     });
+  }
+
+  getRegistrationIntegrationStatus(): Promise<ServiceResult<RegistrationIntegrationStatus>> {
+    return this.apiClient.request<RegistrationIntegrationStatus>('/api/v1/applications/registration/integration-status/');
   }
 
   requestRegistrationEmailOtp(email: string, options: ApplicationRequestOptions = {}): Promise<ServiceResult<RegistrationEmailOtpRequestResult>> {

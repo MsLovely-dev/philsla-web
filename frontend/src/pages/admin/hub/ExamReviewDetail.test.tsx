@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ vi.mock('../../../services/backendExamReviewService', () => ({
   backendExamReviewService: {
     get: vi.fn(),
     release: vi.fn(),
+    setGradingStatus: vi.fn(),
     scoreItem: vi.fn(),
     uploadAnswerSheet: vi.fn(),
   },
@@ -96,6 +97,7 @@ describe('ExamReviewDetail', () => {
     expect(screen.getByRole('button', { name: 'Upload Student Answer Sheet' })).toBeInTheDocument();
     expect(screen.getByText('Objective Response')).toBeInTheDocument();
     expect(screen.getByText('Correct answer')).toBeInTheDocument();
+    expect(screen.getByLabelText('English subject pending status')).toHaveTextContent('1 pending subjective item');
 
     await user.click(screen.getByRole('button', { name: /English/ }));
 
@@ -127,6 +129,7 @@ describe('ExamReviewDetail', () => {
     expect(backendExamReviewService.scoreItem).toHaveBeenCalledWith('review-id', 'english-item', 8);
     expect(await screen.findByText('Graded')).toBeInTheDocument();
     expect(screen.getByText('Points: 8 / 10')).toBeInTheDocument();
+    expect(screen.getByLabelText('English subject pending status')).toHaveTextContent('All subjective items scored');
   });
 
   it('releases a completed graded review through the backend', async () => {
@@ -147,6 +150,27 @@ describe('ExamReviewDetail', () => {
 
     expect(backendExamReviewService.release).toHaveBeenCalledWith('review-id');
     expect(await screen.findByText('Released to Score Management')).toBeInTheDocument();
+  });
+
+  it('marks a fully scored review as graded before allowing release', async () => {
+    const user = userEvent.setup();
+    const completedReview: ExamReviewDetailItem = {
+      ...review,
+      pendingSubjectiveItems: 0,
+    };
+    vi.mocked(backendExamReviewService.get).mockResolvedValue({ ok: true, data: completedReview });
+    vi.mocked(backendExamReviewService.setGradingStatus).mockResolvedValue({
+      ok: true,
+      data: { ...completedReview, status: 'GRADED' },
+    });
+    renderExamReviewDetail();
+
+    await user.click(await screen.findByRole('button', { name: 'Mark as Graded' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Mark exam as Graded?');
+    await user.click(screen.getByRole('button', { name: 'Confirm Grading' }));
+
+    await waitFor(() => expect(backendExamReviewService.setGradingStatus).toHaveBeenCalledWith('review-id', 'GRADED'));
+    expect(await screen.findByRole('button', { name: 'Release to Score Management' })).toBeInTheDocument();
   });
 
   it('keeps release available and shows the backend handoff conflict', async () => {

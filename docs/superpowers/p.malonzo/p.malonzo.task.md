@@ -1,27 +1,37 @@
-# Prince Barachiel Malonzo (P.Malonzo) — Sprint Task Brief
+# Prince Barachiel Malonzo (P.Malonzo) — Results Release & Analytics Task Brief
 
 | Field | Value |
 |---|---|
 | Owner | Prince Barachiel Malonzo (P.Malonzo) |
-| Worktree | `worktrees/p.malonzo/` |
+| Checkout | Repository root: `C:/Users/prince.malonzo/Desktop/philsla/philsla-web` |
 | Sprint | Wednesday 2026-08-05 through Friday 2026-08-07 |
-| Primary module | BRD-05 Exam Review |
-| Official primary branch | `p.malonzo/exam-review` |
-| Current checkout | `p.malonzo/exam-review`; owner directed execution in the current checkout |
-| Documentation status | Design, specification, plan, and implementation record complete |
-| Implementation status | Code repair verified; branch publication authorized; local database recovery choice pending |
+| Current module | BRD-05 Results Release & Analytics |
+| Current branch | `p.malonzo/results-release` |
+| Documentation status | Minimal Results Release plan, API contracts, security boundary, and implementation evidence recorded |
+| Implementation status | Results Release orchestration and released-results analytics implemented; PostgreSQL rehearsal remains a production gate |
 
 ## Stories
 
 | Priority | Story | Module | Branch | Track | Status |
 |---|---|---|---|---|---|
-| 1 | Exam Review | BRD-05 Scoring & Results | `p.malonzo/exam-review` | Repair and isolate the implemented feature | Primary — design review |
-| 2 | Exam Results Release & Analytics | BRD-05 Scoring & Results | `p.malonzo/results-release` | Separate roadmap cycle | Not started |
-| 3 | Student Portal | Student Portal | No branch this sprint | Parked | Out of scope |
+| 1 | Exam Results Release | BRD-05 Scoring & Results | `p.malonzo/results-release` | Backend-owned session readiness, processing, and release | Implemented and verified |
+| 2 | Released Results Analytics | BRD-05 Scoring & Results | `p.malonzo/results-release` | Privacy-safe national/session aggregate reporting | Implemented and verified |
+| 3 | Exam Review | BRD-05 Scoring & Results | `p.malonzo/exam-review` | Isolated Exam Review and Score Management handoff | Preserved completed branch history |
+| 4 | Student Results | Student Portal | `p.malonzo/exam-review` | Student-facing results work remains separate from this branch | Not part of this delivery |
 
-Score Management belongs to A.Depositar. Student Registration belongs to L.Chavez. P.Malonzo's Exam Review work may use their documented interfaces, but it must not take ownership of those modules.
+Score Management belongs to A.Depositar. Student Registration belongs to L.Chavez. This branch orchestrates existing Score Management services without taking ownership of score computation or student registration.
 
-## Current reality check
+## Implemented Results Release & Analytics scope
+
+- `/admin/hub/results-release` uses `GET /api/v1/results/release-summary/`, `POST /api/v1/results/score-management/batches/{sessionId}/process/`, and `POST /api/v1/results/score-management/batches/{sessionId}/release/` for aggregate session readiness, processing, and release. It does not expose candidate identities or individual scores.
+- `/admin/results/matrix` uses `GET /api/v1/results/analytics/overview/` for released-candidate totals, released-session totals, mean final score, fixed score bands, and released-session aggregates. The response and screen are identity-free.
+- The minimal orchestration added no database model or migration. Backend-focused and full-suite verification used the configured in-memory SQLite test database.
+- PostgreSQL-compatible rehearsal was not run because `PHILSA_POSTGRES_TEST_DATABASE_URL` was unavailable. It remains a production-readiness gate.
+- Student Results at `/student/results` remains separate work preserved on `p.malonzo/exam-review`; this branch does not claim that student-facing slice.
+
+## Preserved Exam Review repair history (2026-08-05)
+
+The remainder of this brief preserves the conditions and decisions that initiated the earlier `p.malonzo/exam-review` repair. Statements below describe that historical starting point, not the current `p.malonzo/results-release` checkout.
 
 The original sprint plan described `backend/apps/results` as an empty stub and the Exam Review screens as mock-only. That description is no longer accurate.
 

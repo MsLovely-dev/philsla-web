@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendExamReviewService, type ExamReviewQueueItem } from '../../../services/backendExamReviewService';
 import ExamReviewList from './ExamReviewList';
@@ -50,8 +50,14 @@ function renderList() {
   render(
     <MemoryRouter>
       <ExamReviewList />
+      <LocationDisplay />
     </MemoryRouter>,
   );
+}
+
+function LocationDisplay() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
 }
 
 describe('ExamReviewList grading confirmations', () => {
@@ -78,18 +84,26 @@ describe('ExamReviewList grading confirmations', () => {
     await waitFor(() => expect(setGradingStatusMock).toHaveBeenCalledWith('pending-review', 'GRADED'));
   });
 
-  it('prevents grading while subjective items are pending', async () => {
+  it('opens the review to score pending subjective items instead of grading an incomplete exam', async () => {
+    const user = userEvent.setup();
     renderList();
 
-    const gradeButton = await screen.findByRole('button', { name: 'Mark Demo Candidate 004 as Graded' });
+    const reviewButton = await screen.findByRole('button', { name: 'Review Demo Candidate 004 pending subjective items' });
 
-    expect(gradeButton).toBeDisabled();
-    expect(gradeButton).toHaveAttribute(
+    expect(reviewButton).toBeEnabled();
+    expect(reviewButton).toHaveAttribute(
       'title',
-      'Score 3 pending subjective items before marking this exam as Graded',
+      'Open this review to score 3 pending subjective items',
     );
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    await user.click(reviewButton);
+
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Review pending scores?');
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('3 pending subjective items');
     expect(setGradingStatusMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Open Review' }));
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/admin/hub/review/pending-review');
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 
   it('requires confirmation before rejecting grading and returning an exam to pending', async () => {

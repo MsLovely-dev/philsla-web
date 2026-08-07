@@ -28,6 +28,13 @@ describe('APP_ROUTES', () => {
     expect(APP_ROUTES.find((route) => route.path === '/support/dashboard')?.allowedRoles).toContain('TECH_SUPPORT');
   });
 
+  it('authorizes release operators for results release and aggregate reporting', () => {
+    expect(APP_ROUTES.find((route) => route.path === '/admin/hub/results-release')?.allowedRoles)
+      .toEqual(['EXAM_ADMINISTRATOR', 'SYSTEM_ADMIN']);
+    expect(APP_ROUTES.find((route) => route.path === '/admin/results/matrix')?.allowedRoles)
+      .toEqual(['EXECUTIVE', 'GOVERNMENT', 'UNIVERSITY_ADMIN', 'EXAM_ADMINISTRATOR', 'SYSTEM_ADMIN']);
+  });
+
   it('registers the updated Maintenance Center modules with their intended roles', () => {
     const expectedRoles = new Map([
       ['/admin/maintenance/schools', ['SYSTEM_ADMIN', 'UNIVERSITY_ADMIN', 'ADMISSIONS_REVIEWER']],

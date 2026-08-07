@@ -75,12 +75,12 @@ const permissionMatrixModuleIds = new Set([
   '2', '3', '4',
   '5', '6', '7',
   '8', '9', '48', '10', '11', '12', '13', '14', '15',
-  '16', '49', '19', '17', '20', '46', '22', '56',
+  '16', '49', '19', '18', '20', '21', '46', '22', '56',
   '23', '50', '51',
   '24',
   '25', '26', '27', '28', '29', '52', '30',
   '31', '32', '33', '47', '53',
-  '34', '36', '37', '38', '39', '40', '41',
+  '34', '36', '37', '38', '39',
   '35', '54', '55',
 ]);
 
@@ -128,7 +128,7 @@ const defaultRolePermissionRules: Record<string, RolePermissionRule[]> = {
   ],
   EXAM_ADMINISTRATOR: [
     { moduleIds: ['16', '22', '49', '15', '7', '6', '56'], actions: readOnly },
-    { moduleIds: ['17', '18', '19', '21', '39', '40'], actions: manage },
+    { moduleIds: ['18', '19', '21', '39'], actions: manage },
     { moduleIds: ['20', '46'], actions: decide },
   ],
   SYSTEM_ADMIN: [

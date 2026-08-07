@@ -46,6 +46,7 @@ The baseline health and authentication boundaries, the first student-application
 | `POST` | `/api/v1/applications/profile/submit/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Validate and complete the profile so the application can enter normal admissions review | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
+| `GET` | `/api/v1/applications/registration/integration-status/` | Public; no credentials required | `AllowAny` | Return safe frontend-facing status for PhilSLA backend connectivity and registration provider readiness | Implemented; external DepEd and PhilSys providers remain unavailable placeholders |
 | `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
 | `POST` | `/api/v1/applications/registration/email-otp/verify/` | Public; device/network throttled | `AllowAny` | Verify a registration email OTP and issue a short-lived email verification token | Implemented |
 | `POST` | `/api/v1/applications/registration/attachments/` | Public with `X-Registration-Session-Id` | `AllowAny` | Upload one private PDF/JPEG/PNG file for a configured Step 1 file field | Implemented |
@@ -86,15 +87,72 @@ The baseline health and authentication boundaries, the first student-application
 
 `POST /api/v1/results/exam-reviews/{reviewId}/items/{itemId}/score/` accepts `{ "points": 8 }` for a subjective item. The backend rejects objective-item overrides, scores above the item's maximum, item/review mismatches, and changes to `FINALIZED` records. A successful save recalculates the aggregate total and remaining pending-subjective count from persisted item scores.
 | `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` | List examination sessions with score-processing status and candidate counts | Implemented |
-| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
+| `GET` | `/api/v1/results/release-summary/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | List paginated session-level processing and release readiness totals without candidate details | Implemented |
+| `GET` | `/api/v1/results/analytics/overview/` | Bearer token | `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, or `SYSTEM_ADMIN` | Return released-results aggregate totals, fixed score-band distribution, and session summaries | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` | Return paginated approved candidate score records, with rank and percentile populated after processing | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` | Bearer token | `SYSTEM_ADMIN` | Return a score-anchored read-only candidate profile for a candidate in the selected score batch | Implemented |
-| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `SYSTEM_ADMIN` | Release already processed examination results | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | Release already processed examination results | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/export/` | Bearer token | `SYSTEM_ADMIN` | Stream processed approved score results as CSV | Implemented |
 
 ### Score Management
 
-Score Management is backend-owned. The frontend may trigger processing and release, but it must not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
+Score Management is backend-owned. `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN` may trigger processing and release, but the batch list, candidate results, candidate profiles, and CSV export remain restricted to `SYSTEM_ADMIN`. The frontend may not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
+
+### `GET /api/v1/results/analytics/overview/`
+
+Returns privacy-safe, read-only results aggregates for `CHED_ADMIN`, `DEPED_ADMIN`, `TESDA_ADMIN`, `EXECUTIVE`, `UNIVERSITY_ADMIN`, `EXAM_ADMINISTRATOR`, and `SYSTEM_ADMIN`. It accepts no filters or identity inputs. The backend includes only score rows that are `APPROVED`, `RELEASED`, and belong to a session with `RESULTS_RELEASED` scoring status. The `sessions` collection is intentionally unpaginated and returns one aggregate row per qualifying released session; it is not a candidate-level result collection and the response contains no pagination metadata. The database query count is bounded independently of the number of qualifying sessions, but response cardinality is not capped.
+
+```json
+{
+  "releasedCandidates": 188394,
+  "releasedSessions": 1,
+  "meanFinalScore": 82.5,
+  "scoreBands": [
+    { "label": "0-59.99", "minimum": 0, "maximum": 59.99, "count": 1000 },
+    { "label": "60-69.99", "minimum": 60, "maximum": 69.99, "count": 2000 },
+    { "label": "70-79.99", "minimum": 70, "maximum": 79.99, "count": 3000 },
+    { "label": "80-89.99", "minimum": 80, "maximum": 89.99, "count": 4000 },
+    { "label": "90-100", "minimum": 90, "maximum": 100, "count": 178394 }
+  ],
+  "sessions": [
+    {
+      "sessionId": "SESSION-2027-REGULAR",
+      "sessionName": "PhilSA Regular Examination 2027",
+      "releasedCandidates": 188394,
+      "meanFinalScore": 82.5,
+      "releasedAt": "2026-08-03T08:00:00+00:00"
+    }
+  ]
+}
+```
+
+`meanFinalScore` and each session `meanFinalScore` are `null` when no qualifying rows exist. The fixed bands are `0-59.99`, `60-69.99`, `70-79.99`, `80-89.99`, and `90-100`. Session `releasedAt` is the latest release-audit timestamp, or `null` if no audit exists. Responses never include candidate rows, names, IDs, LRNs, contact details, answer content, rankings, institutions, demographics, regions, agency data, qualifications, or admission decisions.
+
+Small-cell suppression and external-disclosure thresholds are `TBD`. The current authorized API returns exact aggregate counts and does not suppress low-count score bands or session rows. This implemented behavior is not approval for public or external disclosure; a reviewed privacy policy and contract change are required before broader dissemination.
+
+Authentication and authorization failures use the standard safe API error envelope:
+
+```json
+{
+  "error": {
+    "code": "NOT_AUTHENTICATED | PERMISSION_DENIED",
+    "message": "<safe public message>",
+    "fields": {},
+    "meta": {},
+    "correlationId": "<request correlation ID>"
+  }
+}
+```
+
+- `401 NOT_AUTHENTICATED` is returned when no valid authenticated backend session exists.
+- `403 PERMISSION_DENIED` is returned when the authenticated account does not have one of the permitted roles listed above.
+
+### `GET /api/v1/results/release-summary/`
+
+Returns a paginated, session-level readiness summary for `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN`. It accepts positive `page`, `pageSize` from 1 through 100, optional exact `status` (`READY_FOR_PROCESSING`, `SCORING_PROCESSED`, or `RESULTS_RELEASED`), and optional case-insensitive `search` of at most 160 characters over session ID and name. Invalid parameters return the standard validation `400` envelope. The backend selects the filtered page of session identifiers before aggregating score totals, so score aggregation is bounded to the requested page.
+
+Each row contains only `{id, name, status, isClosed, totalCandidates, approvedScores, excludedScores, processedScores, releasedScores, processedAt, releasedAt, processingReady, releaseReady}`. It never includes candidate identities, LRNs, email addresses, individual scores, or notification data. `processedScores` counts approved scores with a non-null rank, matching the release mutation. `processingReady` is true only for a closed session with approved scores in `READY_FOR_PROCESSING` whose score-to-session, ranking-population, and exam-set relationships pass the processing service's consistency rules. `releaseReady` additionally requires `SCORING_PROCESSED`, an actual processing batch, at least one ranked approved score, and no released approved scores.
 
 `GET /api/v1/results/score-management/batches/` returns persisted examination sessions:
 
@@ -128,7 +186,7 @@ Score Management is backend-owned. The frontend may trigger processing and relea
 }
 ```
 
-The backend validates that `allowReprocessing` is a boolean, the session exists, the session is closed, approved scores are present, and the session has not already been processed unless `allowReprocessing` is true. Processing uses approved records only, groups by ranking population, applies competition ranking, computes percentile as the percent of approved candidates in the same population with lower final scores, writes `overallRank`, `percentile`, processing timestamp, processing batch, and leaves release status as `NOT_RELEASED`.
+The backend validates that `allowReprocessing` is a boolean, the session exists, the session is closed, approved scores are present, and the session has not already been processed unless `allowReprocessing` is true. Invalid request data returns `400 VALIDATION_FAILED`, an unknown session returns `404 NOT_FOUND`, and closed-state, approved-score, already-processed, or already-released lifecycle failures return `409 CONFLICT`. Processing uses approved records only, groups by ranking population, applies competition ranking, computes percentile as the percent of approved candidates in the same population with lower final scores, writes `overallRank`, `percentile`, processing timestamp, processing batch, and leaves release status as `NOT_RELEASED`.
 
 Successful response:
 
@@ -173,7 +231,23 @@ Successful response:
 }
 ```
 
-`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues no-score availability email notifications in chunks for released candidates with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend attempts to enqueue a Django RQ dispatch job after the release transaction commits; if Redis is unavailable, release remains successful and notifications stay `PENDING`. The worker claims rows as `PROCESSING`, commits that claim before sending SMTP, and then marks each row `SENT` or `FAILED`. Stale `PROCESSING` claims older than `SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS` can be retried while below the configured attempt limit. The worker drains pending notifications across multiple batches. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. If scores are not processed, the endpoint returns `400` with `Scores must be processed before release.`.
+`POST /api/v1/results/score-management/batches/{sessionId}/release/` is allowed only after processing. It marks processed approved scores as `RELEASED`, updates the session status to `RESULTS_RELEASED`, records a release audit row, and queues no-score availability email notifications in chunks for released candidates with exactly one matching non-draft, non-rejected application email. The release request does not send email synchronously, so SMTP latency does not block publication. When `SCORE_RELEASE_EMAIL_AUTO_ENQUEUE=true`, the backend attempts to enqueue a Django RQ dispatch job after the release transaction commits; if Redis is unavailable, release remains successful and notifications stay `PENDING`. The worker claims rows as `PROCESSING`, commits that claim before sending SMTP, and then marks each row `SENT` or `FAILED`. Stale `PROCESSING` claims older than `SCORE_RELEASE_EMAIL_PROCESSING_TIMEOUT_SECONDS` can be retried while below the configured attempt limit. The worker drains pending notifications across multiple batches. The email says results are available and links to the Student Portal results page. It must not include raw score, final score, rank, percentile, LRN, answer content, or qualification details. Missing or ambiguous application matches are skipped and counted. An unknown session returns `404 NOT_FOUND`; a session that is not ready for release returns `409 CONFLICT` with `Scores must be processed before release.`.
+
+Expected process and release failures use the standard safe API error envelope. For example:
+
+```json
+{
+  "error": {
+    "code": "CONFLICT",
+    "message": "Scores must be processed before release.",
+    "fields": {},
+    "meta": {},
+    "correlationId": "00000000-0000-4000-8000-000000000000"
+  }
+}
+```
+
+The mutation adapters expose only the documented stable messages. Unexpected internal service text is replaced by a generic session-state conflict message.
 
 Successful release response:
 
@@ -261,6 +335,12 @@ The data migration is `backend/apps/configuration/migrations/0007_university_col
 Test coverage: `backend/apps/configuration/tests/test_university_registry_endpoints.py`. Frontend adapter and page behavior coverage: `frontend/src/services/backendUniversityService.test.ts` and `frontend/src/pages/admin/maintenance/UniversitiesListMaintenance.test.tsx`.
 
 ### Student application draft and submission
+
+### `GET /api/v1/applications/registration/integration-status/`
+
+This endpoint lets the frontend show System Integration readiness without calling external registries directly. It confirms PhilSLA backend reachability and reports Manual Registration, LRN Verification, and PhilSys National ID readiness using safe labels only. It must not expose provider URLs, credentials, tokens, raw registry payloads, real LRN values, National ID values, or student records.
+
+Manual Registration is reported as `available`. LRN may report `unavailable`, `mock`, or `placeholder` depending on `LRN_REGISTRY_PROVIDER`. PhilSys reports `locked` or `placeholder` depending on `PHILSYS_REGISTRY_PROVIDER`. Placeholder statuses mean the backend boundary exists but no live external API is connected.
 
 Before draft creation, call `POST /api/v1/applications/registration/lrn/verify/`:
 

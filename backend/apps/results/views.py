@@ -48,6 +48,27 @@ class Conflict(APIException):
     default_code = "conflict"
 
 
+SCORE_MUTATION_CONFLICT_MESSAGES = {
+    "examination session is not closed": "Examination session must be closed before processing.",
+    "session has already been processed": "Examination session has already been processed.",
+    "approved examination scores are not available": "Approved examination scores are not available.",
+    "released results cannot be reprocessed": "Released results cannot be reprocessed.",
+    "Scores must be processed before release.": "Scores must be processed before release.",
+}
+
+
+def _raise_score_mutation_error(exc: ScoreProcessingError) -> None:
+    service_message = str(exc)
+    if service_message == "examination session does not exist":
+        raise NotFound("Examination session not found.") from exc
+    raise Conflict(
+        SCORE_MUTATION_CONFLICT_MESSAGES.get(
+            service_message,
+            "The score operation conflicts with the current examination session state.",
+        ),
+    ) from exc
+
+
 def _get_session(session_id: str) -> ExaminationSession:
     try:
         return ExaminationSession.objects.get(id=session_id)
@@ -181,6 +202,11 @@ class ScoreManagementBaseView(APIView):
     required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
 
 
+class ScoreReleaseOperatorBaseView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.EXAM_ADMINISTRATOR, PortalRole.SYSTEM_ADMIN)
+
+
 class ScoreManagementBatchListView(ScoreManagementBaseView):
     def get(self, request) -> Response:
         latest_batch = ScoreProcessingBatch.objects.filter(session=OuterRef("pk")).order_by("-started_at")
@@ -196,7 +222,7 @@ class ScoreManagementBatchListView(ScoreManagementBaseView):
         return Response({"count": sessions.count(), "results": [_serialize_batch(session) for session in sessions]})
 
 
-class ScoreManagementProcessView(ScoreManagementBaseView):
+class ScoreManagementProcessView(ScoreReleaseOperatorBaseView):
     def post(self, request, session_id: str) -> Response:
         serializer = ScoreProcessRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -208,7 +234,7 @@ class ScoreManagementProcessView(ScoreManagementBaseView):
                 allow_reprocessing=allow_reprocessing,
             )
         except ScoreProcessingError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            _raise_score_mutation_error(exc)
 
         return Response(
             {
@@ -269,12 +295,12 @@ class ScoreManagementCandidateProfileView(ScoreManagementBaseView):
         return Response({"score": _serialize_score(score), "profile": _serialize_profile(application, request)})
 
 
-class ScoreManagementBatchReleaseView(ScoreManagementBaseView):
+class ScoreManagementBatchReleaseView(ScoreReleaseOperatorBaseView):
     def post(self, request, session_id: str) -> Response:
         try:
             release_result = release_score_session(session_id=session_id, released_by=request.user)
         except ScoreProcessingError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            _raise_score_mutation_error(exc)
 
         return Response(
             {

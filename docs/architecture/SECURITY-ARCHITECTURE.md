@@ -40,6 +40,8 @@ Until the backend authentication endpoints from ADR-011 are implemented and inte
 
 Identity verification, document upload, exam delivery, scoring changes, results release, administrative role assignment, and proctoring evidence require explicit threat models before production. Consent, accessibility, privacy, retention, appeal, and chain-of-custody requirements are `TBD`.
 
+Released-results analytics is currently identity-free and restricted to authorized backend roles, but its small-cell suppression and disclosure policy is `TBD`. Exact aggregate counts must not be treated as approved for public or external disclosure until minimum-cell thresholds, suppression behavior, complementary suppression, and authorized disclosure contexts receive a reviewed decision.
+
 ## Frontend key exposure
 
 The current Vite configuration substitutes `GEMINI_API_KEY` into browser code. Any value embedded in a frontend bundle must be treated as public. Production AI or other privileged integrations should be mediated by an authorized backend or use a deliberately public, restricted credential design; the chosen approach is `TBD`.

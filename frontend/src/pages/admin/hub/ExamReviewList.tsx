@@ -29,7 +29,7 @@ function gradingActionTitle(attempt: ExamReviewQueueItem): string {
   if (attempt.status === 'FINALIZED') return 'Released records are locked';
   if (attempt.pendingSubjectiveItems > 0) {
     const noun = attempt.pendingSubjectiveItems === 1 ? 'item' : 'items';
-    return `Score ${attempt.pendingSubjectiveItems} pending subjective ${noun} before marking this exam as Graded`;
+    return `Open this review to score ${attempt.pendingSubjectiveItems} pending subjective ${noun}`;
   }
   return 'Check and mark as Graded';
 }
@@ -55,7 +55,7 @@ export default function ExamReviewList() {
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<{
     attempt: ExamReviewQueueItem;
-    status: 'SUBMITTED' | 'GRADED';
+    kind: 'GRADE' | 'OPEN_REVIEW' | 'RETURN_TO_PENDING';
   } | null>(null);
 
   useEffect(() => {
@@ -288,17 +288,25 @@ export default function ExamReviewList() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() => setPendingAction({ attempt, status: 'GRADED' })}
-                          disabled={attempt.status === 'GRADED' || attempt.status === 'FINALIZED' || attempt.pendingSubjectiveItems > 0 || updatingAttemptId === attempt.id}
+                          onClick={() => {
+                            if (attempt.pendingSubjectiveItems > 0) {
+                              setPendingAction({ attempt, kind: 'OPEN_REVIEW' });
+                              return;
+                            }
+                            setPendingAction({ attempt, kind: 'GRADE' });
+                          }}
+                          disabled={attempt.status === 'GRADED' || attempt.status === 'FINALIZED' || updatingAttemptId === attempt.id}
                           title={gradingActionTitle(attempt)}
-                          aria-label={`Mark ${attempt.candidateName} as Graded`}
+                          aria-label={attempt.pendingSubjectiveItems > 0
+                            ? `Review ${attempt.candidateName} pending subjective items`
+                            : `Mark ${attempt.candidateName} as Graded`}
                           className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-35"
                         >
                           <Check className="h-4 w-4" />
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPendingAction({ attempt, status: 'SUBMITTED' })}
+                          onClick={() => setPendingAction({ attempt, kind: 'RETURN_TO_PENDING' })}
                           disabled={attempt.status === 'SUBMITTED' || attempt.status === 'FINALIZED' || updatingAttemptId === attempt.id}
                           title={attempt.status === 'FINALIZED' ? 'Released records are locked' : 'Reject grading and return to Pending'}
                           aria-label={`Reject grading for ${attempt.candidateName} and return to Pending`}
@@ -393,15 +401,23 @@ export default function ExamReviewList() {
       )}
       <ConfirmationDialog
         isOpen={pendingAction !== null}
-        title={pendingAction?.status === 'GRADED' ? 'Confirm exam check?' : 'Reject grading?'}
-        message={pendingAction?.status === 'GRADED'
+        title={pendingAction?.kind === 'GRADE' ? 'Confirm exam check?' : pendingAction?.kind === 'OPEN_REVIEW' ? 'Review pending scores?' : 'Reject grading?'}
+        message={pendingAction?.kind === 'GRADE'
           ? `This will mark ${pendingAction.attempt.candidateName}'s exam as Graded.`
-          : `This will reject the grading for ${pendingAction?.attempt.candidateName ?? 'this examinee'} and return the exam to Pending.`}
-        confirmLabel={pendingAction?.status === 'GRADED' ? 'Confirm Check' : 'Reject'}
-        tone={pendingAction?.status === 'SUBMITTED' ? 'danger' : 'default'}
+          : pendingAction?.kind === 'OPEN_REVIEW'
+            ? `${pendingAction.attempt.candidateName}'s exam still has ${pendingAction.attempt.pendingSubjectiveItems} pending subjective ${pendingAction.attempt.pendingSubjectiveItems === 1 ? 'item' : 'items'}. Open the review to score them before grading.`
+            : `This will reject the grading for ${pendingAction?.attempt.candidateName ?? 'this examinee'} and return the exam to Pending.`}
+        confirmLabel={pendingAction?.kind === 'GRADE' ? 'Confirm Check' : pendingAction?.kind === 'OPEN_REVIEW' ? 'Open Review' : 'Reject'}
+        tone={pendingAction?.kind === 'RETURN_TO_PENDING' ? 'danger' : 'default'}
         isConfirming={pendingAction !== null && updatingAttemptId === pendingAction.attempt.id}
         onConfirm={() => {
-          if (pendingAction) void handleGradingStatus(pendingAction.attempt, pendingAction.status);
+          if (!pendingAction) return;
+          if (pendingAction.kind === 'OPEN_REVIEW') {
+            navigate(`/admin/hub/review/${pendingAction.attempt.id}`);
+            setPendingAction(null);
+            return;
+          }
+          void handleGradingStatus(pendingAction.attempt, pendingAction.kind === 'GRADE' ? 'GRADED' : 'SUBMITTED');
         }}
         onCancel={() => setPendingAction(null)}
       />

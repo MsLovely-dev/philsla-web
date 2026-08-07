@@ -8,6 +8,7 @@ import {
   backendApplicationService,
   createBackendApplicationDraftInput,
   mapBackendApplicationToFrontend,
+  type RegistrationIntegrationStatus,
   type StudentRegistrationFieldConfig,
 } from '../services/backendApplicationService';
 import { buildAdminPreviewApplication } from '../services/adminPreviewApplication';
@@ -151,6 +152,32 @@ const LRN_COOLDOWN_STORAGE_KEY = 'philsa_lrn_cooldown_expires_at';
 const REGISTRATION_DRAFT_STORAGE_KEY = 'philsa_student_registration_session_draft';
 const REGISTRATION_SESSION_ID_STORAGE_KEY = 'philsa_student_registration_session_id';
 const REGISTRATION_SESSION_DURATION_SECONDS = 1800;
+const DEFAULT_REGISTRATION_INTEGRATION_STATUS: RegistrationIntegrationStatus = {
+  backend: { status: 'connected' },
+  methods: [
+    {
+      id: 'manual',
+      label: 'Manual Registration',
+      status: 'available',
+      active: true,
+      message: 'Manual Registration is available.',
+    },
+    {
+      id: 'lrn',
+      label: 'LRN Verification',
+      status: 'unavailable',
+      active: false,
+      message: 'LRN verification is not connected to a live provider.',
+    },
+    {
+      id: 'philsys',
+      label: 'PhilSys National ID',
+      status: 'locked',
+      active: false,
+      message: 'PhilSys National ID integration is locked until official API requirements are approved.',
+    },
+  ],
+};
 
 type RegistrationSessionDraft = {
   expiresAt: number;
@@ -324,6 +351,8 @@ export default function StudentApplication() {
       { id: 'v3', section: 'Step 1 Registration', type: 'Verification Method', value: 'Manual Entry', status: 'Inactive' },
     ];
   });
+  const [integrationStatus, setIntegrationStatus] = useState<RegistrationIntegrationStatus | null>(null);
+  const [integrationStatusError, setIntegrationStatusError] = useState('');
 
   useEffect(() => {
     let isMounted = true;
@@ -346,6 +375,25 @@ export default function StudentApplication() {
     };
     void loadRegistrationFields();
     return () => { isMounted = false; };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadIntegrationStatus = async () => {
+      const result = await backendApplicationService.getRegistrationIntegrationStatus();
+      if (!isMounted) return;
+      if (result.ok) {
+        setIntegrationStatus(result.data);
+        setIntegrationStatusError('');
+      } else {
+        setIntegrationStatus(null);
+        setIntegrationStatusError('PhilSLA API status could not be loaded. Manual Registration remains available.');
+      }
+    };
+    void loadIntegrationStatus();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const isActiveConfig = (config: { status?: boolean | string }) => config.status === 'Active' || config.status === true;
@@ -3062,6 +3110,26 @@ export default function StudentApplication() {
                    </p>
 
                    <div className="space-y-6">
+                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                          System Integration
+                        </p>
+                        <p className="mt-1 text-sm font-black text-philsa-navy">
+                          {integrationStatus ? 'PhilSLA API connected' : 'PhilSLA API status pending'}
+                        </p>
+                        {integrationStatusError && (
+                          <p className="mt-2 text-xs font-bold text-amber-700">{integrationStatusError}</p>
+                        )}
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          {(integrationStatus?.methods ?? DEFAULT_REGISTRATION_INTEGRATION_STATUS.methods).map(method => (
+                            <div key={method.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-xs font-black text-philsa-navy">{method.label}</p>
+                              <p className="mt-1 text-[11px] font-semibold text-slate-600">{method.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
                       {!verificationPath && (
                         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs font-bold text-amber-800">
                           No registration verification method is enabled. Please contact an administrator.

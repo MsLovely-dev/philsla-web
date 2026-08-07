@@ -38,6 +38,8 @@ STAGING_ALLOW_MOCK_INTEGRATIONS = env_bool("STAGING_ALLOW_MOCK_INTEGRATIONS", Fa
 if not STAGING_ALLOW_MOCK_INTEGRATIONS:
     if LRN_REGISTRY_PROVIDER == "mock":  # noqa: F405
         raise ImproperlyConfigured("LRN_REGISTRY_PROVIDER=mock requires STAGING_ALLOW_MOCK_INTEGRATIONS=true.")
+    if PHILSYS_REGISTRY_PROVIDER == "mock":  # noqa: F405
+        raise ImproperlyConfigured("PHILSYS_REGISTRY_PROVIDER=mock requires STAGING_ALLOW_MOCK_INTEGRATIONS=true.")
     if STEP2_DOCUMENT_RECOGNITION_PROVIDER == "mock":  # noqa: F405
         raise ImproperlyConfigured(
             "STEP2_DOCUMENT_RECOGNITION_PROVIDER=mock requires STAGING_ALLOW_MOCK_INTEGRATIONS=true."

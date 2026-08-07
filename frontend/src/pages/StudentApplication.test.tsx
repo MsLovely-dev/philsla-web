@@ -1,36 +1,60 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StudentApplication from './StudentApplication';
+import { backendApplicationService } from '../services/backendApplicationService';
+
+const currentUser = vi.hoisted(() => ({
+  value: null as { id: string; firstName: string; lastName: string; role: string } | null,
+}));
 
 const backendMocks = vi.hoisted(() => ({
   getMyApplication: vi.fn(),
-  listPublicStudentRegistrationFields: vi.fn().mockResolvedValue({ ok: true, data: [] }),
 }));
 
 vi.mock('../PhilSAContext', () => ({
   usePhilSA: () => ({
-    user: { id: 'student-1', firstName: 'Jan', lastName: 'Delacruz', role: 'STUDENT' },
+    user: currentUser.value,
     addAuditLog: vi.fn(),
-    inputModules: [],
+    inputModules: [{ id: 'student_reg', isActive: true }],
     addTicket: vi.fn(),
   }),
 }));
 
 vi.mock('../services/mockService', () => ({
-  useMockData: () => ({ applications: [] }),
+  useMockData: () => ({
+    applications: [],
+    setApplications: vi.fn(),
+  }),
 }));
 
 vi.mock('../services/backendApplicationService', async () => {
-  const actual = await vi.importActual<typeof import('../services/backendApplicationService')>(
-    '../services/backendApplicationService',
-  );
+  const actual = await vi.importActual<typeof import('../services/backendApplicationService')>('../services/backendApplicationService');
   return {
     ...actual,
     backendApplicationService: {
       ...actual.backendApplicationService,
       getMyApplication: backendMocks.getMyApplication,
-      listPublicStudentRegistrationFields: backendMocks.listPublicStudentRegistrationFields,
+      listPublicStudentRegistrationFields: vi.fn().mockResolvedValue({
+        ok: true,
+        data: [
+          { id: 'manual', section: 'Step 1 Registration', type: 'Verification Method', value: 'Manual Entry', status: true },
+          { id: 'lrn', section: 'Step 1 Registration', type: 'Verification Method', value: 'Learner Reference Number (LRN)', status: false },
+          { id: 'philsys', section: 'Step 1 Registration', type: 'Verification Method', value: 'PhilSys National ID', status: false },
+        ],
+      }),
+      getRegistrationIntegrationStatus: vi.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          backend: { status: 'connected' },
+          methods: [
+            { id: 'manual', label: 'Manual Registration', status: 'available', active: true, message: 'Manual Registration is available.' },
+            { id: 'lrn', label: 'LRN Verification', status: 'placeholder', active: false, message: 'LRN verification is prepared for provider integration but no live DepEd connection is active.' },
+            { id: 'philsys', label: 'PhilSys National ID', status: 'locked', active: false, message: 'PhilSys National ID integration is locked until official API requirements are approved.' },
+          ],
+        },
+      }),
     },
   };
 });
@@ -46,6 +70,7 @@ function renderPage() {
 describe('StudentApplication tracking view (backend mode)', () => {
   beforeEach(() => {
     vi.stubEnv('VITE_AUTH_SERVICE_MODE', 'backend');
+    currentUser.value = { id: 'student-1', firstName: 'Jan', lastName: 'Delacruz', role: 'STUDENT' };
     backendMocks.getMyApplication.mockReset();
   });
 
@@ -86,5 +111,27 @@ describe('StudentApplication tracking view (backend mode)', () => {
 
     expect(await screen.findByText('Data Privacy Notice and Consent Form')).toBeInTheDocument();
     expect(screen.queryByText('Application Tracking')).not.toBeInTheDocument();
+  });
+});
+
+describe('StudentApplication integration status', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    currentUser.value = null;
+    vi.clearAllMocks();
+  });
+
+  it('shows backend connectivity and keeps manual registration available', async () => {
+    const user = userEvent.setup();
+    render(<StudentApplication />);
+
+    await user.click(screen.getByLabelText(/I have read and understood this Notice/i));
+    await user.click(screen.getByRole('button', { name: /I Agree & Accept/i }));
+
+    expect(await screen.findByText(/PhilSLA API connected/i)).toBeInTheDocument();
+    expect(screen.getByText(/Manual Registration is available/i)).toBeInTheDocument();
+    expect(screen.getByText(/no live DepEd connection is active/i)).toBeInTheDocument();
+    expect(backendApplicationService.getRegistrationIntegrationStatus).toHaveBeenCalled();
   });
 });

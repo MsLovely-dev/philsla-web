@@ -46,6 +46,19 @@ class RoleAccountProvisioningCommandTests(TestCase):
 
 
 class AdminUserRoleDefaultPermissionTests(TestCase):
+    def test_default_role_permissions_do_not_grant_retired_modules(self) -> None:
+        retired_module_ids = {"40", "41", "42", "43", "44", "45"}
+
+        for role in PortalRole:
+            if role in {PortalRole.STUDENT, PortalRole.SYSTEM_ADMIN}:
+                continue
+            with self.subTest(role=role.value):
+                module_ids = {
+                    permission.split("_")[1]
+                    for permission in default_module_access_for_role(role.value)
+                }
+                self.assertTrue(retired_module_ids.isdisjoint(module_ids))
+
     def test_create_admin_user_creates_matching_role_assignment(self) -> None:
         _, profile = create_admin_user_account(
             full_name="Admissions Reviewer",

@@ -37,7 +37,7 @@ This document provides a comprehensive list of all modules and pages within the 
 
 ## 6. Results & Analytics Hub
 *   **Score Management**: Raw score calculation and verification. (`/admin/results/scores`)
-*   **Reporting Matrix**: Cross-tabulation of scores by school or track. (`/admin/results/matrix`)
+*   **Reporting Matrix**: Privacy-safe, identity-free released-results reporting with national totals, fixed score-band distribution, and released-session aggregates. (`/admin/results/matrix`)
 *   **National Results Management**: Orchestrating the global release of scores. (`/admin/reports`)
 *   **Item Blueprints**: Defining subject weights and difficulty levels. (**ITEM_WRITER**) (`/admin/blueprints`)
 
