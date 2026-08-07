@@ -440,7 +440,7 @@ export default function UniversitiesListMaintenance() {
           <ChevronRight className="w-3.5 h-3.5" />
           <button
             onClick={() => setSelectedUniversity(null)}
-            className={`hover:text-philsa-navy font-bold ${!selectedUniversity ? 'text-philsa-navy font-black' : ''}`}
+            className={`hover:text-philsa-navy font-bold cursor-pointer ${!selectedUniversity ? 'text-philsa-navy font-black' : ''}`}
           >
             List of Universities
           </button>
@@ -770,14 +770,14 @@ export default function UniversitiesListMaintenance() {
                       <div className="flex items-center gap-1">
                         <button
                           onClick={(e) => handleOpenEditUniModal(uni, e)}
-                          className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all"
+                          className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
                           title="Edit University"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={(e) => requestDeleteUni(uni, e)}
-                          className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                          className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
                           title="Delete University"
                         >
                           <Trash2 className="w-4 h-4" />

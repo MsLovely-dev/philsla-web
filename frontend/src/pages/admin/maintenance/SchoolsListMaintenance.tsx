@@ -509,14 +509,14 @@ export default function SchoolsListMaintenance() {
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => handleOpenEditModal(s)}
-                    className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all"
+                    className="p-1.5 text-slate-400 hover:text-philsa-navy hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
                     title="Edit School Details"
                   >
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setPendingDelete(s)}
-                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                    className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
                     title="Remove School"
                   >
                     <Trash2 className="w-4 h-4" />
