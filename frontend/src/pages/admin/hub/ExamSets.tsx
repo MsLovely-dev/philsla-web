@@ -5,12 +5,9 @@ import {
   ArrowDown,
   ArrowUp,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   Clock3,
   Copy,
   Edit3,
-  FileCheck2,
   Layers3,
   Loader2,
   Plus,
@@ -26,7 +23,8 @@ import { useExamSets } from '../../../hooks/useExamSets';
 import type { Blueprint } from './blueprintMockData';
 import type { QuestionBankItem } from '../../../services/backendQuestionBankService';
 import type { ExamSetDraft, ExamSetRecord, ExamSetStatus } from '../../../services/backendExamSetService';
-import { ACTION_BUTTON, FIELD_INPUT, FIELD_LABEL, nextTransitions, STATUSES, statusClasses, statusLabel } from './examSets/examSetUi';
+import { ACTION_BUTTON, FIELD_INPUT, FIELD_LABEL, nextTransitions, recordToDraft, STATUSES, statusClasses, statusLabel } from './examSets/examSetUi';
+import { ExamSetAssemblyWorkspace } from './examSets/ExamSetAssemblyWorkspace';
 
 interface EditorState {
   recordId: string | null;
@@ -62,30 +60,6 @@ function emptyEditor(blueprint?: Blueprint): EditorState {
   };
 }
 
-function toEditor(record: ExamSetRecord, blueprints: Blueprint[]): EditorState {
-  const blueprint = blueprints.find((item) => item.currentVersionId === record.blueprintVersion.id);
-  return {
-    recordId: record.id,
-    title: record.title,
-    blueprintId: blueprint?.id ?? `version:${record.blueprintVersion.id}`,
-    blueprintVersionId: record.blueprintVersion.id,
-    academicYear: record.academicYear,
-    examinationPeriod: record.examinationPeriod,
-    examType: record.examType,
-    instructions: record.instructions,
-    durationMinutes: record.durationMinutes,
-    questionIds: record.items
-      .slice()
-      .sort((left, right) => left.displayOrder - right.displayOrder)
-      .map((item) => item.question.id),
-    itemMetadata: Object.fromEntries(record.items.map((item) => [item.question.id, {
-      points: item.points,
-      blueprintSectionId: item.blueprintSectionId,
-      selectionMethod: item.selectionMethod,
-    }])),
-  };
-}
-
 export default function ExamSets() {
   const navigate = useNavigate();
   const {
@@ -101,12 +75,13 @@ export default function ExamSets() {
     update,
     clone,
     transition,
+    autoAssemble,
     remove,
   } = useExamSets();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | ExamSetStatus>('ALL');
   const [editor, setEditor] = useState<EditorState | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const pending = mutationState === 'pending';
 
@@ -244,6 +219,7 @@ export default function ExamSets() {
       return;
     }
     setNotice({ type: 'success', message: `${record.title} deleted.` });
+    setSelectedRecordId((current) => current === record.id ? null : current);
   };
 
   const handleTransition = async (record: ExamSetRecord, target: ReturnType<typeof nextTransitions>[number]) => {
@@ -260,6 +236,7 @@ export default function ExamSets() {
     <div className="mx-auto flex w-full max-w-[1420px] flex-col gap-5 text-philsa-navy">
       <ExamHubTabs activeTab="setAssembly" onTabChange={handleHubTabChange} />
 
+      {!selectedRecordId && (
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-5 border-b border-slate-200 bg-gradient-to-r from-slate-950 to-slate-800 px-5 py-6 text-white sm:flex-row sm:items-center sm:justify-between sm:px-7">
           <div>
@@ -322,6 +299,20 @@ export default function ExamSets() {
 
         {loadState === 'ready' && (
           <div className="p-5 sm:p-7">
+            <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {([
+                { label: 'Drafts', count: examSets.filter((r) => r.status === 'DRAFT').length },
+                { label: 'Academic Review', count: examSets.filter((r) => r.status === 'ACADEMIC_REVIEW').length },
+                { label: 'Published', count: examSets.filter((r) => r.status === 'PUBLISHED').length },
+                { label: 'Validation Issues', count: examSets.filter((r) => r.validationResults.some((v) => v.result.toUpperCase() !== 'PASSED')).length },
+              ] as const).map((tile) => (
+                <div key={tile.label} className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">{tile.label}</p>
+                  <p className="mt-1 text-2xl font-black text-slate-950">{tile.count}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="mb-5 flex flex-col gap-3 sm:flex-row">
               <label className="relative flex-1">
                 <span className="sr-only">Search Exam Sets</span>
@@ -342,7 +333,6 @@ export default function ExamSets() {
             ) : (
               <div className="space-y-4">
                 {filteredExamSets.map((record) => {
-                  const expanded = expandedId === record.id;
                   const transitions = nextTransitions(record.status);
                   return (
                     <article key={record.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -360,7 +350,7 @@ export default function ExamSets() {
                           <div className="rounded-xl bg-slate-50 p-3"><p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Duration</p><p className="mt-1 flex items-center gap-1 font-black text-slate-900"><Clock3 className="h-3.5 w-3.5" /> {record.durationMinutes}m</p></div>
                         </div>
                         <div className="flex flex-wrap justify-start gap-2 lg:max-w-sm lg:justify-end">
-                          <button type="button" disabled={pending} onClick={() => setEditor(toEditor(record, eligibleBlueprints))} className={ACTION_BUTTON}><Edit3 className="h-3.5 w-3.5" /> Edit</button>
+                          <button type="button" disabled={pending} onClick={() => setSelectedRecordId(record.id)} className={ACTION_BUTTON}><Edit3 className="h-3.5 w-3.5" /> Edit</button>
                           <button type="button" disabled={pending} onClick={() => void handleClone(record)} className={ACTION_BUTTON}><Copy className="h-3.5 w-3.5" /> Clone</button>
                           {transitions.map((target) => (
                             <button key={target.status} type="button" disabled={pending} onClick={() => void handleTransition(record, target)} className={ACTION_BUTTON}>
@@ -368,27 +358,8 @@ export default function ExamSets() {
                             </button>
                           ))}
                           <button type="button" disabled={pending} onClick={() => void handleDelete(record)} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-[10px] font-black uppercase text-red-700 hover:bg-red-50 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
-                          <button type="button" onClick={() => setExpandedId(expanded ? null : record.id)} aria-expanded={expanded} className={ACTION_BUTTON}>
-                            {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />} Details
-                          </button>
                         </div>
                       </div>
-                      {expanded && (
-                        <div className="grid gap-5 border-t border-slate-200 bg-slate-50 p-5 lg:grid-cols-2">
-                          <div>
-                            <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700"><FileCheck2 className="h-4 w-4" /> Server validation</h3>
-                            {record.validationResults.length === 0 ? <p className="mt-3 text-sm text-slate-500">No validation results recorded.</p> : (
-                              <ul className="mt-3 space-y-2">{record.validationResults.map((result) => <li key={result.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm"><strong>{result.validationName}</strong><p className="mt-1 text-slate-600">{result.message}</p></li>)}</ul>
-                            )}
-                          </div>
-                          <div>
-                            <h3 className="text-xs font-black uppercase tracking-wider text-slate-700">Workflow history</h3>
-                            {record.workflowHistory.length === 0 ? <p className="mt-3 text-sm text-slate-500">No workflow history recorded.</p> : (
-                              <ol className="mt-3 space-y-2">{record.workflowHistory.map((entry) => <li key={entry.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm"><strong>{statusLabel(entry.newStatus)}</strong><p className="mt-1 text-slate-600">{entry.remarks || entry.action}</p></li>)}</ol>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </article>
                   );
                 })}
@@ -397,6 +368,24 @@ export default function ExamSets() {
           </div>
         )}
       </section>
+      )}
+
+      {selectedRecordId && (() => {
+        const selected = examSets.find((record) => record.id === selectedRecordId);
+        if (!selected) return null;
+        return (
+          <ExamSetAssemblyWorkspace
+            record={selected}
+            questions={questions}
+            pending={pending}
+            onUpdateItems={(items) => void update(selected.id, { ...recordToDraft(selected), items })}
+            onAutoAssemble={() => void autoAssemble(selected.id)}
+            onTransition={(target) => void handleTransition(selected, target)}
+            onDelete={() => void handleDelete(selected)}
+            onBack={() => setSelectedRecordId(null)}
+          />
+        );
+      })()}
 
       {editor && (
         <ExamSetEditor

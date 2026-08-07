@@ -146,7 +146,7 @@ describe('ExamSets', () => {
     expect(screen.getByText('Server-provided Exam Set')).toBeInTheDocument();
   });
 
-  it('preserves server item metadata when editing other Exam Set fields', async () => {
+  it('preserves surviving item metadata when removing an item from the assembly workspace', async () => {
     const update = vi.fn().mockResolvedValue(serviceSuccess(record));
     const recordWithMetadata = {
       ...record,
@@ -169,14 +169,34 @@ describe('ExamSets', () => {
           status: 'APPROVED',
           points: 1,
         },
+      }, {
+        id: '71',
+        displayOrder: 2,
+        points: 2,
+        selectionMethod: 'manual',
+        selectedBy: 'Synthetic Owner',
+        selectedAt: '2026-08-05T00:00:00Z',
+        blueprintSectionId: '56',
+        question: {
+          id: '102',
+          questionCode: 'Q-SYNTHETIC-2',
+          questionType: 'Multiple Choice',
+          questionTypeCode: 'MCQ',
+          subject: 'Synthetic Subject',
+          topic: 'Synthetic Topic',
+          difficulty: 'EASY',
+          status: 'APPROVED',
+          points: 1,
+        },
       }],
     } as ExamSetRecord;
     mockUseExamSets.mockReturnValue(hookState({ examSets: [recordWithMetadata], update }));
     renderPage();
     const user = userEvent.setup();
 
+    // Editing an existing Exam Set now opens the assembly workspace instead of the modal.
     await user.click(screen.getByRole('button', { name: 'Edit' }));
-    await user.click(screen.getByRole('button', { name: 'Save Exam Set' }));
+    await user.click(screen.getByRole('button', { name: /remove q-synthetic-2/i }));
 
     expect(update).toHaveBeenCalledWith('7', expect.objectContaining({
       items: [{
@@ -211,5 +231,54 @@ describe('ExamSets', () => {
     expect(confirm).toHaveBeenCalledWith('Delete Server-provided Exam Set? This action cannot be undone.');
     expect(remove).toHaveBeenCalledWith('7');
     confirm.mockRestore();
+  });
+
+  it('opens the assembly workspace when Edit is clicked, instead of the edit modal', async () => {
+    mockUseExamSets.mockReturnValue(hookState());
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('button', { name: /back to exam sets/i })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /edit exam set/i })).not.toBeInTheDocument();
+  });
+
+  it('shows metric tiles computed from the loaded exam sets', () => {
+    mockUseExamSets.mockReturnValue(hookState({
+      examSets: [
+        { ...record, id: '1', status: 'DRAFT' },
+        { ...record, id: '2', status: 'PUBLISHED' },
+      ],
+    }));
+    renderPage();
+
+    expect(screen.getByText('Drafts')).toBeInTheDocument();
+    expect(screen.getByText('Published')).toBeInTheDocument();
+  });
+
+  it('normalizes lowercase validationResults.result values when counting the Validation Issues tile', () => {
+    const validationResult = (result: string) => ([{
+      id: `v-${result}`,
+      validationCode: 'SYNTHETIC_CHECK',
+      validationName: 'Synthetic check',
+      result,
+      expectedValue: '',
+      actualValue: '',
+      message: '',
+      validatedAt: '2026-08-05T00:00:00Z',
+    }]);
+    mockUseExamSets.mockReturnValue(hookState({
+      examSets: [
+        { ...record, id: '1', validationResults: validationResult('passed') },
+        { ...record, id: '2', validationResults: validationResult('failed') },
+      ],
+    }));
+    renderPage();
+
+    // Real backend data serializes ValidationResult as lowercase. If the tile compared
+    // against the uppercase literal 'PASSED' without normalizing case, the lowercase
+    // 'passed' row would also be miscounted as an issue, reporting 2 instead of 1.
+    expect(screen.getByText('Validation Issues').parentElement).toHaveTextContent('1');
   });
 });
