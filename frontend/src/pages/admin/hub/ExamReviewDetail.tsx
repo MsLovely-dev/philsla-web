@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { cn } from '../../../lib/utils';
+import { ConfirmationDialog } from '../../../components/ui';
 import {
   backendExamReviewService,
   type ExamReviewDetailItem,
@@ -39,6 +40,9 @@ export default function ExamReviewDetail() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isReleasing, setIsReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState<string | null>(null);
+  const [isGradeConfirmationOpen, setIsGradeConfirmationOpen] = useState(false);
+  const [isMarkingGraded, setIsMarkingGraded] = useState(false);
+  const [gradingError, setGradingError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
@@ -83,6 +87,20 @@ export default function ExamReviewDetail() {
       setReview(result.data);
     }
     setIsReleasing(false);
+  };
+
+  const handleMarkGraded = async () => {
+    if (!review || review.status !== 'SUBMITTED' || review.pendingSubjectiveItems > 0) return;
+    setGradingError(null);
+    setIsMarkingGraded(true);
+    const result = await backendExamReviewService.setGradingStatus(review.id, 'GRADED');
+    if ('error' in result) {
+      setGradingError(result.error.message);
+    } else {
+      setReview(current => current ? { ...current, ...result.data } : current);
+      setIsGradeConfirmationOpen(false);
+    }
+    setIsMarkingGraded(false);
   };
 
   const handleAnswerSheetSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -138,6 +156,7 @@ export default function ExamReviewDetail() {
   }
 
   const manualScore = Math.max(0, review.totalScore - review.systemInitialScore);
+  const isReadyToMarkGraded = review.status === 'SUBMITTED' && review.pendingSubjectiveItems === 0;
   const isReleaseReady = review.status === 'GRADED' && review.pendingSubjectiveItems === 0;
   const activeSubjectItems = review.examItems.filter(item => item.subject === activeSubject);
 
@@ -153,6 +172,17 @@ export default function ExamReviewDetail() {
         </button>
         <div className="flex flex-col items-end gap-2">
           <div className="flex flex-wrap items-center justify-end gap-3">
+            {isReadyToMarkGraded && (
+              <button
+                type="button"
+                onClick={() => setIsGradeConfirmationOpen(true)}
+                disabled={isMarkingGraded}
+                className="flex cursor-pointer items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white shadow-lg shadow-emerald-700/10 transition-all hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Mark as Graded
+              </button>
+            )}
             {isReleaseReady && (
               <button
                 type="button"
@@ -172,6 +202,11 @@ export default function ExamReviewDetail() {
           {releaseError && (
             <p role="alert" className="flex items-center gap-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-500">
               <Info className="h-3 w-3" /> {releaseError}
+            </p>
+          )}
+          {gradingError && (
+            <p role="alert" className="flex items-center gap-2 rounded-lg border border-rose-100 bg-rose-50 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-500">
+              <Info className="h-3 w-3" /> {gradingError}
             </p>
           )}
           {review.status === 'GRADED' && review.pendingSubjectiveItems > 0 && (
@@ -231,6 +266,7 @@ export default function ExamReviewDetail() {
             const items = review.examItems.filter(item => item.subject === id);
             const score = items.reduce((total, item) => total + (item.pointsAwarded ?? 0), 0);
             const maxScore = items.reduce((total, item) => total + item.maxPoints, 0);
+            const pendingItems = items.filter(item => item.itemType === 'SUBJECTIVE' && item.pointsAwarded === null).length;
             const accuracy = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
             return (
               <div key={id} className="flex flex-col justify-between space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -246,6 +282,14 @@ export default function ExamReviewDetail() {
                     <span>Accuracy</span>
                     <span>{accuracy}%</span>
                   </div>
+                  <p
+                    aria-label={`${name} subject pending status`}
+                    className={cn('text-[9px] font-black uppercase tracking-wider', pendingItems > 0 ? 'text-amber-700' : 'text-emerald-700')}
+                  >
+                    {pendingItems > 0
+                      ? `${pendingItems} pending subjective ${pendingItems === 1 ? 'item' : 'items'}`
+                      : 'All subjective items scored'}
+                  </p>
                 </div>
               </div>
             );
@@ -353,6 +397,15 @@ export default function ExamReviewDetail() {
           </div>
         )}
       </div>
+      <ConfirmationDialog
+        isOpen={isGradeConfirmationOpen}
+        title="Mark exam as Graded?"
+        message={`This confirms that ${review.candidateName}'s subjective items are fully scored and makes the exam ready for release to Score Management.`}
+        confirmLabel="Confirm Grading"
+        isConfirming={isMarkingGraded}
+        onConfirm={() => void handleMarkGraded()}
+        onCancel={() => setIsGradeConfirmationOpen(false)}
+      />
     </div>
   );
 }
