@@ -86,6 +86,7 @@ The baseline health and authentication boundaries, the first student-application
 
 `POST /api/v1/results/exam-reviews/{reviewId}/items/{itemId}/score/` accepts `{ "points": 8 }` for a subjective item. The backend rejects objective-item overrides, scores above the item's maximum, item/review mismatches, and changes to `FINALIZED` records. A successful save recalculates the aggregate total and remaining pending-subjective count from persisted item scores.
 | `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` | List examination sessions with score-processing status and candidate counts | Implemented |
+| `GET` | `/api/v1/results/release-summary/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | List paginated session-level processing and release readiness totals without candidate details | Implemented |
 | `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` | Return paginated approved candidate score records, with rank and percentile populated after processing | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` | Bearer token | `SYSTEM_ADMIN` | Return a score-anchored read-only candidate profile for a candidate in the selected score batch | Implemented |
@@ -95,6 +96,12 @@ The baseline health and authentication boundaries, the first student-application
 ### Score Management
 
 Score Management is backend-owned. The frontend may trigger processing and release, but it must not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
+
+### `GET /api/v1/results/release-summary/`
+
+Returns a paginated, session-level readiness summary for `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN`. It accepts positive `page`, `pageSize` from 1 through 100, optional exact `status` (`READY_FOR_PROCESSING`, `SCORING_PROCESSED`, or `RESULTS_RELEASED`), and optional case-insensitive `search` over session ID and name. Invalid parameters return the standard validation `400` envelope.
+
+Each row contains only `{id, name, status, isClosed, totalCandidates, approvedScores, excludedScores, processedScores, releasedScores, processedAt, releasedAt, processingReady, releaseReady}`. It never includes candidate identities, LRNs, email addresses, individual scores, or notification data. `processingReady` is true only for a closed session with approved scores in `READY_FOR_PROCESSING`; `releaseReady` is true only when processed approved scores exist, no approved scores are released, and the session is `SCORING_PROCESSED`.
 
 `GET /api/v1/results/score-management/batches/` returns persisted examination sessions:
 
