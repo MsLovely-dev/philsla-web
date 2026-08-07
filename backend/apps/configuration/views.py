@@ -178,7 +178,8 @@ class ConfigurableFieldAdminView(APIView):
             candidate = build_configurable_field_candidate(serializer.validated_data)
             validate_verification_method_value(candidate)
             enforce_verification_method_policy(candidate)
-            field = serializer.save(created_by_id=getattr(request.user, "user_id", request.user.id))
+            actor_id = getattr(request.user, "user_id", request.user.id)
+            field = serializer.save(created_by_id=actor_id, updated_by_id=actor_id)
         record_configuration_event(event="configurable_field_created", outcome="success", request=request, user=request.user)
         return Response(ConfigurableFieldSerializer(field).data, status=status.HTTP_201_CREATED)
 
@@ -198,7 +199,7 @@ class ConfigurableFieldAdminDetailView(APIView):
             candidate = build_configurable_field_candidate(serializer.validated_data, field)
             validate_verification_method_value(candidate)
             enforce_verification_method_policy(candidate)
-            updated = serializer.save()
+            updated = serializer.save(updated_by_id=getattr(request.user, "user_id", request.user.id))
         record_configuration_event(event="configurable_field_updated", outcome="success", request=request, user=request.user)
         return Response(ConfigurableFieldSerializer(updated).data)
 
@@ -210,7 +211,7 @@ class ConfigurableFieldAdminDetailView(APIView):
             candidate = build_configurable_field_candidate(serializer.validated_data, field)
             validate_verification_method_value(candidate)
             enforce_verification_method_policy(candidate)
-            updated = serializer.save()
+            updated = serializer.save(updated_by_id=getattr(request.user, "user_id", request.user.id))
         record_configuration_event(event="configurable_field_updated", outcome="success", request=request, user=request.user)
         return Response(ConfigurableFieldSerializer(updated).data)
 

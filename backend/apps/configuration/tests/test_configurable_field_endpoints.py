@@ -302,3 +302,49 @@ class ConfigurableFieldEndpointTests(TestCase):
         response = self.client.get(reverse("configuration:fields-admin"))
 
         self.assertEqual(response.status_code, 403)
+
+    def test_create_sets_updated_by_to_the_acting_admin(self):
+        response = self.client.post(
+            reverse("configuration:fields-admin"),
+            {
+                "module": "student_registration",
+                "section": "Step 1 Registration",
+                "type": "Student Registration Field",
+                "value": "Emergency Contact Number",
+                "fieldSection": "Personal Information",
+                "inputType": "text",
+                "priority": "High Priority",
+                "status": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["updatedBy"], str(self.user.id))
+
+    def test_edit_updates_updated_by_to_the_editing_admin(self):
+        field = ConfigurableField.objects.create(
+            module="student_registration",
+            section="Step 1 Registration",
+            field_type="Student Registration Field",
+            field_name="Emergency Contact Number",
+            field_section="Personal Information",
+            input_type="text",
+            priority="High Priority",
+            is_enabled=True,
+            created_by_id=self.user.id,
+        )
+        other_admin = get_user_model().objects.create_user(username="second-admin")
+
+        # Use a separate, freshly authenticated client for the second admin rather
+        # than self.client, which is already authenticated as self.user.
+        second_client = APIClient()
+        second_client.force_authenticate(user=principal(other_admin, PortalRole.SYSTEM_ADMIN.value))
+        response = second_client.patch(
+            reverse("configuration:fields-admin-detail", args=[field.id]),
+            {"remarks": "Updated by a different admin"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["updatedBy"], str(other_admin.id))

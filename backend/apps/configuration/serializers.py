@@ -18,6 +18,7 @@ class ConfigurableFieldSerializer(serializers.ModelSerializer):
     optionValues = serializers.JSONField(source="option_values", required=False)
     status = serializers.BooleanField(source="is_enabled", required=False)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+    updatedBy = serializers.CharField(source="updated_by_id", read_only=True, allow_null=True)
     createdAt = serializers.DateTimeField(source="created_at", read_only=True)
 
     class Meta:
@@ -37,6 +38,7 @@ class ConfigurableFieldSerializer(serializers.ModelSerializer):
             "display_order",
             "createdAt",
             "updatedAt",
+            "updatedBy",
         )
         read_only_fields = ("id", "createdAt", "updatedAt")
         validators = []
