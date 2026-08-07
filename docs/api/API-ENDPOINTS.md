@@ -46,6 +46,7 @@ The baseline health and authentication boundaries, the first student-application
 | `POST` | `/api/v1/applications/profile/submit/` | Required bearer access token | `STUDENT` with pending bulk-upload profile completion | Validate and complete the profile so the application can enter normal admissions review | Implemented |
 | `POST` | `/api/v1/applications/{applicationId}/review-decision/` | Required bearer access token | `ADMISSIONS_REVIEWER` or `SYSTEM_ADMIN` | Persist reviewer decision as application status update | Implemented |
 | `POST` | `/api/v1/applications/registration/lrn/verify/` | Public; device/network throttled | `AllowAny` | Verify an LRN through the configured registry boundary and return available profile fields | Implemented with synthetic local/test provider; production provider `TBD` |
+| `GET` | `/api/v1/applications/registration/integration-status/` | Public; no credentials required | `AllowAny` | Return safe frontend-facing status for PhilSLA backend connectivity and registration provider readiness | Implemented; external DepEd and PhilSys providers remain unavailable placeholders |
 | `POST` | `/api/v1/applications/registration/email-otp/request/` | Public; device/network throttled | `AllowAny` | Generate and send a registration email OTP | Implemented with Django email backend; local prints to console, production uses Azure Communication Services SMTP |
 | `POST` | `/api/v1/applications/registration/email-otp/verify/` | Public; device/network throttled | `AllowAny` | Verify a registration email OTP and issue a short-lived email verification token | Implemented |
 | `POST` | `/api/v1/applications/registration/attachments/` | Public with `X-Registration-Session-Id` | `AllowAny` | Upload one private PDF/JPEG/PNG file for a configured Step 1 file field | Implemented |
@@ -334,6 +335,12 @@ The data migration is `backend/apps/configuration/migrations/0007_university_col
 Test coverage: `backend/apps/configuration/tests/test_university_registry_endpoints.py`. Frontend adapter and page behavior coverage: `frontend/src/services/backendUniversityService.test.ts` and `frontend/src/pages/admin/maintenance/UniversitiesListMaintenance.test.tsx`.
 
 ### Student application draft and submission
+
+### `GET /api/v1/applications/registration/integration-status/`
+
+This endpoint lets the frontend show System Integration readiness without calling external registries directly. It confirms PhilSLA backend reachability and reports Manual Registration, LRN Verification, and PhilSys National ID readiness using safe labels only. It must not expose provider URLs, credentials, tokens, raw registry payloads, real LRN values, National ID values, or student records.
+
+Manual Registration is reported as `available`. LRN may report `unavailable`, `mock`, or `placeholder` depending on `LRN_REGISTRY_PROVIDER`. PhilSys reports `locked` or `placeholder` depending on `PHILSYS_REGISTRY_PROVIDER`. Placeholder statuses mean the backend boundary exists but no live external API is connected.
 
 Before draft creation, call `POST /api/v1/applications/registration/lrn/verify/`:
 

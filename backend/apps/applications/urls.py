@@ -16,6 +16,7 @@ from .views import (
     BulkUploadValidateView,
     LrnVerificationView,
     PublicStep2ConfigurationView,
+    RegistrationIntegrationStatusView,
     RegistrationEmailOtpRequestView,
     RegistrationEmailOtpVerifyView,
     RegistrationAttachmentUploadView,
@@ -32,6 +33,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("registration/integration-status/", RegistrationIntegrationStatusView.as_view(), name="registration-integration-status"),
     path("registration/lrn/verify/", LrnVerificationView.as_view(), name="verify-lrn"),
     path("registration/email-otp/request/", RegistrationEmailOtpRequestView.as_view(), name="registration-email-otp-request"),
     path("registration/email-otp/verify/", RegistrationEmailOtpVerifyView.as_view(), name="registration-email-otp-verify"),

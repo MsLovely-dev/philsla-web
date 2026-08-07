@@ -282,6 +282,16 @@ describe('StudentRegistrationMaintenance', () => {
     expect(screen.queryByRole('button', { name: /PhilSys National ID/ })).not.toBeInTheDocument();
   });
 
+  it('explains that system integration placeholders do not mean live external APIs are connected', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /Registration Methods/ }));
+
+    expect(screen.getByText(/Frontend API connectivity only confirms PhilSLA backend reachability/i)).toBeInTheDocument();
+    expect(screen.getByText(/Manual Entry remains the active fallback/i)).toBeInTheDocument();
+  });
+
   it('never reads or writes localStorage — no local mock-record fallback exists', async () => {
     const getItem = vi.spyOn(Storage.prototype, 'getItem');
     const setItem = vi.spyOn(Storage.prototype, 'setItem');

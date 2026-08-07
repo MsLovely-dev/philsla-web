@@ -138,3 +138,7 @@ The exact mapping from DepEd-specific errors to these PhilSLA errors remains `TB
 - The frontend should not integrate with DepEd directly.
 - The backend must own the DepEd adapter, error mapping, throttling, and safe response shaping.
 - Production readiness depends on receiving and reviewing the official DepEd API contract.
+
+## 2026-08-07 Provider Placeholder Preparation
+
+PhilSLA may add unavailable provider placeholders for DepEd LRN and PhilSys so frontend System Integration status can show backend readiness without claiming live external connectivity. Manual Registration remains the currently active registration path. The frontend status surface must distinguish PhilSLA backend connectivity from live external registry integration.

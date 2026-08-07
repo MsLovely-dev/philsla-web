@@ -6,7 +6,7 @@ Per-developer working reference for Joshua Ganapin (short code `jo.ganapin`), pe
 
 | Field | Value |
 |---|---|
-| Status | **Design approved — implementation not yet authorized** |
+| Status | **Approved (2026-08-07) — grace period confirmed at 30 minutes; implementation in progress** |
 | Track | BRD-04A Proctoring — desktop-app-only per decision D-QR-01; built this sprint as a preview screen inside the existing web `ProctorAttendance.tsx` page, since no desktop Proctor app exists yet |
 | Owner | Joshua Ganapin (Jo.Ganapin) |
 | Decision date | 2026-08-06 |
@@ -51,15 +51,15 @@ Build a **desktop-Proctor-app preview screen** inside the existing `ProctorAtten
 - [x] Recover and review the deleted BRD/spec/plan/task-log and the local SDD session ledger for prior, unresolved review findings.
 - [x] Brainstorm and confirm scope: desktop-app-only framing (D-QR-01), backend out of scope, reuse-and-fix existing frontend pieces, placeholder grace-period rule at 15 minutes.
 - [x] Write spec and phasing plan.
-- [ ] Obtain user approval of the spec and plan.
-- [ ] Only after approval: begin Phase 1 of the plan on branch `jo.ganapin/qr-scanning`.
+- [x] Obtain user approval of the spec and plan (2026-08-07; grace period set to 30 minutes, not the originally proposed 15).
+- [x] Begin Phase 1 of the plan on branch `jo.ganapin/qr-scanning`.
 
 ### Resumption / go-ahead gates
 
-- [ ] Spec (`specs/2026-08-06-qr-scanning-design.md`) reviewed and approved.
-- [ ] Plan (`plans/2026-08-06-qr-scanning-plan.md`) reviewed and approved.
-- [ ] Only then does implementation begin, logged in `implement/jo.ganapin.implement.md`.
+- [x] Spec (`specs/2026-08-06-qr-scanning-design.md`) reviewed and approved.
+- [x] Plan (`plans/2026-08-06-qr-scanning-plan.md`) reviewed and approved.
+- [x] Implementation begun, logged in `implement/jo.ganapin.implement.md`.
 
 ### Review gate
 
-No implementation may begin from this entry. The user must review and approve the linked spec and plan first.
+Spec and plan approved 2026-08-07. Implementation is in progress per the linked plan's phases.
