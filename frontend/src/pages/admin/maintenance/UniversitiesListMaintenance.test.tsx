@@ -223,6 +223,38 @@ describe('UniversitiesListMaintenance', () => {
     expect(listCourses).toHaveBeenCalledTimes(1); // cached
   });
 
+  it('opens a program details modal from the course title and can jump to editing', async () => {
+    const course: CollegeCourseRecord = {
+      id: 'c1',
+      universityId: university.id,
+      universityCode: university.code,
+      collegeName: 'College of Engineering',
+      programCode: 'BSCS',
+      programName: 'Bachelor of Science in Computer Science',
+      degreeType: 'Bachelor of Science',
+      majorSpecialization: '',
+      durationYears: 4,
+      totalUnits: 150,
+      cutoffPercentile: 85,
+      status: 'Active',
+      createdAt: '2026-08-06T00:00:00Z',
+      updatedAt: '2026-08-06T00:00:00Z',
+    };
+    data = [university];
+    vi.spyOn(universityService, 'listCourses').mockResolvedValue(serviceSuccess([course]));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByText(university.name));
+    await user.click(await screen.findByRole('button', { name: course.programName }));
+    expect(await screen.findByText('Program Details')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^edit$/i }));
+    expect(await screen.findByText('Edit College Course')).toBeInTheDocument();
+    // The details modal stays mounted underneath, so cancelling the edit returns to it.
+    expect(screen.getByText('Program Details')).toBeInTheDocument();
+  });
+
   it('does not refetch the list when the page remounts within the cached provider', async () => {
     data = [university];
     const listPage = vi.mocked(universityService.listUniversitiesPage);
