@@ -3,7 +3,7 @@
 **Date:** 2026-08-06
 **Owner:** Joshua Ganapin (Jo.Ganapin)
 **Ticket:** [Ticket 001](../jo.ganapin.task.md#ticket-001--qr-scanning-desktop-proctor-app-preview)
-**Status:** Awaiting user review
+**Status:** Approved (2026-08-07) — grace period set to 30 minutes
 
 ## Problem and context
 
@@ -49,7 +49,7 @@ No new dependency (`html5-qrcode` is already installed). No new component — `Q
 **`qrAttendanceService.ts` additions:**
 - `resolveScheduledStart(schedule: { date: string; time: string }): Date` — parses the mock schedule's existing `date` + `time` fields into a single timestamp.
 - `computeScanStatus(scheduledStart: Date, scannedAt: Date, graceMinutes: number): 'PRESENT' | 'LATE'` — pure function, no I/O: `scannedAt <= scheduledStart + graceMinutes` → `'PRESENT'`, else `'LATE'`.
-- `DEFAULT_LATE_GRACE_MINUTES = 15` exported constant (see "Grace-period rule" below).
+- `DEFAULT_LATE_GRACE_MINUTES = 30` exported constant (see "Grace-period rule" below).
 
 **`QrScanModal.tsx` fixes (no API change to its props):**
 - Wrap the cleanup's `stop()` call in an outer `try`/`catch` in addition to the existing `.catch()`, so a synchronous throw can never escape the `useEffect` cleanup.
@@ -66,7 +66,7 @@ No new dependency (`html5-qrcode` is already installed). No new component — `Q
 
 `FR-009` and `LATE_ADMISSION_GRACE_MINUTES`, referenced narratively in `build_plan.md`, do not exist anywhere in `docs/` or the codebase — there is no existing rule to reuse. This design proposes and needs sign-off on:
 
-- **`DEFAULT_LATE_GRACE_MINUTES = 15`** — a candidate scanned at or before `scheduledStart + 15min` is Present; after that, Late.
+- **`DEFAULT_LATE_GRACE_MINUTES = 30`** — a candidate scanned at or before `scheduledStart + 30min` is Present; after that, Late. (Confirmed by user 2026-08-07.)
 - Source of `scheduledStart`: the currently-selected mock schedule's existing `date` + `time` fields (e.g. `'2026-06-15'` + `'08:00 AM'`).
 - This value and this computation exist only in this preview's client-side logic — they are not claimed anywhere as an approved platform-wide attendance rule, and the spec/plan/task-log say so explicitly.
 
