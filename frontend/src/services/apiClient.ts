@@ -23,6 +23,10 @@ export interface ApiClientOptions {
   fetcher?: typeof fetch;
 }
 
+export interface ApiRequestOptions {
+  allowAlternativeBaseUrlFallback?: boolean;
+}
+
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
@@ -41,8 +45,12 @@ export class ApiClient {
     return Boolean(this.bearerToken);
   }
 
-  async request<TData>(path: string, init: RequestInit = {}): Promise<ServiceResult<TData>> {
-    const urls = Array.from(
+  async request<TData>(
+    path: string,
+    init: RequestInit = {},
+    options: ApiRequestOptions = {},
+  ): Promise<ServiceResult<TData>> {
+    const candidateUrls = Array.from(
       new Set(
         [
           this.baseUrl ? `${this.baseUrl}${path}` : path,
@@ -52,6 +60,9 @@ export class ApiClient {
         ].filter(Boolean),
       ),
     );
+    const urls = options.allowAlternativeBaseUrlFallback === false
+      ? candidateUrls.slice(0, 1)
+      : candidateUrls;
 
     const failures: string[] = [];
 

@@ -307,3 +307,230 @@ changed Exam Review diagnostics in lint output: none
 ```
 
 The handoff intentionally stops before ranking, percentile processing, student-facing results release, analytics, and external distribution. All current handoff work, its tests, design, plan, and documentation remain uncommitted and unstaged for owner review.
+
+## 2026-08-07 — Results Release stale-request hardening
+
+Removed the misplaced standalone Task 4 report. The Results Release screen now accepts only the latest list response and a successful process/release action refreshes with the latest selected filters. Focused Results Release service/page tests passed (2 files, 16 tests), the production build passed, and `git diff --check` passed.
+
+## 2026-08-07 — Release-summary review hardening
+
+The release summary now selects filtered, ordered session IDs before running score aggregation, keeping aggregation bounded to the requested page. Readiness is conservative with the existing mutation services: processing rejects inconsistent score/session, ranking-population, and exam-set relationships; release requires an actual processing batch and counts only approved scores with a non-null rank. Search input is capped at the session-name model length of 160 characters.
+
+Test-first evidence:
+
+```text
+RED: py -3.13 manage.py test apps.results.tests.test_results_release_api --settings=config.settings.test
+     13 tests run; 5 expected failures covered page-bounded SQL, invalid relationships,
+     missing processing batch, unranked processed scores, and overlong search.
+GREEN: the same focused command passed 13 tests.
+Regression: py -3.13 manage.py test apps.results.tests.test_results_release_api apps.results.tests.test_score_management_api --settings=config.settings.test
+            passed 45 tests.
+Django check: py -3.13 manage.py check --settings=config.settings.local
+              passed with no issues.
+Diff check: git diff --check
+            passed.
+```
+
+## 2026-08-07 — Results Release ambiguous mutation replay hardening
+
+The shared API client now accepts a typed `allowAlternativeBaseUrlFallback` request option. Existing callers preserve the prior cross-base fallback behavior by default, while Results Release processing and release POSTs disable it so a committed mutation whose response connection is lost is not replayed against alternative local URLs. A network failure closes the stale confirmation and refetches the authoritative release summary without repeating the mutation.
+
+Test-first and verification evidence:
+
+```text
+RED: npm test -- src/services/apiClient.test.ts src/services/resultsReleaseService.test.ts src/pages/admin/hub/ResultsRelease.test.tsx --run
+     25 tests ran; 4 expected failures showed four fetch attempts for each ambiguous mutation and no authoritative page refetch.
+GREEN: the same focused command passed 3 files and all 25 tests.
+Build: npm run build
+       passed; 3,119 modules transformed. The existing large-chunk advisory remained.
+TypeScript: npm run lint
+            failed on existing unrelated errors in other modules; no diagnostic referenced the changed Results Release or API client files.
+Diff check: git diff --check
+            passed before this implementation-record append.
+```
+
+The tests emitted the existing warning that `backend/staticfiles/` is absent. One check invocation from the repository root failed because `manage.py` is under `backend/`; rerunning the exact check from `backend/` passed.
+
+## 2026-08-07 — Released results analytics reporting matrix
+
+Replaced the Reporting Matrix's national, university, demographic, qualification, regional, subject, and batch mock authority with the typed `resultsAnalyticsService.getOverview()` contract. The page now renders only released-candidate totals, released-session totals, mean final score, server-provided score bands (with both visual bars and a semantic table), and a released-session aggregate table. It has accessible loading, empty, safe error/retry, keyboard-focus, responsive overflow, null-field fallback, and latest-request/unmount guards.
+
+Test-first evidence:
+
+```text
+RED: npm test -- src/pages/results/ReportingMatrix.test.tsx --run
+     6 expected assertions failed against the old prototype Reporting Matrix.
+GREEN: npm test -- src/services/resultsAnalyticsService.test.ts src/pages/results/ReportingMatrix.test.tsx --run
+       2 files passed, 9 tests passed.
+Build: npm run build
+       passed; 3,119 modules transformed. Existing chunk-size advisory remained.
+Diff check: git diff --check
+            passed.
+```
+
+## 2026-08-07 — Results Release mutation error contract
+
+Score processing and release lifecycle failures now pass through the configured DRF exception handler instead of returning a raw `{detail}` body. Missing sessions return the standard `404 NOT_FOUND` envelope; safe lifecycle failures return `409 CONFLICT`; serializer failures remain `400 VALIDATION_FAILED`. The adapter maps the finite known domain messages to documented public messages and replaces any unexpected service text with a generic session-state conflict message.
+
+Test-first and verification evidence:
+
+```text
+RED: py -3.13 manage.py test apps.results.tests.test_results_release_api apps.results.tests.test_score_management_api --settings=config.settings.test
+     46 tests ran; 4 expected failures showed raw 400 responses where exact 404/409 envelopes were required.
+GREEN: the same focused command passed all 48 tests, including each documented process precondition.
+Frontend: npm test -- --run src/services/resultsReleaseService.test.ts
+          1 file passed, 7 tests passed using a complete backend-shaped conflict envelope.
+Django check: py -3.13 manage.py check --settings=config.settings.local
+              passed with no issues.
+Diff check: git diff --check
+            passed.
+```
+
+The first sandboxed frontend test attempt failed before collection because esbuild could not spawn (`EPERM`). The required escalated rerun passed. Backend tests emitted the existing warning that `backend/staticfiles/` is absent; it did not affect results.
+
+## 2026-08-07 — Reporting Matrix main-landmark correction
+
+The Reporting Matrix now uses a labelled page section rather than its own `main` landmark because `DashboardLayout` owns the routed content `main`. A layout-integrated regression renders the registered protected Reporting Matrix route inside `DashboardLayout` and asserts exactly one `main` landmark.
+
+```text
+RED: npm test -- src/pages/results/ReportingMatrix.test.tsx --run
+     7 tests ran; the new layout regression found 2 main landmarks (expected 1).
+GREEN: npm test -- src/services/resultsAnalyticsService.test.ts src/pages/results/ReportingMatrix.test.tsx --run
+       2 files passed, 10 tests passed.
+Build: npm run build
+       passed; 3,119 modules transformed. Existing chunk-size advisory remained.
+Diff check: git diff --check
+            passed.
+```
+
+## 2026-08-07 — Results Release orchestration Tasks 1–4 consolidated record
+
+The implemented scope follows the approved minimal `plans/2026-08-07-results-release-orchestration.md` plan. The broader 2026-08-06 design and core plan are retained as explicitly superseded history. No release-policy, hold, publication-snapshot, notification, model, migration, or dependency work from those older documents was implemented.
+
+### Runtime and storage evidence
+
+- `py -3.13 --version` reported `Python 3.13.14`. Every Django command listed below used this launcher; the separately observed default `python --version` value of `Python 3.14.5` did not run these Django checks.
+- `node --version` reported `v24.16.0`.
+- `config.settings.test` uses an in-memory SQLite database (`ENGINE=django.db.backends.sqlite3`, `NAME=:memory:`). The focused backend results below therefore do not constitute PostgreSQL verification.
+
+### Task 1 — administrative release summary
+
+Implemented the paginated `/api/v1/results/release-summary/` contract with validated page, page-size, status, and search filters; safe aggregate-only rows; bounded page aggregation; and conservative processing/release readiness.
+
+```text
+Command: py -3.13 manage.py test apps.results.tests.test_results_release_api --settings=config.settings.test
+Result: exit 0; 13 tests passed; Django system check reported no issues.
+Note: the existing warning that backend/staticfiles/ is absent was emitted.
+```
+
+### Task 2 — process/release operator permissions
+
+Authorized `SYSTEM_ADMIN` and `EXAM_ADMINISTRATOR` for release summary, score processing, and batch release while retaining candidate list/profile/export restrictions and backend authority.
+
+```text
+Command: py -3.13 manage.py test apps.results.tests.test_results_release_api apps.results.tests.test_score_management_api --settings=config.settings.test
+Result: exit 0; 48 tests passed; Django system check reported no issues.
+Database: in-memory SQLite through config.settings.test.
+```
+
+### Task 3 — typed frontend orchestration service
+
+Added typed `list`, `process`, and `release` methods over the shared API client, including encoded IDs, standard `ServiceResult` failures, and no alternative-base replay for mutations whose network outcome is ambiguous.
+
+```text
+Command: npm test -- src/services/resultsReleaseService.test.ts --run
+Result: exit 0; 1 test file passed; 9 tests passed.
+```
+
+### Task 4 — authoritative admin screen
+
+Removed mock/localStorage candidate and notification authority. The screen now provides loading, global-empty, filtered-empty, safe error/retry, page-scoped summary labels, responsive table overflow, filters, pagination, confirmation/cancel flows, pending guards, authoritative network-failure refetch, stale-list-response protection, and final released state.
+
+```text
+RED command: npm test -- src/pages/admin/hub/ResultsRelease.test.tsx
+RED result: 15 tests ran; 2 expected failures proved the global-looking page-total labels and undifferentiated filtered-empty message.
+GREEN command: npm test -- src/pages/admin/hub/ResultsRelease.test.tsx
+GREEN result: 1 test file passed; 15 tests passed.
+Final combined command: npm test -- src/services/resultsReleaseService.test.ts src/pages/admin/hub/ResultsRelease.test.tsx --run
+Final combined result: exit 0; 2 test files passed; 24 tests passed.
+Build command: npm run build
+Build result: exit 0; Vite transformed 3,119 modules and emitted the existing large-chunk advisory.
+```
+
+### Rollout, rollback, and outstanding verification
+
+- Roll out the backend summary and permission contracts before or with the connected frontend. Existing `/api/v1/results/score-management/batches/{sessionId}/process/` and `/release/` paths remain the mutation boundary.
+- Roll back by reverting the frontend screen/service and backend summary/permission commits as a coordinated application release. There is no database rollback because this minimal plan added no model or migration.
+- PostgreSQL-compatible storage was not exercised for Tasks 1–4; focused backend tests used in-memory SQLite. A PostgreSQL rehearsal remains outstanding before treating database-specific behavior as verified.
+- Playwright was not run during the initial Tasks 1–4 slice. It was subsequently run in the recorded Results Release and analytics browser verification below; PostgreSQL rehearsal remains outstanding.
+- Repository-wide `npm run lint` is a known red baseline with unrelated TypeScript diagnostics in other modules. The last observed run exited `1`; no diagnostic referenced `ResultsRelease.tsx`, `ResultsRelease.test.tsx`, or `resultsReleaseService.ts`. It was not rerun as part of this focused final cleanup, and is not claimed as passing.
+
+## 2026-08-07 — Analytics final sign-off
+
+The analytics API documentation now explicitly defines the standard `401 NOT_AUTHENTICATED` and `403 PERMISSION_DENIED` contracts and records that the session aggregates are intentionally unpaginated, with one aggregate row per qualifying released session. Database query count is bounded independently of the number of sessions, but response cardinality is not capped. The Reporting Matrix regression suite resolves a deferred overview response after unmount and verifies that the result is not inspected after unmount, directly exercising the mounted-request guard.
+
+```text
+Mutation check: temporarily removed the mounted guard and ran the unmount test only.
+Mutation result: expected failure; the observable result `ok` getter was called once.
+Command: npm test -- src/services/resultsAnalyticsService.test.ts src/pages/results/ReportingMatrix.test.tsx --run
+Result: exit 0; 2 test files passed; 11 tests passed.
+TypeScript: npm run lint
+            exited 1 on the existing unrelated baseline; no diagnostic referenced ReportingMatrix.tsx or ReportingMatrix.test.tsx.
+Build: npm run build
+       passed; 3,119 modules transformed. Existing chunk-size advisory remained.
+```
+
+## 2026-08-07 - Results Release and analytics browser verification
+
+Added the scoped Playwright journey `frontend/e2e/results-release-analytics.spec.ts`. With complete synthetic release-summary, process, release, and analytics-overview responses, an `EXAM_ADMINISTRATOR` enters the protected Results Release route, processes one session once, releases it once, observes the final `Results released` state, then opens the protected Reporting Matrix and sees `Released Results Overview` without candidate ID or LRN text. The test counts each mutation request exactly once. The Reporting Matrix route now includes `EXAM_ADMINISTRATOR` while preserving `EXECUTIVE`, `GOVERNMENT`, `UNIVERSITY_ADMIN`, and `SYSTEM_ADMIN`; route-table assertions state both exact role lists.
+
+Test-first route authorization evidence:
+
+```text
+RED: npm test -- src/routing/routes.test.tsx --run
+     8 tests ran; the new exact Reporting Matrix role assertion failed because EXAM_ADMINISTRATOR was absent.
+GREEN: npm test -- src/routing/routes.test.tsx --run
+       exit 0; 1 file passed, 8 tests passed.
+Playwright: npm run test:e2e -- e2e/results-release-analytics.spec.ts
+            exit 0; 1 Chromium test passed.
+Regression: npm run test:e2e -- e2e/exam-review.spec.ts
+            exit 0; 2 Chromium tests passed.
+Diff check: git diff --check
+            exit 0.
+```
+
+The first sandboxed Vitest invocation could not start because esbuild subprocess creation returned `spawn EPERM`; the elevated rerun produced the RED evidence. An initial Playwright assertion was narrowed from an ambiguous page text match (the hidden status-filter option and the table status both read `Results released`) to the visible Results Release table status; the application workflow itself had completed. Student Results and the cross-feature Exam Review-to-student journey were intentionally not added or changed here because they remain on separately preserved branch scope; this verification covers only Results Release plus aggregate analytics.
+
+## 2026-08-07 - Coordinator final release verification
+
+Fresh coordinator-observed verification evidence:
+
+```text
+Backend check: py -3.13 manage.py check --settings=config.settings.local
+               passed.
+Migration check: py -3.13 manage.py makemigrations --check --dry-run --settings=config.settings.local
+                 No changes detected.
+Focused backend: analytics, release, and Score Management suites
+                 53/53 passed.
+Full backend: 471/471 passed in 208.249s on in-memory SQLite.
+Focused frontend changed area: 6 files, 48 tests passed.
+Route tests: 8/8 passed.
+Playwright: npm run test:e2e -- e2e/results-release-analytics.spec.ts e2e/exam-review.spec.ts
+            3/3 Chromium tests passed.
+Production build: passed; 3,119 modules transformed. The existing >500 kB chunk advisory remained.
+Full frontend suite: 44 files passed, 3 failed; 283 tests passed, 9 failed.
+                     The failures are pre-existing: QrScanModal missing html5-qrcode and
+                     university-maintenance backendUniversityService export issues.
+TypeScript: npm run lint failed on the listed unrelated baseline diagnostics. After the last fix,
+            no ResultsRelease, ReportingMatrix, results-service, or apiClient diagnostic remained.
+PostgreSQL rehearsal: skipped because PHILSA_POSTGRES_TEST_DATABASE_URL was absent; this remains a production gate.
+Root status: clean.
+Diff check: git diff --check passed.
+```
+
+## 2026-08-07 - Final branch findings closure
+
+- Updated the current task brief to identify the root `p.malonzo/results-release` checkout, the implemented release/analytics APIs and screens, the separately preserved Student Results scope, and the outstanding PostgreSQL gate while retaining Exam Review history.
+- Corrected the Reporting Matrix module description to the implemented identity-free national/session aggregate view.
+- Recorded small-cell suppression and disclosure policy as `TBD`. The current analytics endpoint returns exact authorized aggregates; no threshold or suppression rule was invented.
+- An ambiguous process/release network outcome now closes the confirmation, performs one authoritative refetch without replaying the POST, and announces that the outcome is uncertain so the operator verifies the refreshed state before retrying.

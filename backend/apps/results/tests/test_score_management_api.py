@@ -1,6 +1,7 @@
 from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import patch
+from uuid import UUID
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -17,7 +18,15 @@ from rest_framework.test import APIClient
 from apps.accounts.roles import PortalRole
 from apps.applications.models import ApplicationAuditLog, ApplicationStatus, IdentityMediaType, RegistrationSelfieMedia, StudentApplication
 from apps.results.jobs import dispatch_score_release_notification_batch
-from apps.results.models import CandidateScore, ScoreReleaseNotification, ScoreReleaseNotificationStatus, ScoreReleaseStatus
+from apps.results.models import (
+    CandidateScore,
+    ExaminationSession,
+    ExaminationSessionStatus,
+    ScoreReleaseNotification,
+    ScoreReleaseNotificationStatus,
+    ScoreReleaseStatus,
+    ScoreReviewStatus,
+)
 from apps.results.services import REGULAR_SESSION_ID, dispatch_score_release_notifications, seed_score_management_data
 
 
@@ -34,6 +43,17 @@ class ScoreManagementApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.client.force_authenticate(user=principal(self.user, PortalRole.SYSTEM_ADMIN.value))
+
+    def assert_error_envelope(self, response, *, status_code, code, message, fields=None):
+        self.assertEqual(response.status_code, status_code)
+        self.assertEqual(set(response.data), {"error"})
+        error = response.data["error"]
+        self.assertEqual(set(error), {"code", "message", "fields", "meta", "correlationId"})
+        self.assertEqual(error["code"], code)
+        self.assertEqual(error["message"], message)
+        self.assertEqual(error["fields"], fields or {})
+        self.assertEqual(error["meta"], {})
+        UUID(error["correlationId"])
 
     def test_admin_can_list_seeded_score_batches(self):
         response = self.client.get(reverse("results:score-management-batches"))
@@ -119,8 +139,12 @@ class ScoreManagementApiTests(TestCase):
     def test_release_requires_processed_scores(self):
         response = self.client.post(reverse("results:score-management-release", args=[REGULAR_SESSION_ID]))
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.data["detail"], "Scores must be processed before release.")
+        self.assert_error_envelope(
+            response,
+            status_code=409,
+            code="CONFLICT",
+            message="Scores must be processed before release.",
+        )
 
     def test_process_rejects_invalid_reprocessing_flag(self):
         response = self.client.post(
@@ -129,7 +153,61 @@ class ScoreManagementApiTests(TestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, 400)
+        self.assert_error_envelope(
+            response,
+            status_code=400,
+            code="VALIDATION_FAILED",
+            message="Invalid input.",
+            fields={"allowReprocessing": ["Must be a valid boolean."]},
+        )
+
+    def test_process_and_release_return_not_found_envelopes_for_an_unknown_session(self):
+        process = self.client.post(
+            reverse("results:score-management-process", args=["SESSION-UNKNOWN"]),
+            {"allowReprocessing": False},
+            format="json",
+        )
+        release = self.client.post(reverse("results:score-management-release", args=["SESSION-UNKNOWN"]))
+
+        for response in (process, release):
+            self.assert_error_envelope(
+                response,
+                status_code=404,
+                code="NOT_FOUND",
+                message="Examination session not found.",
+            )
+
+    def test_process_requires_a_closed_session_with_a_conflict_envelope(self):
+        ExaminationSession.objects.filter(id=REGULAR_SESSION_ID).update(status=ExaminationSessionStatus.OPEN)
+
+        response = self.client.post(
+            reverse("results:score-management-process", args=[REGULAR_SESSION_ID]),
+            {"allowReprocessing": False},
+            format="json",
+        )
+
+        self.assert_error_envelope(
+            response,
+            status_code=409,
+            code="CONFLICT",
+            message="Examination session must be closed before processing.",
+        )
+
+    def test_process_requires_approved_scores_with_a_conflict_envelope(self):
+        CandidateScore.objects.filter(session_id=REGULAR_SESSION_ID).update(review_status=ScoreReviewStatus.REJECTED)
+
+        response = self.client.post(
+            reverse("results:score-management-process", args=[REGULAR_SESSION_ID]),
+            {"allowReprocessing": False},
+            format="json",
+        )
+
+        self.assert_error_envelope(
+            response,
+            status_code=409,
+            code="CONFLICT",
+            message="Approved examination scores are not available.",
+        )
 
     def test_results_rejects_invalid_pagination(self):
         self.client.post(reverse("results:score-management-process", args=[REGULAR_SESSION_ID]), format="json")
@@ -222,8 +300,12 @@ class ScoreManagementApiTests(TestCase):
             format="json",
         )
 
-        self.assertEqual(blocked.status_code, 400)
-        self.assertEqual(blocked.data["detail"], "session has already been processed")
+        self.assert_error_envelope(
+            blocked,
+            status_code=409,
+            code="CONFLICT",
+            message="Examination session has already been processed.",
+        )
         self.assertEqual(allowed.status_code, 202)
 
     def test_release_persists_after_processing(self):
@@ -536,8 +618,12 @@ class ScoreManagementApiTests(TestCase):
                 format="json",
             )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.data["detail"], "released results cannot be reprocessed")
+        self.assert_error_envelope(
+            response,
+            status_code=409,
+            code="CONFLICT",
+            message="Released results cannot be reprocessed.",
+        )
         self.assertFalse(any("results_candidatescore" in query["sql"].lower() for query in queries))
         self.assertEqual(
             CandidateScore.objects.filter(
