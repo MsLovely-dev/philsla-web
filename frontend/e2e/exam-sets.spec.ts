@@ -96,6 +96,7 @@ function examSet(id: string, title: string, status = 'DRAFT') {
     validation_results: [],
     assembly_runs: [],
     workflow_history: [],
+    published_hash: status === 'PUBLISHED' ? 'f'.repeat(64) : null,
     created_at: '2026-08-05T00:00:00Z',
     updated_at: '2026-08-05T00:00:00Z',
   };
@@ -176,4 +177,64 @@ test('lists, creates, and submits an authoritative Exam Set', async ({ page }) =
   await createdRow.getByRole('button', { name: 'Submit for Review' }).click();
   await expect(createdRow.getByText('ACADEMIC REVIEW')).toBeVisible();
   expect(transitionPayload).toMatchObject({ status: 'ACADEMIC_REVIEW' });
+});
+
+test('auto-assembles and publishes an Exam Set', async ({ page }) => {
+  // NOTE: the record starts as DRAFT (not APPROVED) so that "Run Auto-Selection" is actually
+  // rendered — ExamSetAssemblyWorkspace only shows auto-assemble/item-mutation controls for
+  // DRAFT/REVISION_REQUIRED records (EDITABLE_STATUSES in examSets/ExamSetAssemblyWorkspace.tsx),
+  // matching the backend's own "Only draft or revision-required Exam Sets can be auto-assembled"
+  // rule. Reaching PUBLISHED therefore requires walking the full lifecycle the UI exposes:
+  // Submit for Review -> Approve -> Publish.
+  const examSets = [examSet('7', 'Remote Synthetic Set', 'DRAFT')];
+  let autoAssembleCalled = false;
+  let publishPayload: Record<string, unknown> | null = null;
+
+  await useSystemAdminSession(page);
+  await page.route('**/api/v1/exams/blueprints/', (route) => route.fulfill({ json: [blueprint] }));
+  await page.route('**/api/v1/exams/questions/', (route) => route.fulfill({ json: [question] }));
+  await page.route('**/api/v1/exams/exam-sets/**', async (route) => {
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === '/api/v1/exams/exam-sets/' && request.method() === 'GET') {
+      await route.fulfill({ json: examSets });
+      return;
+    }
+    if (pathname === '/api/v1/exams/exam-sets/7/auto-assemble/' && request.method() === 'POST') {
+      autoAssembleCalled = true;
+      examSets[0] = { ...examSets[0], assembly_runs: [{ id: '1', algorithm_version: 'v1', status: 'completed', selected_item_count: 1, rejected_item_count: 0, initiated_by: 'Synthetic Administrator', started_at: '2026-08-07T00:00:00Z', completed_at: '2026-08-07T00:00:00Z', notes: '', items: [] }] };
+      await route.fulfill({ json: examSets[0] });
+      return;
+    }
+    if (pathname === '/api/v1/exams/exam-sets/7/transition/' && request.method() === 'POST') {
+      const payload = request.postDataJSON() as Record<string, unknown>;
+      const status = String(payload.status);
+      examSets[0] = { ...examSets[0], status, ...(status === 'PUBLISHED' ? { published_hash: 'f'.repeat(64) } : {}) };
+      if (status === 'PUBLISHED') publishPayload = payload;
+      await route.fulfill({ json: examSets[0] });
+      return;
+    }
+    await route.fulfill({ status: 404, json: { error: { code: 'NOT_FOUND', message: 'Synthetic route not found.' } } });
+  });
+
+  await page.goto('/admin/hub/exam-sets/assembly');
+  const row = page.getByRole('article').filter({ hasText: 'Remote Synthetic Set' });
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await expect(page.getByRole('button', { name: 'Back to Exam Sets' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Run Auto-Selection' }).click();
+  // No DOM change is observable purely from a successful auto-assemble in this fixture
+  // (no assembly-run summary is rendered by ExamSetAssemblyWorkspace), so poll the
+  // out-of-band flag instead of racing a UI assertion against the network round trip.
+  await expect.poll(() => autoAssembleCalled).toBe(true);
+
+  await page.getByRole('button', { name: 'Submit for Review' }).click();
+  await expect(page.getByText('ACADEMIC REVIEW')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByText('APPROVED')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(page.getByText('PUBLISHED', { exact: true })).toBeVisible();
+  expect(publishPayload).toMatchObject({ status: 'PUBLISHED' });
 });
