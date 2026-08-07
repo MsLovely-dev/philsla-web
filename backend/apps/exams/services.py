@@ -1392,6 +1392,18 @@ def _replace_exam_set_items(exam_set: ExamSet, items: list[dict[str, Any]], acto
     return diff
 
 
+def _validation_name(value: str) -> str:
+    """Truncates to fit `ExamSetValidationResult.validation_name`'s column width.
+
+    `BlueprintSection.section_name` (max_length=255) and `QuestionType.name`
+    (max_length=100) can combine into a string longer than this column's
+    max_length=150. That's invisible on SQLite (used in tests) but a hard
+    `DataError` on Postgres (the deployment target), so truncate defensively.
+    """
+    max_length = ExamSetValidationResult._meta.get_field("validation_name").max_length
+    return value[:max_length]
+
+
 def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
     exam_set.validation_results.all().delete()
     items = list(exam_set.items.all().select_related("question", "blueprint_section"))
@@ -1437,7 +1449,7 @@ def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
         ExamSetValidationResult.objects.create(
             exam_set=exam_set,
             validation_code=f"section_item_count_{section.pk}",
-            validation_name=f"{section.section_name}: item count",
+            validation_name=_validation_name(f"{section.section_name}: item count"),
             result=ValidationResult.PASSED if len(section_items) == section.item_count else ValidationResult.WARNING,
             expected_value=str(section.item_count),
             actual_value=str(len(section_items)),
@@ -1453,7 +1465,7 @@ def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
             ExamSetValidationResult.objects.create(
                 exam_set=exam_set,
                 validation_code=f"section_difficulty_{section.pk}_{distribution.difficulty}",
-                validation_name=f"{section.section_name}: {distribution.difficulty} items",
+                validation_name=_validation_name(f"{section.section_name}: {distribution.difficulty} items"),
                 result=ValidationResult.PASSED if actual >= distribution.required_item_count else ValidationResult.WARNING,
                 expected_value=str(distribution.required_item_count),
                 actual_value=str(actual),
@@ -1469,7 +1481,7 @@ def _record_exam_set_validation_results(exam_set: ExamSet) -> None:
             ExamSetValidationResult.objects.create(
                 exam_set=exam_set,
                 validation_code=f"section_question_type_{section.pk}_{type_distribution.question_type_id}",
-                validation_name=f"{section.section_name}: {type_distribution.question_type.name} items",
+                validation_name=_validation_name(f"{section.section_name}: {type_distribution.question_type.name} items"),
                 result=ValidationResult.PASSED if actual >= type_distribution.required_item_count else ValidationResult.WARNING,
                 expected_value=str(type_distribution.required_item_count),
                 actual_value=str(actual),

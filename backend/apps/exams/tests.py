@@ -716,6 +716,46 @@ class ExamSetApiTests(APITestCase):
         self.assertEqual(codes[f"section_question_type_{section.id}_{self.question_type.id}"]["result"], "passed")
         self.assertEqual(codes["marks_compliance"]["result"], "warning")
 
+    def test_validation_name_is_truncated_to_fit_the_column_for_long_section_or_question_type_names(self) -> None:
+        # BlueprintSection.section_name (max_length=255) and QuestionType.name (max_length=100)
+        # can combine into a string longer than ExamSetValidationResult.validation_name's
+        # max_length=150. That overflow is invisible on SQLite (used by this test) but a hard
+        # DataError on Postgres (the deployment target) -- so this asserts the real, backend-
+        # agnostic invariant (length <= 150) rather than relying on SQLite's laxness.
+        long_section_name = "S" * 255
+        long_question_type = QuestionType.objects.create(code="LONGQT", name="Q" * 100)
+        section = BlueprintSection.objects.create(
+            blueprint_version=self.blueprint_version,
+            section_number=1,
+            section_name=long_section_name,
+            subject=self.subject,
+            item_count=1,
+            total_marks="5.00",
+            passing_score="2.50",
+            time_limit_minutes=30,
+            display_order=1,
+        )
+        BlueprintDifficultyDistribution.objects.create(blueprint_section=section, difficulty="easy", required_item_count=1)
+        BlueprintQuestionTypeDistribution.objects.create(blueprint_section=section, question_type=long_question_type, required_item_count=1)
+
+        created = self.client.post(reverse("exams:exam_set_list"), {
+            **self.payload,
+            "items": [{"question_id": self.question.id, "blueprint_section_id": section.id, "display_order": 1, "points": 5}],
+        }, format="json")
+
+        self.assertEqual(created.status_code, 201)
+        exam_set = ExamSet.objects.get(pk=created.data["id"])
+        long_name_results = exam_set.validation_results.filter(
+            validation_code__in=[
+                f"section_item_count_{section.id}",
+                f"section_difficulty_{section.id}_easy",
+                f"section_question_type_{section.id}_{long_question_type.id}",
+            ],
+        )
+        self.assertEqual(long_name_results.count(), 3)
+        for result in long_name_results:
+            self.assertLessEqual(len(result.validation_name), 150)
+
     def test_updating_items_records_add_remove_and_replace_audit_entries(self) -> None:
         second_question = Question.objects.create(
             question_code="Q-SCI-002", question_type=self.question_type, subject=self.subject, topic=self.topic,
