@@ -87,15 +87,15 @@ The baseline health and authentication boundaries, the first student-application
 `POST /api/v1/results/exam-reviews/{reviewId}/items/{itemId}/score/` accepts `{ "points": 8 }` for a subjective item. The backend rejects objective-item overrides, scores above the item's maximum, item/review mismatches, and changes to `FINALIZED` records. A successful save recalculates the aggregate total and remaining pending-subjective count from persisted item scores.
 | `GET` | `/api/v1/results/score-management/batches/` | Bearer token | `SYSTEM_ADMIN` | List examination sessions with score-processing status and candidate counts | Implemented |
 | `GET` | `/api/v1/results/release-summary/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | List paginated session-level processing and release readiness totals without candidate details | Implemented |
-| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/process/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | Trigger backend scoring computation for approved scores in a closed examination session | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/` | Bearer token | `SYSTEM_ADMIN` | Return paginated approved candidate score records, with rank and percentile populated after processing | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/results/{candidateId}/profile/` | Bearer token | `SYSTEM_ADMIN` | Return a score-anchored read-only candidate profile for a candidate in the selected score batch | Implemented |
-| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `SYSTEM_ADMIN` | Release already processed examination results | Implemented |
+| `POST` | `/api/v1/results/score-management/batches/{sessionId}/release/` | Bearer token | `EXAM_ADMINISTRATOR` or `SYSTEM_ADMIN` | Release already processed examination results | Implemented |
 | `GET` | `/api/v1/results/score-management/batches/{sessionId}/export/` | Bearer token | `SYSTEM_ADMIN` | Stream processed approved score results as CSV | Implemented |
 
 ### Score Management
 
-Score Management is backend-owned. The frontend may trigger processing and release, but it must not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
+Score Management is backend-owned. `EXAM_ADMINISTRATOR` and `SYSTEM_ADMIN` may trigger processing and release, but the batch list, candidate results, candidate profiles, and CSV export remain restricted to `SYSTEM_ADMIN`. The frontend may not submit raw scores, final scores, ranks, percentiles, or release-state overrides.
 
 ### `GET /api/v1/results/release-summary/`
 

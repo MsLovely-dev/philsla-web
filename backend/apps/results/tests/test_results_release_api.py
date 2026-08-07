@@ -37,7 +37,7 @@ class ResultsReleaseSummaryApiTests(TestCase):
         cls.released_session = cls._create_session("SESSION-RELEASED", "Released examination", ScoreBatchStatus.RESULTS_RELEASED)
         cls.open_session = cls._create_session("SESSION-OPEN", "Open examination", ScoreBatchStatus.READY_FOR_PROCESSING, closed=False)
 
-        cls._create_score(cls.ready_session, "READY-APPROVED", review_status=ScoreReviewStatus.APPROVED)
+        cls.score = cls._create_score(cls.ready_session, "READY-APPROVED", review_status=ScoreReviewStatus.APPROVED)
         cls._create_score(cls.ready_session, "READY-EXCLUDED", review_status=ScoreReviewStatus.REJECTED)
 
         processed_batch = ScoreProcessingBatch.objects.create(
@@ -174,6 +174,43 @@ class ResultsReleaseSummaryApiTests(TestCase):
         self.assertEqual(self.client.get(reverse("results:release-summary")).status_code, 403)
         self.client.force_authenticate(user=None)
         self.assertEqual(self.client.get(reverse("results:release-summary")).status_code, 401)
+
+    def test_exam_administrator_can_process_and_release_a_ready_session(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+
+        processed = self.client.post(
+            reverse("results:score-management-process", args=[self.ready_session.id]),
+            {"allowReprocessing": False},
+            format="json",
+        )
+        self.assertEqual(processed.status_code, 202)
+
+        released = self.client.post(reverse("results:score-management-release", args=[self.ready_session.id]))
+        self.assertEqual(released.status_code, 200)
+
+    def test_exam_administrator_still_cannot_browse_score_management_candidate_data(self):
+        self.authenticate_as(PortalRole.EXAM_ADMINISTRATOR.value)
+
+        self.assertEqual(self.client.get(reverse("results:score-management-batches")).status_code, 403)
+        self.assertEqual(
+            self.client.get(
+                reverse("results:score-management-profile", args=[self.ready_session.id, self.score.candidate_id]),
+            ).status_code,
+            403,
+        )
+        self.assertEqual(self.client.get(reverse("results:score-management-export", args=[self.ready_session.id])).status_code, 403)
+
+    def test_student_and_anonymous_callers_cannot_process_or_release_scores(self):
+        process_url = reverse("results:score-management-process", args=[self.ready_session.id])
+        release_url = reverse("results:score-management-release", args=[self.ready_session.id])
+
+        self.authenticate_as(PortalRole.STUDENT.value)
+        self.assertEqual(self.client.post(process_url, {"allowReprocessing": False}, format="json").status_code, 403)
+        self.assertEqual(self.client.post(release_url).status_code, 403)
+
+        self.client.force_authenticate(user=None)
+        self.assertEqual(self.client.post(process_url, {"allowReprocessing": False}, format="json").status_code, 401)
+        self.assertEqual(self.client.post(release_url).status_code, 401)
 
     def test_summary_query_count_is_bounded_independent_of_session_count(self):
         self.authenticate_as(PortalRole.SYSTEM_ADMIN.value)

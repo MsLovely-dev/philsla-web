@@ -181,6 +181,11 @@ class ScoreManagementBaseView(APIView):
     required_roles = require_roles(PortalRole.SYSTEM_ADMIN)
 
 
+class ScoreReleaseOperatorBaseView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.EXAM_ADMINISTRATOR, PortalRole.SYSTEM_ADMIN)
+
+
 class ScoreManagementBatchListView(ScoreManagementBaseView):
     def get(self, request) -> Response:
         latest_batch = ScoreProcessingBatch.objects.filter(session=OuterRef("pk")).order_by("-started_at")
@@ -196,7 +201,7 @@ class ScoreManagementBatchListView(ScoreManagementBaseView):
         return Response({"count": sessions.count(), "results": [_serialize_batch(session) for session in sessions]})
 
 
-class ScoreManagementProcessView(ScoreManagementBaseView):
+class ScoreManagementProcessView(ScoreReleaseOperatorBaseView):
     def post(self, request, session_id: str) -> Response:
         serializer = ScoreProcessRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -269,7 +274,7 @@ class ScoreManagementCandidateProfileView(ScoreManagementBaseView):
         return Response({"score": _serialize_score(score), "profile": _serialize_profile(application, request)})
 
 
-class ScoreManagementBatchReleaseView(ScoreManagementBaseView):
+class ScoreManagementBatchReleaseView(ScoreReleaseOperatorBaseView):
     def post(self, request, session_id: str) -> Response:
         try:
             release_result = release_score_session(session_id=session_id, released_by=request.user)
