@@ -7,11 +7,18 @@ import { useMockData } from '../services/mockService';
 import { User } from '../types';
 import { ExamRoute, ProtectedRoute, PublicRoute } from './RouteGuards';
 
+const backendApplicationMocks = vi.hoisted(() => ({
+  getStudentProfileCompletion: vi.fn(),
+}));
+
 vi.mock('../PhilSAContext', () => ({
   INITIAL_MAINTENANCE_MODULES: [
     { id: '31', name: 'User Accounts', path: '/admin/users', category: 'System Admin', status: 'ACTIVE' },
   ],
   usePhilSA: vi.fn(),
+}));
+vi.mock('../services/backendApplicationService', () => ({
+  backendApplicationService: backendApplicationMocks,
 }));
 vi.mock('../services/mockService', () => ({ useMockData: vi.fn() }));
 
@@ -53,6 +60,11 @@ function renderAtTarget(guard: (children: ReactNode) => ReactNode) {
 }
 
 beforeEach(() => {
+  backendApplicationMocks.getStudentProfileCompletion.mockReset();
+  backendApplicationMocks.getStudentProfileCompletion.mockResolvedValue({
+    ok: false,
+    error: { kind: 'NOT_FOUND', message: 'No pending profile.' },
+  });
   mockUsePhilSA.mockReturnValue({
     user: student,
     isLoading: false,
@@ -100,12 +112,38 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Location: /login')).toBeInTheDocument();
   });
 
-  it('renders content for an allowed role', () => {
+  it('renders content for an allowed role', async () => {
     renderAtTarget((children) => (
       <ProtectedRoute allowedRoles={['STUDENT']} layout="standalone">{children}</ProtectedRoute>
     ));
 
-    expect(screen.getByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
+  });
+
+  it('redirects a student with pending profile completion to the profile module', async () => {
+    backendApplicationMocks.getStudentProfileCompletion.mockResolvedValue({
+      ok: true,
+      data: {
+        application: { id: 'application-id', status: 'SUBMITTED', personal: {}, address: {}, school: {}, coursePreferences: [], reviewStep: {}, examCycleId: '2026', version: 1, submittedAt: null, createdAt: '2026-07-14T00:00:00Z', updatedAt: '2026-07-14T00:00:00Z' },
+        fields: [],
+        progress: { completed: 1, total: 2, percent: 50, remaining: [] },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/student/permit']}>
+        <Routes>
+          <Route
+            path="/student/permit"
+            element={<ProtectedRoute allowedRoles={['STUDENT']} layout="standalone"><h1>Permit</h1></ProtectedRoute>}
+          />
+          <Route path="/student/profile" element={<><h1>Profile module</h1><LocationProbe /></>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Profile module' })).toBeInTheDocument();
+    expect(screen.getByText('Location: /student/profile')).toBeInTheDocument();
   });
 
   it('redirects an authenticated but disallowed role to unauthorized', () => {
@@ -251,25 +289,25 @@ describe('PublicRoute', () => {
 describe('ExamRoute', () => {
   it.each(['SCHEDULED', 'CHECKED_IN', 'IN_PROGRESS'] as const)(
     'allows a student with %s exam status',
-    (examStatus) => {
+    async (examStatus) => {
       mockUseMockData.mockReturnValue({
         applications: [{ userId: student.id, examStatus }],
       } as ReturnType<typeof useMockData>);
 
       renderAtTarget((children) => <ExamRoute>{children}</ExamRoute>);
 
-      expect(screen.getByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Protected content' })).toBeInTheDocument();
     },
   );
 
-  it('redirects an ineligible student to the dashboard', () => {
+  it('redirects an ineligible student to the dashboard', async () => {
     mockUseMockData.mockReturnValue({
       applications: [{ userId: student.id, examStatus: 'SUBMITTED' }],
     } as ReturnType<typeof useMockData>);
 
     renderAtTarget((children) => <ExamRoute>{children}</ExamRoute>);
 
-    expect(screen.getByRole('heading', { name: 'Dashboard page' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Dashboard page' })).toBeInTheDocument();
     expect(screen.getByText('Location: /dashboard')).toBeInTheDocument();
   });
 

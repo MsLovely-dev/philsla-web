@@ -212,6 +212,21 @@ export interface BackendExamPermit {
   status: 'ISSUED' | 'USED' | 'VOID';
 }
 
+export interface StudentProfileRequirement {
+  section: string;
+  fieldKey: string;
+  label: string;
+  type: 'field' | 'file' | string;
+  required: boolean;
+}
+
+export interface StudentProfileProgress {
+  completed: number;
+  total: number;
+  percent: number;
+  remaining: StudentProfileRequirement[];
+}
+
 export interface RegistrationAttachment {
   id: string;
   section: string;
@@ -232,6 +247,27 @@ export interface BackendApplicationDraftInput {
   school: Record<string, unknown>;
   coursePreferences: Record<string, unknown>[];
   reviewStep: Record<string, unknown>;
+}
+
+export interface StudentProfileCompletion {
+  application: BackendApplication;
+  fields: StudentRegistrationFieldConfig[];
+  progress: StudentProfileProgress;
+}
+
+export interface StudentProfileSelfieUploadResult {
+  uploadedMedia: Array<'SELFIE'>;
+  results: Record<string, unknown>;
+  progress: StudentProfileProgress;
+}
+
+export interface StudentProfileDraftInput {
+  version: number;
+  personal?: Record<string, unknown>;
+  address?: Record<string, unknown>;
+  school?: Record<string, unknown>;
+  coursePreferences?: Record<string, unknown>[];
+  reviewStep?: Record<string, unknown>;
 }
 
 export interface BackendRegistrationSubmittedAuditLog {
@@ -378,6 +414,46 @@ export class BackendApplicationService {
         ...(options.registrationSessionId ? { 'X-Registration-Session-Id': options.registrationSessionId } : {}),
       },
       body,
+    });
+  }
+
+  async getStudentProfileCompletion(): Promise<ServiceResult<StudentProfileCompletion>> {
+    return this.apiClient.request<StudentProfileCompletion>('/api/v1/applications/profile/');
+  }
+
+  async saveStudentProfileDraft(input: StudentProfileDraftInput): Promise<ServiceResult<StudentProfileCompletion>> {
+    return this.apiClient.request<StudentProfileCompletion>('/api/v1/applications/profile/', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async uploadStudentProfileAttachment(
+    fieldName: string,
+    file: File,
+  ): Promise<ServiceResult<RegistrationAttachment>> {
+    const body = new FormData();
+    body.append('fieldName', fieldName);
+    body.append('file', file);
+    return this.apiClient.request<RegistrationAttachment>('/api/v1/applications/profile/attachments/', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  async uploadStudentProfileSelfie(file: File): Promise<ServiceResult<StudentProfileSelfieUploadResult>> {
+    const body = new FormData();
+    body.append('file', file);
+    return this.apiClient.request<StudentProfileSelfieUploadResult>('/api/v1/applications/profile/selfie/', {
+      method: 'POST',
+      body,
+    });
+  }
+
+  async submitStudentProfile(version: number): Promise<ServiceResult<StudentProfileCompletion>> {
+    return this.apiClient.request<StudentProfileCompletion>('/api/v1/applications/profile/submit/', {
+      method: 'POST',
+      body: JSON.stringify({ version }),
     });
   }
 

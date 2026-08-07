@@ -10,7 +10,7 @@ class ResultMigrationBoundaryTests(SimpleTestCase):
         leaves = MigrationExecutor(connection).loader.graph.leaf_nodes()
 
         self.assertIn(
-            ("results", "0003_candidatescore_results_can_session_739f12_idx_and_more"),
+            ("results", "0008_alter_scorereleasenotification_status"),
             leaves,
         )
         self.assertIn(("exam_reviews", "0001_initial"), leaves)

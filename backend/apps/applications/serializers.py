@@ -161,6 +161,12 @@ class ApplicationSubmitSerializer(serializers.Serializer):
     version = serializers.IntegerField(min_value=1)
 
 
+class StudentProfileCompletionSerializer(serializers.Serializer):
+    application = serializers.DictField(read_only=True)
+    fields = serializers.ListField(child=serializers.DictField(), read_only=True)
+    progress = serializers.DictField(read_only=True)
+
+
 class ApplicationAuditLogSerializer(serializers.ModelSerializer):
     applicationId = serializers.SerializerMethodField()
     candidateId = serializers.SerializerMethodField()

@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import connection
@@ -442,6 +443,31 @@ class ScoreManagementApiTests(TestCase):
         self.assertEqual(notification.status, ScoreReleaseNotificationStatus.SENT)
         self.assertEqual(notification.attempts, 2)
         self.assertEqual(notification.failure_reason, "")
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_dispatch_claims_notifications_before_sending_email(self):
+        score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")
+        notification = ScoreReleaseNotification.objects.create(
+            session=score.session,
+            score=score,
+            recipient_email="claimed@example.test",
+            recipient_name="Claimed Student",
+            portal_url="http://localhost:3000/student/results",
+        )
+
+        def assert_claimed_before_send(message, *args, **kwargs):
+            notification.refresh_from_db()
+            self.assertEqual(notification.status, ScoreReleaseNotificationStatus.PROCESSING)
+            self.assertEqual(notification.attempts, 1)
+            return original_send(message, *args, **kwargs)
+
+        original_send = EmailMultiAlternatives.send
+        with patch.object(EmailMultiAlternatives, "send", assert_claimed_before_send):
+            result = dispatch_score_release_notifications(limit=10)
+
+        self.assertEqual(result.sent_count, 1)
+        notification.refresh_from_db()
+        self.assertEqual(notification.status, ScoreReleaseNotificationStatus.SENT)
 
     def test_release_skips_email_when_application_match_is_ambiguous(self):
         score = CandidateScore.objects.get(session_id=REGULAR_SESSION_ID, candidate_id="PHL-2027-000001")

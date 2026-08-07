@@ -63,6 +63,7 @@ import ReviewApplicationAuditLogs from '../pages/reviewer/ReviewApplicationAudit
 import ReviewApplications from '../pages/reviewer/ReviewApplications';
 import TestingCenterAvailability from '../pages/reviewer/TestingCenterAvailability';
 import StudentApplication from '../pages/StudentApplication';
+import StudentProfile from '../pages/student/StudentProfile';
 import SupportDashboard from '../pages/support/SupportDashboard';
 import SystemCompliance from '../pages/SystemCompliance';
 import SystemIntegration from '../pages/admin/SystemIntegration';
@@ -121,6 +122,7 @@ export const APP_ROUTES: readonly AppRouteDefinition[] = [
 
   { path: '/dashboard', element: <Dashboard />, access: 'protected', allowedRoles: ALL_USER_ROLES },
   { path: '/student/dashboard', element: <StudentDashboard />, access: 'protected', allowedRoles: STUDENT_PORTAL },
+  { path: '/student/profile', element: <StudentProfile />, access: 'protected', allowedRoles: STUDENT_PORTAL },
   { path: '/student/application', element: <StudentApplication />, access: 'protected', allowedRoles: STUDENT_PORTAL },
   { path: '/student/permit', element: <ExamPermitPage />, access: 'protected', allowedRoles: STUDENT_PORTAL },
   { path: '/student/results', element: <ResultsPage />, access: 'protected', allowedRoles: STUDENT_PORTAL },

@@ -42,11 +42,15 @@ from .serializers import (
 )
 from .services import (active_step2_configuration, assign_exam_slot, create_draft, decide_application,
                        ApplicationConflict,
-                       decide_step2_manual_review, get_my_application, get_step2_verification, serialize_step2,
-                       submit_application,
+                       decide_step2_manual_review, get_my_application, get_pending_student_profile_application,
+                       get_step2_verification, save_student_profile_draft,
+                       serialize_step2, serialize_student_profile_completion, submit_application,
+                       submit_student_profile,
                        update_draft, upload_step2_media, validate_manual_registration_selfie_face,
                        validate_registration_selfie_face, request_registration_email_otp,
-                       upload_registration_attachment, verify_registration_email_otp, verify_lrn)
+                       upload_registration_attachment, upload_student_profile_attachment,
+                       upload_student_profile_selfie,
+                       verify_registration_email_otp, verify_lrn)
 from .models import IdentityMediaType, Step2VerificationConfiguration
 from .throttling import DeviceScopedRateThrottle
 
@@ -464,6 +468,101 @@ class MyApplicationExamSlotView(APIView):
         updated = assign_exam_slot(owner=request.user, slot_id=serializer.validated_data["slotId"])
         record_application_event(event="application_exam_slot_assigned", outcome="success", request=request, user=request.user)
         return Response(ApplicationSerializer(updated, context={"request": request}).data)
+
+
+class StudentProfileCompletionView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def get(self, request) -> Response:
+        try:
+            application = get_pending_student_profile_application(owner=request.user)
+        except StudentApplication.DoesNotExist as exc:
+            raise Http404("Student profile completion is not pending.") from exc
+        return Response(serialize_student_profile_completion(application, request=request))
+
+    def patch(self, request) -> Response:
+        serializer = ApplicationUpdateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        expected_version = serializer.validated_data.pop("version")
+        updated = save_student_profile_draft(
+            owner=request.user,
+            expected_version=expected_version,
+            data=serializer.validated_data,
+        )
+        record_application_event(
+            event="bulk_upload_profile_draft_saved",
+            outcome="success",
+            request=request,
+            user=request.user,
+            application=updated,
+        )
+        return Response(serialize_student_profile_completion(updated, request=request))
+
+
+class StudentProfileAttachmentUploadView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request) -> Response:
+        serializer = RegistrationAttachmentUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        attachment = upload_student_profile_attachment(
+            owner=request.user,
+            field_name=serializer.validated_data["fieldName"],
+            uploaded_file=serializer.validated_data["file"],
+        )
+        record_application_event(
+            event="bulk_upload_profile_attachment_uploaded",
+            outcome="success",
+            request=request,
+            user=request.user,
+            application=attachment.application,
+        )
+        return Response(RegistrationAttachmentSerializer(attachment).data, status=status.HTTP_201_CREATED)
+
+
+class StudentProfileSelfieUploadView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request) -> Response:
+        serializer = RegistrationIdentitySelfieUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = upload_student_profile_selfie(
+            owner=request.user,
+            uploaded_file=serializer.validated_data["file"],
+        )
+        record_application_event(
+            event="bulk_upload_profile_selfie_uploaded",
+            outcome="success",
+            request=request,
+            user=request.user,
+        )
+        return Response(result, status=status.HTTP_201_CREATED)
+
+
+class StudentProfileSubmitView(APIView):
+    permission_classes = [RoleRequiredPermission]
+    required_roles = require_roles(PortalRole.STUDENT)
+
+    def post(self, request) -> Response:
+        serializer = ApplicationSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        submitted = submit_student_profile(
+            owner=request.user,
+            expected_version=serializer.validated_data["version"],
+        )
+        record_application_event(
+            event="bulk_upload_profile_completed",
+            outcome="success",
+            request=request,
+            user=request.user,
+            application=submitted,
+        )
+        return Response(serialize_student_profile_completion(submitted, request=request))
 
 
 class ApplicationDetailView(APIView):
