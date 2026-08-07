@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,6 +54,12 @@ function listSuccess(...sessions: ResultsReleaseSummary[]) {
   return serviceSuccess({ count: sessions.length, page: 1, pageSize: 25, results: sessions });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
 describe('ResultsRelease', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,6 +94,25 @@ describe('ResultsRelease', () => {
     expect(listMock).toHaveBeenCalledTimes(2);
   });
 
+  it('ignores an older list response after the release status changes', async () => {
+    const user = userEvent.setup();
+    const initialRequest = deferred<ReturnType<typeof listSuccess>>();
+    const currentRequest = deferred<ReturnType<typeof listSuccess>>();
+    const releasedOnly = { ...releasedSession, name: 'PhilSA Special Examination 2027' };
+    listMock.mockReturnValueOnce(initialRequest.promise).mockReturnValueOnce(currentRequest.promise);
+    renderResultsRelease();
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Release status' }), 'RESULTS_RELEASED');
+    currentRequest.resolve(listSuccess(releasedOnly));
+    expect(await screen.findByText('PhilSA Special Examination 2027')).toBeInTheDocument();
+
+    await act(async () => {
+      initialRequest.resolve(listSuccess(readySession));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.queryByText('PhilSA Regular Examination 2027')).not.toBeInTheDocument());
+  });
+
   it('processes a ready session only after confirmation and refreshes it', async () => {
     const user = userEvent.setup();
     processMock.mockResolvedValue(serviceSuccess({
@@ -120,6 +145,23 @@ describe('ResultsRelease', () => {
     await waitFor(() => expect(releaseMock).toHaveBeenCalledWith(processedSession.id));
     expect((await screen.findAllByText('Results released')).length).toBeGreaterThan(0);
     expect(listMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refetches using the current release status after a successful action', async () => {
+    const user = userEvent.setup();
+    const releaseRequest = deferred<ServiceResult<ResultsReleaseResponse>>();
+    listMock.mockResolvedValue(listSuccess(processedSession));
+    releaseMock.mockReturnValueOnce(releaseRequest.promise);
+    renderResultsRelease();
+
+    await user.click(await screen.findByRole('button', { name: /release results/i }));
+    await user.click(screen.getByRole('button', { name: /confirm release/i }));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Release status' }), 'RESULTS_RELEASED');
+    releaseRequest.resolve(serviceSuccess({
+      id: processedSession.id, status: 'RESULTS_RELEASED', releasedCount: 110, notificationQueuedCount: 0, notificationSkippedCount: 0, notificationFailedCount: 0,
+    }));
+
+    await waitFor(() => expect(listMock).toHaveBeenLastCalledWith({ page: 1, status: 'RESULTS_RELEASED', search: '' }));
   });
 
   it('cancels a pending release without calling the service', async () => {

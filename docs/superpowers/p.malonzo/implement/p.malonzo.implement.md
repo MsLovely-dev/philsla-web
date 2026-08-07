@@ -307,3 +307,7 @@ changed Exam Review diagnostics in lint output: none
 ```
 
 The handoff intentionally stops before ranking, percentile processing, student-facing results release, analytics, and external distribution. All current handoff work, its tests, design, plan, and documentation remain uncommitted and unstaged for owner review.
+
+## 2026-08-07 — Results Release stale-request hardening
+
+Removed the misplaced standalone Task 4 report. The Results Release screen now accepts only the latest list response and a successful process/release action refreshes with the latest selected filters. Focused Results Release service/page tests passed (2 files, 16 tests), the production build passed, and `git diff --check` passed.

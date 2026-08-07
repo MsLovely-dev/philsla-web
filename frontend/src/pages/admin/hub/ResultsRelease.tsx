@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, Search, Sparkles } from 'lucide-react';
 import { ConfirmationDialog } from '../../../components/ui';
-import { resultsReleaseService, type ResultsReleaseStatus, type ResultsReleaseSummary } from '../../../services/resultsReleaseService';
+import { resultsReleaseService, type ResultsReleaseListFilters, type ResultsReleaseStatus, type ResultsReleaseSummary } from '../../../services/resultsReleaseService';
 
 type PageState =
   | { kind: 'loading' }
@@ -32,10 +32,17 @@ export default function ResultsRelease() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const currentFiltersRef = useRef<ResultsReleaseListFilters>({ page: 1, search: '' });
+  const requestGenerationRef = useRef(0);
+
+  currentFiltersRef.current = { page, status: status || undefined, search };
 
   const load = useCallback(async () => {
+    const requestGeneration = ++requestGenerationRef.current;
+    const filters = currentFiltersRef.current;
     setPageState({ kind: 'loading' });
-    const result = await resultsReleaseService.list({ page, status: status || undefined, search });
+    const result = await resultsReleaseService.list(filters);
+    if (requestGeneration !== requestGenerationRef.current) return;
     if ('error' in result) {
       setPageState(result.error.kind === 'AUTHORIZATION'
         ? { kind: 'forbidden', message: result.error.message }
@@ -45,9 +52,9 @@ export default function ResultsRelease() {
     setPageState(result.data.results.length === 0
       ? { kind: 'empty' }
       : { kind: 'ready', sessions: result.data.results, count: result.data.count, page: result.data.page, pageSize: result.data.pageSize });
-  }, [page, search, status]);
+  }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, page, search, status]);
 
   const updateFilters = (nextSearch: string, nextStatus: ResultsReleaseStatus | '') => {
     setSuccessMessage(null);
